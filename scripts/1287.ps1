@@ -1,0 +1,70 @@
+﻿Add-Type -Type @"
+using System;
+using System.Runtime.InteropServices;
+
+namespace Huddled {
+   public static class Dwm {
+      [DllImport("dwmapi.dll", PreserveSig = false)]
+      public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+      [Flags]
+      public enum DwmWindowAttribute
+      {
+         NCRenderingEnabled = 1,
+         NCRenderingPolicy,
+         TransitionsForceDisabled,
+         AllowNCPaint,
+         CaptionButtonBounds,
+         NonClientRtlLayout,
+         ForceIconicRepresentation,
+         Flip3DPolicy,
+         ExtendedFrameBounds,
+         HasIconicBitmap,
+         DisallowPeek,
+         ExcludedFromPeek,
+         Last
+      }
+
+      [Flags]
+      public enum DwmNCRenderingPolicy
+      {
+         UseWindowStyle,
+         Disabled,
+         Enabled,
+         Last
+      }
+
+      public static void RemoveFromAeroPeek(IntPtr Hwnd) //Hwnd is the handle to your window
+      {
+         int renderPolicy = (int)DwmNCRenderingPolicy.Enabled;
+         DwmSetWindowAttribute(Hwnd, (int)DwmWindowAttribute.ExcludedFromPeek, ref renderPolicy, sizeof(int));
+      }
+   }
+}
+"@
+
+[Reflection.Assembly]::Load("UIAutomationClient, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35")
+function Select-Window {
+PARAM( [string]$Title="*", 
+       [string]$Process="*", 
+       [switch]$Recurse,
+       [System.Windows.Automation.AutomationElement]$Parent = [System.Windows.Automation.AutomationElement]::RootElement ) 
+PROCESS {
+   $search = "Children"
+   if($Recurse) { $search = "Descendants" }
+   
+   $Parent.FindAll( $search, [System.Windows.Automation.Condition]::TrueCondition ) | 
+   Add-Member -Type ScriptProperty -Name Title     -Value {
+               $this.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty)} -Passthru |
+   Add-Member -Type ScriptProperty -Name Handle    -Value {
+               $this.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NativeWindowHandleProperty)} -Passthru |
+   Add-Member -Type ScriptProperty -Name ProcessId -Value {
+               $this.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::ProcessIdProperty)} -Passthru |
+
+   Where-Object {
+      ((Get-Process -Id $_.ProcessId).ProcessName -like $Process) -and ($_.Title -like $Title)
+   }
+}}
+
+##### Example use, to keep all the Rainlendar2 windows visible
+# Select-Window -Process Rainlendar2 | % { [Huddled.Dwm]::RemoveFromAeroPeek( $_.Handle ) }

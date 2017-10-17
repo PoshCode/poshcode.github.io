@@ -1,0 +1,2 @@
+﻿$var = 'hello world'
+$var

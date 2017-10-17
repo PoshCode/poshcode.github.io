@@ -1,0 +1,164 @@
+﻿
+function Private:Configure-Logging {
+        Use one of the following aliases:
+        Get-LDAPLogging
+            View current LDAP logging settings
+        Enable-LDAPLogging
+            Enables LDAP logging. Logging is set to log every single LDAP query and stores it in directory services log.
+        Disable-LDAPLogging
+            Disables LDAP logging. Logging is set to its default values.
+		PS C:\> Get-LDAPLogging
+		PS C:\> Enable-LDAPLogging DC1
+		Author:    Patrick Sczepanski 
+        Version:   1.0
+        Email:     patrick -at- sczepanski -dot- com
+                   patrick -dot- redtoo -at- redtoo -dot- com
+        Blog:      http://redtoo.com/blog
+        Copyright: 2012
+        Enable-LDAPLogging
+        Disable-LDAPLogging
+        Get-LDAPEventLog
+    Param (
+        [string]
+        $HostName = $env:COMPUTERNAME
+    )
+    [System.Nullable``1[[System.Int32]]]$EnableLogging = $null
+    switch ( $MyInvocation.InvocationName ) {
+            [System.Nullable``1[[System.Int32]]]$EnableLogging = $true
+            [bool]$ReadWrite = $true
+            [int]$Threshold = 1
+            [int]$FieldEngDef = 5
+            break
+        }
+            [System.Nullable``1[[System.Int32]]]$EnableLogging = $false
+            [bool]$ReadWrite = $true
+            [int]$Threshold = 0
+            [int]$FieldEngDef = 0
+            break
+        }
+        Default     { 
+            [System.Nullable``1[[System.Int32]]]$EnableLogging = $null
+            [bool]$ReadWrite = $false
+        }
+    }
+    if ( -not (Test-Connection $HostName -Quiet -Count 1) ) {
+        continue
+    }
+    if ( -not ( 
+                      -ComputerName $HostName -ErrorAction SilentlyContinue) ) {
+        continue
+    }
+    $baseKey = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey( "LocalMachine", $HostName   )
+    try {
+        $key = $baseKey.OpenSubKey($NTDSParams,$ReadWrite)
+        if ( $EnableLogging -eq $true ) { 
+            $key.SetValue( $ExpThre, 1, [Microsoft.Win32.RegistryValueKind]::DWord )
+            $key.SetValue( $IneThre, 1, [Microsoft.Win32.RegistryValueKind]::DWord )
+        } elseif ( $EnableLogging -eq $false ) {
+            $key.DeleteValue( $ExpThre )
+            $key.DeleteValue( $IneThre )
+        }
+        $ExpThreValue = $key.GetValue($ExpThre)
+        $IneThreValue = $key.GetValue($IneThre)
+        $key.Close()
+    }
+    catch {
+    }
+    try {
+        $key = $baseKey.OpenSubKey($NTDSDiag,$ReadWrite)
+        if ( $EnableLogging -ne $null ) { 
+            $key.SetValue( $FieldEng, $FieldEngDef )
+        } 
+        $FieldEngValue = $key.GetValue($FieldEng)
+        $key.Close()
+    }
+    catch {
+    }
+    $baseKey.Close()
+    New-Object PSObject -Property @{
+    }
+}
+New-Alias Get-LDAPLogging Configure-Logging -Force
+New-Alias Enable-LDAPLogging Configure-Logging -Force
+New-Alias Disable-LDAPLogging Configure-Logging -Force
+Function Global:Get-LDAPEventLog {
+		PS C:\> Get-LDAPEventLog
+		[string],[int]
+		[LDAPLookups]
+		Author:    Patrick Sczepanski 
+        Version:   1.0
+        Email:     patrick -at- sczepanski -dot- com
+                   patrick -dot- redtoo -at- redtoo -dot- com
+        Blog:      http://redtoo.com/blog
+        Copyright: 2012
+        Enable-LDAPLogging
+        Disable-LDAPLogging
+Param (
+        [Parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,Position=0)]
+        [string]
+        $DNSHostName = $env:COMPUTERNAME,
+        [int]
+        $LookupMinutes = 60
+    )
+    Begin {
+        $Script:AlreadyLookedUp = @{}
+Add-Type @'
+using System;
+        public class LDAPLookups {
+            public string DNSHostName;
+            public string ClientIP;
+            public string ClientName;
+            public string StartNode;
+            public string Filter;
+            public string SearchScope;
+            public string Attributes;
+            public string ServerControls;
+            public string Date;
+            public string Time;
+        }
+'@      
+(?msx)
+    # Option m = multi-line e.g. ^=start of line and $=end of line    
+    # Option s = single-line e.g. . includes end-of-line    
+    # Option x = spaces and comments are allowed in the pattern 
+Client:\r\n
+  (?<Client>.*)\:(?<Port>.*)\r\n?
+Starting\snode\:\r\n
+  (?<StartNode>.*?)\r\n
+Filter:\r\n
+  (?<Filter>.*?)\r\n
+Search\sscope:\r\n
+  (?<SearchScope>.*?)\r\n
+Attribute\sselection:\r\n
+  (?<Attributes>.*?)\r\n
+Server\scontrols:\r\n
+  (?<ServerControls>.*?)\r\n
+Visited\sentries:\r\n
+  (?<VisitedEntries>.*?)\r\n
+Returned\sentries:\r\n
+  (?<ReturnedEntries>.*)
+    }
+    Process {
+        Get-WinEvent -ComputerName $DNSHostName  -FilterHashtable @{ "LogName"="Directory Service" ; "ID"=1644; StartTime= [datetime]::Now.AddMinutes( -$LookupMinutes ) } |
+            Foreach-Object { 
+                if ( $_.Message -match $RegEx ) { 
+                     New-Object LDAPLookups -Property @{
+                                            try {
+                                                if( -not $AlreadyLookedUp.contains( $ClientIP ) ){
+                                                    $AlreadyLookedUp.$ClientIP = ( [System.Net.Dns]::GetHostByAddress( $ClientIP ).HostName )
+                                                }
+                                            }
+                                            catch {
+                                                $AlreadyLookedUp.$ClientIP = $ClientIP
+                                            }
+                                             $AlreadyLookedUp.$ClientIP
+                                        )
+                        "Time" = $_.TimeCreated.ToString( "HH:mm:ss" )
+                    }
+                }
+            } 
+    } 
+    End {
+        Remove-Variable -Scope Script -Name AlreadyLookedUp
+    }
+} 
