@@ -50,17 +50,18 @@ $extension = switch($Language) {
 @"
 ---
 pid:            $id
-parent:         $parent
-children:       $($children -join ',')
 poster:         $author
 title:          $title
 date:           $date
 format:         $Language
+parent:         $parent
+$(if($parent){   "parent:         $($parent -join ',')"})
+$(if($children){ "children:       $($children -join ',')"})
 ---
 
 # $title
 
-### [download]($id$extension)$(if($parent -ne 0) { " - [parent]($parent.md)" })$(if($children){ " - children: $($(foreach($child in $children) { "[$child]($child.md)" }) -join ', ')" })"
+### [download]($id$extension)$(if($parent -ne 0) { " - [parent]($parent.md)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child]($child.md)" }) -join ', ')" })
 
 $description
 
