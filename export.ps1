@@ -55,22 +55,21 @@ children:       $($children -join ',')
 poster:         $author
 title:          $title
 date:           $date
-description:    $description
 format:         $Language
 ---
 
 # $title
 
-### [download]($id$extension) $(if($parent -ne 0) { "[parent]($parent.md)" }) $(foreach($child in $children) { "[$child]($child.md)" })
+### [download]($id$extension)$(if($parent -ne 0) { " - [parent]($parent.md)" })$(if($children){ " - children: $($(foreach($child in $children) { "[$child]($child.md)" }) -join ', ')" })"
 
 $description
 
 ``````$language
 $code
 ``````
-"@ | Out-File "$id.md"
+"@ | Out-File "scripts\$id.md"
 
-$code | Out-File "$id$extension"
+$code | Out-File "scripts\$id$extension"
 
 }
 }
