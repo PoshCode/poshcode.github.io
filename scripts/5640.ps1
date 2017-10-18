@@ -1,4 +1,4 @@
-﻿function Get-IMDBMatch
+function Get-IMDBMatch
 {
     <#
     .Synopsis

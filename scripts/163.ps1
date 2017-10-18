@@ -1,4 +1,4 @@
-﻿$filter = "(&(objectCategory=user)(userAccountControl:1.2.840.113556.1.4.803:=65536))"
+$filter = "(&(objectCategory=user)(userAccountControl:1.2.840.113556.1.4.803:=65536))"
 $ds = new-object directoryservices.directorysearcher([adsi]"",$filter)
 $users = $ds.findall()
 $users | format-table @{l="User";e={$_.properties.item('cn')}},

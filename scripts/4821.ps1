@@ -1,4 +1,4 @@
-﻿function Get-MimeWithExtension {
+function Get-MimeWithExtension {
   <#
     .EXAMPLE
         PS C:\>Get-MimeWithExtension 'E:\mus\Strangers in the night.mp3'

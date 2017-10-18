@@ -1,4 +1,4 @@
-﻿#The PowerShell Talk
+#The PowerShell Talk
 #Building a HyperVisor Independent Script
 #
 #This script will take a VM (or host) object from the pipline, 

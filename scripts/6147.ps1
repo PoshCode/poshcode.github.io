@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Tool for O365 Mailbox Licensing
 .DESCRIPTION

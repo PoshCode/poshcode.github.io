@@ -1,4 +1,4 @@
-﻿# 22/12/2015 Anastasis Ksouzafeiris
+# 22/12/2015 Anastasis Ksouzafeiris
 # PowerCLI script: UpdateToolsPolicy.ps1
 # You can run it like this eg.:
 # powercli> Set-ExecutionPolicy -Unrestricted

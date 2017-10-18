@@ -1,4 +1,4 @@
-﻿# Daniel Cheng
+# Daniel Cheng
 
 #$VerbosePreference = 'continue'
 $VerbosePreference = 'silent'

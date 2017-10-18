@@ -1,4 +1,4 @@
-﻿# Version History
+# Version History
 # 1.1 - Added aliases, error handling, help, and cleanup
 # 1.2 - Remove erroneous prompt for password with Push-ImpersonationContext's "Credential" ParameterSet
 

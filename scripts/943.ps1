@@ -1,4 +1,4 @@
-﻿function Get-VCTime() {
+function Get-VCTime() {
    return (Get-View "ServiceInstance-ServiceInstance").CurrentTime()
 }
 

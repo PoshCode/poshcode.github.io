@@ -1,4 +1,4 @@
-﻿   function Send-FTP {
+   function Send-FTP {
       Param(
          $Server = "ilncenter.net"
       ,  $Credentials = $(Get-Credential)

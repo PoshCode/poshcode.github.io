@@ -1,4 +1,4 @@
-﻿param ($fileName, $computerName=$env:ComputerName)
+param ($fileName, $computerName=$env:ComputerName)
 
 #######################
 function ConvertTo-MIFXml

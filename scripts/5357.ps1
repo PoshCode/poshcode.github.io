@@ -1,4 +1,4 @@
-﻿function Get-ADThumbnail
+function Get-ADThumbnail
 {
     <#
     .SYNOPSIS

@@ -1,4 +1,4 @@
-﻿#function Invoke-MP3Player {
+#function Invoke-MP3Player {
   param (
     [Parameter(Mandatory=$true, Position=0)]
     [string]$MP3File,

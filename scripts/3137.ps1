@@ -1,4 +1,4 @@
-﻿function Get-Version {
+function Get-Version {
 <#
 .SYNOPSIS
 V2.0 Incorporate Version() and ToString() Methods, 1 Jan 2012.

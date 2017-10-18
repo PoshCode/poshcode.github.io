@@ -1,4 +1,4 @@
-﻿function Get-SimpsonQuote{
+function Get-SimpsonQuote{
     <#
     .SYNOPSIS
     Does a little html scraping to get a random quote from the Simpsons.

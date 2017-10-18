@@ -1,4 +1,4 @@
-﻿$WarningPreference = "SilentlyContinue"
+$WarningPreference = "SilentlyContinue"
 $password = Get-Content C:\securestring.txt | convertto-securestring
 $username = "PROD\administrator"
 $credentials = new-object -typename System.Management.Automation.PSCredential -argumentlist $username, $password

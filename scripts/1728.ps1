@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## ISE-FileName module v 1.0
 ##############################################################################################################
 ## Provides File and Path cmdlets for working with ISE

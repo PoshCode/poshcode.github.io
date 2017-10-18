@@ -1,4 +1,4 @@
-﻿# .SYNOPSIS
+# .SYNOPSIS
 #	Print the hostname of the system.
 # .DESCRIPTION
 #	This function prints the hostname of the system. You can additionally output the DNS

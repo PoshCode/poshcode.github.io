@@ -1,4 +1,4 @@
-﻿Function Create-DatePaths {
+Function Create-DatePaths {
     Param (
         [Parameter(Position=0,Mandatory=$True)]
         [DateTime] $Start,

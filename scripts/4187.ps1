@@ -1,4 +1,4 @@
-﻿#Start of settings
+#Start of settings
 $ScriptPath = (Split-Path ((Get-Variable MyInvocation).Value).MyCommand.Path)
 $ContentFolder = $ScriptPath + "\Lists\"
 #End of settings

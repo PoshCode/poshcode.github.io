@@ -1,4 +1,4 @@
-﻿#Path Below must be set to reflect ORACLE_HOME
+#Path Below must be set to reflect ORACLE_HOME
 [Reflection.Assembly]::LoadFile("C:\app\oracle\product\11.2.0\client_1\ODP.NET\bin\2.x\Oracle.DataAccess.dll")
 Import-Module DataOntap
 #Populate credentials below

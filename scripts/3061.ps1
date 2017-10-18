@@ -1,4 +1,4 @@
-﻿param (
+param (
     [parameter(position=0,
         ValueFromPipeline = $true,
         ValueFromPipelineByPropertyName = $true)]

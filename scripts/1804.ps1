@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 Param(
    [Parameter(ValueFromRemainingArguments=$true)]
    $command=$(Read-Host "You must specify a command")

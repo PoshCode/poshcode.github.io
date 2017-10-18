@@ -1,4 +1,4 @@
-﻿#                                                                                                   #
+#                                                                                                   #
 # Select-Window Notepad | Remove-Window -passthru                                                   #
 # ## And later ...                                                                                  #
 # Select-Window Notepad | Select-ChildWindow | Send-Keys "%N"                                       #

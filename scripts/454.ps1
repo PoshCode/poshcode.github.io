@@ -1,4 +1,4 @@
-﻿## Get-ActiveRules grabs the workflows running on the specified server
+## Get-ActiveRules grabs the workflows running on the specified server
 ## Author: Jeremy D. Pavleck - Jeremy@Pavleck.NET
 ## Requires: The Microsoft.SystemCenter.Internal.Tasks.mp on the SP1 CD
 ## Notes: You can find this task inside the console by going to monitoring, computers and under "Windows Computer Tasks" run

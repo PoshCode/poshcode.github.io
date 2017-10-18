@@ -1,4 +1,4 @@
-﻿#add your translation here
+#add your translation here
 [xml]$res = @'
 <?xml version="1.0" encoding="utf-8"?>
 <Resources>

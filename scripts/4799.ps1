@@ -1,4 +1,4 @@
-﻿Set-Alias clockres Get-ClockRes
+Set-Alias clockres Get-ClockRes
 
 function Get-ClockRes {
   begin {

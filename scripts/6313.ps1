@@ -1,4 +1,4 @@
-﻿## CONFIG START ##
+## CONFIG START ##
 	
 	# Service messages and logging variables.
 	$timeNow = get-date -Format g

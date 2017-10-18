@@ -1,4 +1,4 @@
-﻿#requires -modules GroupPolicy
+#requires -modules GroupPolicy
 param([String]$Computer = 'localhost', [String]$User, [Microsoft.GroupPolicy.ReportType]$ReportType = 'XML')
 $gprsop = new-object Microsoft.GroupPolicy.GPRsop([Microsoft.GroupPolicy.RsopMode]::Logging,'')
 $gprsop.LoggingComputer = $Computer

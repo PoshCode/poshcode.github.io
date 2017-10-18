@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Draw pie charts of server memory usage by process
 #.Description
 #  Uses PowerBoots to draw a pipe-chart of each computer's memory use. While you wait for that information 

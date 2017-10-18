@@ -1,4 +1,4 @@
-﻿<#  
+<#  
 .SYNOPSIS  
     Multiple functions to build a config file and to use file to launch PerfMon background jobs.
 .DESCRIPTION

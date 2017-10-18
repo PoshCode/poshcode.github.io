@@ -1,4 +1,4 @@
-﻿if (-not ("CallbackEventBridge" -as [type])) {
+if (-not ("CallbackEventBridge" -as [type])) {
    Add-Type @"
       using System;
       

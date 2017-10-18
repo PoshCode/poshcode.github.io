@@ -1,4 +1,4 @@
-﻿Function Signal-Batman{
+Function Signal-Batman{
 
     $batman = @"
        _==/          i     i          \==_

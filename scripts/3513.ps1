@@ -1,4 +1,4 @@
-﻿function Rotate-Right {
+function Rotate-Right {
 <#
 .SYNOPSIS
 Performs a binary rotate right operation.

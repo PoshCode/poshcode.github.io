@@ -1,4 +1,4 @@
-﻿(function($) {
+(function($) {
   var std, res, i;
   
   String.prototype.getLastValue = function() {

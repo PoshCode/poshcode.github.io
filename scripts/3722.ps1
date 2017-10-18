@@ -1,4 +1,4 @@
-﻿Add-PSSnapin -Name Quest.ActiveRoles.ADManagement -ErrorAction SilentlyContinue
+Add-PSSnapin -Name Quest.ActiveRoles.ADManagement -ErrorAction SilentlyContinue
 
 # Location of the CSV file created. 
 $fileLocation = "C:\temp\logon.csv"

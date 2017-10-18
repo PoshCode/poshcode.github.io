@@ -1,4 +1,4 @@
-﻿Function Get-mDatastoreList {
+Function Get-mDatastoreList {
 #Parameter- Name of the VMware cluster to choose a datastore from.
 param($Cluster)
 

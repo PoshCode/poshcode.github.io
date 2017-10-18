@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
    Converts data from flat or single-level property files into PSObjects
 .DESCRIPTION

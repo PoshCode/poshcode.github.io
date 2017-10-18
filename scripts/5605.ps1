@@ -1,4 +1,4 @@
-﻿#Valid characters
+#Valid characters
 $CharsString = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz123456789!@#$%^&*()-=_+[]/\{}|:;'`",.<>?``~"
 
 #Testing

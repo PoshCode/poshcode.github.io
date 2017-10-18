@@ -1,4 +1,4 @@
-﻿$Excel = New-Object -Com Excel.Application
+$Excel = New-Object -Com Excel.Application
 $Excel.visible = $True
 $Excel = $Excel.Workbooks.Add()
 

@@ -1,4 +1,4 @@
-﻿function WinFirewall-Stoped(){
+function WinFirewall-Stoped(){
 param (
 $computer
 )

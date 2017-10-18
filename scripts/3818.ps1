@@ -1,4 +1,4 @@
-﻿# This script supports being run with -WhatIf and -Confirm parameters.
+# This script supports being run with -WhatIf and -Confirm parameters.
 [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
 param (
     # Regex of the states that should be included in the process killing field.

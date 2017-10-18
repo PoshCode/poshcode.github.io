@@ -1,4 +1,4 @@
-﻿$DCs = ([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).DomainControllers
+$DCs = ([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).DomainControllers
 $DCs | % { if ($_.Roles -ne '') {
 		"Server $_ has roles:"
 		""

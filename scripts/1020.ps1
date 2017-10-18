@@ -1,4 +1,4 @@
-﻿PARAM(
+PARAM(
    $presentationTitle = "PowerShell Presentation"
 ,  $background = "C:\Users\Joel\Pictures\flow\Flow_2560.jpg"
 )

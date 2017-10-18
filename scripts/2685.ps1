@@ -1,4 +1,4 @@
-﻿param ([String] $ScreenName)
+param ([String] $ScreenName)
 
 $client = New-Object System.Net.WebClient
 $idUrl = "https://api.twitter.com/1/users/show.json?screen_name=$ScreenName"

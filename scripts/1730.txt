@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 Add-Type @"
 public class Shift {
    public static int   Right(int x,   int count) { return x >> count; }

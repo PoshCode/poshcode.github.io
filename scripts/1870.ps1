@@ -1,4 +1,4 @@
-﻿$choices = [System.Management.Automation.Host.ChoiceDescription[]](
+$choices = [System.Management.Automation.Host.ChoiceDescription[]](
 (New-Object System.Management.Automation.Host.ChoiceDescription "&Yes","Choose me!"),
 (New-Object System.Management.Automation.Host.ChoiceDescription "&No","Pick me!"))
 

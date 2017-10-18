@@ -1,4 +1,4 @@
-﻿$rootDir = 'C:\Documents and Settings\buddyl\My Documents\Powershell Scripts\';
+$rootDir = 'C:\Documents and Settings\buddyl\My Documents\Powershell Scripts\';
 $temp = $rootDir + 'temp'
 mkdir $temp
 

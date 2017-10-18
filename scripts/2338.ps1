@@ -1,4 +1,4 @@
-﻿$primes = 2,3,5 #,7,11,13,17,19,23
+$primes = 2,3,5 #,7,11,13,17,19,23
 $primeIndex = 0
 function Get-NextPrime {
    [CmdletBinding(DefaultParameterSetName="KnownPrime")]

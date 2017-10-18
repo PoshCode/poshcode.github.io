@@ -1,4 +1,4 @@
-﻿# Creates an RSS feed
+# Creates an RSS feed
 # Parameter input is for "site": Path, Title, Url, Description
 # Pipeline input is for feed items: hashtable with Title, Link, Author, Description, and pubDate keys
 param (

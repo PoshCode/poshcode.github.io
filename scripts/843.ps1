@@ -1,4 +1,4 @@
-﻿function print-file($file)
+function print-file($file)
 {
  begin  {               
     function internal-printfile($thefile)

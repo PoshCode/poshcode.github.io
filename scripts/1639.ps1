@@ -1,4 +1,4 @@
-﻿function Get-MountPointInfo {
+function Get-MountPointInfo {
     <#
     .Synopsis
         Get mount point volume free space information

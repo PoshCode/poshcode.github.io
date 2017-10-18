@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Set any text file to a fixed number of lines. Use 'Get-Help .\SetFileLines
 -full' to view Help for this file.

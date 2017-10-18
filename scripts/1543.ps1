@@ -1,4 +1,4 @@
-﻿# References:
+# References:
 # http://blogs.msdn.com/powershell/archive/2009/12/05/new-object-psobject-property-hashtable.aspx
 # http://poshoholic.com/2008/07/03/essential-powershell-name-your-custom-object-types/
 # http://poshoholic.com/2008/07/05/essential-powershell-define-default-properties-for-custom-objects/

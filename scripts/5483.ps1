@@ -1,4 +1,4 @@
-﻿$LastEvent = Get-EventLog AppAssure -newest 1
+$LastEvent = Get-EventLog AppAssure -newest 1
 $TimeCheck = Get-EventLog AppAssure -After (Get-Date).AddMinutes(-75)
 If ($TimeCheck -eq $null)
 {

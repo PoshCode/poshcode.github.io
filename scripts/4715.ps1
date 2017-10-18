@@ -1,4 +1,4 @@
-﻿Set-Alias awl Add-AssemblyWithoutLock
+Set-Alias awl Add-AssemblyWithoutLock
 
 function Add-AssemblyWithoutLock {
   param(

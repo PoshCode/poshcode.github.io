@@ -1,4 +1,4 @@
-﻿# Define Filename  
+# Define Filename  
 # By accessing the from the Script directly  
 # you can create multiple files internally with the # same function by swapping the name 
 $Filename='.\test.rtf' 

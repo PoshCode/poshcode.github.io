@@ -1,4 +1,4 @@
-﻿## Format-HexString.ps1
+## Format-HexString.ps1
 ## Format a byte array as a hexadecimal string
 ##
 ## Example usage:

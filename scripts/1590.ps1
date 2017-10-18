@@ -1,4 +1,4 @@
-﻿#Requires -Version 2.0
+#Requires -Version 2.0
 
 <#
   This Export-CSV behaves exactly like native Export-CSV

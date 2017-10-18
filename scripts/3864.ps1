@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS 
 
 Inkscape utility cmdlets

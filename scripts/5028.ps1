@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 try {
   $fs  = [IO.File]::OpenRead((gcm -c Application ntdll.dll).Definition)
   $buf = New-Object "Byte[]" $fs.Length

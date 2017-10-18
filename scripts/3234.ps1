@@ -1,4 +1,4 @@
-﻿#######################
+#######################
 <#
 .SYNOPSIS
 Gets MSQLSvc service principal names (spn) from Active Directory.

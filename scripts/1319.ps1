@@ -1,4 +1,4 @@
-﻿Function Get-Snapinfo {
+Function Get-Snapinfo {
     <#
     .Synopsis
         Get the snapshot info out of a Virtual Machine Managed Entity.  Most useful for

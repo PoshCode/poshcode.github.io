@@ -1,4 +1,4 @@
-﻿# Measure-ScriptCode.ps1
+# Measure-ScriptCode.ps1
 # Return metrics about the script and module files
 # PowerShell 3 is required as Abstract Syntax Trees are used.
 # Jan 2014

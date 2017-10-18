@@ -1,4 +1,4 @@
-﻿Function Get-SQLFileSize { 
+Function Get-SQLFileSize { 
 <#   
 .SYNOPSIS   
     Retrieves the file size of a MDF or LDF file for a SQL Server 

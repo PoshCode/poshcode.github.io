@@ -1,4 +1,4 @@
-﻿# Variables
+# Variables
 $viserver = Read-Host "Enter VI server name"
 $cluster = Read-Host "Enter Cluster name"
 $vmhelper = Read-Host "Enter VM_HELPER name"

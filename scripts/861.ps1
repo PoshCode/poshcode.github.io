@@ -1,4 +1,4 @@
-﻿function foreach-withexception ([scriptblock]$process,$outputexception)
+function foreach-withexception ([scriptblock]$process,$outputexception)
 {
   begin { $global:foreachex = @() }
   process { 

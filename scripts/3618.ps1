@@ -1,4 +1,4 @@
-﻿Function New-OSCVM
+Function New-OSCVM
 {
     [cmdletbinding()]
     Param

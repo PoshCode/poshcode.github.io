@@ -1,4 +1,4 @@
-﻿Function get-certinfo
+Function get-certinfo
 {
 $myobj = @()
 Foreach ($currentuser in get-content c:\temp\username.txt) # "c:\temp\username.txt" is the path of txt file containing AD users

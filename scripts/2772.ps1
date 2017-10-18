@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS 
 A template for a function that creates a PSObject
 .DESCRIPTION

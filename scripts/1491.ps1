@@ -1,4 +1,4 @@
-﻿# New User In PowerShell 
+# New User In PowerShell 
 # ye110wbeard (EnergizedTech) Finally shuts up and writes a script that is USEFUL and doesn't sing about it 
 # 7/15/2009 :) 
 # And it couldn't have happened if it wasn't for the Powershell Community 

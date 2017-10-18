@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Calculate statistics about files
 #.Description
 #  A lightweight simulation of unix's "wc" word count application

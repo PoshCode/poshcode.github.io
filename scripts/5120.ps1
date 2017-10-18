@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 gp -ea 0 HKLM:\SYSTEM\CurrentControlSet\Services\* | ? {
   $_.Type -eq 1 -and $_.ImagePath -ne $null
 } | select @{

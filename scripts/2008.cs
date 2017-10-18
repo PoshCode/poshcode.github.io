@@ -1,4 +1,4 @@
-﻿#region License
+#region License
 // Desktop 1.1
 //																																						*
 // Copyright (C) 2004  http://www.onyeyiri.co.uk

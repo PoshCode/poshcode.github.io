@@ -1,4 +1,4 @@
-﻿[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
 $SCRIPT:hostProperties = @{};
 $SCRIPT:hostState = $null;
 $SCRIPT:BoardWidth = 50;

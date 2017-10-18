@@ -1,4 +1,4 @@
-﻿Import-Module PowerBoots
+Import-Module PowerBoots
 
 # This simulates a download function, say Jaykul's Get-Webfile
 # You can output current progress for a large file, or if it's an array of links then out put the current (index/length)%

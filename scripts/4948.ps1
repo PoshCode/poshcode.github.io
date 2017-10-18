@@ -1,4 +1,4 @@
-﻿#################################################################################
+#################################################################################
 # This function should be included in the PowerShell ISE profile.ps1 and it will 
 # display the start and end times of any scripts started by clicking 'Run Script'
 # in the Add-ons Menu, or F2; additionally they will be logged to the Scripts

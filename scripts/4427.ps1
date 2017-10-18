@@ -1,4 +1,4 @@
-﻿#Created by Ty Lopes 
+#Created by Ty Lopes 
 #Aug 2013
 #Support util to speed up re-curring/quick Active Directory Tasks
 #unlock user account/change password/set to expire in xx number of days

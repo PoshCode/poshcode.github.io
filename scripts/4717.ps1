@@ -1,4 +1,4 @@
-﻿function Test-DigitalSignature {
+function Test-DigitalSignature {
   <#
     .DESCRIPTION
         Checks digital signatures of file(s) via "path" variable.

@@ -1,4 +1,4 @@
-﻿function Time-Stamp
+function Time-Stamp
 {
     return [System.DateTime]::Now.ToString("yyyy.MM.dd hh:mm:ss");
 }

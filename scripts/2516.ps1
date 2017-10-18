@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 # Joins array elements together using a specific string separator
 #.Example
 #   $Env:Path = ls | ? {$_.PSIsContainer} | Select -expand FullName | Join ";" -Append $Env:Path

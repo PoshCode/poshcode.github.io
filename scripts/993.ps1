@@ -1,4 +1,4 @@
-﻿#Usage: Get-SqlDatabase 'Z002\Sql2k8' | where {$_.name -like "pubs*"} | ./WPFDbSpace.ps1
+#Usage: Get-SqlDatabase 'Z002\Sql2k8' | where {$_.name -like "pubs*"} | ./WPFDbSpace.ps1
 #Note: Requires .NET 3.5, Visifire Charts (tested on v2.1.0), Powerboots (tested on v0.1), and SQLPSX (tested on v1.5)
 
 $libraryDir = Convert-Path (Resolve-Path "$ProfileDir\Libraries")

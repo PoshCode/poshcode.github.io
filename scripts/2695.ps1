@@ -1,4 +1,4 @@
-﻿#connect to outlook
+#connect to outlook
 $GetOutlook = New-Object -com "Outlook.Application"; 
 $olName = $GetOutlook.GetNamespace("MAPI")
 $olxEmailFolder = $olName.GetDefaultFolder(‘olFolderInbox’)

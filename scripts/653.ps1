@@ -1,4 +1,4 @@
-﻿## New-Struct
+## New-Struct
 ##   Creates a Struct class and emits it into memory
 ##   The Struct includes a constructor which takes the parameters in order...
 ## 

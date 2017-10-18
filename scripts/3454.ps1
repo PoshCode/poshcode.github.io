@@ -1,4 +1,4 @@
-﻿<#
+<#
     DHCP Backups Powershell Script
     v1.1
     2012-06-04

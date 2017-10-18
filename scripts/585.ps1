@@ -1,4 +1,4 @@
-﻿## Export-Screenshot to take a screenshot and save it to disk
+## Export-Screenshot to take a screenshot and save it to disk
 #####################################################################################
 ## Usage:
 ##   Export-Screenshot sshot.png

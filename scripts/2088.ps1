@@ -1,4 +1,4 @@
-﻿#Active Directory Group Name To Be Edited
+#Active Directory Group Name To Be Edited
 #Load Active Directory Module
 if(@(get-module | where-object {$_.Name -eq "ActiveDirectory"} ).count -eq 0) {import-module ActiveDirectory}
 

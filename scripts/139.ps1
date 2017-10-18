@@ -1,4 +1,4 @@
-﻿# Fix the VPC options left and top position for console
+# Fix the VPC options left and top position for console
 
 $today = get-date -Format "yyyyMMdd"
 $now = Get-Date -format "hhmmss"

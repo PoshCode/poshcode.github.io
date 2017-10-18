@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 .SYNOPSIS
 Deletes files in directory based on age measured in days

@@ -1,4 +1,4 @@
-﻿# This should go OUTSIDE the prompt function, it doesn't need re-evaluation
+# This should go OUTSIDE the prompt function, it doesn't need re-evaluation
 # We're going to calculate a prefix for the window title 
 # Our basic title is "PoSh - C:\Your\Path\Here" showing the current path
 if(!$global:WindowTitlePrefix) {

@@ -1,4 +1,4 @@
-﻿# Robocopy example code for more info see the series on my blog 
+# Robocopy example code for more info see the series on my blog 
 # http://thepowershellguy.com/blogs/posh/archive/tags/robocopy/default.aspx
 
 #############################################################################################

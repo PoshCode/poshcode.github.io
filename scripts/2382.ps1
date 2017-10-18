@@ -1,4 +1,4 @@
-﻿function New-TSRemoteApp {
+function New-TSRemoteApp {
 <#
 .SYNOPSIS
 Creates a new RemoteApp on Windows Server 2008 Terminal Server.

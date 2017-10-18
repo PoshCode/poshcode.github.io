@@ -1,4 +1,4 @@
-﻿#Define PreReqs
+#Define PreReqs
 $timeStamp = Get-Date -UFormat "%m-%d-%Y-%H-%M"
 $systemVars = Gwmi Win32_ComputerSystem -Comp "."
 $userName = $systemVars.UserName

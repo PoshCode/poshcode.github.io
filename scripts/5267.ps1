@@ -1,4 +1,4 @@
-﻿$method = @{}
+$method = @{}
 $method['clear'] = {
 	$this.Items() | foreach -Process {
 		# for the first we must remove all Junction-points

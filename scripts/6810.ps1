@@ -1,4 +1,4 @@
-﻿<#
+<#
  $byte[0] -eq 0x3c -and $byte[1] -eq 0x21 -and $byte[2] -eq 0x44 Gets files that are UTF-8 without BOM
  $byte[0] -eq 0xef -and $byte[1] -eq 0xbb -and $byte[2] -eq 0xbf Gets files that are UTF-8 with BOM
 #>

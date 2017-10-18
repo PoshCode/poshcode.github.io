@@ -1,4 +1,4 @@
-﻿<#
+<#
  # author: Mosser Lee
  # env: powershell 3.0 +
  # blog: http://www.pstips.net

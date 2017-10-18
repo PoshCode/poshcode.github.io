@@ -1,4 +1,4 @@
-﻿$BuiltInAliases   = @{}
+$BuiltInAliases   = @{}
 $BuiltInCmdlets   = @{}
 $BuiltInFunctions = @{}
 $BuiltInVariables = @{}

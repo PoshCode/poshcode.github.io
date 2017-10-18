@@ -1,4 +1,4 @@
-﻿## Because of Split-Path, I get the "Framework" folder path (one level above the versioned folders)
+## Because of Split-Path, I get the "Framework" folder path (one level above the versioned folders)
 $rtr = Split-Path $([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory())
 
 ## Then I loop through them in ascending (numerical, but really ascii) order

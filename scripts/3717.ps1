@@ -1,4 +1,4 @@
-﻿# Convert from one device ID format to another.
+# Convert from one device ID format to another.
 function Get-DeviceIDFromMP {
     
     param([Parameter(Mandatory=$true)][string] $VolumeString,

@@ -1,4 +1,4 @@
-﻿# To use
+# To use
 # Save script as LISTPARAMETERS.PS1
 # 
 # To get the parameters from a Powershell cmdlet just execute

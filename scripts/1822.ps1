@@ -1,4 +1,4 @@
-﻿function Set-Encoding{
+function Set-Encoding{
 
 <#
 .Synopsis

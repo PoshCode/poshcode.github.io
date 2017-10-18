@@ -1,4 +1,4 @@
-﻿function Get-ProcessOwner {
+function Get-ProcessOwner {
   <#
     .EXAMPLE
         PS C:\>Get-ProcessOwner (ps notepad)

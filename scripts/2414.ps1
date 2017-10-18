@@ -1,4 +1,4 @@
-﻿function Receive-Stream {
+function Receive-Stream {
 #.Synopsis
 #  Read a stream to the end and close it
 #.Description

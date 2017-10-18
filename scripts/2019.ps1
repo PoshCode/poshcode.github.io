@@ -1,4 +1,4 @@
-﻿$moveVmScript = { 
+$moveVmScript = { 
 	Connect-VIServer yourVCenterServer
 	Move-VM WinXP -Location yourDestinationHost
 }

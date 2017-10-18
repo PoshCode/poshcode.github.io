@@ -1,4 +1,4 @@
-﻿#Sacamos los dispositivos asociados a cada mailbox
+#Sacamos los dispositivos asociados a cada mailbox
 #Verificamos su ultima conexión o si alguna vez no se han conectado
 #Autor: Pedro Genil
 #Fecha:23/11/2012

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Use this script to change Windows Server 2012 to 1 of 4 types.  The script installs or uninstalls
 windows features to get to the desired type.  The 4 types are:

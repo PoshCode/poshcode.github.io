@@ -1,4 +1,4 @@
-﻿<#
+<#
 
     .NOTES
     Name     : PoSh Email Tester GUI

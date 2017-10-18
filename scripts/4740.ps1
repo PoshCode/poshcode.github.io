@@ -1,4 +1,4 @@
-﻿Set-Alias wmd Write-MiniDump
+Set-Alias wmd Write-MiniDump
 
 function Write-MiniDump {
   <#

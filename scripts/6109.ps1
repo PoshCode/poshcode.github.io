@@ -1,4 +1,4 @@
-﻿<#
+<#
 .EXAMPLE  
     Get-GPO -Name TestOU | Get-GPOLinkedOrganizationalUnits
 #>

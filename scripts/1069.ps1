@@ -1,4 +1,4 @@
-﻿# I want do demonstrate a Compare-object bug
+# I want do demonstrate a Compare-object bug
 # Bernd Kriszio - http://pauerschell.blogspot.com/ 
  
 1, 2, 3, 4, 5 > .\textfile_a.txt

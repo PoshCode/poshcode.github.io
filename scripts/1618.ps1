@@ -1,4 +1,4 @@
-﻿function New-IseFile ($path = 'tmp_default.ps1')
+function New-IseFile ($path = 'tmp_default.ps1')
 {
     $count   = $psise.CurrentPowerShellTab.Files.count
     $null    = $psIse.CurrentPowerShellTab.Files.Add()

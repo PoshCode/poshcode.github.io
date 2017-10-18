@@ -1,4 +1,4 @@
-﻿Notes
+Notes
 =====
 - download the script related files:<br>
    http://www3.bell.net/brearley/public/test-apps.ps1<br>

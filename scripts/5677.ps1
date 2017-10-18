@@ -1,4 +1,4 @@
-﻿function Set-defaultBrowser
+function Set-defaultBrowser
 {
     param($defaultBrowser)
 

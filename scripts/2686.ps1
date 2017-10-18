@@ -1,4 +1,4 @@
-﻿$window = show -minw 300 -minh 300 -width 400 -height 400  -AllowsTransparency -WindowStyle none -Background transparent { 
+$window = show -minw 300 -minh 300 -width 400 -height 400  -AllowsTransparency -WindowStyle none -Background transparent { 
    grid { 
       viewbox -stretch Uniform { 
          Path -Fill "#80D0E0FF" -stroke red -strokethickness 4 `

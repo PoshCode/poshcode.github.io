@@ -1,4 +1,4 @@
-﻿#Get group membership for a list of security 
+#Get group membership for a list of security 
 #groups and export to an XML for comparison 
 #against baseline.
 #

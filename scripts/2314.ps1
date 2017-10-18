@@ -1,4 +1,4 @@
-﻿function Set-Extension { 
+function Set-Extension { 
 #.Synopsis
 #  Change the extension on file paths
 #.Example

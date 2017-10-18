@@ -1,4 +1,4 @@
-﻿## Join
+## Join
 ## Joins array elements together using a specific string separator
 ############################################
 ## Usage:

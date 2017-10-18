@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 
 # Improves over the built-in Select-XML by leveraging Remove-XmlNamespace http://poshcode.org/1492 
 # to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations 

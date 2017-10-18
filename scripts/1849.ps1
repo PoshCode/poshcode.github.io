@@ -1,4 +1,4 @@
-﻿@@#Filename commands.ps1
+@@#Filename commands.ps1
 import-module "G:\Documents\Speech Macros\custom.psm1"
 import-module "G:\Documents\Speech Macros\alice.psm1"
 Add-SpeechCommands @{

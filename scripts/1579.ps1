@@ -1,4 +1,4 @@
-﻿function Move-VMThin {
+function Move-VMThin {
     PARAM(
          [Parameter(Mandatory=$true,ValueFromPipeline=$true,HelpMessage="Virtual Machine Objects to Migrate")]
          [ValidateNotNullOrEmpty()]

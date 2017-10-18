@@ -1,4 +1,4 @@
-﻿#Requires -version 3 
+#Requires -version 3 
 #Requires -modules posh-ssh
 function get-HPSwitchConfig {
 <#

@@ -1,4 +1,4 @@
-﻿#region vars
+#region vars
 $script:maileditor = "C:\Programme\vim\vim72\vim.exe"
 $script:encryption = "C:\Programme\GNU\GnuPG\gpg.exe"
 $script:enckey = "s.patrick1982@gmail.com"

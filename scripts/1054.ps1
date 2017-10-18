@@ -1,4 +1,4 @@
-﻿### Grégory Schiro, 2009
+### Grégory Schiro, 2009
 
 ### <summary>
 ### Removes diacritics from string.

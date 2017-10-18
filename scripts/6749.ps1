@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## ISE-Comments module v 1.1
 ##############################################################################################################
 ## Provides Comment cmdlets for working with ISE

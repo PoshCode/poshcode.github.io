@@ -1,4 +1,4 @@
-﻿function Get-NetworkStatistics
+function Get-NetworkStatistics
 {
 	[OutputType('System.Management.Automation.PSObject')]
 	[CmdletBinding(DefaultParameterSetName='name')]

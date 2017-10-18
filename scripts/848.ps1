@@ -1,4 +1,4 @@
-﻿function checkADSI()
+function checkADSI()
 { $ADSIStat = "Servers in Computer OU"
   $error.clear()
   $errcnt = 0

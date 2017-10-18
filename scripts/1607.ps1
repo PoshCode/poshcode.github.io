@@ -1,4 +1,4 @@
-﻿# NAME
+# NAME
 #   Select-CSVString
 #
 # SYNOPSIS

@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 #Does not appear to be working on version 4.0
 
 

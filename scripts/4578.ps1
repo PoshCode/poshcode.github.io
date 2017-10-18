@@ -1,4 +1,4 @@
-﻿<#   
+<#   
 .SYNOPSIS   
 	Recreates shares and copies share permissions. 
 .DESCRIPTION 

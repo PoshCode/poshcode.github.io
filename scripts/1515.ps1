@@ -1,4 +1,4 @@
-﻿param([String] $DomainName = '192.168.0.1')
+param([String] $DomainName = '192.168.0.1')
 $socket = New-Object System.Net.Sockets.Socket ([System.Net.Sockets.AddressFamily]::InterNetwork, [System.Net.Sockets.SocketType]::Stream, [System.Net.Sockets.ProtocolType]::Tcp)
 
 $Socket.Connect('whois.arin.net', 43) | out-null

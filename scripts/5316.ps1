@@ -1,4 +1,4 @@
-﻿function Get-PEManifest {
+function Get-PEManifest {
   <#
     .SYNOPSIS
         Extract PE file manifest if it's possible.

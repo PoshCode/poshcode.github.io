@@ -1,4 +1,4 @@
-﻿## NOTE: This requires the current changeset download of PowerBoots (not the 0.2 beta)
+## NOTE: This requires the current changeset download of PowerBoots (not the 0.2 beta)
 Import-Module PowerBoots
 
 # This simulates a download function, say Jaykul's Get-Webfile

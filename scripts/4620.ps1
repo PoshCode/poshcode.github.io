@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function Get-UserStatus {
   $usr = [Security.Principal.WindowsIdentity]::GetCurrent()
   return (New-Object Security.Principal.WindowsPrincipal $usr).IsInRole(

@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## A simple SSH Scripting module for PowerShell
 ## History:
 ## v1 - Initial Script

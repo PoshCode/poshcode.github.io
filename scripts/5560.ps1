@@ -1,4 +1,4 @@
-﻿function Invoke-BackgroundTimer {
+function Invoke-BackgroundTimer {
     #.Synopsis
     #   An example of how to run a script repeatedly on a timer...
     #.Example

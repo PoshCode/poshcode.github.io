@@ -1,4 +1,4 @@
-﻿hi	
+hi	
 
 i want a script in powershell that talks to the sharepoint and takes two arguments one is Ip address or server name other is config.xml file.
 

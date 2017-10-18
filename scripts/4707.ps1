@@ -1,4 +1,4 @@
-﻿[String]$buff = ""
+[String]$buff = ""
 
 while($true) {
   [Console]::ReadKey("`r") | % {

@@ -1,4 +1,4 @@
-﻿:: Purpose:         DHCP server Watchdog & Failover script. Read notes below
+:: Purpose:         DHCP server Watchdog & Failover script. Read notes below
 :: Requirements:    1. Domain administrator credentials & "Logon as a batch job" rights
 ::                  2. Proper firewall configuration to allow connection
 ::                  3. Proper permissions on the DHCP backup directory

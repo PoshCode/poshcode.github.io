@@ -1,4 +1,4 @@
-﻿##
+##
 ## Start-WimmEmulator.ps1
 ##
 ## Starts the WIMM emulator - must be placed in the add-ons\addon_wimm_one_7\tools

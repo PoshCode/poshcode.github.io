@@ -1,4 +1,4 @@
-﻿param([String] $inputPath, [String] $wildcard, [String] $outputPath = $inputPath
+param([String] $inputPath, [String] $wildcard, [String] $outputPath = $inputPath
 
 gci -path $inputPath\$wildcard | % {  
   $outputFile = Join-Path $outputPath ($_.Name.Replace($_.Extension, '.mp3'))  

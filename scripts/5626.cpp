@@ -1,4 +1,4 @@
-﻿//
+//
 // Author: greg zakharov
 //
 #include <windows.h>

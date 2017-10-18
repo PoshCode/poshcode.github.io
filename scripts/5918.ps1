@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Gets direct youtube links for given search term
 

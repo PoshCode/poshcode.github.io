@@ -1,4 +1,4 @@
-﻿Param(
+Param(
 	[string]$CCNetListenerFile = $null,
 	[string]$MyComputerName = [System.Environment]::MachineName,
 	[string]$Config='Debug',

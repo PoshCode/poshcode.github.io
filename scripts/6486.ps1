@@ -1,4 +1,4 @@
-﻿<#
+<#
 Original https://github.com/gregzakh/alt-ps/blob/master/ConvertFrom-Docx.ps1
 #>
 function ConvertFrom-Docx {

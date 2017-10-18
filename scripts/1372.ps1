@@ -1,4 +1,4 @@
-﻿function Get-vCenterRetentionPolicy {
+function Get-vCenterRetentionPolicy {
 	$settings = get-view -id OptionManager-VpxSettings
 	if ($settings) {
 		$maxAge = ($settings.Setting | where { $_.Key -eq "task.maxAge" }).Value

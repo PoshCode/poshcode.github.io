@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Purgefiles - recursively remove files with given extension and maximum age from a given path.
 .DESCRIPTION

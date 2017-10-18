@@ -1,4 +1,4 @@
-﻿<#
+<#
 By Adam Driscoll
 12/14/2012
 Twitter: @adamdriscoll

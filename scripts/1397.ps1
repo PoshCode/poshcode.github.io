@@ -1,4 +1,4 @@
-﻿Function Test-GroupMembership {
+Function Test-GroupMembership {
 	Param($user,$group)
 	Get-QADUser $user | select memberof | %{
 		$result = $false

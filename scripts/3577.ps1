@@ -1,4 +1,4 @@
-﻿param(
+param(
 #distribution group holding usermailbox(es)
 [string] $DistGroup = "XC2010Move",
 #move requests per batch/script run

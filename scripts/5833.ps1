@@ -1,4 +1,4 @@
-﻿####################### 
+####################### 
 <# 
 .SYNOPSIS 
 Writes data only to SQL Server tables. 

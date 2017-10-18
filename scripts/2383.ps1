@@ -1,4 +1,4 @@
-﻿Script
+Script
 
 set-psdebug -trace 2
 $sftp = "c:\bin\pscp.exe"

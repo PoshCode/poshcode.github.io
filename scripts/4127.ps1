@@ -1,4 +1,4 @@
-﻿<#
+<#
     Requires ILSpy
     Tested with version 2.1.0.1603
     http://ilspy.net/

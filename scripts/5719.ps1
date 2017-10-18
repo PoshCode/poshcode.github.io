@@ -1,4 +1,4 @@
-﻿function Get-ScriptDC
+function Get-ScriptDC
 {
 
     <#

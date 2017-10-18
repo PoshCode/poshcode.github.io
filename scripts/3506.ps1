@@ -1,4 +1,4 @@
-﻿# Requires a connection to Exchange Server, or Exchange Management Shell
+# Requires a connection to Exchange Server, or Exchange Management Shell
 
 $s = New-PSSession -ConfigurationName Microsoft.Exchange -Name ExchMgmt -ConnectionUri http://ex14.domain.local/PowerShell/ -Authentication Kerberos
 Import-PSSession $s

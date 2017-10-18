@@ -1,4 +1,4 @@
-﻿param($ComputerName = 'COMPUTERNAME')
+param($ComputerName = 'COMPUTERNAME')
 
 $output = [PSCustomObject]@{ComputerName = $ComputerName;MonitorSizes=''}
 

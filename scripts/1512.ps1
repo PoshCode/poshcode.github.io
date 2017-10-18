@@ -1,4 +1,4 @@
-﻿# For example I have this function
+# For example I have this function
 
 function copySourceDestination {
 	Param (

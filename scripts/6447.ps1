@@ -1,4 +1,4 @@
-﻿$folder1 = "C:\Users\Ciphr\Desktop\Test\738"
+$folder1 = "C:\Users\Ciphr\Desktop\Test\738"
         $folder2 = "C:\Users\Ciphr\Desktop\Test\740"
 
 

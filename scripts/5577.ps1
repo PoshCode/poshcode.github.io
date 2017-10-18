@@ -1,4 +1,4 @@
-﻿$ParamObject = new-object PSObject
+$ParamObject = new-object PSObject
 
 $ParamObject | Add-Member Noteproperty OutputFile "C:\root\FarmPermissionReportByUser.csv"
 $ParamObject | Add-Member Noteproperty UserToCheck "es2\es2admin"

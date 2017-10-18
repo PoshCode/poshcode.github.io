@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Checks if a specific disk exists.
 

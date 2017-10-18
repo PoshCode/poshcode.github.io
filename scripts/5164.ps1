@@ -1,4 +1,4 @@
-﻿New-Alias see Get-CommandDefinition
+New-Alias see Get-CommandDefinition
 
 #.SYNOPSIS
 #  Gets the definition of the first command found

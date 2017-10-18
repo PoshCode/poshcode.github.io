@@ -1,4 +1,4 @@
-﻿function Update-Scopes($siteUrl)
+function Update-Scopes($siteUrl)
 {
 	[void][reflection.assembly]::Loadwithpartialname("Microsoft.SharePoint") | out-null
 	[void][reflection.assembly]::Loadwithpartialname("Microsoft.office.server.search") | out-null

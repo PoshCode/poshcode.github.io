@@ -1,4 +1,4 @@
-﻿$filesize = (get-item F:\pastuhov\keywords\aa2.txt).length
+$filesize = (get-item F:\pastuhov\keywords\aa2.txt).length
 $fileread = New-Object System.IO.BinaryReader([System.IO.File]::Open("F:\pastuhov\keywords\aa2.txt", [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite))
 $filewrite= New-Object System.IO.BinaryWriter([System.IO.File]::Open("F:\pastuhov\keywords\aaaaaaaaaaa.txt", [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite))
 

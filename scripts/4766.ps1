@@ -1,4 +1,4 @@
-﻿#It seems very curios feature IsConsoleApplication defined in
+#It seems very curios feature IsConsoleApplication defined in
 #System.Management.Automation.NativeCommandProcessor class
 #because it always returns True at text files and etc. but not
 #on Windows application. Why?

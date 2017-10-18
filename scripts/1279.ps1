@@ -1,4 +1,4 @@
-﻿[string]$entry = $args[0]
+[string]$entry = $args[0]
 if ($entry -eq $null) { [string]$entry = Read-Host -Prompt "Enter Computer Name" }
 
 $Computers = Get-QADComputer $entry

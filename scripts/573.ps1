@@ -1,4 +1,4 @@
-﻿# Get-ProcessCount uses 2 main variables, server and process name.
+# Get-ProcessCount uses 2 main variables, server and process name.
 # Process name is typically the end exe, such as "svchost.exe"
 # Will accept unnamed args (Get-ProcessCount servername processname)
 # or named args (Get-ProcessCount -Computer servername -Process processname)

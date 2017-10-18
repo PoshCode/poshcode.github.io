@@ -1,4 +1,4 @@
-﻿# The trigger
+# The trigger
 $obj = New-Object system.Net.NetworkInformation.Ping
 100..200 | % { $ip = "10.1.1.$_"
 $ping = $obj.send($ip,100)

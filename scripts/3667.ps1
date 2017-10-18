@@ -1,4 +1,4 @@
-﻿# Get User/Pass
+# Get User/Pass
 $Cred = Get-Credential
 # Add Quest CMDLETS
 Add-PSSnapin Quest.ActiveRoles.ADManagement -WarningAction SilentlyContinue -ErrorAction SilentlyContinue

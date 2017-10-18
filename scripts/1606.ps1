@@ -1,4 +1,4 @@
-﻿<#
+<#
   This is a proxy function enhancing Select-Object by adding the
   ability to use subproperties in the Property parameters.
   

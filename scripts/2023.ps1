@@ -1,4 +1,4 @@
-﻿Function Get-EmptyGroup
+Function Get-EmptyGroup
 {
     <#
     .Synopsis

@@ -1,4 +1,4 @@
-﻿Add-Type -As System.IO.Compression.FileSystem
+Add-Type -As System.IO.Compression.FileSystem
 
 function New-ZipFile {
   #.Synopsis

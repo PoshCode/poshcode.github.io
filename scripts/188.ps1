@@ -1,4 +1,4 @@
-﻿## Language.ps1 includes Resolve-Language, Get-English, and Resolve-Anagram
+## Language.ps1 includes Resolve-Language, Get-English, and Resolve-Anagram
 ###################################################################################################
 ## Some language functions, including a language guessing script using a web form 
 ## Xerox Research Center Europe (www.xrce.xerox.com) which may not always be available, 

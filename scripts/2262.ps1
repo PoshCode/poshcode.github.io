@@ -1,4 +1,4 @@
-﻿## Generate two dummy datatables in a dataset for testing
+## Generate two dummy datatables in a dataset for testing
 $global:dt1 = New-Object system.data.datatable "Times"
 $global:dt2 = New-Object system.data.datatable "Properties"
 $global:ds = New-Object system.data.dataset "dataset"

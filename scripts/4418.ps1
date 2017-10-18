@@ -1,4 +1,4 @@
-﻿function Import-PfxCertificate {
+function Import-PfxCertificate {
     #.Synopsis
     #  Import a pfx certificate to the specified local certificate store
     #.Example

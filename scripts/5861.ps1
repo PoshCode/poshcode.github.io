@@ -1,4 +1,4 @@
-﻿function Measure-Command {
+function Measure-Command {
     [CmdletBinding()]
     param(
         [ScriptBlock]$Command,

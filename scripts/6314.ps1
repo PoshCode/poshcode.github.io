@@ -1,4 +1,4 @@
-﻿<?xml version="1.0"?>
+<?xml version="1.0"?>
 <Settings>
 	<siglog>\\FOO\signatures_log.txt</siglog>
 	<siglogerror>\\FOO\signatures_errorlog.txt</siglogerror>

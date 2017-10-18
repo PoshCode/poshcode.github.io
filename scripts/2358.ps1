@@ -1,4 +1,4 @@
-﻿#This scripts compares the agents that are installed in two zones and
+#This scripts compares the agents that are installed in two zones and
 #gives the agents that are not common.
 
 #Usage:

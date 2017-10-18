@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #   Parse natural language descriptions of appointments or meetings ...
 #.EXAMPLE 
 @@#  New-Event Lunch every other Friday at 11:45

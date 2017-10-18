@@ -1,4 +1,4 @@
-﻿function Write-Host
+function Write-Host
 {
     <#
     .SYNOPSIS

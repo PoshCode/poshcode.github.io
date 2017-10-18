@@ -1,4 +1,4 @@
-﻿if((Get-Command Get-Website, Get-WebApplication, Get-WebConfiguration, Get-WebConfigFile, Set-WebConfigurationProperty -EA 0).Count -lt 5) {
+if((Get-Command Get-Website, Get-WebApplication, Get-WebConfiguration, Get-WebConfigFile, Set-WebConfigurationProperty -EA 0).Count -lt 5) {
    throw "The required commands from the 'WebAdministration' module are not available. Import the WebAdministration module and try again.`n
 The following commands are required: Get-Website, Get-WebApplication, Get-WebConfiguration, Get-WebConfigFile, Set-WebConfigurationProperty"
 }

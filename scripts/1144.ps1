@@ -1,4 +1,4 @@
-﻿Begin { 
+Begin { 
 	#VMware VM Host (ESX) UUID
 	$VMHost_UUID = @{ 
         Name = "VMHost_UUID" 

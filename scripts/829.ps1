@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Creates a task in Outlook
 .DESCRIPTION

@@ -1,4 +1,4 @@
-﻿# a helper GUI to create RoboCopy commands 
+# a helper GUI to create RoboCopy commands 
 # uses FormsLib.ps1 
 # 
 # /\/\o\/\/ 

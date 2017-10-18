@@ -1,4 +1,4 @@
-﻿# Tip of the hat to @daniel_rehn for original idea
+# Tip of the hat to @daniel_rehn for original idea
 # based on the image he tweeted of seeyouspacecowboy.sh 
 # his shell script is here :: https://gist.github.com/danielrehn/d2e6f2129e5f853c3166
 # This is my take in PowerShell (I think I got the ascii art right)

@@ -1,4 +1,4 @@
-﻿#function ConvertFrom-Hashtable {
+#function ConvertFrom-Hashtable {
 [CmdletBinding()]
    PARAM(
       [Parameter(ValueFromPipeline=$true, Mandatory=$true)]

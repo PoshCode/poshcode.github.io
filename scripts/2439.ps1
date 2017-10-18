@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
 		Tests for a valid IP mask.
 	

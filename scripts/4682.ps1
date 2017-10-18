@@ -1,4 +1,4 @@
-﻿Function Get-DeviceChassis () {
+Function Get-DeviceChassis () {
 	[CmdletBinding()]
     Param($ComputerName = 'localhost')
  

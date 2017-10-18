@@ -1,4 +1,4 @@
-﻿#Requires -Version 2.0
+#Requires -Version 2.0
 
 <#
 	Export-Html behaves exactly like native ConvertTo-HTML

@@ -1,4 +1,4 @@
-﻿function Convert-ToCHexString {
+function Convert-ToCHexString {
 [CmdletBinding()]
 param (
     [Parameter(ValueFromPipeline=$true,Mandatory=$true)][string]$str

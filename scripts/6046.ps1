@@ -1,4 +1,4 @@
-﻿#Pointers:
+#Pointers:
 $EnableUser = 512
 $DisableUser = 2
 $PasswordNotExpire = 65536

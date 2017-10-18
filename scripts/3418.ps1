@@ -1,4 +1,4 @@
-﻿function Get-ProcAddress {
+function Get-ProcAddress {
 <#
 .Synopsis
 Returns the address of the desired Windows API function.

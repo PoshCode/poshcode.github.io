@@ -1,4 +1,4 @@
-﻿# Get-CalendarWeek by Holger Adam
+# Get-CalendarWeek by Holger Adam
 # Simple function to retrieve the calendar week to a given or the current date.
 # The function always assumes a calendar week rule of at least four days and the week starting with monday.
 

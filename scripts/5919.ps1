@@ -1,4 +1,4 @@
-﻿function Find-FolderUniqueID
+function Find-FolderUniqueID
 {
        
        <#

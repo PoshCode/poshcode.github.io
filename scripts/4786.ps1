@@ -1,4 +1,4 @@
-﻿$i = 1
+$i = 1
 [Math]::Pow(((++$i + ++$i) * ++$i), ++$i) #this returns 3200000
 #what do you think is $i right now? it's "5"
 #reseting $i

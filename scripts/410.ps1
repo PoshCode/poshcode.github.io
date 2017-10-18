@@ -1,4 +1,4 @@
-﻿function burn()
+function burn()
 {
 #get the files and ship them to burn-file
 dir -recurse -include *.iso -path c:\,d:\,e:\ | foreach { burn-file $_.FullName }

@@ -1,4 +1,4 @@
-﻿Function Get-VMMemory {
+Function Get-VMMemory {
 <# 
 .SYNOPSIS
 Retrieves memory usage percentage for a Windows VMWare virtual server. 

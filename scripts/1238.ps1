@@ -1,4 +1,4 @@
-﻿#requires -version 2
+#requires -version 2
 $NetSnmp = Join-Path $env:programfiles "Net-SNMP\bin"
 	if ( -not ( Test-Path "$NetSnmp\snmpwalk.exe" ) ) {
 		Throw "Net-SNMP binaries not found in $NetSnmp. Please install to this folder `

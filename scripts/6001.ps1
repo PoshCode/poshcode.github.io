@@ -1,4 +1,4 @@
-﻿function Invoke-PowerTipsMenu
+function Invoke-PowerTipsMenu
 {
     function Start-PowerTipsMonthly ([int]$Volume)
     {

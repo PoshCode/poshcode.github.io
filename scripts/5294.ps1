@@ -1,4 +1,4 @@
-﻿function Get-Manipulator {
+function Get-Manipulator {
   <#
     .EXAMPLE
         PS C:\> Get-Manipulator Mouse

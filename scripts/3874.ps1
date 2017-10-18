@@ -1,4 +1,4 @@
-﻿function New-Eicar {
+function New-Eicar {
 <#
 .SYNOPSIS
  

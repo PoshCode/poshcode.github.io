@@ -1,4 +1,4 @@
-﻿# 
+# 
 # simple example using a hash to parse CAS Connect Logs
 #
 # after using the get-CASConnectLogEntries.ps1 to collect the log information

@@ -1,4 +1,4 @@
-﻿#.SYNOPSIS
+#.SYNOPSIS
 #  Gets a directory entry from ActiveDirectory based on the login user name
 function Get-ADUser {
 [CmdletBinding()]

@@ -1,4 +1,4 @@
-﻿function New-Module {
+function New-Module {
    #.Synopsis
    #  Generate a new module from some script files
    #.Description

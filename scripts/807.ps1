@@ -1,4 +1,4 @@
-﻿## Tab-Completion
+## Tab-Completion
 #################
 ## For V2CTP3.
 ## All or some features won't work on V1 and V2CTP and V2CTP2.

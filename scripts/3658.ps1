@@ -1,4 +1,4 @@
-﻿param ( 
+param ( 
   $Cmdlet,
   [switch]$ShowCommon, 
   [switch]$Full

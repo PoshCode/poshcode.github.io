@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 .NOTES  
     File Name  : send-HL7Message.ps1  
     Author     : Rob Holme (rob@holme.com.au) 

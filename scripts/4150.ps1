@@ -1,4 +1,4 @@
-﻿# Import-IISLog 
+# Import-IISLog 
 param ($Path)
 get-content $Path |
   foreach {

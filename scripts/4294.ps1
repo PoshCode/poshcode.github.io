@@ -1,4 +1,4 @@
-﻿
+
 function Encode-FileToBase64Block {
     param ( [ValidateScript({Test-Path $_ -PathType 'Leaf'})][string]$SourcePath ) 
     $leafName = (Get-Item $SourcePath).Name 

@@ -1,4 +1,4 @@
-﻿
+
 function OnApplicationLoad
 {
 	#TODO: Add custom code to validate application load

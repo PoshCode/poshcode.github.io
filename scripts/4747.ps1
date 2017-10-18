@@ -1,4 +1,4 @@
-﻿Set-Alias gmt Get-MachineType
+Set-Alias gmt Get-MachineType
 
 function Get-MachineType {
   param(

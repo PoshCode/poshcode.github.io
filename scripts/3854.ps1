@@ -1,4 +1,4 @@
-﻿function Get-NTStatusException
+function Get-NTStatusException
 {
 <#
 .SYNOPSIS

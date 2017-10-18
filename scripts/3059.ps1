@@ -1,4 +1,4 @@
-﻿function New-Event {
+function New-Event {
 <#
 .Synopsis
    Generates a new event from a plain English string

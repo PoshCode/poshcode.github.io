@@ -1,4 +1,4 @@
-﻿param( [string] $VIServer )
+param( [string] $VIServer )
 
 if ($VIServer -eq ""){
 	Write-Host

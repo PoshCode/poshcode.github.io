@@ -1,4 +1,4 @@
-﻿Param ($servercsv)
+Param ($servercsv)
 
 # $servercsv is the input file
 

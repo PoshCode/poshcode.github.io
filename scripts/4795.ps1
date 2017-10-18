@@ -1,4 +1,4 @@
-﻿Set-Alias strings Get-Strings
+Set-Alias strings Get-Strings
 
 function Get-Strings {
   <#

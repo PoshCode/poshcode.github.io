@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Demonstrates uptime using WMI 
 .DESCRIPTION

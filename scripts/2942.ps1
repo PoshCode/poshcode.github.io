@@ -1,4 +1,4 @@
-﻿Function Get-Printers
+Function Get-Printers
 {
     <#
     .SYNOPSIS

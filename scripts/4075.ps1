@@ -1,4 +1,4 @@
-﻿#Require 2.0
+#Require 2.0
 
 $def = [Environment]::CurrentDirectory
 

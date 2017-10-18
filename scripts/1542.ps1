@@ -1,4 +1,4 @@
-﻿function Set-PSODefaultProperties {
+function Set-PSODefaultProperties {
     param(
           [PSObject]$Object,
           [string[]]$DefaultProperties

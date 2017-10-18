@@ -1,4 +1,4 @@
-﻿#Created by P. Sukus
+#Created by P. Sukus
 #Name: iPhone users syncing through OWA audit 
 #set the timeframe to audit in days
 $Daysold = 1 

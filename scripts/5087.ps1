@@ -1,4 +1,4 @@
-﻿#This script will map multiple pst files automatically
+#This script will map multiple pst files automatically
 #If you work helpdesk like me, it will save you years on your life (not kidding)
 
 #This bit of code is optional, its just to pretty up the shell

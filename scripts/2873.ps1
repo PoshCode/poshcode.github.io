@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Get the BIOS serial numbers from computers in the domain.
     .DESCRIPTION

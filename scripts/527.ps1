@@ -1,4 +1,4 @@
-﻿function Is-SameSubnet {param(	[string]$IP1,
+function Is-SameSubnet {param(	[string]$IP1,
 				[string]$IP2,
 				[string]$Subnet = "255.255.255.0")
 	

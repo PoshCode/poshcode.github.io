@@ -1,4 +1,4 @@
-﻿Param($property,$tport=135,$timeout=1000,[switch]$port,[switch]$verbose)
+Param($property,$tport=135,$timeout=1000,[switch]$port,[switch]$verbose)
 Begin{
     function TestPort {
         Param($srv)

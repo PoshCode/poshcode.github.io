@@ -1,4 +1,4 @@
-﻿
+
 
 function where-property([string] $PropertyName,[string]$SubProperty , $is,$isnot,$contains,$in)  
 {

@@ -1,4 +1,4 @@
-﻿# Wordlist of choice. Used with New-PassPhrase function.
+# Wordlist of choice. Used with New-PassPhrase function.
 $PasswdList = Import-CSV $ENV:UserProfile\words.csv
 
 function Check-Even($num){[bool]!($num%2)}

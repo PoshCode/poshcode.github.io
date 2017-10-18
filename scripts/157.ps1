@@ -1,4 +1,4 @@
-﻿function Spin-Busy {
+function Spin-Busy {
 	param(
 		[Int]														$msWait =		0,
 		[String]													$spinStr =		'-\|/. ',

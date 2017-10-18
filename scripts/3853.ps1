@@ -1,4 +1,4 @@
-﻿#Initialize Global Variables
+#Initialize Global Variables
 $NumYears = 0
 $NumMonths = 0
 $NumDays = 0

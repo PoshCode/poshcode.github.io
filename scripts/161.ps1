@@ -1,4 +1,4 @@
-﻿## Start-Timer.ps1
+## Start-Timer.ps1
 ## A kitchen timer script with visible countdown and customizable audio alert and messages
 ####################################################################################################
 param( $seconds=0,  $reason="The Timer",  $SoundFile="$env:SystemRoot\Media\notify.wav",

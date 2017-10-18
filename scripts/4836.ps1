@@ -1,4 +1,4 @@
-﻿function Get-SignerName {
+function Get-SignerName {
   param(
     [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]
     [ValidateScript({Test-Path $_})]

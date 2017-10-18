@@ -1,4 +1,4 @@
-﻿$VMs = get-vm
+$VMs = get-vm
 $Results = @()
 foreach ($VM in $VMs) {
     $Result = new-object PSObject

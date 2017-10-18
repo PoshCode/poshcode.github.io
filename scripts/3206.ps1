@@ -1,4 +1,4 @@
-﻿#####################################################################
+#####################################################################
 #	TIAA-CREF VMWare Standard Scripts - PowerCLI
 #
 # 	Purpose:  "Check and upgrade Tools during power cycling"

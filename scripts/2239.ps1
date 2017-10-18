@@ -1,4 +1,4 @@
-﻿#
+#
 # This script will help detect vulnerable configuration for the Padding Oracle 
 # ASP.Net vulnerability documented in MS advisory 2416728.
 # 

@@ -1,4 +1,4 @@
-﻿# For TabExpansion.ps1
+# For TabExpansion.ps1
 # this requires latest TabExpansion.ps1
 function Get-PipeLineObject {
 

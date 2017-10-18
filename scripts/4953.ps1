@@ -1,4 +1,4 @@
-﻿# Get-WSManCredSSPConfiguration.ps1
+# Get-WSManCredSSPConfiguration.ps1
 # Compile a WSManCredSSP configuration object for the local or remote computer
 # Inspired by http://www.ravichaganti.com/blog/?p=1902
 # http://blog.victorvogelpoel.nl/2014/03/03/powershell-get-wsmancredsspconfiguration-getting-credssp-configuration-for-local-or-remote-computers/

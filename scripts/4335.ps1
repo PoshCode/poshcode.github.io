@@ -1,4 +1,4 @@
-﻿# This function does a HTTP GET against the vCloud 5.1 API using our current API session.
+# This function does a HTTP GET against the vCloud 5.1 API using our current API session.
 # It accepts any vCloud HREF.
 function Get-vCloud51($href)
 {

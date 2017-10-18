@@ -1,4 +1,4 @@
-﻿@@This code was copied from the site http://www.ti4fun.com
+@@This code was copied from the site http://www.ti4fun.com
 @@-----------------------------------------------------------
 
 

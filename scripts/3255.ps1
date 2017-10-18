@@ -1,4 +1,4 @@
-﻿
+
 function Export-DefaultParameter {
 #.Synopsis
 #  Exports the current default parameter values

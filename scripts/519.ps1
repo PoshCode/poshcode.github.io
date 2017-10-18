@@ -1,4 +1,4 @@
-﻿########################################################
+########################################################
 # Created by Brian English
 # for Charlotte County Government
 # No warranty suggested or implied

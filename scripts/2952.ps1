@@ -1,4 +1,4 @@
-﻿#Requires -Version 2.0
+#Requires -Version 2.0
 #Requires â€“PsSnapIn Quest.ActiveRoles.ADManagement
 #Requires â€“PsSnapIn VMware.VimAutomation.Core
 <#>

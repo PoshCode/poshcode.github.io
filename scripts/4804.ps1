@@ -1,4 +1,4 @@
-﻿#requires -Module SQLite
+#requires -Module SQLite
 
 if(!(Test-Path data:)) {
    Mount-SQLite -name data -dataSource data.sqlite

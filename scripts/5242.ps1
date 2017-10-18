@@ -1,4 +1,4 @@
-﻿if (Get-USA) {
+if (Get-USA) {
    if (Continue-LobbyUkraineFascism) {
        Set-USA -Status Nazi
        Kill-Psaki

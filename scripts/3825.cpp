@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Creates a fir tree in your console!
 #.Description
 #  A simple christmas tree simulation with (optional) flashing lights. 

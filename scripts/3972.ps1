@@ -1,4 +1,4 @@
-﻿@charset "utf-8";
+@charset "utf-8";
 /*
 Credit: http://www.templatemo.com
 */

@@ -1,4 +1,4 @@
-﻿# Add the Active Directory bits and not complain if they're already there
+# Add the Active Directory bits and not complain if they're already there
 Import-Module ActiveDirectory -ErrorAction SilentlyContinue
 
 # set default password

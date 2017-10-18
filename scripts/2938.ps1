@@ -1,4 +1,4 @@
-﻿function Delete-ADUser
+function Delete-ADUser
 {
 	Param($userName = $(throw 'Enter a username to delete'))
 	$searcher = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"","(&(objectcategory=user)(sAMAccountName=$userName))")

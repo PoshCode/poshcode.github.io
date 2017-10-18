@@ -1,4 +1,4 @@
-﻿    function Trace-Message {
+    function Trace-Message {
         #.Synopsis
         #   A function to print trace messages with timings.
         #.Notes

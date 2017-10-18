@@ -1,4 +1,4 @@
-﻿#Publish FF Entry using PowerShell script
+#Publish FF Entry using PowerShell script
 #Description: PowerShell script to publish an entry to Friendfeed.
 #Change the FF Username and Remotekey in the script.
 #More info on the FF Api: http://friendfeed.com/api/

@@ -1,4 +1,4 @@
-﻿# Name  : Find-Abbreviation.ps1
+# Name  : Find-Abbreviation.ps1
 # Author: David "Makovec" Moravec
 # Web   : http://www.powershell.cz
 # Email : powershell.cz@googlemail.com

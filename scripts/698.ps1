@@ -1,4 +1,4 @@
-﻿#Get all mailboxes that have an active sync partnership:
+#Get all mailboxes that have an active sync partnership:
 $Mailboxes = Get-CASMailbox -Filter{HasActiveSyncDevicePartnership -eq $true}| select name, servername, DistinguisheDName, ActiveSyncMailboxPolicy
 
 $NumberWiped = 0

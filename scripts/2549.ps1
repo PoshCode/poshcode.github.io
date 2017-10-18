@@ -1,4 +1,4 @@
-﻿
+
 #======================================================================================
 #              File Name : FixInvalidVMs.ps1
 #        Original Author : Kenneth C. Mazie 

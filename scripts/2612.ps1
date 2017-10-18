@@ -1,4 +1,4 @@
-﻿#requires â€“version 2.0
+#requires â€“version 2.0
 
 #region Help
 

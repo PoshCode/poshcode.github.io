@@ -1,4 +1,4 @@
-﻿function Out-UnixFile
+function Out-UnixFile
 {
     Param(
 

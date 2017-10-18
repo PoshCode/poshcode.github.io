@@ -1,4 +1,4 @@
-﻿function Start-ScriptThreading{
+function Start-ScriptThreading{
 <#   
 .SYNOPSIS
    

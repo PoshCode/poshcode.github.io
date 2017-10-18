@@ -1,4 +1,4 @@
-﻿#This script extracts the UNC paths from all login scripts associated to users.
+#This script extracts the UNC paths from all login scripts associated to users.
 #Author: Justin Grote
 
 #Netlogon Path

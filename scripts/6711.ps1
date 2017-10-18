@@ -1,4 +1,4 @@
-﻿function Get-RarContent {
+function Get-RarContent {
   <#
     .SYNOPSIS
         Gets content of a compressed (RAR) file.

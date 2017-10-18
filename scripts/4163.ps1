@@ -1,4 +1,4 @@
-﻿
+
 $name = Read-Host 'SSIS_DUMMY?'
 $E = $name
 

@@ -1,4 +1,4 @@
-﻿# Name: Get-Tail.ps1
+# Name: Get-Tail.ps1
 # Author: William Stacey
 # Created: 02/22/2007
 # Description: Gets the last N lines of a file. Does scan from end-of-file so works on large files. Also has a loop flag that prompts for refresh.

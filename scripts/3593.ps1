@@ -1,4 +1,4 @@
-﻿function is-natural{
+function is-natural{
 	param ($number)
 	if($number -like "*.*" -or $number -like "*-*"){
 		return $false

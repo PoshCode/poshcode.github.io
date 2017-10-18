@@ -1,4 +1,4 @@
-﻿# Load the template
+# Load the template
 $url = "http://spf" # where template base
 $namesite = "Good Site" #name new site title
 $targeturl = "goodsite" #name url new site

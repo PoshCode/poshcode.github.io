@@ -1,4 +1,4 @@
-﻿<#
+<#
 	Example on how to use Proxy Cmdlets in combination with object events.
 	For more information see:
 	

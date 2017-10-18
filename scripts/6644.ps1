@@ -1,4 +1,4 @@
-﻿# Simple PowerShell JSON Server:
+# Simple PowerShell JSON Server:
 
 
 function Start-WebServer {

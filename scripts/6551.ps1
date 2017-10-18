@@ -1,4 +1,4 @@
-﻿function Get-TVShowNextAirDate
+function Get-TVShowNextAirDate
 {
     <#
     .Synopsis

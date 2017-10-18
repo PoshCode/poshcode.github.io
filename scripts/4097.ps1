@@ -1,4 +1,4 @@
-﻿    #First Stanza
+    #First Stanza
     [System.Console]::Beep(587.3,200)
     [System.Console]::Beep(1174.7,200)
     [System.Console]::Beep(880,200)

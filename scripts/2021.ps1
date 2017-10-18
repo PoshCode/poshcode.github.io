@@ -1,4 +1,4 @@
-﻿Function Take-ScreenShot {
+Function Take-ScreenShot {
     <#  
 .SYNOPSIS  
     Used to take a screenshot of the desktop or the active window. 

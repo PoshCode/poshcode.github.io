@@ -1,4 +1,4 @@
-﻿function Get-IBResourceRecord
+function Get-IBResourceRecord
 {
 
     <#

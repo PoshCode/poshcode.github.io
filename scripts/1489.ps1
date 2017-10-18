@@ -1,4 +1,4 @@
-﻿@@#BASEPATH variable should be explicitly set in every 
+@@#BASEPATH variable should be explicitly set in every 
 @@#build script. It represents the "root"
 @@#of the project folder, underneath which all tools, source, config settings,
 @@#and deployment folder lie.

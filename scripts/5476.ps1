@@ -1,4 +1,4 @@
-﻿Function Get-ComputerReport {
+Function Get-ComputerReport {
 	[CmdletBinding()]
 	Param (
 		[Parameter(ValueFromPipeline=$true,

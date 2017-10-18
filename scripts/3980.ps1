@@ -1,4 +1,4 @@
-﻿param(
+param(
 [Parameter(Position=0,ValueFromPipeline=$True)]$GPOs = @(Get-GPO -All),
 [string] $Reportfolder = [Environment]::getfolderpath("mydocuments") + "\GPOreports"
 )

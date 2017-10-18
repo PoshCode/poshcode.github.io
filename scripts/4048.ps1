@@ -1,4 +1,4 @@
-﻿#######################
+#######################
 <#
 .SYNOPSIS
 Gets the Scan time information for Sophos

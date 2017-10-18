@@ -1,4 +1,4 @@
-﻿#Requires -version 2.0
+#Requires -version 2.0
 ##This is just script-file nesting stuff, so that you can call the SCRIPT, and after it defines the global function, it will call it.
 param ( 
    [Parameter(Position=1,ValueFromPipelineByPropertyName=$true,Mandatory=$true)]

@@ -1,4 +1,4 @@
-﻿## Get-HtmlHelp - by Joel Bennett
+## Get-HtmlHelp - by Joel Bennett
 ## version 3.2
 #####################################################################
 ## Cool Example, using ShowUI:

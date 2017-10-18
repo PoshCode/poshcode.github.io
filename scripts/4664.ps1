@@ -1,4 +1,4 @@
-﻿<#
+<#
        .SYNOPSIS
               Change the setting for TCPIP KeepAliveTime on a server or several
               servers.

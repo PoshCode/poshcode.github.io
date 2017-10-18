@@ -1,4 +1,4 @@
-﻿## USING the binaries from:
+## USING the binaries from:
 ## http://downloads.sourceforge.net/sharpssh/SharpSSH-1.1.1.13.bin.zip
 [void][reflection.assembly]::LoadFrom( (Resolve-Path "~\Documents\WindowsPowerShell\Libraries\Tamir.SharpSSH.dll") )
 

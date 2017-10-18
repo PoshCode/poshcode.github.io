@@ -1,4 +1,4 @@
-﻿$mytypes = @()
+$mytypes = @()
 function run-csharpexpression([string] $expression )
 {
 $global:ccounter = [int]$ccounter + 1

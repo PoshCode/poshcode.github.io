@@ -1,4 +1,4 @@
-﻿## This is the first version of a Growl module (just dot-source to use in PowerShell 1.0)
+## This is the first version of a Growl module (just dot-source to use in PowerShell 1.0)
 ## Initially it only supports a very simple notice, and I haven't gotten callbacks working yet
 ## Coming soon: 
 ## * Send notices to other PCs directly

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Gets the start time of the PC
 

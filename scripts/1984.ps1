@@ -1,4 +1,4 @@
-﻿    <#
+    <#
         .Synopsis
 	       Gets the daily woot deal from woot.com.
         .Description

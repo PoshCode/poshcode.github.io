@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Parses an Apache redirect file to identify broken entries.
 .DESCRIPTION

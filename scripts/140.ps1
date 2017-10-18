@@ -1,4 +1,4 @@
-﻿#REQUIRES -pssnapin quest.activeroles.admanagement
+#REQUIRES -pssnapin quest.activeroles.admanagement
 #REQUIRES -pssnapin Pscx
 
 begin {

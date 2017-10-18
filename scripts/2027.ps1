@@ -1,4 +1,4 @@
-﻿#MSDTC is needed by SQL Server Linked Servers
+#MSDTC is needed by SQL Server Linked Servers
 #This script checks whether MSDTC has been configured for network access
 #See KB http://support.microsoft.com/default.aspx?scid=kb;en-us;816701 for steps to enable
 #All values except AllowOnlySecureRpcCalls should be true

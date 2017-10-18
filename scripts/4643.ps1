@@ -1,4 +1,4 @@
-﻿function Get-WmiNSTree {
+function Get-WmiNSTree {
   param(
     [Parameter(Mandatory=$true)]
     [String]$NameSpace

@@ -1,4 +1,4 @@
-﻿function get-currentPayOffInYears {
+function get-currentPayOffInYears {
 	[cmdletbinding()]
 	param(
 		[Parameter(Mandatory=$true,Position=1)]

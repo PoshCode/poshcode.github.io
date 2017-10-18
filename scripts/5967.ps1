@@ -1,4 +1,4 @@
-﻿# ####################################################################
+# ####################################################################
 # This is a fun script to take test with the help of input boxes.
 # And the best part is  it ueses the system Speech to speak the 
 # questions as well

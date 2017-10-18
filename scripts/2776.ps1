@@ -1,4 +1,4 @@
-﻿Function Get-SiSReport
+Function Get-SiSReport
 {
     <#
         .SYNOPSIS

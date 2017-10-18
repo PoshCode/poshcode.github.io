@@ -1,4 +1,4 @@
-﻿Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 ##############################################################################################################
 ## REQUIRES -Module Accelerators -URI http://www.poshcode.org/762

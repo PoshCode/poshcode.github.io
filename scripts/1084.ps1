@@ -1,4 +1,4 @@
-﻿#requires -pssnapin VMware.Vimautomation.Core
+#requires -pssnapin VMware.Vimautomation.Core
 Param(
     [int]
     $LastDays

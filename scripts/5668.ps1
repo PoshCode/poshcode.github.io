@@ -1,4 +1,4 @@
-﻿# Unzip the file and keep the zip
+# Unzip the file and keep the zip
 # Unzip-File -FileName 'test.zip'
 # Unzip the file and delete the zip
 # Unzip-File -FileName 'test.zip' -DeleteSource $True

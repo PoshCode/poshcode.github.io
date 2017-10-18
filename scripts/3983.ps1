@@ -1,4 +1,4 @@
-﻿function Mount-UserDrives {
+function Mount-UserDrives {
   <#
     .Synopsis
         Create additional user drives.

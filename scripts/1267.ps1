@@ -1,4 +1,4 @@
-﻿function Add-NoteProperty {
+function Add-NoteProperty {
   <#
 .Synopsis
   Adds a NoteProperty member to an object.

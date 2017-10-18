@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 set PSScriptRoot -val $(Split-Path $MyInvocation.MyCommand.Path) -opt Constant
 
 function Get-UserStatus {

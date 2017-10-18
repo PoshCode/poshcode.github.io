@@ -1,4 +1,4 @@
-﻿#requires -Version 2.0
+#requires -Version 2.0
 #requires -Module HttpRest -Version 1.2
 # http`://poshcode.org/1262
 Set-StrictMode -Version 2.0

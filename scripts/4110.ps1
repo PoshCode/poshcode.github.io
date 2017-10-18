@@ -1,4 +1,4 @@
-﻿If ([intptr]::size -eq 4) {
+If ([intptr]::size -eq 4) {
 	$powerShellDir = $powershelldir = "$env:Windir\Sysnative\WindowsPowerShell\V1.0\"
 	$dir = "& `"$env:ProgramFiles\Check_MK\plugins\Ex2010_MBDB_Info.ps1`""
 	$bytes = [Text.Encoding]::Unicode.GetBytes($dir)

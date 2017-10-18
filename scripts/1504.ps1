@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 # Select-Xml 2.2 and Remove-XmlNamespace
 # Version History:
 # Select-Xml 2.0 was the first script version I wrote, and it didn't function identically to the built-in Select-Xml with regards to parameter parsing

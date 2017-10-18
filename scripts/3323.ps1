@@ -1,4 +1,4 @@
-﻿function Get-SerialNumber {
+function Get-SerialNumber {
   $regVal = Get-ItemProperty $regDir.PSPath
   $arrVal = $regVal.DigitalProductId
   $arrBin = $arrVal[52..66]

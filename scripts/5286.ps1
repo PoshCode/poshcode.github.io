@@ -1,4 +1,4 @@
-﻿import-csv c:\foo
+import-csv c:\foo
 
 net use z: \\0.0.0.0\c$ /user:foo foo
 

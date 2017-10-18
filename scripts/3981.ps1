@@ -1,4 +1,4 @@
-﻿function Get-UserStatus {
+function Get-UserStatus {
   <#
     .Synopsis
         Get extended information about local user.

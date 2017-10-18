@@ -1,4 +1,4 @@
-﻿#
+#
 # By Adam Driscoll
 # This is very much a test function to see if this was possible. There was no polishing done. Please visit 
 # http://csharpening.net/?p=867 for more information. 

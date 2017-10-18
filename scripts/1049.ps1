@@ -1,4 +1,4 @@
-﻿## New-CodeSigningCert.ps1
+## New-CodeSigningCert.ps1
 ########################################################################################################################
 ## Does the setup needed to self-sign PowerShell scripts ...
 ## Generates a "test" self-signed root Certificate Authority 

@@ -1,4 +1,4 @@
-﻿param
+param
 (
     [string] $Name = $(Read-Host "Provide a value for parameter 'Name'"),
     [string] $Protocol = 'TCP',

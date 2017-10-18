@@ -1,4 +1,4 @@
-﻿#require -version 2.0
+#require -version 2.0
 <#
 .SYNOPSIS
 This PowerShell Script will compare all of the files in the same directory on two or more different computers. It will compute the MD5 hash of a file and use that to compare

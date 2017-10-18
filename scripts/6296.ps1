@@ -1,4 +1,4 @@
-﻿# Prompt for Search String
+# Prompt for Search String
 $Input = Read-Host	'Dot-sourced path to input file (eg .\Targets.txt)'
 Write-Host		' '
 Write-Host		'Wildcard characters * and ? can be used in the pattern'

@@ -1,4 +1,4 @@
-﻿# FoxPro does this:
+# FoxPro does this:
 # lcStringToRun =  "! \N C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe '\\NTSERVER\FinishImport.ps1 -CSV " + ALLTRIM(THISFORM.ordergenobj.ImportFileContents) + "'"
 # So basically a powershell.exe call is being assembled and ran by FoxPro.
 

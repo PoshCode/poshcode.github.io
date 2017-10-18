@@ -1,4 +1,4 @@
-﻿# 1. Create a simple customizations spec:
+# 1. Create a simple customizations spec:
 $custSpec = New-OSCustomizationSpec -Type NonPersistent -OSType Windows `
     -OrgName “My Organization” -FullName “MyVM” -Domain “MyDomain” `
     –DomainAdminUsername “user” –DomainAdminPassword “password”

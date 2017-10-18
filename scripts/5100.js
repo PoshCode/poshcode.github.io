@@ -1,4 +1,4 @@
-﻿(function() {
+(function() {
   var key = 'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\',
       i, j, res;
       

@@ -1,4 +1,4 @@
-﻿while($cell.value2.length -ge 0) {
+while($cell.value2.length -ge 0) {
   $name = $cell.value2
   $sam = $cell.offset(0,1).value2
   $givenName = $cell.offset(0,2).value2

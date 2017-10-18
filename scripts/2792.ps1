@@ -1,4 +1,4 @@
-﻿# .Synopsis
+# .Synopsis
 #   Use the Get-MailboxImportRequestProgress cmdlet to view detailed information about pst import progress.
 # .Description
 #   The Get-MailboxImportRequestProgress cmdlet displays statistics on imports currently in progress that help determine if a import is likely to complete successfully. To accureately evaluate the current progress of an import examine the durration it has been running and the number of times the estimated number of items have been transferred.

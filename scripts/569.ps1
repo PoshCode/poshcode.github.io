@@ -1,4 +1,4 @@
-﻿# Code to auto update the Address policy, GAL, OAB and storage groups and mailbox databases of an Exchange 2007 server by John McLear
+# Code to auto update the Address policy, GAL, OAB and storage groups and mailbox databases of an Exchange 2007 server by John McLear
 # This code is good for hosting providers or people who wish to use lots of storage groups and mailbox databases.
 # 
 # Thanks to Joel Bennett (Jaykul) for general scripting help and the friendly folks in #powershell - freenode

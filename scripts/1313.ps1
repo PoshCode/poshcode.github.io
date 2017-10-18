@@ -1,4 +1,4 @@
-﻿# vProfile-ClusterAudit.ps1	: vSphere cluster node auditing script
+# vProfile-ClusterAudit.ps1	: vSphere cluster node auditing script
 # This script will compare all VI/vSphere cluster nodes against a reference node
 # Parameters:
 #	$xmlFile	: XML profile file, created by the vProfile.ps1 script

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Get-GprsTime (V4.0 Update for Windows 7 and allow time correction)  Check the 
 total connect time of any GPRS devices from a specified date. 

@@ -1,4 +1,4 @@
-﻿function Get-Captures {
+function Get-Captures {
   #.Synopsis
   #   Takes data and a regex containing named captures, and outputs all of the resulting captures in one (or more) hashtable(s)
 param( 

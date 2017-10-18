@@ -1,4 +1,4 @@
-﻿$datetime = Get-Date -Format "yyMMdd-HHmm"
+$datetime = Get-Date -Format "yyMMdd-HHmm"
 
 $objDomain = New-Object System.DirectoryServices.DirectoryEntry
 [string]$DomainName = $objDomain.name

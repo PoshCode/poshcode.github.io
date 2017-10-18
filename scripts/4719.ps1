@@ -1,4 +1,4 @@
-﻿Set-Alias ffws Find-FileWithSignature
+Set-Alias ffws Find-FileWithSignature
 
 function Find-FileWithSignature {
   <#

@@ -1,4 +1,4 @@
-﻿function New-SQLComputerLogin {
+function New-SQLComputerLogin {
 param(
 	[Parameter(Mandatory=$True,Position=0)]
 	[String]$SQLServer,

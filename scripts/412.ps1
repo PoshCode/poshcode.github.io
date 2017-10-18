@@ -1,4 +1,4 @@
-﻿# Name: zip.ps1
+# Name: zip.ps1
 # Author: Shadow
 # Created: 05/12/2008
 param([string]$zipfilename=$(throw "ZIP archive name needed!"), 

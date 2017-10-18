@@ -1,4 +1,4 @@
-﻿param(
+param(
     # The name of the file to edit.
     $TargetFile,
 

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Creates a custom error record.
 .DESCRIPTION

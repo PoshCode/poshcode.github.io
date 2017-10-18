@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	WinPE Push Button Reset
 .DESCRIPTION

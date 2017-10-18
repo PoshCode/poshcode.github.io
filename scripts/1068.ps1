@@ -1,4 +1,4 @@
-﻿
+
 param ($Subnet, $SiteName, $Location, [switch]$Help)
 
 function Help

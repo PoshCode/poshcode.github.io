@@ -1,4 +1,4 @@
-﻿####### Log deletions in all sites in a web application ######
+####### Log deletions in all sites in a web application ######
 
 ############# http://iLoveSharePoint.com ##################
 ############## by Christian Glessner ######################

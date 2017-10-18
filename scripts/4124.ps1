@@ -1,4 +1,4 @@
-﻿<#
+<#
 ALZDBA SQLServer_Export_DeadlockGraphs_SMO.ps1
 Export top n Deadlock graphs for all databases of a given SQLServer (SQL2008+) Instance
 results in a number of .XDL files and one overview file *AllDbDeadlockGraphs.csv.

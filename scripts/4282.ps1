@@ -1,4 +1,4 @@
-﻿#========================================================================
+#========================================================================
 #Credits to http://poshcode.org/2886 as I leveraged some functions
 #Please modify parameters in Email-RebootResult
 #

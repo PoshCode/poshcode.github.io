@@ -1,4 +1,4 @@
-﻿function Update-ModulePath {
+function Update-ModulePath {
 <#
     .Synopsis
         Command insures that path and the name of psm1 file are alike.

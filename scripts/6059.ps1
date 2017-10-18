@@ -1,4 +1,4 @@
-﻿function Show-CPU {
+function Show-CPU {
   <#
     .EXAMPLE
         Show-CPU

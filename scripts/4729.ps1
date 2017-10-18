@@ -1,4 +1,4 @@
-﻿function frmMain_Show([String]$card) {
+function frmMain_Show([String]$card) {
   Add-Type -Assembly System.Windows.Forms
   [Windows.Forms.Application]::EnableVisualStyles()
   

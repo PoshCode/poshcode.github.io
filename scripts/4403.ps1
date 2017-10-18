@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]param(
+[CmdletBinding()]param(
     [string]$query, 
     [string]$server,
     [switch]$nOforward

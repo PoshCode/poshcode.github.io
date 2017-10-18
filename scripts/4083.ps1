@@ -1,4 +1,4 @@
-﻿$nul = "<NULL>"
+$nul = "<NULL>"
 $type = "Directory", "File"
 
 function Show-Error([string]$mes) {

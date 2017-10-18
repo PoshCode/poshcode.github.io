@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 .SYNOPSIS
     Flattens a hashtable, removing 'unnecessary' levels of nesting.

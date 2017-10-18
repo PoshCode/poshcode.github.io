@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     BER encoding library
 

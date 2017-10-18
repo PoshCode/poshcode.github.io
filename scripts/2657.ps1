@@ -1,4 +1,4 @@
-﻿function Get-BogonList {
+function Get-BogonList {
 <#
 	.SYNOPSIS
 		Gets the bogon list.

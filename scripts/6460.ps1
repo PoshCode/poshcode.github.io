@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    This script is to give you some basic info for troubleshooting or gathering data for a support call
 .DESCRIPTION

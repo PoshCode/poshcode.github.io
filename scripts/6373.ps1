@@ -1,4 +1,4 @@
-﻿#Requires -version 5.0
+#Requires -version 5.0
 <#
 .SYNOPSIS
 	Archives and deletes files on the basis of an ISO 8601 date (YYYY-MM-DD) in the first ten bytes of the file name.

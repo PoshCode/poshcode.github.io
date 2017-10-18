@@ -1,4 +1,4 @@
-﻿<#
+<#
  # Function to select any file using GUI from Powershell
  #Downloaded from technet
  http://blogs.technet.com/b/heyscriptingguy/archive/2009/09/01/hey-scripting-guy-september-1.aspx

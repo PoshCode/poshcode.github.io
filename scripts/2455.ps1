@@ -1,4 +1,4 @@
-﻿# http://powershell.codeplex.com
+# http://powershell.codeplex.com
 
 Function Test-TCPPort
 {

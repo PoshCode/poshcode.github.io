@@ -1,4 +1,4 @@
-﻿function JoinTwoCustomObjs($Parent,$Child,$Key)
+function JoinTwoCustomObjs($Parent,$Child,$Key)
 {	
 	$CurrentErrorSetting = $ErrorActionPreference
 	$ErrorActionPreference = 'SilentlyContinue'

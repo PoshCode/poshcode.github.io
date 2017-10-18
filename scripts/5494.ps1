@@ -1,4 +1,4 @@
-﻿    # Download Get-WinEventData ... https://gallery.technet.microsoft.com/scriptcenter/Get-WinEventData-Extract-344ad840
+    # Download Get-WinEventData ... https://gallery.technet.microsoft.com/scriptcenter/Get-WinEventData-Extract-344ad840
         . "\\path\to\Get-WinEventData.ps1"
 
     # Set up Sysmon as desired

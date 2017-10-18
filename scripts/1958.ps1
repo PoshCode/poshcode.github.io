@@ -1,4 +1,4 @@
-﻿trap [System.Management.Automation.RuntimeException]
+trap [System.Management.Automation.RuntimeException]
 {
     $entryException = $_
     

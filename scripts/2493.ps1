@@ -1,4 +1,4 @@
-﻿param([Parameter(ValueFromPipelineByPropertyName=$true)][Alias("PSPath")][string]$Path) 
+param([Parameter(ValueFromPipelineByPropertyName=$true)][Alias("PSPath")][string]$Path) 
 begin {
 
 Add-Type -TypeDef @"

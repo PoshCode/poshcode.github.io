@@ -1,4 +1,4 @@
-﻿# vminfo.ps1
+# vminfo.ps1
 #
 # Give this a VMware guest and it will attempt to dump all the information available.
 #

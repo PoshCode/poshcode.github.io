@@ -1,4 +1,4 @@
-﻿## An update using New-WebServiceProxy to the MSDN ContentService instead of HttpRest
+## An update using New-WebServiceProxy to the MSDN ContentService instead of HttpRest
 ## See: http: //services.msdn.microsoft.com/ContentServices/ContentService.asmx
 
 ## This is a VERY EARLY prototype of a function that could retrieve cmdlet help from TechNet ...

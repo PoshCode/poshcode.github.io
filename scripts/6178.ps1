@@ -1,4 +1,4 @@
-﻿#Save this as a .ps1 script, dot source and then just call the function (if credentials is null, it will prompt for login info)
+#Save this as a .ps1 script, dot source and then just call the function (if credentials is null, it will prompt for login info)
 #This was tested on JIRA v5.1.7 (should work on everything at or above)
 #Notice there are two different methods of authentication used below (both types work fine)
 

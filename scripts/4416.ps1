@@ -1,4 +1,4 @@
-﻿function Get-WifiNetwork {
+function Get-WifiNetwork {
     end {
         netsh wlan sh net mode=bssid | % -process {
             if ($_ -match '^SSID (\d+) : (.*)$') {

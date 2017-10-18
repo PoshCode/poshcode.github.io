@@ -1,4 +1,4 @@
-﻿$alphabet = '!"¹;%:?*()_+=-~/\<>,.[]{}1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';$iter=343
+$alphabet = '!"¹;%:?*()_+=-~/\<>,.[]{}1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';$iter=343
 [Console]::Write("Enter your master password: ")
 $pass="";while($true){$key=[Console]::ReadKey($true);if($key.Key-eq[ConsoleKey]::Backspace){[Console]::Write("`b `b");$pass = $pass.Substring(0, ($pass.Length - 1))}elseif($key.Key-eq[ConsoleKey]::Enter){break}else{$pass+=$key.KeyChar;[Console]::Write("*")}};""
 $htool=New-Object System.Security.Cryptography.SHA512Managed

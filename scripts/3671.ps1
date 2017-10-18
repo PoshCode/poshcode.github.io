@@ -1,4 +1,4 @@
-﻿Hi,
+Hi,
 
 I've tried your excellent -Append feature for export-csv and it works good. I've only have a short question. 
 

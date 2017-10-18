@@ -1,4 +1,4 @@
-﻿Param (
+Param (
 	[Parameter(ValueFromPipelineByPropertyName=$True,
 		HelpMessage='Lotus Domino Server')]
 		$ServerName,

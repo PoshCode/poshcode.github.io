@@ -1,4 +1,4 @@
-﻿New-UIWidget { 
+New-UIWidget { 
    Grid {
       $shadow = DropShadowEffect -ShadowDepth 0 -BlurRadius 5 -Direction 0
       Ellipse -Name Hour   -Fill Transparent -Stroke Black -StrokeThickness 100 -Width 350 -Height 350 -StrokeDashArray 7.85,7.85 -RenderTransformOrigin "0.5,0.5" -RenderTransform { RotateTransform -Angle -90 }

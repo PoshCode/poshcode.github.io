@@ -1,4 +1,4 @@
-﻿##########################################################################################
+##########################################################################################
 ## Depends on the PsXmppHelper.dll from http://CodePlex.com/PowerXmpp
 ## CONTAINS Read-HostMasked http://powershellcentral.com/scripts/104
 ## CONTAINS Out-Working http://powershellcentral.com/scripts/105

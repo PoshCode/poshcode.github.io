@@ -1,4 +1,4 @@
-﻿function Get-RelativeFileHash {
+function Get-RelativeFileHash {
    param(
       [Parameter(Mandatory=$True)]
       $Root,

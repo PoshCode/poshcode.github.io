@@ -1,4 +1,4 @@
-﻿# GpupdateADcomputer
+# GpupdateADcomputer
 # Synopsis: Updates group policy on remote domain computer,(Can be modified easily to include all computers or a list.).
 # Johnny Reel
 # V1.0

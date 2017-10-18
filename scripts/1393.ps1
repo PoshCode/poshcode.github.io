@@ -1,4 +1,4 @@
-﻿Function Test-ADCredentials {
+Function Test-ADCredentials {
 	Param($username, $password, $domain)
 	Add-Type -AssemblyName System.DirectoryServices.AccountManagement
 	$ct = [System.DirectoryServices.AccountManagement.ContextType]::Domain

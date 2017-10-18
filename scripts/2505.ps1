@@ -1,4 +1,4 @@
-﻿function prompt {
+function prompt {
   $mapped_drives =    Get-WmiObject Win32_LogicalDisk -Filter "drivetype=4" | foreach {echo $_.deviceid}
   $local_drives =     Get-WmiObject Win32_LogicalDisk -Filter "drivetype=3" | foreach {echo $_.deviceid}
   $removable_drives = Get-WmiObject Win32_LogicalDisk -Filter "drivetype=2" | foreach {echo $_.deviceid}

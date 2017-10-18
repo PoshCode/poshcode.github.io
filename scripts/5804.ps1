@@ -1,4 +1,4 @@
-﻿#
+#
 # Requires the DLL from the taskscheduler managed wrapper
 # http://taskscheduler.codeplex.com/releases/view/120747
 #

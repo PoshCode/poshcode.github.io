@@ -1,4 +1,4 @@
-﻿$Script:xhtmlns = @{x="http://www.w3.org/1999/xhtml"}
+$Script:xhtmlns = @{x="http://www.w3.org/1999/xhtml"}
 $Script:Definitions = @{}
 $Script:LastWord = ""
 $Script:LastDefinitionIndex = 0

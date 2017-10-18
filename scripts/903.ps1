@@ -1,4 +1,4 @@
-﻿# WS-MAN monitoring of ESX with PowerShell.
+# WS-MAN monitoring of ESX with PowerShell.
 # This requires PowerShell v2 CTP3 and requires the new WS-MAN CTP
 # from MS (currently 64 bit only)
 # You will also need to allow basic auth.

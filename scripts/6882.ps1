@@ -1,4 +1,4 @@
-﻿Clear
+Clear
 # Draw a vertical line on the right side of the console window
     $position = $Host.UI.RawUI.CursorPosition
     $height = $Host.UI.RawUI.WindowSize.height

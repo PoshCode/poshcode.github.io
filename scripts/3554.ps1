@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
    Executes a set of parameterized script blocks asynchronously using runspaces, and returns the resulting data.
 .DESCRIPTION

@@ -1,4 +1,4 @@
-﻿function elevate-process
+function elevate-process
 {
 	$file, [string]$arguments = $args;
 	$psi = new-object System.Diagnostics.ProcessStartInfo $file;

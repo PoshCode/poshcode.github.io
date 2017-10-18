@@ -1,4 +1,4 @@
-﻿New-Variable castDictionaryEntries
+New-Variable castDictionaryEntries
 [System.Func[System.Collections.IEnumerable, System.Collections.Generic.IEnumerable[System.Collections.DictionaryEntry]]] `
     $castDictionaryEntries = [System.Delegate]::CreateDelegate(
         [System.Func[System.Collections.IEnumerable, System.Collections.Generic.IEnumerable[System.Collections.DictionaryEntry]]],

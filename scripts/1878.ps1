@@ -1,4 +1,4 @@
-﻿function WinFirewall-Disabled(){
+function WinFirewall-Disabled(){
 param (
 $computer
 )

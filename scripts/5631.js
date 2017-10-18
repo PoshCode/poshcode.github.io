@@ -1,4 +1,4 @@
-﻿(function() {
+(function() {
   var i, raw = 0,
       arr = (new ActiveXObject('WScript.Shell')).RegRead(
         'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Windows\\ShutdownTime'

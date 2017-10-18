@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 # No help (yet) because I'm still changing and renaming everything every time I mess with this code
 Add-Type -Assembly System.ServiceModel.Web, System.Runtime.Serialization
 $utf8 = [System.Text.Encoding]::UTF8

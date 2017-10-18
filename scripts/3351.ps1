@@ -1,4 +1,4 @@
-﻿#Author: Ant B 2012
+#Author: Ant B 2012
 #Purpose: Batch feed recipients to MailChimp
 
 # Check for ActiveDirectory Module and load if it isn't already.

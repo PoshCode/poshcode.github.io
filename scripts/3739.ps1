@@ -1,4 +1,4 @@
-﻿# DefaultParameters Module
+# DefaultParameters Module
 # 1.4 - removed extra parameter set to get parameter binding working better
 #     - added default aliases (sdp/gdp/rmdp)
 #requires -version 3.0

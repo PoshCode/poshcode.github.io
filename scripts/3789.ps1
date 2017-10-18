@@ -1,4 +1,4 @@
-﻿# List of  Guids not properly defined in AD but used
+# List of  Guids not properly defined in AD but used
 # Used to initialize GuidCache. 
 New-Variable -Name GuidCache -Force -Option AllScope -Scope Script -Description "Cached GUIDs from AD. :: [redtoo]" 
 $Script:GuidCache = @{

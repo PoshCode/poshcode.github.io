@@ -1,4 +1,4 @@
-﻿Param($user,
+Param($user,
       $password = $(Read-Host "Enter Password" -asSec),
       $filter = "(objectclass=user)",
       $server = $(throw '$server is required'),

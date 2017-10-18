@@ -1,4 +1,4 @@
-﻿function Start-Countdown{
+function Start-Countdown{
 <#
 	.Synopsis
 	 Initiates a countdown on your session.  Can be used instead of Start-Sleep.

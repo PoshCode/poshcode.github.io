@@ -1,4 +1,4 @@
-﻿#
+#
 # Out-AnsiGraph.psm1
 # Author:       xcud
 # History:

@@ -1,4 +1,4 @@
-﻿Function Get-WindowsProduct
+Function Get-WindowsProduct
 {
 	function DecodeDigitalPID([byte[]]$digitalProductId)
 	{

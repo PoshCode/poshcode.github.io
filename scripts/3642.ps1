@@ -1,4 +1,4 @@
-﻿$FolderPath = "\\FilerName\ShareName"
+$FolderPath = "\\FilerName\ShareName"
 
 
 $rootfolder = Get-ChildItem -Path $FolderPath -recurse 

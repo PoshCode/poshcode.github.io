@@ -1,4 +1,4 @@
-﻿#requires -pssnapin VMware.VimAutomation.Core -version 1.0
+#requires -pssnapin VMware.VimAutomation.Core -version 1.0
 # Author:  Glenn Sizemore
 # URL:	   http`://get-admin.com/blog/?p=47
 # Purpose: Move VMware templates

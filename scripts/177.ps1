@@ -1,4 +1,4 @@
-﻿## Pause (aka Pause-Script)
+## Pause (aka Pause-Script)
 ## Pause the script and wait for user action
 ###################################################################################################
 ## Parameters (are all OPTIONAL)

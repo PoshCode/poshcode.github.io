@@ -1,4 +1,4 @@
-﻿#################################################
+#################################################
 # Sample code showing how to save/load PowerShell script
 # configuration to disk
 #

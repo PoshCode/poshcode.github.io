@@ -1,4 +1,4 @@
-﻿function Execute-SQLCommand {param(	[string]$Server,				#the host name of the SQL server
+function Execute-SQLCommand {param(	[string]$Server,				#the host name of the SQL server
 					[string]$Database,				#the name of the database
 					[System.Data.SqlClient.SqlCommand]$Command)	#the command to execute (name of stored procedure)
 

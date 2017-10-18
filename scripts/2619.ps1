@@ -1,4 +1,4 @@
-﻿#requires -version 1.0
+#requires -version 1.0
 ################################################################################
 ## Run commands in multiple concurrent pipelines
 ##   by Arnoud Jansveld - www.jansveld.net/powershell

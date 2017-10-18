@@ -1,4 +1,4 @@
-﻿function Get-NetView  {
+function Get-NetView  {
 	param($Computer)
 	
 	$Result = @()

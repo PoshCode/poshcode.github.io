@@ -1,4 +1,4 @@
-﻿# Logpings.ps1
+# Logpings.ps1
 # Version: 1.0
 # Author: Jacob Saaby Nielsen
 # Author E-Mail: jsy@systematic.com

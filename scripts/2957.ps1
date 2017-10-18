@@ -1,4 +1,4 @@
-﻿Function Convert-FspToUsername
+Function Convert-FspToUsername
 {
     <#
         .SYNOPSIS

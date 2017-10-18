@@ -1,4 +1,4 @@
-﻿## SETTINGS START ##
+## SETTINGS START ##
 
 $date = Get-Date
 $targetGroup = "Enter the name of your production WSUS target group here"

@@ -1,4 +1,4 @@
-﻿$missingFld = @()
+$missingFld = @()
 # Create an array of the full paths to the Clients folders
 $clientPaths = (Get-ChildItem 'C:\Shared Drives\Clients'| Where-Object {$_.PSIsContainer}).FullName
 

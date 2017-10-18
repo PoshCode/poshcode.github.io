@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 1
+$ErrorActionPreference = 1
 
 [void](
   Set-Variable -Name z_ -Value (Join-Path HKCU:\Software (

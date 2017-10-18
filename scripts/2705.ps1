@@ -1,4 +1,4 @@
-﻿$secpasswd = ConvertTo-SecureString "here the password" -AsPlainText -Force
+$secpasswd = ConvertTo-SecureString "here the password" -AsPlainText -Force
 $mycreds = New-Object System.Management.Automation.PSCredential ("Administrator@domain", $secpasswd)
 
 $subnet="192.168.0." 

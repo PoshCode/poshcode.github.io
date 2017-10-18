@@ -1,4 +1,4 @@
-﻿#Connection Strings
+#Connection Strings
 $Database = "Database"
 $Server = "SQLServer"
 #SMTP Relay Server

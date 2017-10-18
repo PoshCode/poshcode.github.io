@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 This module provides Cmdlets that help to manage Network routes.
 .DESCRIPTION

@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 CMDLET Set-AuthenticodeSignature -snapin Huddled.BetterDefaults {
 PARAM ( 
    [Parameter(Position=1, Mandatory=$true, ValueFromPipelineByPropertyName=$true)]

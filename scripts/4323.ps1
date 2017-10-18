@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Uses plink to run an ssh remote command.
 

@@ -1,4 +1,4 @@
-﻿	[void]([reflection.assembly]::LoadWithPartialName("Microsoft.office.server"))
+	[void]([reflection.assembly]::LoadWithPartialName("Microsoft.office.server"))
 
 	$serverContext = [Microsoft.Office.Server.ServerContext]::Default
 	$upm = [Microsoft.Office.Server.UserProfiles.UserProfileManager]$serverContext

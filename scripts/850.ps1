@@ -1,4 +1,4 @@
-﻿
+
 function Create-SCCMCollection
 {
 param($Server = $Env:ComputerName, $Name, $Site, $ParentCollectionID = "COLLROOT")

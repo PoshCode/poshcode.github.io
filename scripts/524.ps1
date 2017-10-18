@@ -1,4 +1,4 @@
-﻿
+
 [45]: [IO.File]::ReadAllLines( "C:\Users\Joel\Sites\webalizer.current" ).Length
 31873
 [46]: (gc C:\Users\Joel\Sites\webalizer.current).Length

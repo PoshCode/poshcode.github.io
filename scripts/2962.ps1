@@ -1,4 +1,4 @@
-﻿function Get-FreeRam {
+function Get-FreeRam {
 #.Synopsis
 #  Gets the FreePhysicalMemory from the specified computer(s)
 #.Parameter ComputerName

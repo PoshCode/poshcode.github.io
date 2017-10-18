@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Schreiben sie ein Programm,dass ihnen für eine bestimmte Stelle,
  * die zugehörige Fibonacci Zahl ausgibt.
  */

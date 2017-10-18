@@ -1,4 +1,4 @@
-﻿function Get-DirSize {
+function Get-DirSize {
 <#
 .Synopsis
   Gets a list of directories and sizes.

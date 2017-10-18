@@ -1,4 +1,4 @@
-﻿# vCheck - Daily Error Report 
+# vCheck - Daily Error Report 
 # 
 # Changes:
 # Version 1.10 - Added How many days old the snapshots are

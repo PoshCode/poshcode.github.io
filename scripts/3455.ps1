@@ -1,4 +1,4 @@
-﻿function Move-ISETab
+function Move-ISETab
 {
     param(
         $offset = 1

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Import Exchange 2010 Gal photo for one or more users. 
 .DESCRIPTION

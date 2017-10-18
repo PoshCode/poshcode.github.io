@@ -1,4 +1,4 @@
-﻿function Set-ComputerName {
+function Set-ComputerName {
 	param(	[switch]$help,
 		[string]$originalPCName=$(read-host "Please specify the current name of the computer"),
 		[string]$computerName=$(read-host "Please specify the new name of the computer"))

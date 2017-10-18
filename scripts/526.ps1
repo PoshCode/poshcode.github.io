@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # Out-Wiki - converts cmdlets help to media wiki (wikipedia) format
 # http://dmitrysotnikov.wordpress.com/2008/08/18/out-wiki-convert-powershell-help-to-wiki-format/
 # Modify the invocation line at the bottom of the script to point to your

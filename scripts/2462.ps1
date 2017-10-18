@@ -1,4 +1,4 @@
-﻿Add-PSSnapin VMware.VimAutomation.Core
+Add-PSSnapin VMware.VimAutomation.Core
 Import-Module DataOntap
 $cred = Get-VICredentialStoreItem -Host nau-vc.naucom.com -File c:\users\aaworkman\powershell\credentials.xml
 Connect-VIServer nau-vc -User $cred.User -Password $cred.Password

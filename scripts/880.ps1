@@ -1,4 +1,4 @@
-﻿## Tab-Completion
+## Tab-Completion
 #################
 ## Please dot souce this script file.
 ## In first loading, it may take a several minutes, in order to generate ProgIDs and TypeNames list.

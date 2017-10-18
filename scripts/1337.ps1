@@ -1,4 +1,4 @@
-﻿function Get-SerialNumber {
+function Get-SerialNumber {
 	param([VMware.VimAutomation.Types.VMHost[]]$InputObject = $null)
 
 	process {

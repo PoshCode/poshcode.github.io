@@ -1,4 +1,4 @@
-﻿Function Compare-Even($num){ # Dependency for New-PassPhrase function
+Function Compare-Even($num){ # Dependency for New-PassPhrase function
 	[bool]!($num%2)
 }
 

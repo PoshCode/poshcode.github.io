@@ -1,4 +1,4 @@
-﻿Add-Type -ErrorAction Stop <# -path $PSScriptRoot\FileSystemPath.cs #> @'
+Add-Type -ErrorAction Stop <# -path $PSScriptRoot\FileSystemPath.cs #> @'
 using System;
 using System.ComponentModel;
 using System.Management.Automation;

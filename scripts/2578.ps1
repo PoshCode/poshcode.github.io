@@ -1,4 +1,4 @@
-﻿param([Microsoft.Exchange.WebServices.Data.FileAttachment]$attachment)
+param([Microsoft.Exchange.WebServices.Data.FileAttachment]$attachment)
 "Downloading Attachment"
 $attachment.Load()
 "Done"

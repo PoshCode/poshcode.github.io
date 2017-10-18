@@ -1,4 +1,4 @@
-﻿Function Lock-WorkStation {
+Function Lock-WorkStation {
 $signature = @"
 [DllImport("user32.dll", SetLastError = true)]
 public static extern bool LockWorkStation();

@@ -1,4 +1,4 @@
-﻿Add-Type -TypeDefinition @"
+Add-Type -TypeDefinition @"
 
 public struct HashContainer : System.IComparable
 {

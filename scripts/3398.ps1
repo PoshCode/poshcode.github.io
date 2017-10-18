@@ -1,4 +1,4 @@
-﻿Function Get-SharePermissions($ShareName){
+Function Get-SharePermissions($ShareName){
     $Share = Get-WmiObject win32_LogicalShareSecuritySetting -Filter "name='$ShareName'"
     if($Share){
         $obj = @()

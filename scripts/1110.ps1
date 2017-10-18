@@ -1,4 +1,4 @@
-﻿#.SYNOPSIS
+#.SYNOPSIS
 #  A few functions for working with FriendFeed and Twitter
 #.DESCRIPTION
 #  Allows you to copy your users from Twitter to imaginary FriendFeed users...

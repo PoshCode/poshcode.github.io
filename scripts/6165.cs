@@ -1,4 +1,4 @@
-﻿// .NET 4+ required
+// .NET 4+ required
 using System;
 using System.Linq;
 using System.Reflection;

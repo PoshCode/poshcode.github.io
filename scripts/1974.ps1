@@ -1,4 +1,4 @@
-﻿#
+#
 # DATE  : 6/21/2010
 # COMMENT: This is an updated Version of my Cook Book from Augest of 2008
 #

@@ -1,4 +1,4 @@
-﻿# to make it readable, I've wrapped the lines, but you can remove all the line breaks:
+# to make it readable, I've wrapped the lines, but you can remove all the line breaks:
 &{ 
   PARAM($FileName,$HashFileName) 
   ((Get-Content $HashFileName) -match $FileName)[0].split(" ")[0] -eq 

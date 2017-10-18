@@ -1,4 +1,4 @@
-﻿function load-omsa([string]$server) {
+function load-omsa([string]$server) {
 
 	$omsaie = new-object -com InternetExplorer.Application
 	if (($server -eq $null) -or ($server -eq "")) {

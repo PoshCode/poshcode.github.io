@@ -1,4 +1,4 @@
-﻿Function Set-RemoteService
+Function Set-RemoteService
 {
 <#
 	.SYNOPSIS

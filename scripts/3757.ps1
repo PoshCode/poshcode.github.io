@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Runs an SSIS package from an SQL package store.
 .DESCRIPTION

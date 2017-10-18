@@ -1,4 +1,4 @@
-﻿Function Global:Get-NestedGroups {
+Function Global:Get-NestedGroups {
 	<#
 		.SYNOPSIS
 			Enumerate all AD group memberships of an account (including nested membership).

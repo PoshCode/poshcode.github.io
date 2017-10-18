@@ -1,4 +1,4 @@
-﻿#If you use .NET Framework 4.5 then the best way to create zip file will be using
+#If you use .NET Framework 4.5 then the best way to create zip file will be using
 #ZipFile class which defined in System.IO.Compression.FileSystem.dll assembly.
 #If you use .NET Framework 3.0 then it possible to create zip file with next way:
 function Add-FileToZip {

@@ -1,4 +1,4 @@
-﻿###
+###
 # Purpose        : Import vCenter roles and permissions into a new vCenter.
 # Created        : 18/08/2010
 # Author         : VMware Community, namely Alan Renouf and Luc Dekens

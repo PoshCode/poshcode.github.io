@@ -1,4 +1,4 @@
-﻿function New-ODataServiceProxy {
+function New-ODataServiceProxy {
 #.Synopsis
 #  Creates a proxy class for an odata web service
 #  YOU NEED TO BE VERY CAREFUL NOT TO OUTPUT THE PROXY OBJECT TO THE POWERSHELL HOST!

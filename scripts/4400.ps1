@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]param($query, $server)
+[CmdletBinding()]param($query, $server)
 $TLDs = DATA {
   @{
     ".br.com"="whois.centralnic.net"

@@ -1,4 +1,4 @@
-﻿#PowerShell Script 
+#PowerShell Script 
 #This script deletes all shadow copies older than 30 days
 #By Wayne Johnson
 

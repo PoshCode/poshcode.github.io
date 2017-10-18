@@ -1,4 +1,4 @@
-﻿Add-PSSnapin -Name Microsoft.SharePoint.PowerShell
+Add-PSSnapin -Name Microsoft.SharePoint.PowerShell
 
 $claim = New-SPClaimTypeMapping -IncomingClaimType "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress" -IncomingClaimTypeDisplayName "EmailAddress" -SameAsIncoming
 

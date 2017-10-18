@@ -1,4 +1,4 @@
-﻿Function Get-PendingUpdates { 
+Function Get-PendingUpdates { 
 <#    
   .SYNOPSIS   
     Retrieves the updates waiting to be installed from WSUS   

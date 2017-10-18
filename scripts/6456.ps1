@@ -1,4 +1,4 @@
-﻿function Trace-Message {
+function Trace-Message {
     [CmdletBinding(DefaultParameterSetName="Precalculated")]
     param(
         [Parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName="Precalculated",Position=0)]

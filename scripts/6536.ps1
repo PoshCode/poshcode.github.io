@@ -1,4 +1,4 @@
-﻿#path of the script
+#path of the script
 $scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
 
 #This Module is needed to overcome to long paths

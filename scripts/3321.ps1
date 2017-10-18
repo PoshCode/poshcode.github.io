@@ -1,4 +1,4 @@
-﻿$empty = "<NULL>"
+$empty = "<NULL>"
 
 $itmType = "Directory", "File"
 

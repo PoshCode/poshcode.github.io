@@ -1,4 +1,4 @@
-﻿function ConvertTo-RelativeTimeString {
+function ConvertTo-RelativeTimeString {
 #.Synopsis 
 #  Calculates a relative text version of a duration
 #.Description

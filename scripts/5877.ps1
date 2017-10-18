@@ -1,4 +1,4 @@
-﻿#  Import the Exchange Web Services module
+#  Import the Exchange Web Services module
 Import-Module -Name "C:\Program Files\Microsoft\Exchange\Web Services\2.2\Microsoft.Exchange.WebServices.dll"
 
 #  Create the services object used to connect to Exchange

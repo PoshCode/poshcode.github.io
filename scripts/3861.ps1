@@ -1,4 +1,4 @@
-﻿$snapins = "vmware.vimautomation.core"
+$snapins = "vmware.vimautomation.core"
 foreach ($snapin in $snapins){if (!(Get-PSSnapin $snapin -ErrorAction SilentlyContinue)){Add-PSSnapin $snapin}}
 
 $vserver = "vmware vCenter Server"

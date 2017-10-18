@@ -1,4 +1,4 @@
-﻿# Version:	0.1
+# Version:	0.1
 # Author:	Stefan Stranger
 # Description:	Retrieve Dell Order Status
 # Start Page Order Status USA: https://support.dell.com/support/order/status.aspx?c=us&cs=19&l=en&s=dhs&~ck=pn

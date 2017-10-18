@@ -1,4 +1,4 @@
-﻿if (!(Test-Path alias:pipelist)) { Set-Alias pipelist Get-PipeList }
+if (!(Test-Path alias:pipelist)) { Set-Alias pipelist Get-PipeList }
 
 function Get-PipeList {
   <#

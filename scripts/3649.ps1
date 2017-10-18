@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Report-RecipientCounts.ps1
     Keep a running total of daily recipient count distribution.

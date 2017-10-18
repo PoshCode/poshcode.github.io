@@ -1,4 +1,4 @@
-﻿#Requires -version 2
+#Requires -version 2
 
 # TITLE: 	Newer-LinkedClone.ps1
 # AUTHOR:	Cameron Smith (original by Hal Rottenberg)

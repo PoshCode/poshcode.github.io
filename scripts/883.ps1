@@ -1,4 +1,4 @@
-﻿function Show-LineArrayStructure ($lines)
+function Show-LineArrayStructure ($lines)
 {
     $len = $lines.length
     "Type is:         $($lines.gettype().Name)"

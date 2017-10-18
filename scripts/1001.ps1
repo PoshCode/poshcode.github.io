@@ -1,4 +1,4 @@
-﻿
+
 
 Add-PSSnapin "VMware.VimAutomation.Core"
 Add-PSSnapIn "VMware.VumAutomation" 

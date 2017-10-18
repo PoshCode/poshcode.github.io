@@ -1,4 +1,4 @@
-﻿function Connect-Session
+function Connect-Session
 {
     [CmdletBinding()]
     

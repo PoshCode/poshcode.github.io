@@ -1,4 +1,4 @@
-﻿function Test-UserCredential {
+function Test-UserCredential {
 	[CmdletBinding(DefaultParameterSetName = "set1")]
 	[OutputType("set1", [System.Boolean])]
 	[OutputType("PSCredential", [System.Boolean])]

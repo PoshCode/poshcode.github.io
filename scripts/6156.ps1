@@ -1,4 +1,4 @@
-﻿    param([string]$computerName, [System.Management.Automation.PSCredential]$Credential)
+    param([string]$computerName, [System.Management.Automation.PSCredential]$Credential)
 
     invoke-command -ComputerName $computername -Credential $Credential -ScriptBlock {
 

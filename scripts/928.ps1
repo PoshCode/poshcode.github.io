@@ -1,4 +1,4 @@
-﻿function Get-VMHostWSManInstance {
+function Get-VMHostWSManInstance {
 	param (
 	[Parameter(Mandatory=$TRUE,HelpMessage="VMHosts to probe")]
 	[VMware.VimAutomation.Client20.VMHostImpl[]]

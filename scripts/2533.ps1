@@ -1,4 +1,4 @@
-﻿#a function to count how many items there are, whether its an array, a collection, or actually just
+#a function to count how many items there are, whether its an array, a collection, or actually just
 # a single no array/non list/non collection object in which case it would be 1
 function count-object ($InputObject)
 {

@@ -1,4 +1,4 @@
-﻿#This script will compare the names of the people you follow on Twitter
+#This script will compare the names of the people you follow on Twitter
 #and the people following you.  It returns a comparison object consisting 
 #of the Twitter name of a subject and a side indicator - 
 #"<=" means that you are following a subject who is not following you, 

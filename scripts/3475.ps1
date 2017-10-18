@@ -1,4 +1,4 @@
-﻿function Copy-ToCreateFolder
+function Copy-ToCreateFolder
 {
     param(
         [string]$src,

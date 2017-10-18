@@ -1,4 +1,4 @@
-﻿function global:prompt {
+function global:prompt {
    $(&{
          # FIRST, make a note if there was an error in the previous command
          $err = !$?

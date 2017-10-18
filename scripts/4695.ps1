@@ -1,4 +1,4 @@
-﻿Set-Alias hl New-HardLink
+Set-Alias hl New-HardLink
 
 $code = @'
 using System;

@@ -1,4 +1,4 @@
-﻿function Get-MyModule {
+function Get-MyModule {
     param ([string] $name)
     write-host "Is '$name' already imported? " -NoNewline -ForegroundColor Cyan
     if (-not(Get-Module -name $name)) {

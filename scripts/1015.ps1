@@ -1,4 +1,4 @@
-﻿#Depends on Microsoft Report Viewer Redistributable and ReportExporters
+#Depends on Microsoft Report Viewer Redistributable and ReportExporters
 #ReportExporters available at http://www.codeproject.com/KB/reporting-services/ReportExporters_WinForms.aspx
 #Download demo version of ReportExporters for compiled dlls
 #Tested with Microsoft Report Viewer 2008 SP1 Redistributable, although 2005 and base 2008 version should work

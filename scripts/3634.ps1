@@ -1,4 +1,4 @@
-﻿function Get-WebSite {
+function Get-WebSite {
 <#  
 .SYNOPSIS  
     Retrieves information about a website.

@@ -1,4 +1,4 @@
-﻿## Set-WindowTransparent.ps1
+## Set-WindowTransparent.ps1
 ## 
 ##
 Add-Type -Type @"

@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function Clear-MatchesSelection {
   $rtbText.SelectAll()
   $rtbText.SelectionColor = [Drawing.Color]::Black

@@ -1,4 +1,4 @@
-﻿# Removes un-needed apps from Windows 10.
+# Removes un-needed apps from Windows 10.
 # To keep install of package insert hashtag before line, see example below:
 #Get-AppxPackage *3dbuilder* | Remove-AppxPackage
 

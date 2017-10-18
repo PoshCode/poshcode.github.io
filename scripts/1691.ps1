@@ -1,4 +1,4 @@
-﻿$rep_du_user = $env:userprofile
+$rep_du_user = $env:userprofile
 $repertoire_pst = ($rep_du_user+"\AppData\Local\Microsoft\Outlook")
 $repertoire_sauvegarde = "directory"
 

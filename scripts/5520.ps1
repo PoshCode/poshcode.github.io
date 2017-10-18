@@ -1,4 +1,4 @@
-﻿<#
+<#
   How to create a non blocking GUI Thread and how to write Data with PowerShell to GUI controls correctly from a different Runspace.
   
   First of all excuse me for my bad English.

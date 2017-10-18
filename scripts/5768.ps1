@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Converts Microsoft Office 365 Best Practices Analyzer HTML reports to CSV.
 

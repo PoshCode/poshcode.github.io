@@ -1,4 +1,4 @@
-﻿Function Get-ADGroupMembers
+Function Get-ADGroupMembers
 {
     <#
         .SYNOPSIS

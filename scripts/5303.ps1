@@ -1,4 +1,4 @@
-﻿function Get-DriveGeometry {
+function Get-DriveGeometry {
   <#
     .NOTES
         Author: greg zakharov

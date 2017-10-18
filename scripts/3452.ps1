@@ -1,4 +1,4 @@
-﻿#* FileName: loginTime.ps1
+#* FileName: loginTime.ps1
 #*=============================================================================
 #* Created: [09/25/2009]
 #* Author: Alan Oakland

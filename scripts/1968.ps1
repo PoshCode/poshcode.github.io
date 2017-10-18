@@ -1,4 +1,4 @@
-﻿function Set-Domain {
+function Set-Domain {
 	param(	[switch]$help,
 			[string]$domain=$(read-host "Please specify the domain to join"),
 			[System.Management.Automation.PSCredential]$credential = $(Get-Crdential) 

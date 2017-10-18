@@ -1,4 +1,4 @@
-﻿function Get-ParentProcess {
+function Get-ParentProcess {
   <#
     .LINK
         Follow me on twitter @gregzakharov

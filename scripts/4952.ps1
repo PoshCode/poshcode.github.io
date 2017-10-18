@@ -1,4 +1,4 @@
-﻿#the cool way
+#the cool way
 ([String][Environment]::OSVersion.Version).Substring(0, 8)
 
 #the ugly way

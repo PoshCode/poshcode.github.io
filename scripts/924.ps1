@@ -1,4 +1,4 @@
-﻿# Glenn Sizemore www . Get-Admin . Com
+# Glenn Sizemore www . Get-Admin . Com
 # Requires the NetApp OnTap SDK v3.5
 #
 # Will connect to the destination Filer and retrieve detailed information on every

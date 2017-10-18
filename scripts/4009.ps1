@@ -1,4 +1,4 @@
-﻿#Script to add a value to the VMX file of a virtual client.
+#Script to add a value to the VMX file of a virtual client.
 #This is to remove the ability to eject the network card as described in
 #http://kb.vmware.com/selfservice/microsites/search.do?language=en_US&cmd=displayKC&externalId=1012225
 #

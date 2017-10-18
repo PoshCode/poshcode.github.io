@@ -1,4 +1,4 @@
-﻿Import-Module : Process should have elevated status to access IIS configuration data.
+Import-Module : Process should have elevated status to access IIS configuration data.
 At C:\Users\ca27573\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1:18 char:29
 + Get-Module -ListAvailable | Import-Module
 +                             ~~~~~~~~~~~~~

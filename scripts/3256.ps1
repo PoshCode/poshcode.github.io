@@ -1,4 +1,4 @@
-﻿# DefaultParameters Module
+# DefaultParameters Module
 # 1.3 - fixed denable/disable, added get and remove, and improved import and set
 # 1.2 - added help and commands to enable/disable the defaults
 # 1.0 - initial release

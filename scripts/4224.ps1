@@ -1,4 +1,4 @@
-﻿$sourcex86 = 'http://javadl.sun.com/webapps/download/AutoDL?BundleId=79063' #Java 7 u 25 x86
+$sourcex86 = 'http://javadl.sun.com/webapps/download/AutoDL?BundleId=79063' #Java 7 u 25 x86
 $sourcex64 = 'http://javadl.sun.com/webapps/download/AutoDL?BundleId=79065' #Java 7 u 25 x64
 
 $64bit = $false

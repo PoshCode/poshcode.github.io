@@ -1,4 +1,4 @@
-﻿<#
+<#
   .DESCRIPTION
       Two ways uncover SecureString.
   .NOTES

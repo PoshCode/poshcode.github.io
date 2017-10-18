@@ -1,4 +1,4 @@
-﻿Select-String "(MSIE [0-9]\.[0-9]|Firefox\/[0-9]+|Safari|-)" $log -all |
+Select-String "(MSIE [0-9]\.[0-9]|Firefox\/[0-9]+|Safari|-)" $log -all |
 Group  { $_.matches[-1].Value } | 
 ForEach -begin   { $total = 0 } `
 	-process { $total += $_.Count; $_ } | 

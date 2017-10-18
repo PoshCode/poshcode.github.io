@@ -1,4 +1,4 @@
-﻿#Programmer Name: Nathan Estell
+#Programmer Name: Nathan Estell
 #Date: 8/14/2015
 #Description: Displays a constant stream of numbers and spaces. This can cause patterns to form and can be mesmerizing :)
 

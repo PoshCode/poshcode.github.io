@@ -1,4 +1,4 @@
-﻿$btnMove_MouseDown= {
+$btnMove_MouseDown= {
   if ($_.Button -eq [Windows.Forms.MouseButtons]::Left) {
     $bool = $true
     $coor = [Drawing.Point]$_.Location

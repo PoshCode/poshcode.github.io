@@ -1,4 +1,4 @@
-﻿Function Test-VM
+Function Test-VM
 {
     [cmdletbinding()]
     Param

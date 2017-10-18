@@ -1,4 +1,4 @@
-﻿#Created by P. Sukus
+#Created by P. Sukus
 #Modified by D. Dill
 #Name: mobile users syncing through OWA audit 
 #set the timeframe to audit in days

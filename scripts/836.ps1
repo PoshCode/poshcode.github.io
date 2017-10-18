@@ -1,4 +1,4 @@
-﻿# returns true if windows firewall is enabled, false if it is disabled
+# returns true if windows firewall is enabled, false if it is disabled
 filter global:get-firewallstatus ([string]$computer = $env:computername)
 	{
 	if ($_) { $computer = $_ }

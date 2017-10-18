@@ -1,4 +1,4 @@
-﻿function Search-PoshcodeScript {
+function Search-PoshcodeScript {
   <#
     .EXAMPLE
         PS C:\> Search-PoshcodeScript "logon users"

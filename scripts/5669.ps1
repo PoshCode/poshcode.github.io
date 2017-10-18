@@ -1,4 +1,4 @@
-﻿#Checking for available updates
+#Checking for available updates
 Write-Host "  Checking for available updates... Please wait!" -ForegroundColor 'Yellow'
 $UpdateSession = New-Object -ComObject Microsoft.Update.Session
 $SearchResult = $UpdateSession.CreateUpdateSearcher().Search($criteria).Updates | ? {$_.Title -notmatch $skipUpdates}

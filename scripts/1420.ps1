@@ -1,4 +1,4 @@
-﻿function dnsref ($computername) {
+function dnsref ($computername) {
 $ErrorActionPreference = "SilentlyContinue"
 $testrun=$Null
 trap { 

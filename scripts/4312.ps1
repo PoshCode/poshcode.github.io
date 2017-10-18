@@ -1,4 +1,4 @@
-﻿function Write-SessionLockdown
+function Write-SessionLockdown
 {
     
 	<#

@@ -1,4 +1,4 @@
-﻿# This is to remove the Hidden folder attribute and delete the autorun.inf and x.mpeg due to changeup virus!
+# This is to remove the Hidden folder attribute and delete the autorun.inf and x.mpeg due to changeup virus!
 # 4-3-2013 John R Remillard
 # You need the exact root folder path to unhide and delete the proper files and folders.
 #$Pth = Read-Host "Enter full path to unhide"

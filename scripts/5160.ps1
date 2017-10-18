@@ -1,4 +1,4 @@
-﻿#
+#
 # Filename: Subversion.psm1
 # Created:  2014-05-14
 # Version:  0.1

@@ -1,4 +1,4 @@
-﻿# Need the Quest ActiveRoles cmdlets for this one.
+# Need the Quest ActiveRoles cmdlets for this one.
 Add-PSSnapin Quest.ActiveRoles* -ea SilentlyContinue
 
 function Get-Groups {

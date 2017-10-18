@@ -1,4 +1,4 @@
-﻿foreach ($entry in (import-csv "spreadsheet.csv")) {
+foreach ($entry in (import-csv "spreadsheet.csv")) {
 	$ipScript = @"
 	`$NetworkConfig = Get-WmiObject -Class Win32_NetworkAdapterConfiguration
 	`$NicAdapter = `$NetworkConfig | where {`$_.DHCPEnabled -eq "True"}

@@ -1,4 +1,4 @@
-﻿function Check-NewGmail {
+function Check-NewGmail {
   param(
     [String]$Email = (Read-Host "Enter your email"),    
     [Security.SecureString]$Password = (Read-Host "Enter email password" -as)

@@ -1,4 +1,4 @@
-﻿#Input File. Run "ls vdisk full xml > vdisks.xml" in HP SSSU to generate
+#Input File. Run "ls vdisk full xml > vdisks.xml" in HP SSSU to generate
 $vdiskxmlfilepath = "vdisks.xml"
 
 #Where to output the CSV file

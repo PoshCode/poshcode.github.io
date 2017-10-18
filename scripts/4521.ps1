@@ -1,4 +1,4 @@
-﻿$Data = @()
+$Data = @()
 
 Function writeHtmlHeader
 {

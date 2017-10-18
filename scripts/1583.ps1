@@ -1,4 +1,4 @@
-﻿function set-vSwitchLinkDiscovery {
+function set-vSwitchLinkDiscovery {
     Param (
         #Switch to enable vSwitch Discovery On
          [Parameter(Mandatory=$true,ValueFromPipeline=$true)]$vSwitchName

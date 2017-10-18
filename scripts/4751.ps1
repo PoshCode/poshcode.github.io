@@ -1,4 +1,4 @@
-﻿Set-Alias procdump Get-ProcessDump
+Set-Alias procdump Get-ProcessDump
 
 function Get-ProcessDump {
   <#

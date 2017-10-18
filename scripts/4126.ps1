@@ -1,4 +1,4 @@
-﻿#Requires ILSpy. 
+#Requires ILSpy. 
 #Tested with version 2.1.0.1603
 #http://ilspy.net/
 Add-Type -Path "Mono.Cecil.dll"

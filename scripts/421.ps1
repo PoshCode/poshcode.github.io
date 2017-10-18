@@ -1,4 +1,4 @@
-﻿## Send-Paste (aka sprunge for Pastebin)
+## Send-Paste (aka sprunge for Pastebin)
 ##############################################################################################################
 ## Uploads code to any pastebin.com based pastebin site and returns the url for you.
 ##############################################################################################################

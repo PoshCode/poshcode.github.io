@@ -1,4 +1,4 @@
-﻿@(gci (Split-Path $env:userprofile) | ? {
+@(gci (Split-Path $env:userprofile) | ? {
   $_.Name -ne 'All Users'
 }) | % {
   '{0, 13}: {1}'-f $_.Name, (New-Object Security.Principal.NTAccount(

@@ -1,4 +1,4 @@
-﻿param(
+param(
    [string] $dirRoot = $pwd,
    [string] $Spec = "*.*",
    [bool] $longOnly = $false

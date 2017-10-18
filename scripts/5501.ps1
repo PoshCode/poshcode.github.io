@@ -1,4 +1,4 @@
-﻿function exit-CurrentUser
+function exit-CurrentUser
 {
   <#
     .SYNOPSIS

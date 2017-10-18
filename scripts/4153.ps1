@@ -1,4 +1,4 @@
-﻿# Script to get creator and creation date and add to custom attribute
+# Script to get creator and creation date and add to custom attribute
 # second part of the script checks latest Netapp snapshot used for backup purposes and adds to custom attribute
 
 if (-not (Get-PSSnapin VMware.VimAutomation.Core -ErrorAction SilentlyContinue)) {

@@ -1,4 +1,4 @@
-﻿function frmMain_Show {
+function frmMain_Show {
   Add-Type -AssemblyName PresentationFramework
 
   $win = New-Object Windows.Window

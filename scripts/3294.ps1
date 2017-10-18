@@ -1,4 +1,4 @@
-﻿function Start-CLR4 {
+function Start-CLR4 {
    
 	[CmdletBinding()]
     

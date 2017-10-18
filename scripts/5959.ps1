@@ -1,4 +1,4 @@
-﻿# Force .NET Framework optimization to happen (causes high CPU by mscorsvw.exe)
+# Force .NET Framework optimization to happen (causes high CPU by mscorsvw.exe)
 # By default the optimization only uses a single CPU core.
 # Running "NGEN.EXE executeQueuedItems" forces optimization to happen on all cores.
 # http://blogs.msdn.com/b/dotnet/archive/2013/08/06/wondering-why-mscorsvw-exe-has-high-cpu-usage-you-can-speed-it-up.aspx

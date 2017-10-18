@@ -1,4 +1,4 @@
-﻿function get-SQLInstanceInfo2
+function get-SQLInstanceInfo2
 {
 	param
 	(

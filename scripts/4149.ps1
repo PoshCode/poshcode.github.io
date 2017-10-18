@@ -1,4 +1,4 @@
-﻿function Load-PowerCLISnapin{
+function Load-PowerCLISnapin{
     #Load Required VMware Snapin if not already loaded
     if (!(Get-PSSnapin VMware.vimautomation.core -erroraction SilentlyContinue)) {
         #Throw error if not installed

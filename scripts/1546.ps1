@@ -1,4 +1,4 @@
-﻿New-BootsGadget {
+New-BootsGadget {
 #.Synopsis
 #   Create desktop gadgets with no window chrome
 #.Description

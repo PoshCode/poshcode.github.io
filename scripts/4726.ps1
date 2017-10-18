@@ -1,4 +1,4 @@
-﻿#
+#
 # Opera 12 password recover sample
 # Author: greg zakharov
 # Inform me about bugs mailto:grishanz@yandex.ru

@@ -1,4 +1,4 @@
-﻿###############################################################################
+###############################################################################
 # Use Unregister-Event -SourceIdentifier <name> -Force (to stop an Event).
 # Include script in $profile to register all these events. Modify to suit own
 # requirements and comment out any of the examples below that are not needed. 

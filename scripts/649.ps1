@@ -1,4 +1,4 @@
-﻿function Shuffle
+function Shuffle
 {
  param([Array] $a)
  

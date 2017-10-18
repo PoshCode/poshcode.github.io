@@ -1,4 +1,4 @@
-﻿function Remove-SCCMDPContent
+function Remove-SCCMDPContent
 {
 <#
 .Synopsis

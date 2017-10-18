@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function Set-Opacity([Object]$obj) {
   $ops.Checked = $false
   $frmMain.Opacity = [Single]('.' + ($obj.Text)[0])

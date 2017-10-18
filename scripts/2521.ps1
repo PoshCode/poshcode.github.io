@@ -1,4 +1,4 @@
-﻿function Get-WebsiteCertificate {
+function Get-WebsiteCertificate {
 	[CmdletBinding()]
 	param (
 		[Parameter(Mandatory=$true)] [System.Uri]

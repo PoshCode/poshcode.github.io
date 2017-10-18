@@ -1,4 +1,4 @@
-﻿function Install-Module {
+function Install-Module {
 [CmdletBinding()]
 Param(
     [Parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,Mandatory=$true)]

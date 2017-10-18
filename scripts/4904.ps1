@@ -1,4 +1,4 @@
-﻿# DuserLremove.ps1
+# DuserLremove.ps1
 # Removes a domain user from local admin group on a list of servers
 # Qodosh
 # 2.15.2014 v1.1

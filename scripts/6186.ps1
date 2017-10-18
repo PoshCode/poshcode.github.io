@@ -1,4 +1,4 @@
-﻿
+
 <#
 Requisite updates for IE11 installation on Microsoft Windows 7 x86 and x64 (Please see http://support.microsoft.com/kb/2847882)
 

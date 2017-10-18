@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 
 Applies permissions and roles to vSphere vApps

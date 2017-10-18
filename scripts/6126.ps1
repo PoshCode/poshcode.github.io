@@ -1,4 +1,4 @@
-﻿param([string]$OwnerName = (Read-Host "What is the owner name?"),
+param([string]$OwnerName = (Read-Host "What is the owner name?"),
       [string]$RepositoryName = (Read-Host "What is the repository name?"),
       [string]$AuthToken = (Read-Host "What is the auth token?"),
       [switch]$DeleteLabels)

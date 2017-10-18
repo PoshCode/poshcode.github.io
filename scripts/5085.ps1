@@ -1,4 +1,4 @@
-﻿function Send-Popup {
+function Send-Popup {
 
     param ($Computername,$Message)
 

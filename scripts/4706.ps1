@@ -1,4 +1,4 @@
-﻿function Set-Countdown([Single]$Timer) {
+function Set-Countdown([Single]$Timer) {
   <#
     .EXAMPLE
         PS C:\> Set-Countdown 0.3

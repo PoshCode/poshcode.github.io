@@ -1,4 +1,4 @@
-﻿function Get-CpuId {
+function Get-CpuId {
   begin {
     ($psdll = New-PSDllObject).set(@(
       [Runtime.InteropServices.GCHandle],

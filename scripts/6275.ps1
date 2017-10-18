@@ -1,4 +1,4 @@
-﻿param ([Switch]$force = $false)
+param ([Switch]$force = $false)
 $SignatureEnforcing = $true
 $AppData=(Get-Item env:appdata).value
 $SigPath = '\Microsoft\Signatures'

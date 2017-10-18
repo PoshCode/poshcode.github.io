@@ -1,4 +1,4 @@
-﻿function ConvertTo-Hashtable {
+function ConvertTo-Hashtable {
   #.Synopsis
   #   Converts an object to a hashtable of property-name = value 
   PARAM(

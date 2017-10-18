@@ -1,4 +1,4 @@
-﻿Function Set-FSMORoleOwner {
+Function Set-FSMORoleOwner {
 <#  
 .SYNOPSIS  
     Performs a transfer of a FSMO role to a specified Domain Controller. 

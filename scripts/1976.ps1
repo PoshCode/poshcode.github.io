@@ -1,4 +1,4 @@
-﻿function Set-AssemblyBindLogging {
+function Set-AssemblyBindLogging {
 #.Synopsis
 #  Enable or disable Assembly Bind logging for the machine
 #.Parameter EnableLogging

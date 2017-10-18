@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 clear	# clear terminal window
 read -p "CSCI212Shell$ " input
 

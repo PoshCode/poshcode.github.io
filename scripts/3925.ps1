@@ -1,4 +1,4 @@
-﻿# script parameters
+# script parameters
 param(
 [Parameter(Position=0,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)]
 [alias("Name","ComputerName")][string[]]$Computers = @($env:computername),

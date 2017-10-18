@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
 $computername = $env:COMPUTERNAME,
 #$username = "Administrator",

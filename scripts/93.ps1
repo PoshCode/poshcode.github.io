@@ -1,4 +1,4 @@
-﻿Param($file,$headers)
+Param($file,$headers)
 # Check for Input and fill $data
 if($input){$data = @();$input | foreach-Object{$data += $_}}
 

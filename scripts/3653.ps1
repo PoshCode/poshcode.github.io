@@ -1,4 +1,4 @@
-﻿## Trim Working set
+## Trim Working set
 
 Function TrimWorkingSet {
 param([int] $procid)

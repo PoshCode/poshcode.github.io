@@ -1,4 +1,4 @@
-﻿<# Globalscape EFT module
+<# Globalscape EFT module
  Written by Daniel V. Davidson; davidsondaniel81@gmail.com
  The purpose of this module is to simplify creating and maintaining users in Globalscape EFT
  There are several limitations to keep in mind:

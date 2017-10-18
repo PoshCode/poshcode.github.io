@@ -1,4 +1,4 @@
-﻿function Get-RandomNames {
+function Get-RandomNames {
 <#
 .SYNOPSIS
 Gets Full Names from a List of Names from http://names.mongabay.com

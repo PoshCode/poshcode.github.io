@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 
 # Highlight-Syntax.ps1
 # version 2.0

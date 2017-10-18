@@ -1,4 +1,4 @@
-﻿function ISE-CopyOutPutToEditor () {
+function ISE-CopyOutPutToEditor () {
     $count = $psise.CurrentOpenedRunspace.OpenedFiles.count
     $psIse.CurrentOpenedRunspace.OpenedFiles.Add()
     $Newfile = $psIse.CurrentOpenedRunspace.OpenedFiles[$count]

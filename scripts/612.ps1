@@ -1,4 +1,4 @@
-﻿## Get-Sequence
+## Get-Sequence
 ## Optionless implementation of seq for PowerShell
 ############################################################################
 ## Most of the options don't apply because they convert the numbers to text

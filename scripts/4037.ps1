@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Creates config bundle backup for ESXi hosts. Works where 80 is blocked to ESXi host
 Originally script by Alan Renouf (http://www.virtu-al.net/2011/02/23/backing-up-the-esxi-system-image)

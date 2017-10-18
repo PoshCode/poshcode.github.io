@@ -1,4 +1,4 @@
-﻿function Get-DNSDebugLog
+function Get-DNSDebugLog
 {
     <#
     .SYNOPSIS

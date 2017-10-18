@@ -1,4 +1,4 @@
-﻿
+
 function Get-WebConfigSqlConnectionString 
 {
 param( [switch]$help, [string]$configfile = $(read-host "Please enter a web.config file to read"), 

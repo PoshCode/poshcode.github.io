@@ -1,4 +1,4 @@
-﻿Begin {
+Begin {
 
 	$key = "keyboard.typematicMinDelay"
 	$value = "2000000"

@@ -1,4 +1,4 @@
-﻿$views = (get-vm | get-view)
+$views = (get-vm | get-view)
 $views += (get-template | get-view)
 
 $VMDatastores = get-datastore

@@ -1,4 +1,4 @@
-﻿$null = [Reflection.Assembly]::LoadWithPartialName("System.Speech")
+$null = [Reflection.Assembly]::LoadWithPartialName("System.Speech")
 
 ## Create the two main objects we need for speech recognition and synthesis
 if(!$Global:SpeechModuleListener){ ## For XP's sake, don't create them twice...

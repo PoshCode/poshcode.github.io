@@ -1,4 +1,4 @@
-﻿function New-ODataServiceProxy {
+function New-ODataServiceProxy {
 #.Synopsis
 #  Creates a proxy class for an odata web service and assigns it to the specified variable.
 #  DOES NOT output the proxy on the pipleline, and you should not do so either!

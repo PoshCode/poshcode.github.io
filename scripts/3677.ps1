@@ -1,4 +1,4 @@
-﻿<#
+<#
 ====================================================================
 Author(s):	Josh Atwell <josh.c.atwell@gmail.com>
 Link:		www.vtesseract.com

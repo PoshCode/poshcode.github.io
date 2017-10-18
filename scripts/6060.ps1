@@ -1,4 +1,4 @@
-﻿Import-Module OperationsManager
+Import-Module OperationsManager
 
 $computer = "mycomputer.mydomain.com"
 

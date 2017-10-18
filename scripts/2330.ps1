@@ -1,4 +1,4 @@
-﻿## Aliases Module, Bash-style aliases with functions
+## Aliases Module, Bash-style aliases with functions
 function alias {
    # pull together all the args and then split on =
    $alias,$cmd = [string]::join(" ",$args).split("=",2) | % { $_.trim()}

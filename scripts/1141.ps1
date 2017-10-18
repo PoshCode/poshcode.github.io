@@ -1,4 +1,4 @@
-﻿###########
+###########
 # PS1 script to launch gpupdate on all computers in domain, without some stupid QAD cmdlets, just pure PS1 and WMI
 # Made by pan_2@LJ (gunkan@yandex.ru)
 # Note: if by some reason RPC host was unavaible - there will be exception throwed, I didn't use trap so I can see real reason.

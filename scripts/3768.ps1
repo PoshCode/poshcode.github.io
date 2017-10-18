@@ -1,4 +1,4 @@
-﻿param($ComputerName1,$ComputerName2)
+param($ComputerName1,$ComputerName2)
 
 $a = gwmi win32_volume -filter "DriveType=3"  -computername $ComputerName1 | where {@('Y:','Z:') -notcontains $_.DriveLetter} | select name, @{n='capacity'; e={[math]::truncate($_.Capacity/1GB)}}
 $b = gwmi win32_volume -filter "DriveType=3"  -computername $ComputerName2 | where {@('Y:','Z:') -notcontains $_.DriveLetter} | select name, @{n='capacity'; e={[math]::truncate($_.Capacity/1GB)}}

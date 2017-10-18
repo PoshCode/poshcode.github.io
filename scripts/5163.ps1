@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Onkyo home theatre receiver controller
 .DESCRIPTION

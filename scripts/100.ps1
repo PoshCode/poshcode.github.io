@@ -1,4 +1,4 @@
-﻿# Highlight-Syntax.ps1
+# Highlight-Syntax.ps1
 # version 1.0
 # by Jeff Hillman
 #

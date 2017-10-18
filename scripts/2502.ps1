@@ -1,4 +1,4 @@
-﻿function Get-WebPage {
+function Get-WebPage {
 <#  
 .SYNOPSIS  
    Downloads web page from site.

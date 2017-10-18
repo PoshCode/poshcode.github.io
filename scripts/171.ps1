@@ -1,4 +1,4 @@
-﻿## New-Script function
+## New-Script function
 ## Creates a new script from the most recent commands in history
 ##################################################################################################
 ## Example Usage:

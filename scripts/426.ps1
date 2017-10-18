@@ -1,4 +1,4 @@
-﻿## Find-String.ps1
+## Find-String.ps1
 ########################################################################################################################
 ## Find-String is basically a PowerShell 1.0 wrapper around { select-string } which will append the "Matches" to it
 ## Highlight-Matches takes a collections of MatchInfo objects and prints them out, highlighting the actual match.

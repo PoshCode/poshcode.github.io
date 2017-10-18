@@ -1,4 +1,4 @@
-﻿<#
+<#
    Name     : Universal Log4Net Logging Module (Logger.psm1)
    Version  : 0.4
    Author   : Joel Bennett (MVP)

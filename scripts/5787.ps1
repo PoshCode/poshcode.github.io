@@ -1,4 +1,4 @@
-﻿function Analyse-Robocopy {
+function Analyse-Robocopy {
 <# 
    .Synopsis 
     This function analyse output logging for robocopy  

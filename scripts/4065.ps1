@@ -1,4 +1,4 @@
-﻿param (
+param (
     [Parameter(Position=1)]
     $searchBase = "cn=configuration,dc=domain,dc=com",
     [Parameter(Position=2)]

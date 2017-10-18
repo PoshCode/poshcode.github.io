@@ -1,4 +1,4 @@
-﻿###############################################################################
+###############################################################################
 # Use Unregister-Event -SourceIdentifier <name> -Force (to stop)
 # Include script in $profile to register all these events. (Access events via 
 # $MyEvent.SourceEventArgs.NewEvent for the current session only). Must only 

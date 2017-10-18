@@ -1,4 +1,4 @@
-﻿# Detect 32 or 64 bits Windows – regardless of WoW64 – with the PowerShell OSArchitecture function
+# Detect 32 or 64 bits Windows – regardless of WoW64 – with the PowerShell OSArchitecture function
 # By Vincent Hoogendoorn
 @@# See http://vincenth.net/blog/archive/2009/11/02/detect-32-or-64-bits-windows-regardless-of-wow64-with-the-powershell-osarchitecture-function.aspx for details.
 @@# For the used InvokeCSharp function source, see http://vincenth.net/blog/archive/2009/10/27/call-inline-c-from-powershell-with-invokecsharp.aspx

@@ -1,4 +1,4 @@
-﻿#function Join-Object {
+#function Join-Object {
    Param(
       [Parameter(Position=0)]
       $First

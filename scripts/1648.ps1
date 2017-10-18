@@ -1,4 +1,4 @@
-﻿@@ # UpdateADPC.ps1, to be run outside of Poshboard
+@@ # UpdateADPC.ps1, to be run outside of Poshboard
 function Get-DomainComputerAccounts
 {
 

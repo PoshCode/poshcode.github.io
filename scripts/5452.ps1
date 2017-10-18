@@ -1,4 +1,4 @@
-﻿#Requires -Version 2
+#Requires -Version 2
 Add-Type -Assembly PresentationFramework
 Add-Type -Assembly PresentationCore
 #Add-Type –AssemblyName WindowsBase

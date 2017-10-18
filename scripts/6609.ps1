@@ -1,4 +1,4 @@
-﻿<#
+<#
   https://mobile.twitter.com/gregzakharov/status/794627428182323202
 #>
 function Stop-CursorBlinking {

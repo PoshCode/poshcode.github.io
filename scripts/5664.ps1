@@ -1,4 +1,4 @@
-﻿# Export vCenter Folder structure incl VM relations
+# Export vCenter Folder structure incl VM relations
 # By Leon Scheltema AVANCE ICT Groep Nederland
 # Functions used by Grzegorz Kulikowski / Robert van den Nieuwendijk
 

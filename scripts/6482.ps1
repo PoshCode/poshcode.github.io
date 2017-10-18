@@ -1,4 +1,4 @@
-﻿add-type -name Session -namespace "" -member @"
+add-type -name Session -namespace "" -member @"
 [DllImport("gdi32.dll")]
 public static extern int AddFontResource(string filePath);
 "@

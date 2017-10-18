@@ -1,4 +1,4 @@
-﻿[Array]$ExchSrvs = @("")
+[Array]$ExchSrvs = @("")
 [String]$StrFilter = "(objectCategory=msExchExchangeServer)"
 $objRootDSE = [ADSI]"LDAP://RootDSE"
 [String]$strContainer = $objRootDSE.configurationNamingContext

@@ -1,4 +1,4 @@
-﻿Set-Alias cal Get-Calendar
+Set-Alias cal Get-Calendar
 
 function Get-Calendar {
   <#

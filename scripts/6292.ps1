@@ -1,4 +1,4 @@
-﻿#Get the OEM product key from WMI
+#Get the OEM product key from WMI
 $ProductKey = $(wmic path softwarelicensingservice get OA3xOriginalProductKey)[2]
 #Get the Operating System SKU (Edition) from WMI
 $OSSKU = (Get-WMIObject Win32_OperatingSystem).OperatingSystemSKU

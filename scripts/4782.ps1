@@ -1,4 +1,4 @@
-﻿Set-Alias gpem Get-PEManifest
+Set-Alias gpem Get-PEManifest
 Set-Alias gpeh Get-PEHeader
 #
 # need for accessing PEStreams and SystemUtils

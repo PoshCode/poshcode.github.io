@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param (
     [string]$InsideColor = 'White',
     [string]$OutsideColor = 'Transparent',

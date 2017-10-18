@@ -1,4 +1,4 @@
-﻿import sublime, sublime_plugin, subprocess
+import sublime, sublime_plugin, subprocess
 
 # TODO: can we find ConEmu from App Paths?
 # E.g. 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\ConEmu.exe' plus a little tweak...

@@ -1,4 +1,4 @@
-﻿Clear
+Clear
     $Host.UI.RawUI.WindowTitle = "Quitting Time Clock"
     $Size = $Host.UI.RawUI.WindowSize
     $Size.Width = 30

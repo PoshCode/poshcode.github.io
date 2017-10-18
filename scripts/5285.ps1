@@ -1,4 +1,4 @@
-﻿function Get-HarddriveModel {
+function Get-HarddriveModel {
   <#
     .NOTES
         Author: greg zakharov

@@ -1,4 +1,4 @@
-﻿param
+param
 (
 	[Parameter(Mandatory=$true, Position = 0, ValueFromPipeline=$true)]
 	[Parameter(HelpMessage="Specifies the path to the IIS *.log file to import. You can also pipe a path to Import-Iss-Log.")]

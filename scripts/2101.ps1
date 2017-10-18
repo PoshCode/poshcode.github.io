@@ -1,4 +1,4 @@
-﻿Function New-ISEScript
+Function New-ISEScript
 {
 $strName = $env:username
 $date = get-date -format d

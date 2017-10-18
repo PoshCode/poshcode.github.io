@@ -1,4 +1,4 @@
-﻿## This script serves three purposes:
+## This script serves three purposes:
 ## 1) You can look up whether a name is masculine or feminine
 ##    -- even for foreign names.
 ## 2) It demonstrates the use of the HttpRest functions

@@ -1,4 +1,4 @@
-﻿Function Move-Template{
+Function Move-Template{
     <#
     .Synopsis
         Move a VM template

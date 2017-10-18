@@ -1,4 +1,4 @@
-﻿# Author: 	Hal Rottenberg <hal@halr9000.com>
+# Author: 	Hal Rottenberg <hal@halr9000.com>
 # Url:		http://halr9000.com/article/tag/lib-authentication.ps1
 # Purpose:	These functions allow one to easily save network credentials to disk in a relatively
 #			secure manner.  The resulting on-disk credential file can only [1] be decrypted

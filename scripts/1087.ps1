@@ -1,4 +1,4 @@
-﻿#The PowerShell Takl
+#The PowerShell Takl
 #Demo 1 - Hypervisors
 #ESX
 

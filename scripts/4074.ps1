@@ -1,4 +1,4 @@
-﻿<#
+<#
    Required v2.0
    Using examples:
       PS C:\> gi .\foo | hex -b 150

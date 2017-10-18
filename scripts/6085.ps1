@@ -1,4 +1,4 @@
-﻿Set-psdebug -strict
+Set-psdebug -strict
 #PSGame Programmed by John L. Sinneslöschen (09/11/2015)
 #Contact: jonhlimon@gmail.com - a.maria@sapalomera.cat
 #You are free to edit/use this. Attribution needed pls :)

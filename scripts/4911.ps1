@@ -1,4 +1,4 @@
-﻿$dest = "c$\data"
+$dest = "c$\data"
 
 $src = "\\src\dir\*"
 

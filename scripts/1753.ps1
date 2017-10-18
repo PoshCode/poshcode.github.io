@@ -1,4 +1,4 @@
-﻿param($dir = '.')
+param($dir = '.')
 
 $matches = 0     # initialize number of matches for summary.
 

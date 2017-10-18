@@ -1,3 +1,3 @@
-﻿Sow nothing, reap nothing.
+Sow nothing, reap nothing.
  
 -----------------------------------

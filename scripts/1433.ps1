@@ -1,4 +1,4 @@
-﻿[void][system.reflection.Assembly]::LoadWithPartialName("MySql.Data")
+[void][system.reflection.Assembly]::LoadWithPartialName("MySql.Data")
 
 # Open Connection
 $connStr = "server=127.0.0.1;port=3306;uid=root;pwd=perilous;database=test;Pooling=False"

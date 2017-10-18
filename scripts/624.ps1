@@ -1,4 +1,4 @@
-﻿function New-TrustAllWebClient {
+function New-TrustAllWebClient {
 	# Create a compilation environment
 	$Provider=New-Object Microsoft.CSharp.CSharpCodeProvider
 	$Compiler=$Provider.CreateCompiler()

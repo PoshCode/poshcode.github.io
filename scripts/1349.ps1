@@ -1,4 +1,4 @@
-﻿$cnt = 'Bytes Total/sec'
+$cnt = 'Bytes Total/sec'
 $inst = 'Broadcom NetXtreme Gigabit Ethernet - Packet Scheduler Miniport'
 $cat = 'Network Interface'
 $cnt2 = 'Current Bandwidth'

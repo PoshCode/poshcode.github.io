@@ -1,4 +1,4 @@
-﻿# start setting
+# start setting
 # end setting
 
 # User input ESXi host

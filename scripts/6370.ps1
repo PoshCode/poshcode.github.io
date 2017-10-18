@@ -1,4 +1,4 @@
-﻿#requires -version 5
+#requires -version 5
 function Invoke-InjectLibrary {
   <#
     .SYNOPSIS

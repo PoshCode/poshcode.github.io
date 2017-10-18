@@ -1,4 +1,4 @@
-﻿###ESXi Configuration Backup Script
+###ESXi Configuration Backup Script
 #DESCRIPION: This Script takes a CSV file with the hostname, username, and password of a list of ESXi servers, and backs up their configurations to a specified Destination
 #USAGE: This script is meant to be run as a regular scheduled task or a pre-script for a backup job. There is no version control, so it is recommended to use an external backup program (Such as Backup Exec) to scan this.
 #LAST MODIFIED: 15 Dec 2009 by JGrote <jgrote AT enpointe NOSPAMDOT-com>

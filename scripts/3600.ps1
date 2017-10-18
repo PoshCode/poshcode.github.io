@@ -1,4 +1,4 @@
-﻿#Get Domain List
+#Get Domain List
 $objForest = [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest()
 $DomainList = @($objForest.Domains | Select-Object Name)
 $Domains = $DomainList | foreach {$_.Name}

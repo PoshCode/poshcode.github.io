@@ -1,4 +1,4 @@
-﻿$server = "dcserver1.mafoberg.net"
+$server = "dcserver1.mafoberg.net"
 $session = new-pssession -computer $server -cred $creds
 
 icm -Session $session -ScriptBlock {

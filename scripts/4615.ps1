@@ -1,4 +1,4 @@
-﻿# Get Mailbox information in CSV Format. 
+# Get Mailbox information in CSV Format. 
 
 # Checks if Quest Active Roles Management snapin is running and if not, loads it. 
 if ((get-pssnapin |% {$_.name}) -notcontains "Microsoft.Exchange.Management.PowerShell.E2010")

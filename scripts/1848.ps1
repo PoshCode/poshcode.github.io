@@ -1,4 +1,4 @@
-﻿########################################################
+########################################################
 # This function will prompt the user asking if they want
 # to start a transcript file. It will loop until the user
 # types y or n. If the user selects y, the script will

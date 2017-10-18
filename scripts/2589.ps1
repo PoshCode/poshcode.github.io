@@ -1,4 +1,4 @@
-﻿$url = "http://dougfinke.com/scriptinggames/scriptinggames.html"
+$url = "http://dougfinke.com/scriptinggames/scriptinggames.html"
 $web = New-Object System.Net.WebClient
 
 foreach($line in ($web.downloadString($url)).split("`n")){

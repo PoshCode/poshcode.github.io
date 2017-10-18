@@ -1,4 +1,4 @@
-﻿param ( 
+param ( 
    [Parameter(Mandatory=$true,HelpMessage= "Enter souce folder path")] 
    [ValidateScript({Test-Path $_ -PathType Container})] 
    [string]$Src, 

@@ -1,4 +1,4 @@
-﻿Function Get-2011SGScriptingScore ([Parameter(Mandatory=$True)][STRING]$Contestant) {
+Function Get-2011SGScriptingScore ([Parameter(Mandatory=$True)][STRING]$Contestant) {
 
    $WebClient = New-Object System.Net.WebClient
 

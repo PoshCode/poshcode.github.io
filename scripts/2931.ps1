@@ -1,4 +1,4 @@
-﻿# This requires  JSON 1.7 ( http://poshcode.org/2930 ) and the HttpRest ( http://poshcode.org/2097 ) modules
+# This requires  JSON 1.7 ( http://poshcode.org/2930 ) and the HttpRest ( http://poshcode.org/2097 ) modules
 # It's a first draft at Paraimpu cmdlets 
 # I'm not sure yet that using Paraimpu with my Chumby gets me what I want, since it only shows one item and can't go back to old ones.
 #

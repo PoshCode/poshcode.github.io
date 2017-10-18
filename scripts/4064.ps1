@@ -1,4 +1,4 @@
-﻿$def = (gci $MyInvocation.MyCommand.Name).Directory
+$def = (gci $MyInvocation.MyCommand.Name).Directory
 
 ##################################################################################################
 

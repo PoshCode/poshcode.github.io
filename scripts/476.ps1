@@ -1,4 +1,4 @@
-﻿ Get-VIServer YOURSERVER
+ Get-VIServer YOURSERVER
 
 $Excel = New-Object -Com Excel.Application
 $Excel.visible = $True

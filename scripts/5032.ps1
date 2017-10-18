@@ -1,4 +1,4 @@
-﻿function Send-ONKYOCommand
+function Send-ONKYOCommand
 {
     [cmdletbinding()]
     param($OnkyoIP,

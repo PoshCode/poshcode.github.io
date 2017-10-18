@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function Get-PopupInfo {
   param(
     [Parameter(Position=0)]

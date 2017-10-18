@@ -1,4 +1,4 @@
-﻿#Usage: Get-WmiObject -computername Z002 Win32_LogicalDisk -filter "DriveType=3" | ./WPFDiskSpace.ps1
+#Usage: Get-WmiObject -computername Z002 Win32_LogicalDisk -filter "DriveType=3" | ./WPFDiskSpace.ps1
 #Note: Requires .NET 3.5, Visifire Charts (tested on v2.1.0), Powerboots (tested on v0.1)
 
 $libraryDir = Convert-Path (Resolve-Path "$ProfileDir\Libraries")

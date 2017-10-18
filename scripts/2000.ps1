@@ -1,4 +1,4 @@
-﻿## NOTE: Destination must end in .bmp, .gif, .png, .wmp, .jpeg or .tiff
+## NOTE: Destination must end in .bmp, .gif, .png, .wmp, .jpeg or .tiff
 param($source = "C:\Windows\Web\Wallpaper\Windows\img0.jpg", $destination = "$Home\Pictures\thumb0.png", $scale = 0.25)
 Add-Type -Assembly PresentationCore
 

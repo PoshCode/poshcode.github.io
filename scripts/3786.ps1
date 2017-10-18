@@ -1,4 +1,4 @@
-﻿#Generamos los usuarios por buzon y comprimimos el resultado
+#Generamos los usuarios por buzon y comprimimos el resultado
 #Autor: Pedro Genil
 #Fecha: 2012/11/21
 #Version: 1.0

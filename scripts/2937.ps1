@@ -1,4 +1,4 @@
-﻿$NumDays = 90
+$NumDays = 90
 $LogDir = ".\Disabled-User-Accounts.log"
 
 $currentDate = [System.DateTime]::Now

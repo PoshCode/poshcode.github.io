@@ -1,4 +1,4 @@
-﻿function Write-ProgressForm {
+function Write-ProgressForm {
 	<#
 	.SYNOPSIS
 		Write-ProgressForm V1.0

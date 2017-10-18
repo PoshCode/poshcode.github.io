@@ -1,4 +1,4 @@
-﻿function New-PowerChart() {
+function New-PowerChart() {
 [CmdletBinding(DefaultParameterSetName='DataTemplate')]
 param(
     [Parameter(Position=0, Mandatory=$true)]

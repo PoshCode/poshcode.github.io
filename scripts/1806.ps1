@@ -1,4 +1,4 @@
-﻿# ahhh ... much better. Don't ask for prompts. It's not scriptable if you do.
+# ahhh ... much better. Don't ask for prompts. It's not scriptable if you do.
 
 function Set-IPAddress {
 		param(	[string]$networkinterface,

@@ -1,4 +1,4 @@
-﻿#Programmer Name: Nathan Estell
+#Programmer Name: Nathan Estell
 #Date: 8/14/2015
 #Description: Displays a constant stream of random colors with random size. This causes patterns to form and can be mesmerizing :)
 for (;;)

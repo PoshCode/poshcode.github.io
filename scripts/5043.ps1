@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.AUTHOR
 		Chris Seiter
 		4-2-14

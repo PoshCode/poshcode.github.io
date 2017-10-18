@@ -1,4 +1,4 @@
-﻿$key = @(
+$key = @(
     'HKLM:\SYSTEM\CurrentControlSet',
     '\Services\Tcpip\Parameters\Interfaces\',
     '\Control\Class\',

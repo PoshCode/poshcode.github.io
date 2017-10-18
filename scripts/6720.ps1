@@ -1,4 +1,4 @@
-﻿function Get-StandardDeviation {
+function Get-StandardDeviation {
     [CmdletBinding()]
     Param (
     # Array of double values

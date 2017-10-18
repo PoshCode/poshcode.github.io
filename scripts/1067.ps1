@@ -1,4 +1,4 @@
-﻿
+
 param ($LDAPPath = "", [switch]$Help)
 
 if ($Help)

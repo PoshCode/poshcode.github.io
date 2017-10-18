@@ -1,4 +1,4 @@
-﻿<#
+<#
     .Synopsis
         Creates new object based on hashtable definition
     .Description

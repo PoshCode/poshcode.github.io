@@ -1,4 +1,4 @@
-﻿param( [string] $vimfile )
+param( [string] $vimfile )
 
 # some instructions we don't care for
 $ignorable = ( 'link', 'clear' )

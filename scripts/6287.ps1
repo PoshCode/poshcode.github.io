@@ -1,4 +1,4 @@
-﻿Import-Module ActiveDirectory
+Import-Module ActiveDirectory
 
 # Folder to save result file to
 @@$SaveTo = "\\server\share\folder"

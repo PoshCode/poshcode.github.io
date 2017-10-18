@@ -1,4 +1,4 @@
-﻿function New-HyperVVM {
+function New-HyperVVM {
 	param	(
 			[string]$Hypervhost = "localhost",
 			[string]$Vm = "VM Courtesy of PowerShell",

@@ -1,4 +1,4 @@
-﻿Function Reset-Alerts
+Function Reset-Alerts
 { 
 <#  
 .Synopsis  

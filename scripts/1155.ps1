@@ -1,4 +1,4 @@
-﻿function Convert-ToCHexString 
+function Convert-ToCHexString 
 {
 	param ([String] $str) 
 	$ans = ''

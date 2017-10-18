@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Local administrator password update
     .DESCRIPTION

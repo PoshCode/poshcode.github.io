@@ -1,4 +1,4 @@
-﻿# TXT File containing the server hostnames or IPs you want to monitor
+# TXT File containing the server hostnames or IPs you want to monitor
 $monitoredServers = gc "C:\ServersToMonitor.txt"
 # Directory containing the folder structure you want to compare
 $referenceDirectory = "C:\CLEAN\"

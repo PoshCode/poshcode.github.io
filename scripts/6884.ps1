@@ -1,4 +1,4 @@
-﻿function get-windowsproductkey([string]$computer)
+function get-windowsproductkey([string]$computer)
 {
 $Reg = [WMIClass] ("\\" + $computer + "\root\default:StdRegProv")
 $values = [byte[]]($reg.getbinaryvalue(2147483650,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","DigitalProductId").uvalue)

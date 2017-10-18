@@ -1,4 +1,4 @@
-﻿function gather {
+function gather {
 #.SYNOPSIS
 #  Port of Perl 6's gather/take (which itself is a port of Mathematica's Reap/Sow)
 #.PARAMETER Using

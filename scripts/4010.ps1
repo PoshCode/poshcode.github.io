@@ -1,4 +1,4 @@
-﻿#######################
+#######################
 <#
 .SYNOPSIS
 Gets HP PSP/SPP Agent Version

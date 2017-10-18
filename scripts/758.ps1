@@ -1,4 +1,4 @@
-﻿function Start-ISE ()
+function Start-ISE ()
 {
      <#
     .synopsis

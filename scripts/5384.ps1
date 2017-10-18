@@ -1,4 +1,4 @@
-﻿function Get-RamLength {
+function Get-RamLength {
   <#
     .NOTES
         Author: greg zakharov

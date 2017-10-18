@@ -1,4 +1,4 @@
-﻿$mailboxes = get-mailbox
+$mailboxes = get-mailbox
 
 $mailboxes| foreach-object {
 	

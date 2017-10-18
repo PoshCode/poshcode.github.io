@@ -1,4 +1,4 @@
-﻿function out-default() {
+function out-default() {
 [CmdletBinding()]
 param(
     [Parameter(ValueFromPipeline=$true)]

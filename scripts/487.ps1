@@ -1,4 +1,4 @@
-﻿#Revision 1 
+#Revision 1 
 #7-29-2008
 #author Jon Owings
 #contact - jowings at securas dot com

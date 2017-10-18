@@ -1,4 +1,4 @@
-﻿function Split-ByLength{
+function Split-ByLength{
     <#
     .SYNOPSIS
     Splits string up by Split length.

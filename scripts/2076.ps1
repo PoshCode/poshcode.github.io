@@ -1,4 +1,4 @@
-﻿<#
+<#
 
  NAME: Invoke-BPAModeling.ps1
 

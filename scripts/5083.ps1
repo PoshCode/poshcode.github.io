@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
 		Returns information about the Processor via WMI. 
 

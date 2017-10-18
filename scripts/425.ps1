@@ -1,4 +1,4 @@
-﻿## Selected 'Exif' statistics script is below. There are a number of ways I can improve it: 
+## Selected 'Exif' statistics script is below. There are a number of ways I can improve it: 
 ## Stream output, skip csv file creation (as an interim step) read list with arrays and parameters,
 ## using regex expressions to best effect. Still, quite a few lessons learned with this and the output can help 
 ## check for errors. The issue is that 'exif' (Cygwin, GNU utility) will sometimes skip fields. I am not checking ## for that or other  error conditions in general, but the 'Counts' need to sync up at least. 

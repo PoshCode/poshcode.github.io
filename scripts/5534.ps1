@@ -1,4 +1,4 @@
-﻿$Requests = get-moverequest|get-moverequeststatistics
+$Requests = get-moverequest|get-moverequeststatistics
 
 while ($TRUE) {
        $Requests | Foreach-Object {

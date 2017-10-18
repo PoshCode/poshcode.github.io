@@ -1,4 +1,4 @@
-﻿param([type]$type = $(throw "need a type!"))
+param([type]$type = $(throw "need a type!"))
 
 $type | Get-Member -static | Where {$_.membertype -eq "method" } | 
 % {

@@ -1,4 +1,4 @@
-﻿#######################
+#######################
 <#
 .SYNOPSIS
 Creates a DataTable for an object

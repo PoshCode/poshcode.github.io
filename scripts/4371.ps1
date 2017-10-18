@@ -1,4 +1,4 @@
-﻿function Get-PermissionGroup{
+function Get-PermissionGroup{
     <#
     .SYNOPSIS
     Returns all permission groups from the server.

@@ -1,4 +1,4 @@
-﻿<#
+<#
 Using examples:
  Example 1:
    Get-ItemPlace *.log -h

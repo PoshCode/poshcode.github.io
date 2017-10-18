@@ -1,4 +1,4 @@
-﻿# Wrapper for Out-Default that saves the last object written
+# Wrapper for Out-Default that saves the last object written
 # and handles missing commands if the command is a directory
 # or an URL
 #

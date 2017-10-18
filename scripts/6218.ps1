@@ -1,4 +1,4 @@
-﻿$BitlockerStatus = (Get-BitLockerVolume -MountPoint $env:SystemDrive).ProtectionStatus
+$BitlockerStatus = (Get-BitLockerVolume -MountPoint $env:SystemDrive).ProtectionStatus
 $RecoveryKeyPath = "\\<servername>\USER\users\<username>"
 $RecoveryKeyFilePath = "Z:"
 

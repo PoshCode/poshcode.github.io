@@ -1,4 +1,4 @@
-﻿Param(
+Param(
     [Parameter(Mandatory=$true)][string]$RootPath,
     [Parameter(Mandatory=$true)][string]$Destination,
     [Parameter(Mandatory=$true)][string]$LogPath

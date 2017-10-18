@@ -1,4 +1,4 @@
-﻿function Add-PInvoke
+function Add-PInvoke
 {
     <#
     .Synopsis

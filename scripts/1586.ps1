@@ -1,4 +1,4 @@
-﻿# Stick this anywhere
+# Stick this anywhere
     filter convertTypeToTabCompletionName()
     {
 

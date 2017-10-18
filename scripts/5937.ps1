@@ -1,4 +1,4 @@
-﻿# Note, the code for the Import function below must be in the same Directory as this powershell script.
+# Note, the code for the Import function below must be in the same Directory as this powershell script.
 # Function that gets Advanced VM settings in .VMX file
 Import-Module ./Get-AdvancedVM.ps1
 

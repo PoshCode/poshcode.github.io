@@ -1,4 +1,4 @@
-﻿function add-OLPublicFolder {
+function add-OLPublicFolder {
    param (
       [string]$PFName,                                                     #Name of the new Public Folder
       $PFType,                                                             #Type of the new Public Folder

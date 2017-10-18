@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
 		Finds the unique IP(s) of the Veeam repository server(s) that failed to backup one or more virtual servers because of RPC errors.
 	

@@ -1,4 +1,4 @@
-﻿function Test-UserCredential {
+function Test-UserCredential {
 	[CmdletBinding()] [OutputType([System.Boolean])]
 	param(
 		[Parameter(Mandatory=$true)] [ValidateNotNullOrEmpty()]

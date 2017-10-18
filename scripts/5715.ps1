@@ -1,4 +1,4 @@
-﻿#region Variables - Set up Data source, SMTP info, and To address(s)
+#region Variables - Set up Data source, SMTP info, and To address(s)
 # The input CSV needs one column with the header "Octet" - This should contain the IP addresses one on each line to look  up.
 $IPADDRESSES = Import-Csv '<Path to CSV>'
 $Smtpserver = '<Mail server Info>'

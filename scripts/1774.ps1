@@ -1,4 +1,4 @@
-﻿# new version avoids recalculating MD5s, has delete/noprompt options, and by default checks the current directory.
+# new version avoids recalculating MD5s, has delete/noprompt options, and by default checks the current directory.
 
 function Get-MD5([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
 

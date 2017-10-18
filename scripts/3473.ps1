@@ -1,4 +1,4 @@
-﻿
+
 #Check if PowerShell version 3 or higher is installed
 if($host.Version.Major -lt 3)
 {

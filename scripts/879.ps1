@@ -1,4 +1,4 @@
-﻿$hdr_txt = gc ./hdr.txt
+$hdr_txt = gc ./hdr.txt
 
 $rec_hdr_regex = [regex]"^Received\:\sfrom\s(.+?)\sby\s(.+?)\;\s(.+?\d\d\:\d\d\:\d\d\s[+|-]\d{4})"
 

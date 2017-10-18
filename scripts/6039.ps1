@@ -1,4 +1,4 @@
-﻿#Get-GPOUNCPaths.ps1
+#Get-GPOUNCPaths.ps1
 #This script retrieves the UNC paths from all group policies in the domain
 
 $gpos = get-gpo -all

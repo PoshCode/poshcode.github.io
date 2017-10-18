@@ -1,4 +1,4 @@
-﻿$NumDays = 0
+$NumDays = 0
 $LogDir = ".\sfonseca\Accounts.csv"
 
 $currentDate = [System.DateTime]::Now

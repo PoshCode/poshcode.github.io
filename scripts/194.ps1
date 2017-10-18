@@ -1,4 +1,4 @@
-﻿## Get-Delegate.ps1
+## Get-Delegate.ps1
 ###################################################################################################
 ## Use Reflection and IL to emit arbitrary delegates ...
 ## A trick they taught us on the PowerShell blog

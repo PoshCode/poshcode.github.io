@@ -1,4 +1,4 @@
-﻿# Email-ServiceStatus
+# Email-ServiceStatus
 
 # Version 1.04
 # Johnny Reel

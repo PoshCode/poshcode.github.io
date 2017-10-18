@@ -1,4 +1,4 @@
-﻿function check-ping {
+function check-ping {
 $erroractionpreference = "SilentlyContinue"
 $ping = new-object System.Net.NetworkInformation.Ping
 $rslt = $ping.send($args)

@@ -1,4 +1,4 @@
-﻿#requires -Module PackageManagement
+#requires -Module PackageManagement
 function Import-NugetLibrary {
     param(
         [Parameter(Mandatory)]

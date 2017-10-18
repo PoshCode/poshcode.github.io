@@ -1,4 +1,4 @@
-﻿# Be sure to include the tailing backslash "\"
+# Be sure to include the tailing backslash "\"
 $DstFolder = "D:\somefolder\"
 
 $EvtSession = New-Object System.Diagnostics.Eventing.Reader.EventLogSession($env:computername)

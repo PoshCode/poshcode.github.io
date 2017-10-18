@@ -1,4 +1,4 @@
-﻿<#
+<#
 Script written to parse Event Log Entries to make usable Windows Event log filtering xpath for Windows Event Filters and Windows Eventlog Forwarding
 Finds all Nodes and Attributes that are not empty and not null and then recurses 3 levels up to find the 'Event' node and writes out the correct xpath
 This includes replacing tabs and carriage returns in the #text of the node which do not transport properly to an event filter via copy/paste

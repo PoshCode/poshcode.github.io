@@ -1,4 +1,4 @@
-﻿function Get-Credential{ 
+function Get-Credential{ 
 PARAM([String]$Title, [String]$Message, [String]$Domain, [String]$UserName, [switch]$Console)
    ## Carefully EA=SilentlyContinue and check for $True because by default it's MISSING (not False, as you might expect)
    $cp = (Get-ItemProperty HKLM:\SOFTWARE\Microsoft\PowerShell\1\ShellIds ConsolePrompting -ea "SilentlyContinue").ConsolePrompting -eq $True

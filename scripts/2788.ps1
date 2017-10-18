@@ -1,4 +1,4 @@
-﻿## log backup
+## log backup
 
 $backuppath = "\\server\sqlbackups\"
 $alertaddress = "jrich@domain.com"

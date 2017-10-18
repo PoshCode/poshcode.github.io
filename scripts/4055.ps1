@@ -1,4 +1,4 @@
-﻿<#
+<#
 inspired by HelloKitty script and Mike Hays's obsession for Julie Andrews
 added voice selection menu, should work for everyone anywhere
 interluded speaking by using string array joined with newline

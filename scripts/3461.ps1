@@ -1,4 +1,4 @@
-﻿param($Issue, $Credentials = $(Get-Credential), $BaseURI = "https://your.jira.server/jira")
+param($Issue, $Credentials = $(Get-Credential), $BaseURI = "https://your.jira.server/jira")
 
 function ConvertTo-UnsecureString(
     [System.Security.SecureString][parameter(mandatory=$true)]$SecurePassword)

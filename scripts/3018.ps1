@@ -1,4 +1,4 @@
-﻿Add-PSSnapin Quest.ActiveRoles.ADManagement -ErrorAction SilentlyContinue #This is needed to pull computers from AD
+Add-PSSnapin Quest.ActiveRoles.ADManagement -ErrorAction SilentlyContinue #This is needed to pull computers from AD
 Clear-Host
 $Skipped = @()	#Create Array for Skipped Computers
 $Finished = @()	#Create Array for Finished Computers

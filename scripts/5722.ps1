@@ -1,4 +1,4 @@
-﻿(Get-Date) - [DateTime]::FromFileTime(
+(Get-Date) - [DateTime]::FromFileTime(
   [BitConverter]::ToInt64(
     (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Windows).ShutdownTime, 0
   )

@@ -1,4 +1,4 @@
-﻿$Script:WinSCPCSettingsOptionsObjectType = ""
+$Script:WinSCPCSettingsOptionsObjectType = ""
 $Script:WinSCPDirHasBeenLoaded   = $false 
 $script:WinSCPDLLFolder          = "" #path to folder containing the WinSCP DLL and EXE
 

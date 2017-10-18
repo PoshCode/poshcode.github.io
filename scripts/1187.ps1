@@ -1,4 +1,4 @@
-﻿## Format-Table with wrapping and string trimming.
+## Format-Table with wrapping and string trimming.
 function Format-TablePlus() {
 [CmdletBinding()]
 param(

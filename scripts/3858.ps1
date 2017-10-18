@@ -1,4 +1,4 @@
-﻿function read-stream ([Parameter(Position=0,Mandatory=$true)][validatenotnull()]
+function read-stream ([Parameter(Position=0,Mandatory=$true)][validatenotnull()]
 		[System.Net.Sockets.NetworkStream]$stream,
 		[String]$expect = "")
 {

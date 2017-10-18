@@ -1,4 +1,4 @@
-﻿function Set-FileWriteable {
+function Set-FileWriteable {
 #.Example
 # $s = New-PSSession $ComputerName
 # C:\PS>$files = Invoke-Command $s { ls }

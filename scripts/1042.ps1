@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Compile this program by simply doing:
  * 
  * csc.exe PSLauncher.cs

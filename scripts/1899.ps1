@@ -1,4 +1,4 @@
-﻿function Add-Slide($pres, $maxShared, $vmUsages, $vmShared, $maxVM, $vmLoad) {
+function Add-Slide($pres, $maxShared, $vmUsages, $vmShared, $maxVM, $vmLoad) {
 	$slide = $pres.slides.range(1).duplicate()
 	#$totalSlides = ($pres.slides | Measure-Object).Count
 	#$pres.slides.range(2).moveto($totalSlides)

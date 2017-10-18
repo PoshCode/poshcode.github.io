@@ -1,4 +1,4 @@
-﻿Function Fix-GPOPermission {
+Function Fix-GPOPermission {
 <#
 	.SYNOPSIS
 		Repairs GPOs that have had an account removed from the delegation tab. Does NOT give GPOAPPLY rights.

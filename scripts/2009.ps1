@@ -1,4 +1,4 @@
-﻿Add-Type @'
+Add-Type @'
 #region License
 // Desktop 1.1
 //																																						*

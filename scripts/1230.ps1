@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 Import-Module Accelerators  # http://poshcode.org/762
 Import-Module PowerBoots    # http://boots.codeplex.com
                             # http://dynamicdatadisplay.codeplex.com

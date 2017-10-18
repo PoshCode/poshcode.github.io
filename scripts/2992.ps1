@@ -1,4 +1,4 @@
-﻿#------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Strips off the '1-' prefix from phone numbers stored in Active Directory.
 # Requires 'ActiveRoles Management Shell for Active Directory' from Quest
 # Software.

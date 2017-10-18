@@ -1,4 +1,4 @@
-﻿param(
+param(
     $url = (Read-Host "Url? e.g http://www.maxfinance.pt/img/frame5.jpg")
 )
 begin {

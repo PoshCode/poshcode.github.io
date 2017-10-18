@@ -1,4 +1,4 @@
-﻿#The PowerShell Talk
+#The PowerShell Talk
 #Virtualization Congress 2009
 #
 #The Chicken Counter Script

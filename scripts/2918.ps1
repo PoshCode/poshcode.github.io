@@ -1,4 +1,4 @@
-﻿#######################################################################################################################
+#######################################################################################################################
 # File:             ESXiMgmt_machines_poweroff_sample.ps1                                                             #
 # Author:           Alexander Petrovskiy                                                                              #
 # Publisher:        Alexander Petrovskiy, SoftwareTestingUsingPowerShell.WordPress.Com                                #

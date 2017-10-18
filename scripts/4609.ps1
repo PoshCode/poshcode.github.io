@@ -1,4 +1,4 @@
-﻿# pstools.ps1
+# pstools.ps1
 
 <#
 function get-color {

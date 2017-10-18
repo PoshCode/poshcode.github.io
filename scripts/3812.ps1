@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Update Sysinternals Suite.
 .DESCRIPTION

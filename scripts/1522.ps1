@@ -1,4 +1,4 @@
-﻿cls
+cls
 
 [void][Reflection.Assembly]::LoadWithPartialName("VMware.Vim");
 

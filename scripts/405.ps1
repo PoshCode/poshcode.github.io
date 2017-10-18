@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ### Import the WPF assemblies
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore

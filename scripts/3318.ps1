@@ -1,4 +1,4 @@
-﻿function Get-ProfilesList {
+function Get-ProfilesList {
   $hive = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList"
 
   gci $hive | % -b {$prof = @()} -p {$dest = "" | select UserName, Sid, ProfilePath

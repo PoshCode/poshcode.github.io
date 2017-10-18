@@ -1,4 +1,4 @@
-﻿##
+##
 ## Author   : Roman Kuzmin
 ## Synopsis : Resize console window/buffer using arrow keys
 ##

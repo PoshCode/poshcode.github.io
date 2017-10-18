@@ -1,4 +1,4 @@
-﻿Set-Alias gpg Get-ProcessorGraph
+Set-Alias gpg Get-ProcessorGraph
 
 function Get-ProcessorGraph {
   <#

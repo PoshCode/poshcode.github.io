@@ -1,4 +1,4 @@
-﻿function Get-MonthAccountCreated {
+function Get-MonthAccountCreated {
     <#
     .SYNOPSIS
     Gets Account created in given month.

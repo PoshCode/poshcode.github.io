@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 .SYNOPSIS
     Downloads a file showing the progress of the download
 .DESCRIPTION

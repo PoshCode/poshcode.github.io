@@ -1,4 +1,4 @@
-﻿function cya($spacecowboy){
+function cya($spacecowboy){
   $spacecowboy = "
   IC5kODg4OGI      uICA4ODg4ODg4ODg4I  Dg4ODg4ODg4ODggICA  gICBZO      DhiICA
   gZDg4UCAgLmQ     4ODg4OGIuICA4ODggI  CAgIDg4OA0KZDg4UCA  gWTg4Y      iA4ODg

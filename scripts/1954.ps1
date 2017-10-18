@@ -1,4 +1,4 @@
-﻿function out-colour {
+function out-colour {
     	if ($Input) {
 		[int[]]$columns = @()
 		# select colors you prefer and the one that a readable on your console.. :)

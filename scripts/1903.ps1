@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
 		Takes input objects, and outputs a sortable HTML table
 

@@ -1,4 +1,4 @@
-﻿Function Watch-Process {
+Function Watch-Process {
 	<#
 	.DESCRIPTION
 		Creates an event handler for monitoring either process creation or deletion. This requires to be run as administrator.

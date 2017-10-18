@@ -1,4 +1,4 @@
-﻿##############################################
+##############################################
 ##Import group policies from a folder to a Domain Controller
 ##Author: Adam Liquorish
 ##

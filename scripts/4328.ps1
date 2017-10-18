@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Write message to screen with mix colors.
 .DESCRIPTION

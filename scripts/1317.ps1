@@ -1,4 +1,4 @@
-﻿
+
 	Write-Host ""
 	Write-Host "This is dangerous - beware!"
 	Write-Host "Type: delssids client.domain.com to DELETE ALL it's SAVESETS!!"

@@ -1,4 +1,4 @@
-﻿#-----------------------------------------------------------------------
+#-----------------------------------------------------------------------
 # Script creates one-way connections between one sending member server 
 # and a list of receiving member servers. The group schedule is used.
 # All servers are assumed to exist in the given replication group.

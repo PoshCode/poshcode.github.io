@@ -1,4 +1,4 @@
-﻿Add-Type -AssemblyName 'PresentationFramework'
+Add-Type -AssemblyName 'PresentationFramework'
 
 Function Get-WindowsProduct ## ver 1.02a
 {

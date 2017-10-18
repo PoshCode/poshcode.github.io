@@ -1,4 +1,4 @@
-﻿#
+#
 # get-unitylicense.ps1
 #
 # Returns license information for a Cisco Unity environment

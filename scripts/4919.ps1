@@ -1,4 +1,4 @@
-﻿# Firefox_install_extensions.ps1
+# Firefox_install_extensions.ps1
 # Purpose: install Firefox extensions
 # Details: This PowerShell script installs Firefox extensions into the main C:\Program Files (x86)\Mozilla Firefox\extensions folder
 # so that they are available to all users. This has been tested for extensions (including dictionaries). It's not designed for plugins.

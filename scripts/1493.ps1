@@ -1,4 +1,4 @@
-﻿
+
 
 ## Update all fast running (1 minute) timerjobs to run onece every 30+ minutes instead 
 ## Jos Verlinde 

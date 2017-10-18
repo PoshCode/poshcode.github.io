@@ -1,4 +1,4 @@
-﻿function MapNetDrive 
+function MapNetDrive 
 {
     param(
     

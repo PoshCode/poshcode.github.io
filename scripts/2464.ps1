@@ -1,4 +1,4 @@
-﻿function Send-SMTPmail($to, $from, $subject, $smtpserver, $body) {
+function Send-SMTPmail($to, $from, $subject, $smtpserver, $body) {
 	$mailer = new-object Net.Mail.SMTPclient($smtpserver)
 	$msg = new-object Net.Mail.MailMessage($from,$to,$subject,$body)
 	$msg.IsBodyHTML = $true

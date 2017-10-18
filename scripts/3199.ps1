@@ -1,4 +1,4 @@
-﻿Add-PSSnapin quest.activeroles.admanagement
+Add-PSSnapin quest.activeroles.admanagement
 $cred = Get-Credential
 $conn = connect-QADService -service 'x.x.x.x' -credential $cred
 

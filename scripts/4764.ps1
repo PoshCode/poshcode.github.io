@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function script:Get-Class([String]$Assembly, [String]$Class) {
   return ([AppDomain]::CurrentDomain.GetAssemblies() | ? {
     $_.Location.Split('\')[-1].Equals($Assembly)

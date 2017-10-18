@@ -1,4 +1,4 @@
-﻿####################################################################
+####################################################################
 #
 #Script will list all selected workstations and currently logged on user.
 #Results will be output to a file.  A query can be placed on a previous search.

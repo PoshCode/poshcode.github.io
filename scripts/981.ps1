@@ -1,4 +1,4 @@
-﻿if(!(Get-Command New-BootsWindow -EA SilentlyContinue)) {
+if(!(Get-Command New-BootsWindow -EA SilentlyContinue)) {
    # Add-PsSnapin PoshWpf
    Import-Module PowerBoots
    Add-BootsContentProperty 'DataPoints', 'Series'

@@ -1,4 +1,4 @@
-﻿# Snapshot Reminder Email script based on - SnapReminder V1.0 By Virtu-Al
+# Snapshot Reminder Email script based on - SnapReminder V1.0 By Virtu-Al
 # modified by Leon Scheltema 
 #
 # Please use the below variables to define your settings before use

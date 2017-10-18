@@ -1,4 +1,4 @@
-﻿Param (
+Param (
   [string[]]$Computers=$env:ComputerName,
   [string[]] $Paths = @("C:\Windows","C:\Windows\system32"),
   [string[]] $FileNames = @("fsb.tmp","fsb.stb","notpad.exe")

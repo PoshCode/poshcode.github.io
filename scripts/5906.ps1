@@ -1,4 +1,4 @@
-﻿# Zip functions, We can NEW, ADD, LIST, and EXTRACT 
+# Zip functions, We can NEW, ADD, LIST, and EXTRACT 
 # Pipeline input accepted
 # Example: dir <Path to files> | add-zip <Path to Destination Zipfile>
 function global:New-Zip

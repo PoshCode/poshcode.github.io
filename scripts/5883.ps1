@@ -1,4 +1,4 @@
-﻿function Get-Number {
+function Get-Number {
     [CmdletBinding(SupportsPaging = $true)]
     param(
         [Parameter(Position = 0, ValueFromPipeline = $true)]

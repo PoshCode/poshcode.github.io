@@ -1,4 +1,4 @@
-﻿#Requires -version 2.0
+#Requires -version 2.0
 #Generates External MAML Powershell help file for any loaded cmdlet or function
 #Note: Requires Joel Bennet's New-XML script from http: //www.poshcode.com/1244
 #place New-XML in same directory as New-MAML

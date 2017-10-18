@@ -1,4 +1,4 @@
-﻿# Function to set current path as location of script ( Credit: blogs.msdn.com/powershell/archive/2007/06/19/get-scriptdirectory.aspx )
+# Function to set current path as location of script ( Credit: blogs.msdn.com/powershell/archive/2007/06/19/get-scriptdirectory.aspx )
 	function Get-ScriptDirectory
 	{
 	$Invocation = (Get-Variable MyInvocation -Scope 1).Value

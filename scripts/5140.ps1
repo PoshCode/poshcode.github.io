@@ -1,4 +1,4 @@
-﻿function Get-DGMembershipRule {
+function Get-DGMembershipRule {
 
     param (
         $Identity

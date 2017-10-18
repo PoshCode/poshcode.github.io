@@ -1,4 +1,4 @@
-﻿Hello
+Hello
 
 I contact you a few weeks ago to inquire as to the possibility of sponsoring guest posts on your website: http://huddledmasses.org.  I wanted to follow up again to see if there was any interest. 
 

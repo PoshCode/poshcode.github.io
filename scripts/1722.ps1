@@ -1,4 +1,4 @@
-﻿function Get-HttpResponseUri {
+function Get-HttpResponseUri {
 #.Synopsis
 #   Fetch the HEAD for a url and return the ResponseUri.
 #.Description

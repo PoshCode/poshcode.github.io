@@ -1,4 +1,4 @@
-﻿# functions to print overwriting multi-line messages.  Test script will accept a file/filespec/dir and iterate through all files in all subdirs printing a test message + file name to demostrate.
+# functions to print overwriting multi-line messages.  Test script will accept a file/filespec/dir and iterate through all files in all subdirs printing a test message + file name to demostrate.
 # e.g. PS>.\writefilename.ps1 c:\
 # call WriteFileName [string]
 # after done writing series of overwriting messages, call WriteFileNameEnd

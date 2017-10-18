@@ -1,4 +1,4 @@
-﻿<#
+<#
         .SYNOPSIS
         This script cleans some directories in Users Profiles folder on a terminal server.
                 The script need some modifications, pleasee .NOTES section.

@@ -1,4 +1,4 @@
-﻿
+
 # Execute-MagisterSOAP.ps1
 # We are reading a list of students from a Magister SOAP webrequest.
 # 20120330

@@ -1,4 +1,4 @@
-﻿#user selector Script
+#user selector Script
 clear
 #First Time Load
 

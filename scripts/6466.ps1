@@ -1,4 +1,4 @@
-﻿function Get-NtVersionNumbers {
+function Get-NtVersionNumbers {
   <#
     .SYNOPSIS
         Gets the version numbers of the run time library.

@@ -1,4 +1,4 @@
-﻿## ConvertTo-Function
+## ConvertTo-Function
 ## By Steven Murawski (http://www.mindofroot.com / http://blog.usepowershell.com)
 ###################################################################################################
 ## Usage:

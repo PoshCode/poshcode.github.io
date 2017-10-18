@@ -1,4 +1,4 @@
-﻿## Function Get-WebFile (aka wget for PowerShell)
+## Function Get-WebFile (aka wget for PowerShell)
 ## Author: Joel Bennett and
 ## Peter Kriegel http://www.admin-source.de
 ## Original : http://poshcode.org/417

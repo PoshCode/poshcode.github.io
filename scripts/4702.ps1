@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 $mnuOpen_Click= {
   (New-Object Windows.Forms.OpenFileDialog) | % {
     $_.Filter = "JPEG (*.jpg;*.jpeg)|*.jpg;*jpeg"

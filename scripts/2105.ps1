@@ -1,4 +1,4 @@
-﻿if(-not(get-command New-System.Windows.Window -EA 0)){  Import-Module PowerBoots  }
+if(-not(get-command New-System.Windows.Window -EA 0)){  Import-Module PowerBoots  }
 Add-BootsTemplate $PSScriptRoot\PresentationFrame.xaml
 
 $name = [System.Windows.Navigation.JournalEntry]::NameProperty

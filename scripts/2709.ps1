@@ -1,4 +1,4 @@
-﻿function Get-Sp1Articles() 
+function Get-Sp1Articles() 
 { 
     $web = New-Object System.Net.WebClient 
     # Microsoft XLS-Datei über google herunterladen, damit kommt die XLS-Datei als in HTML konvertierte Datei

@@ -1,4 +1,4 @@
-﻿function Run-Query($siteUrl, $queryText)
+function Run-Query($siteUrl, $queryText)
 {
 	[reflection.assembly]::loadwithpartialname("microsoft.sharePOint") | out-null
 	[reflection.assembly]::loadwithpartialname("microsoft.office.server") | out-null

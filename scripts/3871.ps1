@@ -1,4 +1,4 @@
-﻿function repr {
+function repr {
     [CmdletBinding()]
     [OutputType([string])]
     Param(

@@ -1,4 +1,4 @@
-﻿# v2.0
+# v2.0
 
 function Push-Module {
     param(

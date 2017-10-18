@@ -1,4 +1,4 @@
-﻿Set-Alias sudo Invoke-RunAs
+Set-Alias sudo Invoke-RunAs
 
 function Invoke-RunAs {
   <#

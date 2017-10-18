@@ -1,4 +1,4 @@
-﻿#Powershell Script Made by Paulo Seabra. Use it freely, but please give proper credits.
+#Powershell Script Made by Paulo Seabra. Use it freely, but please give proper credits.
 
 # Set Session variables
 $Computer=hostname

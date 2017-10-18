@@ -1,4 +1,4 @@
-﻿function Get-ChildItem2 ($path)
+function Get-ChildItem2 ($path)
 {
     # path can either be absolut or relative, I only tried filesystem
     # perhaps to named Get-ChildItemsRecursive

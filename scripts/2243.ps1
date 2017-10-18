@@ -1,4 +1,4 @@
-﻿#Requires -Version 2.0
+#Requires -Version 2.0
 
 ## Version History
 ## beta 8 - 2010.09.20

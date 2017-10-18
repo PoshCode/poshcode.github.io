@@ -1,4 +1,4 @@
-﻿#requires -module BetterCredentials
+#requires -module BetterCredentials
 
 # REQUIRED:
 # Get a key from https://datamarket.azure.com/account/keys 

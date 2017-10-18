@@ -1,4 +1,4 @@
-﻿$page = Invoke-WebRequest "http://www.apk.se"
+$page = Invoke-WebRequest "http://www.apk.se"
 $html = $page.parsedHTML
 $products = $html.body.getElementsByTagName("TR")
 $headers = @()

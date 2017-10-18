@@ -1,4 +1,4 @@
-﻿function Get-LocalUsers {
+function Get-LocalUsers {
   param(
     [Parameter(Position=0)]
     [Alias("o")]

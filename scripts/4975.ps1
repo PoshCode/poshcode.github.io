@@ -1,4 +1,4 @@
-﻿function Build-OleDbConnectionString {
+function Build-OleDbConnectionString {
     param (
         [string]$ConnectionString,
         [string]$DataSource,

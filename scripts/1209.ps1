@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## Format-Table with wrapping and string trimming.
 function Format-TablePlus() {
 [CmdletBinding()]

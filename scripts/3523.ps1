@@ -1,4 +1,4 @@
-﻿<# TODO
+<# TODO
 -Change number of DSTs to is selection of $DSTMostFree to be variable.  Also add in logic to select DSTs with lower VMCounts.
 Total DSTs   Select DSTs
 ----------   -----------

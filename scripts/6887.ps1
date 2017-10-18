@@ -1,4 +1,4 @@
-﻿Clear
+Clear
 $start = Read-Host "Start date (mmddyyyy)"
     $startY = $start.Substring(4,4)
     $startM = $start.Substring(0,2)

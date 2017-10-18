@@ -1,4 +1,4 @@
-﻿function Write-ColorizedHTML { 
+function Write-ColorizedHTML { 
         <#
         .Synopsis
             Writes Windows PowerShell as colorized HTML

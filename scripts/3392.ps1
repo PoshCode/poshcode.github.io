@@ -1,4 +1,4 @@
-﻿Param([Parameter(Mandatory=$true)] [string]$VMGuest)
+Param([Parameter(Mandatory=$true)] [string]$VMGuest)
 
 $vm = get-vm $VMGuest
 $cpuCap = $vm.NumCPU*1000

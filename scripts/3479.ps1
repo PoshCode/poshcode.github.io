@@ -1,4 +1,4 @@
-﻿#Author: Tozzi June 2012
+#Author: Tozzi June 2012
 #OriginalAuthor: Ant B 2012
 #Purpose: Batch feed recipients to MailChimp
 

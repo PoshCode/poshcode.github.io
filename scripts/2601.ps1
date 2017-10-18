@@ -1,4 +1,4 @@
-﻿
+
 #--------------------------------------------------------
 # Script  : Advanced2_2011.ps1
 # Author  : marc carter (marcadamcarter)

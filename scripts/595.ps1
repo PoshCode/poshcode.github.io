@@ -1,4 +1,4 @@
-﻿Clear
+Clear
 $ITunes = New-Object -ComObject iTunes.Application
 
 1..$ITunes.LibraryPlaylist.Tracks.Count | % {

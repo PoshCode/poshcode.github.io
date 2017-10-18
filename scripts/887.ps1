@@ -1,4 +1,4 @@
-﻿#requires -version 2.0  ## for v1 you need to change Add-Type to "New-Type":http://poshcode.org/720
+#requires -version 2.0  ## for v1 you need to change Add-Type to "New-Type":http://poshcode.org/720
 Add-Type @"
 public class Shift {
    public static int    Left(int x,   int count) { return x >> count; }

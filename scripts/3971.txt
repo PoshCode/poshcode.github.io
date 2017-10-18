@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
   ::interactive mode
   if "%1" equ "" (
     if not defined run goto:interactive

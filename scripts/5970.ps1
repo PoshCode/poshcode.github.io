@@ -1,4 +1,4 @@
-﻿################################
+################################
 # DEFINING VARIABLES
  $result = "C:\ProgramData\Paessler\PRTG Network Monitor\Logs (Sensors)\result.txt"
 

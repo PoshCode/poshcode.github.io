@@ -1,4 +1,4 @@
-﻿#Some Parameters
+#Some Parameters
 param([string]$ftVM, [string]$ftState)
 
 #Load the PowerCLI Snapin

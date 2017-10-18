@@ -1,4 +1,4 @@
-﻿function Convert-Umlaut {
+function Convert-Umlaut {
   <#
      .NOTES
          Author: greg zakharov

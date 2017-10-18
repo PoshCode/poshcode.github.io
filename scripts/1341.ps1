@@ -1,4 +1,4 @@
-﻿function Get-VMHostSerialNumber {
+function Get-VMHostSerialNumber {
 	param([VMware.VimAutomation.Types.VMHost[]]$InputObject = $null)
 
 	process {

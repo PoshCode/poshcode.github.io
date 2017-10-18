@@ -1,4 +1,4 @@
-﻿function ConvertFrom-Html {
+function ConvertFrom-Html {
    #.Synopsis
    #   Convert a table from an HTML document to a PSObject
    #.Example

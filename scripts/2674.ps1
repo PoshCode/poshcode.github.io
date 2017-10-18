@@ -1,4 +1,4 @@
-﻿# Script:	Exch2010QueueMonitor.ps1
+# Script:	Exch2010QueueMonitor.ps1
 # Purpose:  This script can be set as a scheduled task to run every 30minutes and will monitor all exchange 2010 queue's. If a threshold of 10 is met an 
 #			output file with the queue details will be e-mailed to all intended admins listed in the e-mail settings
 # Author:   Paperclips (The Dark Lord)

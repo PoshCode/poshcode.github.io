@@ -1,4 +1,4 @@
-﻿[reflection.assembly]::LoadWithPartialName(&#8221;System.Drawing&#8221;)
+[reflection.assembly]::LoadWithPartialName(&#8221;System.Drawing&#8221;)
 
 $SizeLimit=1280          # required size of picture's long side
 $logfile=&#8221;resizelog.txt&#8221; # log file for errors

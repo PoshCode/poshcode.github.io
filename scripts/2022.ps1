@@ -1,4 +1,4 @@
-﻿
+
 Function Create-Password {
         #How many characters in the password
         [int]$passwordlength = 14

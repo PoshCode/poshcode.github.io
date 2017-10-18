@@ -1,4 +1,4 @@
-﻿@@---------------------logoff_clientside_interactive.ps1-----------------
+@@---------------------logoff_clientside_interactive.ps1-----------------
 #powershell -ExecutionPolicy Unrestricted logoff_clientside_interactive.ps1
 $ErrorActionPreference = "silentlycontinue"
 $mycreds = (Get-Credential)

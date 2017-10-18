@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # Set-FileLines.ps1
 # This script will maintain the PS Transcript file, or any text file, at a fixed
 # length and can be used to prevent such files from becoming too large, with the

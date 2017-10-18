@@ -1,4 +1,4 @@
-﻿function Convert-TableToList
+function Convert-TableToList
 {
     param(
         $t,

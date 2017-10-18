@@ -1,4 +1,4 @@
-﻿param($serverName,$portNumber,$pollIntervalSeconds,$watcherNodes,$displayName,$targetMp)
+param($serverName,$portNumber,$pollIntervalSeconds,$watcherNodes,$displayName,$targetMp)
 
 function GetPortMonitoringTemplate
 {

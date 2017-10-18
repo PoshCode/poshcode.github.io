@@ -1,4 +1,4 @@
-﻿$null, $null, $null, $null, $netstat = netstat -a -n -o
+$null, $null, $null, $null, $netstat = netstat -a -n -o
 $ps = Get-Process
 [regex]$regexTCP = '(?<Protocol>\S+)\s+(?<LAddress>\S+):(?<LPort>\S+)\s+(?<RAddress>\S+):(?<RPort>\S+)\s+(?<State>\S+)\s+(?<PID>\S+)'
 [regex]$regexUDP = '(?<Protocol>\S+)\s+(?<LAddress>\S+):(?<LPort>\S+)\s+(?<RAddress>\S+):(?<RPort>\S+)\s+(?<PID>\S+)'

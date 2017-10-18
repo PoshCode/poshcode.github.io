@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
  ::unequal symbols
  for %%i in ("!", "x") do if "%1" equ "%%~i" goto:error
  ::display help information args

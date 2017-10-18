@@ -1,4 +1,4 @@
-﻿#Requires -Version 3.0
+#Requires -Version 3.0
 
 #This script is designed to be attached to Windows TS Events 21 and 22 (which work for local logons too) 
 #to email notification to an audit mailbox

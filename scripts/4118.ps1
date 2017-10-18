@@ -1,4 +1,4 @@
-﻿Function Get-DrsGroup {
+Function Get-DrsGroup {
 <#
 .SYNOPSIS
 Retrieves DRS groups from a cluster.

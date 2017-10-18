@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
   setlocal enabledelayedexpansion
     for /f "tokens=2 delims=-" %%i in (
       'arp -a ^| 2^>nul findstr /rc:"0x"'

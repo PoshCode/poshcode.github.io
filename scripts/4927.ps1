@@ -1,4 +1,4 @@
-﻿<#
+<#
   .DESCRIPTION
       Returns the current original equipment manufacter (OEM)
       code page identifier for the operating system.

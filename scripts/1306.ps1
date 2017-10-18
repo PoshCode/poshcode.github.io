@@ -1,4 +1,4 @@
-﻿function Get-UserProfile($accountName)
+function Get-UserProfile($accountName)
 {
 	[reflection.assembly]::LoadWithPartialName("Microsoft.SharePoint") | out-null
 	[reflection.assembly]::LoadWithPartialName("Microsoft.Office.Server") | out-null

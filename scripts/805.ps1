@@ -1,4 +1,4 @@
-﻿# Enumerate fan speeds on an ESX host that is running WSMAN.
+# Enumerate fan speeds on an ESX host that is running WSMAN.
 # This doesn't take advantage of CTP3's WSMAN cmdlets.
 # Needs winrm installed.
 $serverName = "your.server"

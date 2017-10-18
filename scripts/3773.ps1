@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Finds and Replaces multiple entries, in multiple files.
 

@@ -1,4 +1,4 @@
-﻿#
+#
 # Module manifest for module 'QAD'
 #
 # Generated from: Quest.ActiveRoles.ADManagement

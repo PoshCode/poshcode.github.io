@@ -1,4 +1,4 @@
-﻿function AddTo-HostsFile{
+function AddTo-HostsFile{
 
 	<#
 		.DESCRIPTION

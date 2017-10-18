@@ -1,4 +1,4 @@
-﻿function get-whoisabuse ([string][ValidatePattern("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")]$ipaddress)
+function get-whoisabuse ([string][ValidatePattern("^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")]$ipaddress)
 {
 
 [xml]$a = (Invoke-WebRequest -Uri "http://whois.arin.net/rest/ip/$ipaddress" -ContentType "text/xml").content

@@ -1,4 +1,4 @@
-﻿function ConvertTo-Unix {
+function ConvertTo-Unix {
     [CmdletBinding()]
     param(
         [Parameter(ValueFromPipelineByPropertyName=$true, ValueFromPipeline=$true, Mandatory=$true)]

@@ -1,4 +1,4 @@
-﻿$ELIMServer  = $Env:ComputerName
+$ELIMServer  = $Env:ComputerName
 $ELIMChannel = "ELIM"
 $ELIMUser    = $Env:UserName
 

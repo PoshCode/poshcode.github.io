@@ -1,4 +1,4 @@
-﻿function Invoke-JQuery
+function Invoke-JQuery
 {
 <#
     .SYNOPSIS

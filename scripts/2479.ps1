@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 # ALSO REQUIRES Autoload for some functionality
 # You should create a Reflection.psd1 with the contents: @{ RequiredModules = @("Autoload"); GUID="64b5f609-970f-4e65-b02f-93ccf3e60cbb"; ModuleVersion="3.5.0.0" }
 #History:

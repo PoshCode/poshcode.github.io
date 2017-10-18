@@ -1,4 +1,4 @@
-﻿gp 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkCards\*' | % {
+gp 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkCards\*' | % {
   $ht = @{}
 }{
   $ht[$_.Description] = $_.ServiceName

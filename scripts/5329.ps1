@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 This module contains 2 functions:
 

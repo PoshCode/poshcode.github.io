@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.0.9814.0
+#Requires -Version 5.0.9814.0
  
 if(!($PSVersionTable.PSVersion.Major -ge 5 -and $PSVersionTable.PSVersion.Build -ge 9814)) {
  

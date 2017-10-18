@@ -1,4 +1,4 @@
-﻿function Get-FileEncoding {
+function Get-FileEncoding {
 <#
 .SYNOPSIS
 Gets file encoding.

@@ -1,4 +1,4 @@
-﻿#==================================================================================================
+#==================================================================================================
 #              File Name : WSUS-Purge.ps1
 #        Original Author : Kenneth C. Mazie (kcmjr)
 #            Description : As written it will clear out files left over from Windows Updates.

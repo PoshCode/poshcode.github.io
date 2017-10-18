@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Get the different protocol latencies for a specified volume.
 .DESCRIPTION

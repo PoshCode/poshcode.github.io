@@ -1,4 +1,4 @@
-﻿function Get-LogonSessions {
+function Get-LogonSessions {
   <#
     .SYNOPSIS
         Describes the logon session or sessions associated with a user logged (

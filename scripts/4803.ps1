@@ -1,4 +1,4 @@
-﻿Set-Alias listdlls Get-DllList
+Set-Alias listdlls Get-DllList
 
 function Get-DllList {
   [CmdletBinding()]

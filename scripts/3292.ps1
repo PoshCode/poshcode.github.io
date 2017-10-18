@@ -1,4 +1,4 @@
-﻿
+
 function Set-ESXRemoteCLI() {
     Param([parameter(Mandatory=$true,ValueFromPipeline=$true)]$VMHost,
         [parameter(Mandatory=$true)][Boolean]$enabled,

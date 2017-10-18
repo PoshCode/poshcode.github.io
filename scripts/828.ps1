@@ -1,4 +1,4 @@
-﻿# Function New-CustomColumn for PowerShell V1.0
+# Function New-CustomColumn for PowerShell V1.0
 #
 # Helper function to create Custom Columns for select or format cmdlets
 # for more info and examples see :

@@ -1,4 +1,4 @@
-﻿#Requires -version 3
+#Requires -version 3
  
 function Start-TransportLogSearch
 {

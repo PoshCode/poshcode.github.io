@@ -1,4 +1,4 @@
-﻿# fastNFS
+# fastNFS
 # Description: Mounts NFS datastore to a group of ESX hosts.
 # Usage: Enter a list of ESX hosts (by IP or hostname). Then enter the IP, path, and datastore name of the share.
 #

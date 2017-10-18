@@ -1,4 +1,4 @@
-﻿<#
+<#
     .NOTES 
     Name: Availability Group Refresh
     Author: Rob Sewell 

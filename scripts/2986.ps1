@@ -1,4 +1,4 @@
-﻿function Start-MyTranscript
+function Start-MyTranscript
 {
 	Param
 	(

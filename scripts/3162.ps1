@@ -1,4 +1,4 @@
-﻿$s = "Server01", "Server02", "Server03"
+$s = "Server01", "Server02", "Server03"
 foreach($server in $s) {$server
 
 #$computername = Get-Content env:computername

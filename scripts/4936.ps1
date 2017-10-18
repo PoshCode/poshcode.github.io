@@ -1,4 +1,4 @@
-﻿import sublime, sublime_plugin, subprocess
+import sublime, sublime_plugin, subprocess
 
 # { "keys": ["f5"], "command": "run_script" }
 class RunScriptCommand(sublime_plugin.TextCommand):

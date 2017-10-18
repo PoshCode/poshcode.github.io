@@ -1,2 +1,2 @@
-﻿test script
+test script
 

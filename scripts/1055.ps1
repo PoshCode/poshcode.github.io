@@ -1,4 +1,4 @@
-﻿function get-ipinformation
+function get-ipinformation
 {
 process {
     (Get-WmiObject Win32_NetworkAdapterConfiguration -computer $_ ) | ? { $_.IPenabled } | 

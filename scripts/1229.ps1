@@ -1,4 +1,4 @@
-﻿####################################################################################
+####################################################################################
 #PoSH script to check if a server is up and if it is check for a service.
 #If the service isn't running, start it and send an email
 # JK - 7/2009

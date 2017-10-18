@@ -1,4 +1,4 @@
-﻿##
+##
 # Remove-MyOldComputers.ps1
 #
 #  Makes certian assumptions about your computers naming scheme: mainly that all your

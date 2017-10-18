@@ -1,4 +1,4 @@
-﻿if(@(Import-ConstructorFunctions -Path "$PSScriptRoot\Types_Generated").Count -lt 3) {
+if(@(Import-ConstructorFunctions -Path "$PSScriptRoot\Types_Generated").Count -lt 3) {
 Add-ConstructorFunction  -T Hammock.Authentication.OAuth.OAuthCredentials, Hammock.RestClient, Hammock.RestRequest -Path "$PSScriptRoot\Types_Generated"
 }
 

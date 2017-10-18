@@ -1,4 +1,4 @@
-﻿function Test-GACAssembly {
+function Test-GACAssembly {
   <#
     .SYNOPSIS
         Check that assembly has been installed in GAC.

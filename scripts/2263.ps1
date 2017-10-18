@@ -1,4 +1,4 @@
-﻿function Ignore-SslErrors {
+function Ignore-SslErrors {
 	# Create a compilation environment
 	$Provider=New-Object Microsoft.CSharp.CSharpCodeProvider
 	$Compiler=$Provider.CreateCompiler()

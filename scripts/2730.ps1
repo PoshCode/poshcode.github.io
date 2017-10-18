@@ -1,4 +1,4 @@
-﻿function New-Wrapper {
+function New-Wrapper {
 <#
     .Synopsis
         Encrypt a secret script to run from a new ps1 wrapper script.

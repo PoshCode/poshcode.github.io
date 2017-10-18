@@ -1,4 +1,4 @@
-﻿#Define DPMHosts
+#Define DPMHosts
 [CmdletBinding()]
 param([string]$PrimaryDPMHost, [string]$SecondaryDPMHost);
 Write-Verbose "Compare-DataSources.ps1 written by Shai Perednik sperednik@deloitte.com"

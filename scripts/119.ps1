@@ -1,4 +1,4 @@
-﻿## Depends on the PoshXmpp.dll from http://CodePlex.com/PowerXmpp
+## Depends on the PoshXmpp.dll from http://CodePlex.com/PowerXmpp
 #requires -pssnapin PoshXmpp
 ## Requires System.Web for the RSS-feed option
 [Reflection.Assembly]::LoadWithPartialName("System.Web") | Out-Null

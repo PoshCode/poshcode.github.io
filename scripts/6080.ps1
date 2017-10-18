@@ -1,4 +1,4 @@
-﻿
+
 try{
     Add-PSSnapin VMware.VimAutomation.Core -ErrorAction continue
     Connect-VIServer -Server "ActualServerName" -user domain\Username -password Password1IsTheBestPassword -erroraction continue

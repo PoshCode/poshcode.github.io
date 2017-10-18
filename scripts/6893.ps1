@@ -1,4 +1,4 @@
-﻿ ##################### MOD DEV ################
+ ##################### MOD DEV ################
   Function Import-CurrentFileAsModule
 {
     [cmdletbinding()]

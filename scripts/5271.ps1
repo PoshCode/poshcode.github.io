@@ -1,4 +1,4 @@
-﻿Function Is-Admin
+Function Is-Admin
 {
 	$principal = [Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
 	$role = [Security.Principal.WindowsBuiltInRole]::Administrator

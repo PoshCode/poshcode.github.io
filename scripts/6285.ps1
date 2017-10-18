@@ -1,4 +1,4 @@
-﻿# Continue on errors
+# Continue on errors
 $ErrorActionPreference = "silentlycontinue"
  
 # Target and remove all HP Software except Security Manager

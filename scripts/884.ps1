@@ -1,4 +1,4 @@
-﻿$null, $null, $null, $null, $netstat = netstat -a -n -o
+$null, $null, $null, $null, $netstat = netstat -a -n -o
 [regex]$regexTCP = '(?<Protocol>\S+)\s+(?<LocalAddress>\S+)\s+(?<RemoteAddress>\S+)\s+(?<State>\S+)\s+(?<PID>\S+)'
 [regex]$regexUDP = '(?<Protocol>\S+)\s+(?<LocalAddress>\S+)\s+(?<RemoteAddress>\S+)\s+(?<PID>\S+)'
 foreach ($net in $netstat)

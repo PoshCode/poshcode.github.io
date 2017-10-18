@@ -1,4 +1,4 @@
-﻿function Write-Host {
+function Write-Host {
 #.Synopsis
 #  Wraps Write-Host with support for indenting based on stack depth.
 #.Description

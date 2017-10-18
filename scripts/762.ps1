@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## Custom Accelerators for PowerShell 2 (CTP3)
 ####################################################################################################
 ## A script module for CTP3 which allows the user to create their own custom type accelerators. 

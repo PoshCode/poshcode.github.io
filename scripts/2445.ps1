@@ -1,4 +1,4 @@
-﻿# Transcribe output to log
+# Transcribe output to log
 $null = Start-Transcript "$pwd\$([System.IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Definition)).log"
 # Check the QAD snapins are installed
 if ( (Get-PSSnapin -Name Quest.ActiveRoles.ADManagement -ErrorAction silentlycontinue) -eq $null ) {

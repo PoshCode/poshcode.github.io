@@ -1,4 +1,4 @@
-﻿# Tags alert with PrincipalName, Severity and MP name in Custom fields.
+# Tags alert with PrincipalName, Severity and MP name in Custom fields.
 # Use in OpsMgr Command Shell.
 # Original script from Marco Shaw.
 # Changed by Stefan Stranger

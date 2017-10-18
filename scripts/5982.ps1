@@ -1,4 +1,4 @@
-﻿$folder = "$env:userprofile\pictures"
+$folder = "$env:userprofile\pictures"
 $wait = 10
 
 function New-PInvoke

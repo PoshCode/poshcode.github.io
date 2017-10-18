@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Generate pseudo-random passwords based on templates
 #
 #.Parameter Template

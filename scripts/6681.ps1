@@ -1,4 +1,4 @@
-﻿Set-Location 'C:\Mirth Connect'
+Set-Location 'C:\Mirth Connect'
 $ChannelOutput=.\mccommand.exe -a https://localhost:38443 -u username -p password -s "C:\commands.txt"
 
 If($ChannelOutput -like '*successfully*')

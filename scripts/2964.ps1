@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Copy group membership between two accounts.
     .DESCRIPTION

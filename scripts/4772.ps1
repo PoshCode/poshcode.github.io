@@ -1,4 +1,4 @@
-﻿$script:library = @'
+$script:library = @'
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;

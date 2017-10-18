@@ -1,4 +1,4 @@
-﻿function Get-ProcessList {
+function Get-ProcessList {
   #snapshot time
   $now = Get-Date -f 'HH:mm:ss'
 

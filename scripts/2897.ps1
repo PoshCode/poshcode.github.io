@@ -1,4 +1,4 @@
-﻿# Process command line parameter (if present).
+# Process command line parameter (if present).
 	[bool] $DISABLE_PROXY = $false;
     	foreach ($param in $MyInvocation.UnboundArguments) {
 		if ($param -like 'disable') { $DISABLE_PROXY = $true; }

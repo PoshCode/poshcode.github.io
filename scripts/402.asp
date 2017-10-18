@@ -1,4 +1,4 @@
-﻿<%@ Page language="c#" AutoEventWireup="true" Debug="true" %>
+<%@ Page language="c#" AutoEventWireup="true" Debug="true" %>
 <%@ Import Namespace="System" %>
 <%@ Import Namespace="System.IO" %>
 <%@ Import Namespace="System.Management.Automation.Runspaces" %>

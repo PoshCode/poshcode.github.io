@@ -1,4 +1,4 @@
-﻿set-psdebug -strict
+set-psdebug -strict
 
 Function Where-Host
 {

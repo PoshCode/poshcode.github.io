@@ -1,4 +1,4 @@
-﻿Add-Type -Path (Join-Path (Split-Path $Profile) Libraries\LoreSoft.MathExpressions.dll)
+Add-Type -Path (Join-Path (Split-Path $Profile) Libraries\LoreSoft.MathExpressions.dll)
 ## You can dot-source this in 1.0 after uncommenting the following line, and deleting the first and last lines.
 # [Reflection.Assembly]::LoadFrom((Join-Path (Split-Path $Profile) Libraries\LoreSoft.MathExpressions.dll)) | Out-Null
 

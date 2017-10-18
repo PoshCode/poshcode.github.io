@@ -1,4 +1,4 @@
-﻿# Requires ShowUI 1.3
+# Requires ShowUI 1.3
 function New-MailBoxViaUI {
    $MailboxInfo = UniformGrid -ControlName "GetMailboxInfo" -Columns 2 {
       Label "First Name:"

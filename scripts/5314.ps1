@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 After running this code, use it like:
 

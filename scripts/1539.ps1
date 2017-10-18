@@ -1,4 +1,4 @@
-﻿$gadgetWindow = @{
+$gadgetWindow = @{
    # Transparency, WindowStyle, and background work together 
    # to get rid of the standard window's chrome and make the window "irregular" shaped
    # that is, the window will be the shape of it's content.

@@ -1,4 +1,4 @@
-﻿Function Export-XLS {
+Function Export-XLS {
 <#
 	.SYNOPSIS
 		Function to create a Tab delimited Excel .xls File from Objects.

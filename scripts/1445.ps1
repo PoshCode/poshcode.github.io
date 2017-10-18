@@ -1,4 +1,4 @@
-﻿#requires -version 2
+#requires -version 2
 
 #Uses Visual Studio Database Edition classes Microsoft.Data.Schema.ScriptDom and Microsoft.Data.Schema.Script.Sql to parse T-SQL
 #Chad Miller

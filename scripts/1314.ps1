@@ -1,4 +1,4 @@
-﻿# PG-duplex.ps1	: NIC Teaming with failover set on duplexity
+# PG-duplex.ps1	: NIC Teaming with failover set on duplexity
 # This script will configure the portgroup to use NIC Teaming where the failover is
 # depending on the duplexity of the Active NIC.
 #

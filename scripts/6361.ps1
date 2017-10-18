@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 Param(
    [Parameter(Mandatory=$True)]
    [string]$magnetlink

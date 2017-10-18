@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 Set-Alias sum Get-FileOrStringHash
 
 function Get-FileOrStringHash {

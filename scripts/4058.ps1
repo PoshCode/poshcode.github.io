@@ -1,4 +1,4 @@
-﻿#ugly way
+#ugly way
 function Get-RandomPassword {
   [CmdletBinding()]
   param(

@@ -1,4 +1,4 @@
-﻿# Creates in global scope PSMenu variable which contained some useful methods.
+# Creates in global scope PSMenu variable which contained some useful methods.
 # Author: greg zakharov
 # Known issues: conflicts with ConEmu (reported by 01MDM)
 # How does it work?

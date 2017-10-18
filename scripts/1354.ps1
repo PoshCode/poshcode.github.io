@@ -1,4 +1,4 @@
-﻿function Kill-Process() {
+function Kill-Process() {
 param(
 [string[]]$ComputerNames,
 [string[]]$ProcessNames,

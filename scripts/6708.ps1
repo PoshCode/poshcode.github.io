@@ -1,4 +1,4 @@
-﻿<#Examples
+<#Examples
 
 .Get-Hotfix | clip.exe | AutoWord
 

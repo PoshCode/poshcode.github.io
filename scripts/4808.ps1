@@ -1,4 +1,4 @@
-﻿function get-whoisabuse ([string][validatescript({ $ip = $null; [net.ipaddress]::tryparse($_, [ref]$ip); })]$ipaddress)
+function get-whoisabuse ([string][validatescript({ $ip = $null; [net.ipaddress]::tryparse($_, [ref]$ip); })]$ipaddress)
 {
 
 [xml]$a = (Invoke-WebRequest -Uri "http://whois.arin.net/rest/ip/$ipaddress" -ContentType "text/xml").content

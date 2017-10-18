@@ -1,4 +1,4 @@
-﻿function Get-BinarySum
+function Get-BinarySum
 {
 <#
 .SYNOPSIS

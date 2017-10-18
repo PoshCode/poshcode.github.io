@@ -1,4 +1,4 @@
-﻿# vProfiler.ps1	: vSphere profiling script
+# vProfiler.ps1	: vSphere profiling script
 # This script will export recursively all objects and properties of a VI/vSphere entity to a XML file
 # Parameters:
 #	$entityName	: the name of the vSphere entity for which the properties should be written to the XML file

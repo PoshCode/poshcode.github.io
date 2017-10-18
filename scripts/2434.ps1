@@ -1,4 +1,4 @@
-﻿## CHANGE this to point to your WatiN.Core.dll
+## CHANGE this to point to your WatiN.Core.dll
 $WatinPath = Convert-Path (Resolve-Path "$(Split-Path $Profile)\Libraries\Watin2\WatiN.Core.dll")
 ## Load the assembly
 $global:watin = [Reflection.Assembly]::LoadFrom( $WatinPath )

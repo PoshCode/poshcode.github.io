@@ -1,4 +1,4 @@
-﻿$SourcePath = 'C:\\Admin\\ScriptTest\\SourceFolder'
+$SourcePath = 'C:\\Admin\\ScriptTest\\SourceFolder'
 $destPath = 'C:\Admin\ScriptTest\DestinationFolder'
 foreach ($file in Get-ChildItem $SourcePath -Recurse -Filter TestFile.txt){
     $destDir = $file.DirectoryName -replace $sourcePath,$destPath

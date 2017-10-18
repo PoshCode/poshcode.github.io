@@ -1,4 +1,4 @@
-﻿<#
+<#
 Get-Command is a great stuff which can help you to locate almost any command or DLL.
 But what if you want to find arbitrary file? For example, try to locate msconfig.exe
 with Get-Command cmdlet:

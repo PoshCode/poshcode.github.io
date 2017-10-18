@@ -1,4 +1,4 @@
-﻿function New-Object
+function New-Object
 {
     [CmdletBinding(DefaultParameterSetName='Net', HelpUri='http://go.microsoft.com/fwlink/?LinkID=113355')]
     param(

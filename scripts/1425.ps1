@@ -1,4 +1,4 @@
-﻿function Get-VMHostLunLatency {
+function Get-VMHostLunLatency {
 	param($VMHost)
 
 	$luns = $VMHost | Get-ScsiLun

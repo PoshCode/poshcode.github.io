@@ -1,4 +1,4 @@
-﻿# -==-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+# -==-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #        Author: Kris Cieslak (defaultset.blogspot.com)
 #          Date: 2010-05-26
 #   Description: Identifying knowledge base article by id number taken from 

@@ -1,4 +1,4 @@
-﻿#Variables
+#Variables
 $Date = Get-Date
 $TempReport = $env:TEMP + "\temp.csv"
 $FinalReport = $env:USERPROFILE + "\" + $Date.Year + "_" + $Date.Month + "_" + $Date.Day + "_" + $Date.Hour + ":" + $Date.Minute + "_Scheduled_Task_Report.csv"

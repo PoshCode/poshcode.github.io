@@ -1,4 +1,4 @@
-﻿function killItWithFire {
+function killItWithFire {
   $TrustedInstallerProcess = Get-Process -ProcessName trustedinstaller
   if($TrustedInstallerProcess){
     Write-Host -ForegroundColor GREEN "TrustedInstaller process is running, killing it now."

@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
 		Pulls down the leaderboards for the 2011 Scripting Games
 

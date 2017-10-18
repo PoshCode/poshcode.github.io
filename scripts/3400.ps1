@@ -1,4 +1,4 @@
-﻿function Expand-ZipFile {
+function Expand-ZipFile {
     param {
        $zipPath,
        $destination,

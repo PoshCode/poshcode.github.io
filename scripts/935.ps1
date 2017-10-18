@@ -1,4 +1,4 @@
-﻿Function New-FileShare {
+Function New-FileShare {
 #this function returns $True is the share is successfully created
     Param([string]$computername=$env:computername,
           [string]$path=$(Throw "You must enter a complete path relative to the remote computer."),

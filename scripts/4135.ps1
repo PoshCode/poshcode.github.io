@@ -1,4 +1,4 @@
-﻿#######################################################################################################
+#######################################################################################################
 # NAME:    BuildPowershellClusterCommands.ps1
 #
 # COMMENT: This script runs a series of 'get' cmdlet's to inventory a MS cluster and turns around

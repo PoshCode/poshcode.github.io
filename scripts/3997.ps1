@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
 	Dynamically shortens the prompt based upon window size
 .Notes

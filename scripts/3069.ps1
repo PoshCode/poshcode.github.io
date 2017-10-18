@@ -1,4 +1,4 @@
-﻿##Creates variable for filename
+##Creates variable for filename
 
 $date = (get-date).tostring("yyyy-MM-dd")
 $filename = "H:\dailychecks\checks_$date.xls"

@@ -1,4 +1,4 @@
-﻿# Wireless Statistics into object
+# Wireless Statistics into object
 # Author: Josh Popp
 # Put Wireless Stats, like Signal Strengh, BSSID, and Channel into an object
 

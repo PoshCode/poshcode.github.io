@@ -1,4 +1,4 @@
-﻿#Email Alert Parameters
+#Email Alert Parameters
 
 $to = "user@mydomain.com"
 

@@ -1,4 +1,4 @@
-﻿# Start of Settings
+# Start of Settings
 $VC1 = "VI server"
 # Max CPU usage for non HA cluster
 $limitResourceCPUClusNonHA = 0.6 

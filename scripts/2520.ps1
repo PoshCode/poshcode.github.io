@@ -1,4 +1,4 @@
-﻿[Reflection.Assembly]::LoadFile("C:\Program Files\Microsoft\Exchange\Web Services\1.1\Microsoft.Exchange.WebServices.dll") | Out-Null
+[Reflection.Assembly]::LoadFile("C:\Program Files\Microsoft\Exchange\Web Services\1.1\Microsoft.Exchange.WebServices.dll") | Out-Null
 $s = New-Object Microsoft.Exchange.WebServices.Data.ExchangeService([Microsoft.Exchange.WebServices.Data.ExchangeVersion]::Exchange2007_SP1)
 $s.Credentials = New-Object Net.NetworkCredential('email@domain', 'password')
 $s.Url = new-object Uri("https://red001.mail.microsoftonline.com/ews/exchange.asmx")

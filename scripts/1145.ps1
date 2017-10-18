@@ -1,4 +1,4 @@
-﻿Process { 
+Process { 
 	#Get the type of object we have
 	$InputTypeName = $_.GetType().Name 
     

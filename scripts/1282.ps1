@@ -1,4 +1,4 @@
-﻿function KillDBConnections([string]$serverName, [string]$DBName)
+function KillDBConnections([string]$serverName, [string]$DBName)
 {   
     $ConnectionString = "Data Source=$serverName;Initial Catalog=master;Integrated Security=SSPI"
     

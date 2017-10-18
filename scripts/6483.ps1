@@ -1,4 +1,4 @@
-﻿<#
+<#
 Calculates crc32 sum of a file.
 Grabbed from https://github.com/gregzakh/alt-ps/blob/master/Get-FileCrc32.ps1
 #>

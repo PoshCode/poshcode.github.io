@@ -1,4 +1,4 @@
-﻿#Example 
+#Example 
 #New-XVM -ComputerName HYPERVSVR02 -Name "TLG-INET2" -SwitchName "External(192.168.1.0/24)" -VhdType Differencing -ParentVhdPath 'D:\vhds\Windows #Server 2012 RC Base.vhdx'
 
 Function New-XVM

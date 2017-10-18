@@ -1,4 +1,4 @@
-﻿function Get-IPFromAD {
+function Get-IPFromAD {
 	
     import-module ActiveDirectory
     $PATH = "C:\Reports\$(get-date -UFormat "%Y%m%d%A-%H%M")-AD_DNS_Report.csv"

@@ -1,4 +1,4 @@
-﻿<#
+<#
    Name     : Universal NLog Logging Module (NLog.psm1)
    Version  : 0.5
    Author   : Joel Bennett (MVP)

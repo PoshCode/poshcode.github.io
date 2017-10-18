@@ -1,4 +1,4 @@
-﻿#######################################################################
+#######################################################################
 # Convert-PowerPack2Ps1
 # 
 # Converts PowerGUI .PowerPack files to ps1 PowerShell script library

@@ -1,4 +1,4 @@
-﻿$arr = @()
+$arr = @()
 $key = "HKLM:\SOFTWARE\Classes\CLSID"
 
 foreach ($i in (gci $key)) {

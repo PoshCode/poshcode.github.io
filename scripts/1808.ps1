@@ -1,4 +1,4 @@
-﻿param ([string]$recursePath= $(Throw "Du må spesifisere ei mappe!"))
+param ([string]$recursePath= $(Throw "Du må spesifisere ei mappe!"))
 
 function build-word-docs($recursePath) {
     # $dir = "C:\Users\bjorninge\Documents\My Dropbox\mafo-bjorn\bachelor-prosjekt\Driftsdokumentasjon"

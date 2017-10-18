@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
   setlocal enabledelayedexpansion
     set "key=HKLM\SOFTWARE\Microsoft\.NETFramework"
     for /f "skip=3 tokens=3" %%i in (

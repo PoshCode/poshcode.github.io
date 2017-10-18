@@ -1,4 +1,4 @@
-﻿Function Get-FileAllocation
+Function Get-FileAllocation
 {
     param
     (

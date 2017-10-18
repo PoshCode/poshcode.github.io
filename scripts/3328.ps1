@@ -1,4 +1,4 @@
-﻿function Get-SHA512([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
+function Get-SHA512([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
 {
   	$stream = $null
   	$cryptoServiceProvider = [System.Security.Cryptography.SHA512CryptoServiceProvider]

@@ -1,4 +1,4 @@
-﻿$30DaysFiles = Get-ChildItem $dataLocation | Where-object {
+$30DaysFiles = Get-ChildItem $dataLocation | Where-object {
     ([datetime]::ParseExact($_.Name.Substring(4,6),"yyMMdd",$null) -gt (Get-Date).AddDays(-31)) -and `
     ([datetime]::ParseExact($_.Name.Substring(4,6),"yyMMdd",$null) -lt (Get-Date)) -and`
     

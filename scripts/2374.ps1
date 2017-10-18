@@ -1,4 +1,4 @@
-﻿Function Set-IISLogLocation {
+Function Set-IISLogLocation {
 <#  
 .SYNOPSIS  
     This command will allow you to set the IIS log location on a server or multiple servers.

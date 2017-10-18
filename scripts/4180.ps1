@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 Add-User script. This script accesses multiple 
 PSSessions to add a new user, including creation of a

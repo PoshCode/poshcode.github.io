@@ -1,4 +1,4 @@
-﻿# Script to copy standard vSwitch config across all host within the cluster
+# Script to copy standard vSwitch config across all host within the cluster
 # Modified by Leon Scheltema AVANCE ICT Groep Nederland
 
 # Begin variables

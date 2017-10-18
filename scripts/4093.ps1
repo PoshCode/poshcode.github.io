@@ -1,4 +1,4 @@
-﻿[System.Console]::Beep(659, 125)
+[System.Console]::Beep(659, 125)
 [System.Console]::Beep(659, 125)
 Start-Sleep -Milliseconds 125
 [System.Console]::Beep(659, 125)

@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 Name: VHDFunctions.psm1
 Author: Rich Kusak (rkusak@cbcag.edu)

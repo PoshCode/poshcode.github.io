@@ -1,4 +1,4 @@
-﻿# author: Hal Rottenberg
+# author: Hal Rottenberg
 # Website/OpenID: http://halr9000.com
 # purpose: does "real" SVMotion of a VM
 # usage: get-vm | SVMotion-VM -destination (get-datastore foo)

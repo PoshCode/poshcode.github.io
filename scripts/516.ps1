@@ -1,4 +1,4 @@
-﻿#Printer Statistic checking script by Henrik Pedersen Åmark
+#Printer Statistic checking script by Henrik Pedersen Åmark
 
 #This script is used to check how many times all printerques on the selected server has been used the latest X months
 #First it gets all the events from the remote server's eventlog that are of ID 10 (successful print) and of the type "Print".

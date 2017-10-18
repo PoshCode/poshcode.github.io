@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 An attempt to send text messages to phones. 
 

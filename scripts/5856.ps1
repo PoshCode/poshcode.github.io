@@ -1,4 +1,4 @@
-﻿function Get-Ignite2015Video {
+function Get-Ignite2015Video {
   [CmdletBinding()]
   param (
     [Parameter(Mandatory=$True,ValueFromPipeline=$true)]

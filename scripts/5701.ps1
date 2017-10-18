@@ -1,4 +1,4 @@
-﻿#Require -module AppX
+#Require -module AppX
 
 # Props to Tome Tanasovski and Howard Kapustein who went before me ...
 # https://powertoe.wordpress.com/2012/11/02/get-a-list-of-metro-apps-and-launch-them-in-windows-8-using-powershell/

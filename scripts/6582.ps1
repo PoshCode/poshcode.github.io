@@ -1,4 +1,4 @@
-﻿<#
+<#
 Original code
 https://github.com/gregzakh/alt-ps/blob/master/Get-Handles.ps1
 #>

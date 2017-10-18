@@ -1,4 +1,4 @@
-﻿## sudo.ps1
+## sudo.ps1
 #
 # Authors: rbellamy, pezhore, mrigns, This guy: http://tsukasa.jidder.de/blog/2008/03/15/scripting-sudo-with-powershell,
 #             other powershell peoples

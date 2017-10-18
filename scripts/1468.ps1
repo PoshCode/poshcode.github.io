@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # Get-GprsTime.ps1(V 1008)
 #       Check the total connect time of any GPRS devices from a specified date. 
 # Use the -Verbose switch for some extra information if desired. A default value

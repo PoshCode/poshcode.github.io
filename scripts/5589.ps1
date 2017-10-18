@@ -1,4 +1,4 @@
-﻿Go to http://poshcode.org/5487 for part 1 of the script
+Go to http://poshcode.org/5487 for part 1 of the script
 
         If ($Source -eq "btnCustomCert")
             {

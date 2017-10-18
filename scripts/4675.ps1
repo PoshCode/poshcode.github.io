@@ -1,4 +1,4 @@
-﻿Clear
+Clear
 $error.Clear()
 $computador = Read-host "Qual o nome do computador?(ex: SERVIDOR)"
 if ($computador -eq '')

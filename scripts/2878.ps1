@@ -1,4 +1,4 @@
-﻿# Make sure SQLite.Interop.dll is in the same directory as System.Data.SQLite.dll
+# Make sure SQLite.Interop.dll is in the same directory as System.Data.SQLite.dll
 
 $scriptDir = "Path to your SQLite DLL"
 

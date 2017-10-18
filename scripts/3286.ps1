@@ -1,4 +1,4 @@
-﻿function global:Format-Column {
+function global:Format-Column {
 ################################################################
 #.Synopsis
 #  Formats incoming data to columns.

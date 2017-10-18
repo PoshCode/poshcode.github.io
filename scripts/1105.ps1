@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## HttpRest module
 ####################################################################################################
 ## Initial stages of changing HttpRest into a v2-only module

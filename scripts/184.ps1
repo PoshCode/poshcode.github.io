@@ -1,4 +1,4 @@
-﻿## Send-Paste.ps1 (aka sprunge for Pastebin)
+## Send-Paste.ps1 (aka sprunge for Pastebin)
 ##############################################################################################################
 ## Uploads code to any pastebin.com based pastebin site and returns the url for you.
 ## History:

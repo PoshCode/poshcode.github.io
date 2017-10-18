@@ -1,4 +1,4 @@
-﻿$ErrorLogFilePreference = "c:\err.txt"
+$ErrorLogFilePreference = "c:\err.txt"
 
 
 function Get-SystemInfo {

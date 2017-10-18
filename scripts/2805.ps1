@@ -1,4 +1,4 @@
-﻿function Get-LocalGroupMember {
+function Get-LocalGroupMember {
 param( 
    # The name of the local group to retrieve members of
    [Parameter(Position=0,Mandatory=$true)]

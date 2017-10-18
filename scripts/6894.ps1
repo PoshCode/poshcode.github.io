@@ -1,4 +1,4 @@
-﻿function Write-Log {  
+function Write-Log {  
   [CmdletBinding(SupportsShouldProcess, SupportsPaging)]
   param(
     # The type of message to be logged. Alias is 'type'.

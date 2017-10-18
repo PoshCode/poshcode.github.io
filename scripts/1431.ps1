@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # Copy-Backup.ps1
 # This script will backup recently changed .ps1 files from any selected folder
 # (default is $pwd) to any number of inserted USB devices, on which an archive  

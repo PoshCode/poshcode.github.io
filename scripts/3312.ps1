@@ -1,4 +1,4 @@
-﻿First file RotateBackups_MasterList.txt
+First file RotateBackups_MasterList.txt
 RowNbr,BackupName,VersionsRetained,BackupType
 1,TargetBackup,2,Folder
 2,LstDefBackup,5,File

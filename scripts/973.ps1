@@ -1,4 +1,4 @@
-﻿Function Add-SessionVariable()
+Function Add-SessionVariable()
 {
 	param ([string[]]$VariableName=$null)
 	

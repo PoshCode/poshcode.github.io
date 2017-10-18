@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]param($query)
+[CmdletBinding()]param($query)
 $TLDs = DATA {
   ConvertFrom-StringData -stringdata @'
     .br.com=whois.centralnic.net

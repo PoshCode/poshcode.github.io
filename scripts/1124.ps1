@@ -1,4 +1,4 @@
-﻿param(
+param(
 	[switch]$Help
 	, [string] $User
 	, [string] $Password

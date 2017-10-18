@@ -1,4 +1,4 @@
-﻿#config
+#config
 @@#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 @@#NOTE: Does not support IPv6.  If used on a network with static IPv6 addresses,
 @@#they may be lost.

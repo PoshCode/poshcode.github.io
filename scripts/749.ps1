@@ -1,4 +1,4 @@
-﻿#Requires -version 2.0
+#Requires -version 2.0
 ## Authenticode.psm1 updated for CTP 3
 ####################################################################################################
 ## Wrappers for the Get-AuthenticodeSignature and Set-AuthenticodeSignature cmdlets 

@@ -1,4 +1,4 @@
-﻿#function Start-Elevated {
+#function Start-Elevated {
    param ($app) 
    $psi = new-object "System.Diagnostics.ProcessStartInfo"
    $psi.FileName = $app; 

@@ -1,4 +1,4 @@
-﻿#ThePowerShellTalk
+#ThePowerShellTalk
 #reconfigure-ha.ps1
 #take a VMhost object from the pipeline and apply the 'Reconfigure HA host' task
 

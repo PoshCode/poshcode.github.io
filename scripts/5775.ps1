@@ -1,4 +1,4 @@
-﻿function Analyse-RC_Log {
+function Analyse-RC_Log {
     <#
     .SYNOPSIS
         Robocopy log analyser

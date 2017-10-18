@@ -1,4 +1,4 @@
-﻿Import-Module grouppolicy
+Import-Module grouppolicy
 #region ConfigBlock
 # What domain are we going to backup GPOs for?
 $domain = "mydomain.com"

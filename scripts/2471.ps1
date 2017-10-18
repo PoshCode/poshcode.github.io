@@ -1,4 +1,4 @@
-﻿function Edit-Variable {
+function Edit-Variable {
     #.Parameter name
     #    The name (or path) to the variable to edit.
     #.Parameter Environment

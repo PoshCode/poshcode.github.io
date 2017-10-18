@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Return free space on disk
     .DESCRIPTION

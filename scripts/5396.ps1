@@ -1,4 +1,4 @@
-﻿function Get-RemoteRegistryKeyProperty
+function Get-RemoteRegistryKeyProperty
 {
     ##############################################################################
     ##

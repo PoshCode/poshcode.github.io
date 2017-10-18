@@ -1,4 +1,4 @@
-﻿
+
 # Description                                                                                                          
 # ===========                                                                                                          
 # This script is to check the Sybase ASE Server errorlog for certain strings indicating errors and other issues        

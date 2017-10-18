@@ -1,4 +1,4 @@
-﻿# defrag_analysis.ps1
+# defrag_analysis.ps1
 #
 # Displays Defrag Analysis Info for a remote server.
 #

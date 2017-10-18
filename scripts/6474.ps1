@@ -1,4 +1,4 @@
-﻿# Working PowerGrowl Sample Goes Here
+# Working PowerGrowl Sample Goes Here
 Clear-Host
 $Location = $($Env:PSModulePath).Split(';')[0]
 

@@ -1,4 +1,4 @@
-﻿###############################################################################
+###############################################################################
 # Compare-AD - a set of functions (and sample code using them) to create 
 # snapshots of user accounts in the current Active Directory domain
 # save them in an xml file, and then compare live AD environment

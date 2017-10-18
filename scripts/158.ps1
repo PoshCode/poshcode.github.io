@@ -1,4 +1,4 @@
-﻿## Spin-Busy displays a "spinning" character with each step reflecting an individual pipeline object being passed through.
+## Spin-Busy displays a "spinning" character with each step reflecting an individual pipeline object being passed through.
 ## The current cursor position, fg/bg colors, screen width, etc. can be specified or automatically detected.
 ##
 ## This is *very* loosly adapted from Out-Working by Joel Bennett (http://powershellcentral.com/scripts/105).

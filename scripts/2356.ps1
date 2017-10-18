@@ -1,4 +1,4 @@
-﻿# Note that this version will not descend directories.
+# Note that this version will not descend directories.
 function Publish-File {
 	param (
 		[parameter( Mandatory = $true, HelpMessage="URL pointing to a SharePoint document library (omit the '/forms/default.aspx' portion)." )]

@@ -1,4 +1,4 @@
-﻿Function Add-Counter {
+Function Add-Counter {
     [CmdletBinding()]
     Param(
         [parameter(Mandatory=$true, ValueFromPipeline=$true)] $input,

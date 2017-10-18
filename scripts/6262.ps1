@@ -1,4 +1,4 @@
-﻿# get-large-pics.ps1 - takes two arguments, source directory and target directory.
+# get-large-pics.ps1 - takes two arguments, source directory and target directory.
 # all files in source directory are uploaded to google image search one by one,
 # and in turn it downloads the resulting pictures and saves the largest picture,
 # in the target directory, using the same file name as the source file. Only if the downloaded Picture is larger than the source Picture.

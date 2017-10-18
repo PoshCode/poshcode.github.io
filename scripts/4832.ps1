@@ -1,4 +1,4 @@
-﻿Set-Alias gpek Get-ManagedPEKind
+Set-Alias gpek Get-ManagedPEKind
 
 Set-Alias gpek Get-ManagedPEKind
 

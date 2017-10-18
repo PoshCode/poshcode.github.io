@@ -1,4 +1,4 @@
-﻿#requires -version 2
+#requires -version 2
 Function Get-GoogleSpreadSheets {
     param(
         $userName = $(throw 'Please specify a user name'),

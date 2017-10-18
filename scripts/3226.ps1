@@ -1,4 +1,4 @@
-﻿function Get-WebFile {
+function Get-WebFile {
 <# 
 	.SYNOPSIS 
 	Downloads a file or page from the web.

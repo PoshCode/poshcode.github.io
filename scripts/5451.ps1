@@ -1,4 +1,4 @@
-﻿add-bulk-printers.ps1
+add-bulk-printers.ps1
 $printers = import-csv "C:\temp\printers.csv"
 $newprintserver = "fdqn"
 

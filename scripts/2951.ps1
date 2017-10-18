@@ -1,4 +1,4 @@
-﻿function Get-TheVillageChurchPodCast {
+function Get-TheVillageChurchPodCast {
 <#
 	.SYNOPSIS
 		Gets The Village Church sermon podcasts.

@@ -1,4 +1,4 @@
-﻿function Group-ByObject {
+function Group-ByObject {
 #.Synopsis
 # Groups by a set of properties, returning objects
 #.Description

@@ -1,4 +1,4 @@
-﻿[CmdletBinding(DefaultParameterSetName='DefaultParameter')]
+[CmdletBinding(DefaultParameterSetName='DefaultParameter')]
 param(
     [Parameter(ValueFromPipeline=$true)]
     [System.Management.Automation.PSObject]

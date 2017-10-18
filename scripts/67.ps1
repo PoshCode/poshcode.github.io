@@ -1,4 +1,4 @@
-﻿# Get-MySQLDataSet - Query a MySQL server & return the result to a PoSh variable
+# Get-MySQLDataSet - Query a MySQL server & return the result to a PoSh variable
 # Created:  11/29/07	Modified:  11/29/07
 # Written by:  Matt Wilson (Kemis / Matt at ClearChoiceIT dot com) with MAJOR help from
 # Joel Bennett (Jaykul):  http://powershellcentral.com/scripts/57

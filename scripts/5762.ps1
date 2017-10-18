@@ -1,4 +1,4 @@
-﻿$FabricA = @{}
+$FabricA = @{}
 $FabricA.SwitchIP = "1.2.3.4"
 $FabricA.VsanID = "Vsan01"
 $FabricA.ZoneSetname = "FabricA"

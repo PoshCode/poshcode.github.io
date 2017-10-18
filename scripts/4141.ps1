@@ -1,4 +1,4 @@
-﻿function Get-Label {
+function Get-Label {
     #.Synopsis
     #   Get labelled data using Regex
     #.Example

@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 The problem with PowerShell is that it uses .NET's type system instead of its own.
 

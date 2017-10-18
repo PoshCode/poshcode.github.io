@@ -1,4 +1,4 @@
-﻿Function Get-Software{
+Function Get-Software{
     <#
     .SYNOPSIS
         Gets the software applications on a remote computer.

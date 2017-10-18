@@ -1,4 +1,4 @@
-﻿function Get-VolumeId {
+function Get-VolumeId {
   $arr = @()
   $local:key = 'HKLM:\SYSTEM\MountedDevices'
   function pak([string]$mat) { return (gi $key | % {$_.Property} | ? {$_ -match $mat}) }

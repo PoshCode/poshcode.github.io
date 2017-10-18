@@ -1,4 +1,4 @@
-﻿$WSUSREGALL = @()
+$WSUSREGALL = @()
 [String]$File = "C:\server.txt"
 $Servers = Get-Content $File
 ForEach($Server In $Servers)

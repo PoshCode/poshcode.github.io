@@ -1,4 +1,4 @@
-﻿$Results = gci $env:userprofile\favorites -rec -inc *.url |
+$Results = gci $env:userprofile\favorites -rec -inc *.url |
 ? {select-string -inp $_ -quiet "^URL=http"} |
 select @{Name="Name"; Expression={[IO.Path]::GetFileNameWithoutExtension($_.FullName)}},
 @{Name="URL"; Expression={get-content $_ | ? {$_ -match "^URL=http"} | % {$_.Substring(4)}}}

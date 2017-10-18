@@ -1,4 +1,4 @@
-﻿## Watch-Process.ps1
+## Watch-Process.ps1
 ## Continuously display a process list, sorted
 ## by the desired criteria.
 ##

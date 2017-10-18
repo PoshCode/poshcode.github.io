@@ -1,4 +1,4 @@
-﻿function ConvertFrom-QuotedPrintable {
+function ConvertFrom-QuotedPrintable {
 	[OutputType([string])]
 	[CmdletBinding()]
 	param(

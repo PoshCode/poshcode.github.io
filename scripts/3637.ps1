@@ -1,4 +1,4 @@
-﻿#requires -Version 2.0
+#requires -Version 2.0
 #
 # Example 1:
 # Get-PrivateKeyPath CN=DO_NOT_TRUST_FiddlerRoot -StoreName My -StoreScope CurrentUser

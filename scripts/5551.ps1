@@ -1,4 +1,4 @@
-﻿function Write-Log {
+function Write-Log {
   #.Synopsis
   #  Write to a rotating log file
   #.Example

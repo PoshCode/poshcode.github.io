@@ -1,4 +1,4 @@
-﻿Function Set-ScreenResolution {
+Function Set-ScreenResolution {
 
 <#
     .Synopsis

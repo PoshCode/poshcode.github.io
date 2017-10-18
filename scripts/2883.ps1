@@ -1,4 +1,4 @@
-﻿#############################################################
+#############################################################
 # Deploy-VM.ps1 v1.1
 # David Summers 2011/8/2
 # Script to deploy VM(s) from Template(s) and set appropriate

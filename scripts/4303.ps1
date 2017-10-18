@@ -1,4 +1,4 @@
-﻿# Modules
+# Modules
 import-module showui
 Add-PSSnapin Quest.ActiveRoles.ADManagement
 

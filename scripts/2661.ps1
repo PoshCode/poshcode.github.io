@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 	.SYNOPSIS
 		Gets the public IP address that represents your computer on the internet.
 	

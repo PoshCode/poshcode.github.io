@@ -1,4 +1,4 @@
-﻿function Speak-Text
+function Speak-Text
 {
     [CmdletBinding()]
     [OutputType([int])]

@@ -1,4 +1,4 @@
-﻿param($dir = '.')
+param($dir = '.')
 
 function Get-MD5([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
 

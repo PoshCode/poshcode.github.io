@@ -1,4 +1,4 @@
-﻿$a = @"
+$a = @"
 
 using System;
 namespace ClassLibrary1

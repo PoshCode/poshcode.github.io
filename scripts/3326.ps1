@@ -1,4 +1,4 @@
-﻿function BuildProcessesList {
+function BuildProcessesList {
   $arr = New-Object Collections.ArrayList
   $script:col = ps | select Name, Id, BasePriority, Description, Company | sort Name
   $arr.AddRange($col)

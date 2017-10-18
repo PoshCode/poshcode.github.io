@@ -1,4 +1,4 @@
-﻿#0# init  
+#0# init  
 $error.clear() 
 cls 
 $ErrorActionPreference= "Stop"  # do zmiany na "SilentlyContinue" lub "Continue" po adaptacji

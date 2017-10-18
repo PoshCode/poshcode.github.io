@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 # ALSO REQUIRES Autoload for some functionality (Latest version: http://poshcode.org/3173)
 # You should create a Reflection.psd1 with the contents: 
 #    @{ ModuleToProcess="Reflection.psm1"; RequiredModules = @("Autoload"); GUID="64b5f609-970f-4e65-b02f-93ccf3e60cbb"; ModuleVersion="4.1.0.0" }

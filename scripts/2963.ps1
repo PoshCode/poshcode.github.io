@@ -1,4 +1,4 @@
-﻿# Function may be useful for people who want to play with CTP1 for PowerShell 3 but need to use v2 scripts.
+# Function may be useful for people who want to play with CTP1 for PowerShell 3 but need to use v2 scripts.
 
 function Invoke-V2Script {
 

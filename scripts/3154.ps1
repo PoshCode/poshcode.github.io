@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 mstsc-Ac.ps1 (Version 1.0, 7 Jan 2012)
 The author may be contacted via zippy1981@gmail.com

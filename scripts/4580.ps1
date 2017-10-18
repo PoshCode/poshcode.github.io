@@ -1,4 +1,4 @@
-﻿function Get-DriveFormatData {
+function Get-DriveFormatData {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true,

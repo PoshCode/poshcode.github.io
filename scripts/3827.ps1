@@ -1,4 +1,4 @@
-﻿# am I running in 32 bit shell?
+# am I running in 32 bit shell?
 if ($pshome -like "*syswow64*") {
 	
 	write-warning "Restarting script under 64 bit powershell"

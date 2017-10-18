@@ -1,4 +1,4 @@
-﻿Function PowerOn-VM($vm){
+Function PowerOn-VM($vm){
 
 	Start-VM -VM $vm -Confirm:$false -RunAsync | Out-Null
 	

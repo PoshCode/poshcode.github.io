@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
 	[string]$Path = 'C:\',
 	[string]$User1 = "$Env:USERDOMAIN\$Env:UserName",

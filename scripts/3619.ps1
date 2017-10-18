@@ -1,4 +1,4 @@
-﻿Function New-XVM
+Function New-XVM
 {
     [cmdletbinding()]
     Param

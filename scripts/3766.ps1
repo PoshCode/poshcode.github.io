@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 		.NOTES
 		Name     : Get-Checksum GUI

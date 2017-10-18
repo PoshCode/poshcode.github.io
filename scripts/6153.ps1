@@ -1,4 +1,4 @@
-﻿Function Set-MailLicense {
+Function Set-MailLicense {
 <#
 .Synopsis
    Tool for Office 365 Mailbox Licensing

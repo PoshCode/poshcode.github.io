@@ -1,4 +1,4 @@
-﻿param (
+param (
 $Computer,
 [String[]]$ObjectsDeleted
 )

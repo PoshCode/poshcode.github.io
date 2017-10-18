@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
 	Outputs .NET exception information along with their summary information if available.
 .Description

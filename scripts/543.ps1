@@ -1,4 +1,4 @@
-﻿# Sets local account passwords on one or more computers
+# Sets local account passwords on one or more computers
 # usage [computerName1,computerName2,... | ] ./Set-LocalPassword.ps1 [-user] <userName> [-password] <password> [[-computers] computerName1,computerName2,...]
 
 param(

@@ -1,4 +1,4 @@
-﻿#Requires -Version 2.0
+#Requires -Version 2.0
 
 ## Version History
 ## beta 6 - 2010.05.18

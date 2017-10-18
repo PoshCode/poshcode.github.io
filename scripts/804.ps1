@@ -1,4 +1,4 @@
-﻿#requires -pssnapin VMware.VimAutomation.Core
+#requires -pssnapin VMware.VimAutomation.Core
 # http://get-admin.com/blog/?p=342
 #Get any cluster that has DPM Enabled
 $Clusters = @()

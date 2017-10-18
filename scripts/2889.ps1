@@ -1,4 +1,4 @@
-﻿#######################################################################################################################
+#######################################################################################################################
 # File:             LogPortsUsedByApplication.ps1                                                                     #
 # Author:           Alexander Petrovskiy                                                                              #
 # Publisher:        Alexander Petrovskiy, SoftwareTestingUsingPowerShell.WordPress.Com                                #

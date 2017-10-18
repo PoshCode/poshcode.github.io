@@ -1,4 +1,4 @@
-﻿function new-parameterTransform 
+function new-parameterTransform 
 {
 	[cmdletbinding()]
 	param( 

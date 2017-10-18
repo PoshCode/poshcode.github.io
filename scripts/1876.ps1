@@ -1,4 +1,4 @@
-﻿function Seach-LocalGroupMemberDomenNetwork() {
+function Seach-LocalGroupMemberDomenNetwork() {
 param(
 $Domen,
 $User

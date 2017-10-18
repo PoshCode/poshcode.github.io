@@ -1,4 +1,4 @@
-﻿# .SYNOPSIS
+# .SYNOPSIS
 # 	Returns information about NTFS hard links. Only available on Windows Vista or later.
 #
 # .DESCRIPTION

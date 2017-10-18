@@ -1,4 +1,4 @@
-﻿<#Time Synchronization Status#>
+<#Time Synchronization Status#>
 	
 	Write-Host "Time Synchronization Status" -ForegroundColor Yellow
 	Write-Host "_______________________________" -ForegroundColor Yellow

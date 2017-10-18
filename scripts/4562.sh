@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 
 err="\033[1;31m"
 res="\033[1;36m"

@@ -1,4 +1,4 @@
-﻿Function Set-Password {
+Function Set-Password {
 #requires -version 2.0
 
 <#

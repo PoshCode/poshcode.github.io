@@ -1,4 +1,4 @@
-﻿# Directions for use:
+# Directions for use:
 # Import this script using the Import-Module cmdlet
 # All output is logged to the backup directory in the $($BackupDriveLetter):\VMBackup\Backup-VMs.log file
 # Use the Backup-VMs cmdlet to begin the process

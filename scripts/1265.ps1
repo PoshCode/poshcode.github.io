@@ -1,4 +1,4 @@
-﻿$dcs = [System.DirectoryServices.ActiveDirectory.Domain]::getcurrentdomain().DomainControllers | select name
+$dcs = [System.DirectoryServices.ActiveDirectory.Domain]::getcurrentdomain().DomainControllers | select name
 
 $startdate = get-date('1/1/1601')
 

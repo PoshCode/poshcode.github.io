@@ -1,4 +1,4 @@
-﻿Function Test-DNSAliasChange{
+Function Test-DNSAliasChange{
 <#
     .Synopsis
     Tests to see if a DNS alias has changed - pings until timeout or it matches the new hostname.

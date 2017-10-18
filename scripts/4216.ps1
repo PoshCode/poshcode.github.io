@@ -1,4 +1,4 @@
-﻿function Invoke-BlueScreen
+function Invoke-BlueScreen
 {
     Add-Type "
       using System;

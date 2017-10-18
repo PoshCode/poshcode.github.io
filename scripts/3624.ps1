@@ -1,4 +1,4 @@
-﻿#EXAMPLES
+#EXAMPLES
 <#
 New-XVM -ComputerName CNSHHYPERVSVR02 -Name "WS2012-TESTSVR01" -SwitchName "External(192.168.1.0/24)" -VhdType NoVHD
 New-XVM -ComputerName CNSHHYPERVSVR02 -Name "WS2012-TESTSVR02" -SwitchName "External(192.168.1.0/24)" -VhdType ExistingVHD -VhdPath D:\vhds\WS2012-TESTSVR02.vhdx

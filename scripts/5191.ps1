@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Enables logging of print jobs
 .DESCRIPTION

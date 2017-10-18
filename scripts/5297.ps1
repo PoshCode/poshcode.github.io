@@ -1,4 +1,4 @@
-﻿function Show-ConsoleMenu {
+function Show-ConsoleMenu {
    <#
       .Synopsis
         Displays a menu in the console and returns the selection

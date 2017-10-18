@@ -1,4 +1,4 @@
-﻿function Select-Alive {param(	[object]$InputObject,
+function Select-Alive {param(	[object]$InputObject,
 								[string]$Property,
 								[int32]$Requests = 3)
 

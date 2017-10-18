@@ -1,4 +1,4 @@
-﻿## Use ps to measure Application Memory Deltas
+## Use ps to measure Application Memory Deltas
 ## Run '.\ws_diff [Interval in Seconds] [Process Name] or
 ## to log all processes continually every 10 seconds -- 'while (1) {.\WS_diff.ps1 10 cmd >> ps_out.txt }'
 

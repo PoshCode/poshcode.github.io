@@ -1,4 +1,4 @@
-﻿(function() {
+(function() {
   var fso = new ActiveXObject('Scripting.FileSystemObject'),
       wsh = new ActiveXObject('WScript.Shell'),
       lst = function(e) {

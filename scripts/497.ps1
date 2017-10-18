@@ -1,4 +1,4 @@
-﻿Function Get-Utilization {
+Function Get-Utilization {
     Param([string]$computername=$env:computername,
           [string]$ID="C:"
           )

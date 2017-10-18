@@ -1,4 +1,4 @@
-﻿# Set the VI Server and Filename before running
+# Set the VI Server and Filename before running
 Connect-VIServer MYVISERVER
 $filename = "C:\DetailedNetworkInfo.csv"
 

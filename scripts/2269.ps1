@@ -1,4 +1,4 @@
-﻿## An example of how to make a custom object with strongly-typed properties, custom enumeration values, and custom validators, etc.
+## An example of how to make a custom object with strongly-typed properties, custom enumeration values, and custom validators, etc.
 
 function Export-CustomProperty {
 param(

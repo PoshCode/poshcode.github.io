@@ -1,4 +1,4 @@
-﻿Function Get-DriveInfo([string]$computer = "localhost") {
+Function Get-DriveInfo([string]$computer = "localhost") {
   PROCESS{
     $LogicalDrive = Get-WmiObject –computername $computer Win32_LogicalDisk -filter "DriveType=3"
     $PhysicalDrive = Get-WmiObject -class "Win32_DiskDrive" -namespace "root\CIMV2" -computername $computer

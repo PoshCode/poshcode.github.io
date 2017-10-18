@@ -1,4 +1,4 @@
-﻿<#=====================================================
+<#=====================================================
 SYNOPSIS
 Create an Excel workbook for a teacher.
 The workbook contains a worksheet for each class.

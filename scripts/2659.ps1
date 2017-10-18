@@ -1,4 +1,4 @@
-﻿function New-Choice {
+function New-Choice {
 <#
 	.SYNOPSIS
 		The New-Choice function is used to provide extended control to a script author who writing code 

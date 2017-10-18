@@ -1,4 +1,4 @@
-﻿Function Get-FSMORoleOwner {
+Function Get-FSMORoleOwner {
 <#  
 .SYNOPSIS  
     Retrieves the list of FSMO role owners of a forest and domain  

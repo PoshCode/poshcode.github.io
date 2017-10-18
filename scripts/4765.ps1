@@ -1,4 +1,4 @@
-﻿function script:Get-Class([String]$Assembly, [String]$Class) {
+function script:Get-Class([String]$Assembly, [String]$Class) {
   return ([AppDomain]::CurrentDomain.GetAssemblies() | ? {
     $_.Location.Split('\')[-1].Equals($Assembly)
   }).GetType($Class)

@@ -1,4 +1,4 @@
-﻿function get-DiskVolumeInfo
+function get-DiskVolumeInfo
 {
     <#
         .SYNOPSIS

@@ -1,4 +1,4 @@
-﻿### VARIABLES ###
+### VARIABLES ###
 
 #Stop the script if an error ever occurs
 $ErrorActionPreference = "stop"

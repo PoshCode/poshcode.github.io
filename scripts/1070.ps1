@@ -1,4 +1,4 @@
-﻿function Convert-StringSID {
+function Convert-StringSID {
 <#
 .Synopsis
   Takes a SID string and outputs a Win32_SID object.

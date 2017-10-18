@@ -1,4 +1,4 @@
-﻿#get-site-byIP, ipv4
+#get-site-byIP, ipv4
 #written by Nathan Linley
 # http://myitpath.blogspot.com
 

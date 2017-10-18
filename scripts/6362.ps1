@@ -1,4 +1,4 @@
-﻿function Get-ProcessTree {
+function Get-ProcessTree {
   begin {
     Set-Variable ($$ = [Regex].Assembly.GetType(
       'Microsoft.Win32.NativeMethods'

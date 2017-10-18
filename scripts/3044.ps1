@@ -1,4 +1,4 @@
-﻿Get-SPWebApplication | Get-SPSite -Limit ALL | 
+Get-SPWebApplication | Get-SPSite -Limit ALL | 
 ForEach-Object {
     $content = "";
     $rootSite = New-Object Microsoft.SharePoint.SPSite($_.Url)

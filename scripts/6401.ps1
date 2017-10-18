@@ -1,4 +1,4 @@
-﻿function Test-Confirm {
+function Test-Confirm {
     [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact="Medium")]
     param([Switch]$Force)
 

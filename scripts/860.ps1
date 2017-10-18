@@ -1,4 +1,4 @@
-﻿########################################################
+########################################################
 # Modifies the default PowerGUI admin console
 # welcome screen to the mht file you supply
 # Details available at:

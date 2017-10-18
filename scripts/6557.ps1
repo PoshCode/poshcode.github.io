@@ -1,4 +1,4 @@
-﻿$Outputreport=""
+$Outputreport=""
 $Outputreport +="<style>TABLE{ border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse;align:center;width:100%;}
 TH{border-width: 1px;background-color: lightblue;bgcolor=blue;padding: 3px;border-style: solid;border-color: black;}
 TD{border-width: 1px;color: white;background-color: gray;padding: 3px;border-style: solid;border-color: black;}

@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Port of Chris Veness' AES CTR (AES Counter Mode) Aes.Ctr.decrypt
 #.Description
 #  This cmdlet will decrypt text encypted with Aes.Ctr.encrypt from:

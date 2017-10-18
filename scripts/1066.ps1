@@ -1,4 +1,4 @@
-﻿# check-disabledstatus.ps1
+# check-disabledstatus.ps1
 # by Ken Hoover <ken.hoover@yale.edu> - Yale University ITS Windows Systems Team - Spring 2009
 #
 # reads a text file of usernames and outputs CSV showing the status of that user - OK, DISABLED or NOTFOUND

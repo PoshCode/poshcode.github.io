@@ -1,4 +1,4 @@
-﻿param($fileName)
+param($fileName)
 
 Add-Type -Path "C:\Oracle\Oracle.ManagedDataAccess.dll"
 

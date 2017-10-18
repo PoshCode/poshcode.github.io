@@ -1,4 +1,4 @@
-﻿$x = New-Object PSObject | 
+$x = New-Object PSObject | 
       Add-Member -MemberType ScriptMethod -Name Test -Value {
           param($message=$(Read-Host "Message")) 
           return "This is the message: $message"

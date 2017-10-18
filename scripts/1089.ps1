@@ -1,4 +1,4 @@
-﻿#The PowerShell Talk
+#The PowerShell Talk
 #Demo 1 - Hypervisors
 #Xen!
 

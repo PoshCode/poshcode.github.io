@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Retrieves the virtual network adapters  available on a vSphere server.
     .DESCRIPTION

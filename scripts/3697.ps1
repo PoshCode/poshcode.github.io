@@ -1,4 +1,4 @@
-﻿[string]$rootDir = "C:\Build\"
+[string]$rootDir = "C:\Build\"
 [string]$buildDir = "C:\Build\build_dir\"
 [string]$outputDir = "C:\Build\output_dir\"
 [string]$svnDir = "C:\Build\build_dir\vacuum"

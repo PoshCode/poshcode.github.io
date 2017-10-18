@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #   Split a file into many files, based on a regular expression boundary
 #.Example
 #   Split-File huge.sql -Pattern '^GO$'

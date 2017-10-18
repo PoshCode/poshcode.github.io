@@ -1,4 +1,4 @@
-﻿function Get-VMHostLunLatency {
+function Get-VMHostLunLatency {
   param([parameter(Mandatory=$true, ValueFromPipeline=$true)] $VMHost)
 
   process {

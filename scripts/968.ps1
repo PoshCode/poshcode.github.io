@@ -1,4 +1,4 @@
-﻿#Steven Murawski
+#Steven Murawski
 #http://blog.usepowershell.com
 #03/20/2009
 

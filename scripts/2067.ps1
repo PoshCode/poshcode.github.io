@@ -1,4 +1,4 @@
-﻿function Get-Field{
+function Get-Field{
 [CmdletBinding()]
 	param ( 
 		[Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$true)]

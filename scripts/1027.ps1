@@ -1,4 +1,4 @@
-﻿Function ConvertUser
+Function ConvertUser
 {
 Process
 {

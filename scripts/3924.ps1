@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "silentlycontinue"
+$ErrorActionPreference = "silentlycontinue"
 
 $login = read-host -prompt "Type the user login"
 

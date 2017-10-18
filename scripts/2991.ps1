@@ -1,4 +1,4 @@
-﻿function Protect-Variable {
+function Protect-Variable {
 param(
 [Parameter(Mandatory=$true,Position=0)][String]$Name, [Int]$Scope = 1,
 [Parameter(ParameterSetName="ValidateScriptBlock")][ScriptBlock]$ScriptBlock,

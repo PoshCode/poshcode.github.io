@@ -1,4 +1,4 @@
-﻿$File = "D:\Dev\somefilename.zip"
+$File = "D:\Dev\somefilename.zip"
 $ftp = "ftp://username:password@example.com/pub/incoming/somefilename.zip"
 
 "ftp url: $ftp"

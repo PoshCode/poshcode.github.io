@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
 		Quick way to see whether the object exists in AD.
 

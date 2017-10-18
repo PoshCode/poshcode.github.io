@@ -1,4 +1,4 @@
-﻿# Eg: Get-Constructor System.IO.StreamReader
+# Eg: Get-Constructor System.IO.StreamReader
 
 function Get-Constructor {
 Param([Type]$type) 

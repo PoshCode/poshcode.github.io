@@ -1,4 +1,4 @@
-﻿function Register-Timer {
+function Register-Timer {
 	[CmdletBinding()]
 	param(
 		[Parameter(Mandatory, Position = 0)]

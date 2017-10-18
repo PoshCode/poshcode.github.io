@@ -1,4 +1,4 @@
-﻿function Get-Head {
+function Get-Head {
 #.Synopsis
 #  Read the first few characters of a file, fast.
 param(

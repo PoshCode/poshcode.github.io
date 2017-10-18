@@ -1,4 +1,4 @@
-﻿# --- begin test-csv.ps1 ---
+# --- begin test-csv.ps1 ---
 param(
     [string]$Path = $(throw "require CSV path!"),
     [string]$RulesetPath = $(throw "require Ruleset path!")

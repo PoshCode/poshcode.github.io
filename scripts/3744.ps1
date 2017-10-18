@@ -1,4 +1,4 @@
-﻿function Get-Pecoff 
+function Get-Pecoff 
 {
       <#
   .SYNOPSIS

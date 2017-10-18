@@ -1,4 +1,4 @@
-﻿#Jason Ochoa
+#Jason Ochoa
 #3/3/2010
 #This script requires the DLL from the website below.
 #http://communities.netapp.com/docs/DOC-1110

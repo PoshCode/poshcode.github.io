@@ -1,4 +1,4 @@
-﻿function run-csharpexpression([string] $expression )
+function run-csharpexpression([string] $expression )
 {
 $global:ccounter = [int]$ccounter + 1
 $local:name  =  [system.guid]::NewGuid().tostring().replace('-','_').insert(0,"csharpexpr")

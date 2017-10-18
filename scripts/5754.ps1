@@ -1,4 +1,4 @@
-﻿$strComputer = "ComputerName"
+$strComputer = "ComputerName"
 $Ports = get-wmiobject -class "win32_tcpipprinterport" -namespace "root\CIMV2" -computername $strComputer -EnableAllPrivileges
 $Printers = get-wmiobject -class "Win32_Printer" -namespace "root\CIMV2" -computername $strComputer -EnableAllPrivileges
 $ports | Select-Object Name,Hostaddress | Set-Variable port

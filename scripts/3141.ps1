@@ -1,4 +1,4 @@
-﻿param($msBuildTarget, $configurationName, [bool]$deleteInstrumentedAssemblies) 
+param($msBuildTarget, $configurationName, [bool]$deleteInstrumentedAssemblies) 
 
 #-------------------------------------
 # Script to compile coverage for a WCF

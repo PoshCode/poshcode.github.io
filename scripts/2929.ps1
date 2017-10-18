@@ -1,4 +1,4 @@
-﻿function New-RandomPassword {
+function New-RandomPassword {
 	[CmdletBinding()]
 	param(
 		[Int16] $Length = 6,

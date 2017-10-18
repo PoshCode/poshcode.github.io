@@ -1,4 +1,4 @@
-﻿function get-SQLInstanceInfo
+function get-SQLInstanceInfo
 {
     <#
         .SYNOPSIS

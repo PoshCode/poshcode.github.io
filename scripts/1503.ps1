@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 # Select-Xml 2.1 and Remove-XmlNamespace
 
 function Select-Xml {

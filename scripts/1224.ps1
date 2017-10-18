@@ -1,4 +1,4 @@
-﻿## poll-process.ps1 
+## poll-process.ps1 
 ## Continuously display a process list, sorted 
 ## by the desired criteria. 
 ## 

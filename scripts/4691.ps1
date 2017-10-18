@@ -1,4 +1,4 @@
-﻿function Get-CurrentUSBDevice {
+function Get-CurrentUSBDevice {
   $dgvGrid.Columns.Clear()
   
   $dt = New-Object Data.DataTable

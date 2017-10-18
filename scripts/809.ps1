@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Send mail to BCC using PowerShell
 .DESCRIPTION

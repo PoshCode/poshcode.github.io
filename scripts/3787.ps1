@@ -1,4 +1,4 @@
-﻿#Comprobacion del estado de los clusters#
+#Comprobacion del estado de los clusters#
 #########################################
 # Add Exchange Admin module
 If ((Get-PSSnapin | where {$_.Name -match "Exchange.Management"}) -eq $null)

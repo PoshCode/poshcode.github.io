@@ -1,4 +1,4 @@
-﻿function Get-Films {
+function Get-Films {
 param($Name)
    $proxy = New-ODataServiceProxy http://odata.netflix.com/Catalog/
    if($Name -match "\*") {

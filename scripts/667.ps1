@@ -1,4 +1,4 @@
-﻿###
+###
 # Description: Add Voice to Powershell
 # Version: 1.1 (11 Nov 2008)
 # Mike Hays / www.mike-hays.net / blog.mike-hays.net

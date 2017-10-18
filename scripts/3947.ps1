@@ -1,4 +1,4 @@
-﻿param (
+param (
 $logpath = "C:\WINDOWS\system32\LogFiles\SMTPSVC1"
  # can also be fed by "gci $logpath | select basename" but then all logfiles would be read
 $logfiles = @("ex130213.log","ex130214.log")

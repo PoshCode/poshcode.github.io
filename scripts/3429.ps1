@@ -1,4 +1,4 @@
-﻿#Thanks http://27.am/posts/how-to-download-net-reflector-6-for-free
+#Thanks http://27.am/posts/how-to-download-net-reflector-6-for-free
 
 add-type @'
 using System;

@@ -1,4 +1,4 @@
-﻿## You'll want to dot-source this into your script
+## You'll want to dot-source this into your script
 ## To change colors, specify the parameters: 
 ##  . Scripts\OutWorkingScript.ps1 "Yellow" "Blue"
 ##

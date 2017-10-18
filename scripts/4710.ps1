@@ -1,4 +1,4 @@
-﻿Function Get-WriteFilter {
+Function Get-WriteFilter {
     <#
     .SYNOPSIS
     Retrieves the status of an embedded device's write filter

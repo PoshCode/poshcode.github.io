@@ -1,4 +1,4 @@
-﻿function Get-TinyUrl
+function Get-TinyUrl
 {
     [CmdletBinding()]
     [OutputType([string])]

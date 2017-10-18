@@ -1,4 +1,4 @@
-﻿$file = "MYFILE.TXT"
+$file = "MYFILE.TXT"
 
 $smtpServer = "MYSMTPSERVER.EMAIL.CO.UK"
 

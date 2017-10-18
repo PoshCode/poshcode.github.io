@@ -1,4 +1,4 @@
-﻿## Page (aka More, aka Page-Output)
+## Page (aka More, aka Page-Output)
 ###################################################################################################
 ## This is like a (very simple) "more" script for PowerShell ... 
 ## The problem with it is that you're paging by a count of objects, not by how many lines of text 

@@ -1,4 +1,4 @@
-﻿<# 
+<# 
     Set some Variables and start transcript.
     
     $MaximumHistoryCount is used to set the number of commands that are stored in History. Defaults to 64. Maximum 32767.

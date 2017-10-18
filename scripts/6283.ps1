@@ -1,4 +1,4 @@
-﻿$rng = 10000
+$rng = 10000
 (Measure-Command {
     $hash = @{}
     foreach ($a in 1..$rng){

@@ -1,4 +1,4 @@
-﻿#STORED CREDENTIAL CODE
+#STORED CREDENTIAL CODE
 $AdminName = Read-Host "Enter your Admin AD username"
 $CredsFile = "C:\$AdminName-PowershellCreds.txt"
 $FileExists = Test-Path $CredsFile

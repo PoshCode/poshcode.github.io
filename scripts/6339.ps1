@@ -1,4 +1,4 @@
-﻿function Get-ADNestedGroupMembers { 
+function Get-ADNestedGroupMembers { 
 <#  
 .EXAMPLE   
 Get-ADNestedGroupMembers "MyGroup" | Export-CSV .\NedstedMembers.csv -NoTypeInformation

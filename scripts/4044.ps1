@@ -1,4 +1,4 @@
-﻿# Plik: 4_Demo_v3_Reflection.ps1
+# Plik: 4_Demo_v3_Reflection.ps1
 #requires -version 3
 
 $Akceleratory = 

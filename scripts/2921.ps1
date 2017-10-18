@@ -1,4 +1,4 @@
-﻿Function Get-FailingDrive {
+Function Get-FailingDrive {
 <#
 .SYNOPSIS
     Checks for any potentially failing drives and reports back drive information.

@@ -1,4 +1,4 @@
-﻿function Get-ProductKey([String]$Computer = '.') {
+function Get-ProductKey([String]$Computer = '.') {
   <#
     .NOTES
         Author: greg zakharov

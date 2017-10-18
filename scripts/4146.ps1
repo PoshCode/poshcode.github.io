@@ -1,4 +1,4 @@
-﻿function Add-Strings{
+function Add-Strings{
     <#
     .SYNOPSIS
     Adds two strings together.

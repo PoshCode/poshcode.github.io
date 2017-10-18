@@ -1,4 +1,4 @@
-﻿#requires -pssnapin PSEventing -version 1.1
+#requires -pssnapin PSEventing -version 1.1
 ## http://www.codeplex.com/PSEventing/
 ## ALSO REQUIRES .NET 3.0
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 
 DOWNLOAD THE DEPLOY PACKAGE FROM http://techjeeper.com/?page_id=112 for all the pieces to make this work. 
 

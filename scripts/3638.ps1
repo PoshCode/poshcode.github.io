@@ -1,4 +1,4 @@
-﻿$dictionaryWords = gc $dictionaryFile
+$dictionaryWords = gc $dictionaryFile
 $azLower = 'abcdefghijklmnopqrstuvwxyz'.ToCharArray()
 $azUpper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.ToCharArray()
 $hex = '012345679ABCDEF'.ToCharArray()

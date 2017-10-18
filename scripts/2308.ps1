@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <Configuration version="1.0">
 
 <Feature Name="MailboxProvisioningDatabase" Cmdlets="new-mailbox">

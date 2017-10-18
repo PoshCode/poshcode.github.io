@@ -1,4 +1,4 @@
-﻿<#
+<#
     .Description
     image2excel converts image to excel file
 #>

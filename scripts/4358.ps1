@@ -1,4 +1,4 @@
-﻿###Variable to be changed
+###Variable to be changed
 ##Server Setup
 Write-host "Start time: "(get-date).ToShortTimeString()""
 $startDate=(get-date).addDays(-1) ##-1 equates to previous date

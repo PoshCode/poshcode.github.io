@@ -1,4 +1,4 @@
-﻿#requires -version 2
+#requires -version 2
 param([switch]$Disable)
 
 add-type -namespace Hacks -name Aero -memberdefinition @"

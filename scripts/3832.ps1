@@ -1,4 +1,4 @@
-﻿$executionContext.SessionState.InvokeCommand.PostCommandLookupAction = {
+$executionContext.SessionState.InvokeCommand.PostCommandLookupAction = {
     param($CommandName, $CommandLookupEventArgs)
 
     # Only for interactive commands (and that doesn't include "prompt")

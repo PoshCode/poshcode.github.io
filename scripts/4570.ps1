@@ -1,4 +1,4 @@
-﻿# The script is using a csv file in the following format
+# The script is using a csv file in the following format
 #
 #	Domain,GPOName,PrinterName,PrinterPath,Order,GroupName
 #	domain.local,TestGP,TestPrinter1,\\server1\printer1,1,group1

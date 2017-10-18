@@ -1,4 +1,4 @@
-﻿<#
+<#
 
     .NOTES
     Name     : NumLockNotifier.ps1

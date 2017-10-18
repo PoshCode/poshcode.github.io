@@ -1,4 +1,4 @@
-﻿if ($host.Runspace.ApartmentState -ne 'STA') {
+if ($host.Runspace.ApartmentState -ne 'STA') {
   powershell /noprofile /sta $MyInvocation.MyCommand.Path
   return
 }

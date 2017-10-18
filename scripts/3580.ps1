@@ -1,4 +1,4 @@
-﻿param(
+param(
 [Parameter(Position=0,ValueFromPipeline=$True)]
 [ValidateNotNullorEmpty()][string[]]$Mailboxes = @(),
 [string] $Regex = "domain\.local$|^CCMAIL|^MS:COMPREGION",

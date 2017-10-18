@@ -1,4 +1,4 @@
-﻿$url = "http://www.somepage.com/"
+$url = "http://www.somepage.com/"
 $interval = 60
 $shell = New-Object -ComObject Shell.Application
 

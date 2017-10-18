@@ -1,4 +1,4 @@
-﻿<#
+<#
 # Checking IP address with cmd:
 # C:\> ipconfig
 #

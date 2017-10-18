@@ -1,4 +1,4 @@
-﻿## Get-Weather 
+## Get-Weather 
 ## Parse and display the current weather and forecast from yahoo RSS
 ## Note that you _could_ modify this a bit to return "current condition" and "forecast" objects
 ##   but for now, it just prints them out in a relatively nice format

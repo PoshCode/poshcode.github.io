@@ -1,4 +1,4 @@
-﻿[reflection.assembly]::loadwithpartialname("Microsoft.SharePoint")
+[reflection.assembly]::loadwithpartialname("Microsoft.SharePoint")
 $cs = [microsoft.sharepoint.administration.spwebservice]::ContentService
 $global:largeListThreshhold = 2000
 

@@ -1,4 +1,4 @@
-﻿# Get-MyModule adapted from http://blogs.technet.com/b/heyscriptingguy/archive/2010/07/11/hey-scripting-guy-weekend-scripter-checking-for-module-dependencies-in-windows-powershell.aspx
+# Get-MyModule adapted from http://blogs.technet.com/b/heyscriptingguy/archive/2010/07/11/hey-scripting-guy-weekend-scripter-checking-for-module-dependencies-in-windows-powershell.aspx
 function Get-MyModule {
     param ([string] $name)
     write-host "Is '$name' already imported? " -NoNewline -ForegroundColor Cyan

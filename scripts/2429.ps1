@@ -1,4 +1,4 @@
-﻿# Windows Scheduled Tasks Management PowerShell Module
+# Windows Scheduled Tasks Management PowerShell Module
 # http://powershell.codeplex.com
 
 Function Get-ScheduledTasks

@@ -1,4 +1,4 @@
-﻿function Get-MessagesToMailboxforSpecificMonth {
+function Get-MessagesToMailboxforSpecificMonth {
 
 <#
 .SYNOPSIS

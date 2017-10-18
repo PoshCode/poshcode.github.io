@@ -1,4 +1,4 @@
-﻿#==================================================================================================
+#==================================================================================================
 #              File Name : WSUS-Settings.ps1
 #        Original Author : Kenneth C. Mazie (kcmjr at kcmjr.com)
 #            Description : As written will manually apply all settings associated with a local

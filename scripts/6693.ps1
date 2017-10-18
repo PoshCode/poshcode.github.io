@@ -1,4 +1,4 @@
-﻿Add-Type -assembly "Microsoft.Office.Interop.Outlook"
+Add-Type -assembly "Microsoft.Office.Interop.Outlook"
 $Outlook = New-Object -comobject Outlook.Application
 $namespace = $Outlook.GetNameSpace("MAPI")
 $f = $namespace.Folders(2).Folders(2).Folders(6)

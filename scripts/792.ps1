@@ -1,4 +1,4 @@
-﻿function Sort-ISE ()
+function Sort-ISE ()
 {
  <# 
 .SYNOPSIS 

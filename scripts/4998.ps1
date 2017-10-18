@@ -1,4 +1,4 @@
-﻿$nextPlaylist = ((Get-Date).AddHours(1).ToString("MMddyyHH") + ".pla")
+$nextPlaylist = ((Get-Date).AddHours(1).ToString("MMddyyHH") + ".pla")
 
 $files = Import-Csv -Header file,duration,flag C:\Users\Will\workspace\networx\06021400.pla #$nextPlaylist
 

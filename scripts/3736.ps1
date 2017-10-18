@@ -1,4 +1,4 @@
-﻿<#
+<#
 
     .NOTES
     Name     : CapsLockNotifier.ps1

@@ -1,4 +1,4 @@
-﻿function New-SqlConnectionString {
+function New-SqlConnectionString {
 #.Synopsis
 #  Create a new SQL ConnectionString
 #.Description

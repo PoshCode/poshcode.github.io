@@ -1,4 +1,4 @@
-﻿#first way
+#first way
 [xml]$res = @'
 <?xml version="1.0"?>
 <Drives>

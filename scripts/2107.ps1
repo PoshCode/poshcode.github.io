@@ -1,4 +1,4 @@
-﻿function global:Enable-FusionLog {  
+function global:Enable-FusionLog {  
     Remove-ItemProperty HKLM:Software\Microsoft\Fusion -name EnableLog -ErrorAction SilentlyContinue  
     [void](New-ItemProperty  HKLM:Software\Microsoft\Fusion -name EnableLog -propertyType dword -ErrorAction Stop)  
     Set-ItemProperty  HKLM:Software\Microsoft\Fusion -name EnableLog -value 1 -ErrorAction Stop  

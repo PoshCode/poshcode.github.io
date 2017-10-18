@@ -1,4 +1,4 @@
-﻿## Get-DistinguishedName -- look up a DN from a user's (login) name 
+## Get-DistinguishedName -- look up a DN from a user's (login) name 
 function Get-DistinguishedName { 
 Param($UserName)
    $ads = New-Object System.DirectoryServices.DirectorySearcher([ADSI]'')

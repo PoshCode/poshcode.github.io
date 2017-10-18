@@ -1,4 +1,4 @@
-﻿#
+#
 # I'm sick of searching for new cars on KSL manually.
 #
 

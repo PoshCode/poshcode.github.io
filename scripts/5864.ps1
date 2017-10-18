@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Does a backup of a single UCS target.
    

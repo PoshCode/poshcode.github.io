@@ -1,4 +1,4 @@
-﻿## Stupid PowerShell Tricks
+## Stupid PowerShell Tricks
 ###################################################################################################
 ## Usage:
 ## ps Notepad | Hide-App

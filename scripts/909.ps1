@@ -1,4 +1,4 @@
-﻿#  Glenn Sizemore ~ www . Get-Admin . Com
+#  Glenn Sizemore ~ www . Get-Admin . Com
 #  Example Powershell function to get the NFS Exports from a NetApp Filer
 #  First you'll need to download the OnTap SDK 3.5 : http://communities.netapp.com/docs/DOC-1365
 #  within the download your interested in .\manage-ontap-sdk-3.5\lib\DotNet\ManageOntap.dll

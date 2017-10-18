@@ -1,4 +1,4 @@
-﻿function Update-FakeWindow8Startmenu
+function Update-FakeWindow8Startmenu
 {
     $StartMenu = "C:\Startmenu"
     remove-item $StartMenu -Recurse -Force

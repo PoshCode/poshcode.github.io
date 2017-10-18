@@ -1,4 +1,4 @@
-﻿funtcion Add-SVNFile {
+funtcion Add-SVNFile {
     # Usage Get-Childitem C:\Scripts\ | Add-SVNFile -Uri https://svn.internal.foo.com/svn/mycoolgame/branches/1.81 -Comment "Not sure if it's working"
     param (
         [Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$true)]

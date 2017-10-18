@@ -1,4 +1,4 @@
-﻿function Copy-ItemGUI
+function Copy-ItemGUI
 {
 <#
 .Synopsis

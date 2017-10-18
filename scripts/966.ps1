@@ -1,4 +1,4 @@
-﻿#requires -version 1.0
+#requires -version 1.0
 # or version 2.0, obviously
 ## ISO 8601 Dates
 ########################################################################

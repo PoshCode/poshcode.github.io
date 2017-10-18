@@ -1,4 +1,4 @@
-﻿$word=New-Object -COM "Word.Application"
+$word=New-Object -COM "Word.Application"
  
 $errorlog="c:\missing.csv"
 Set-Content $errorlog "Chapter,Script"

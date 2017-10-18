@@ -1,4 +1,4 @@
-﻿# map2_gps_prod.ps1
+# map2_gps_prod.ps1
 # Maps a network drive using PowerShell
 # 
 # 

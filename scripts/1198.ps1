@@ -1,4 +1,4 @@
-﻿Coresponding to the Scripting Guy blog "How Can I Both Save Information in a File and Display It on the Screen?"
+Coresponding to the Scripting Guy blog "How Can I Both Save Information in a File and Display It on the Screen?"
 (http://blogs.technet.com/heyscriptingguy/archive/2009/07/07/hey-scripting-guy-how-can-i-both-save-information-in-a-file-and-display-it-on-the-screen.aspx):
 My comment is:
 All of the above is cool but can't work if you want your Write-Host or Write-Debug to be redirected to file as well as printing to console.

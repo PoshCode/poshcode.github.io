@@ -1,4 +1,4 @@
-﻿Function EndianReverse ($strHex)
+Function EndianReverse ($strHex)
 {
  $intCounter=$strHex.length-1
  do

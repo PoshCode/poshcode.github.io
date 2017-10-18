@@ -1,4 +1,4 @@
-﻿function Save-CurrentFile ($path)
+function Save-CurrentFile ($path)
 {
     $psISE.CurrentFile.SaveAs($path)
     $psISE.CurrentFile.Save([Text.Encoding]::default)

@@ -1,4 +1,4 @@
-﻿[sourcecode language="css"]
+[sourcecode language="css"]
 ##
 # ----------------------------------------------------- 
 function Release-Ref ($ref) { 

@@ -1,4 +1,4 @@
-﻿#REQUIRES -version 4
+#REQUIRES -version 4
 set-strictmode -version 2
 
 #Enable Verbosity

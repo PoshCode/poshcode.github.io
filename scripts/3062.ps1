@@ -1,4 +1,4 @@
-﻿param (
+param (
     $ComputerName #(Read-Host -Prompt "Enter a computer name")
 )
 

@@ -1,4 +1,4 @@
-﻿Function get-sandisks ([string]$InputFilename,[string]$OutputFilename)
+Function get-sandisks ([string]$InputFilename,[string]$OutputFilename)
 {
 $strComputer = gc $InputFilename
 $MyObj = @()

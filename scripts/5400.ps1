@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Generates an offline PKCS#10 certificate request
 

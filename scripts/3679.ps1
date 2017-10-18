@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 <#
 ################################################################################
 ## Run commands in multiple concurrent pipelines

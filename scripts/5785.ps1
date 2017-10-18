@@ -1,4 +1,4 @@
-﻿
+
 
 $servers = get-adcomputer -filter {operatingsystem -like "Windows Server*"} -properties lastlogondate | where {$_.lastlogondate -gt (get-date).adddays(-30)}
 

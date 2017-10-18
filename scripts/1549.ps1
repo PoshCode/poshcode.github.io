@@ -1,4 +1,4 @@
-﻿#Requires -version 2
+#Requires -version 2
 
 # TITLE: 	New-LinkedClone.ps1
 # AUTHOR:	Hal Rottenberg

@@ -1,4 +1,4 @@
-﻿function Get-ImageMetadata {
+function Get-ImageMetadata {
 #.Synopsis
 # pull EXIF, XMP, and other data from images using the BitmapMetaData
 #.Example

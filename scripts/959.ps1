@@ -1,4 +1,4 @@
-﻿Set-Alias Ver Get-PSVersion
+Set-Alias Ver Get-PSVersion
 function Get-PSVersion
 {
 [string]$Major = ($PSVersionTable).PSVersion.Major

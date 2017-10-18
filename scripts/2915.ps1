@@ -1,4 +1,4 @@
-﻿## Get-RemoteRegistry
+## Get-RemoteRegistry
 ########################################################################################
 ## Version: 2.2
 ##  + Added a feature that will return the (Default) values for a key.

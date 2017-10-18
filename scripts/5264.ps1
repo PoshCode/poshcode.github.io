@@ -1,4 +1,4 @@
-﻿$systems | ForEach {
+$systems | ForEach {
 	# Populate $currentcomp with item for processing
 	$currentcomp = $_
 	# Try to perform the following code-block on the specified system. If there are problems, drop to "Catch" block below.

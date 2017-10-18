@@ -1,4 +1,4 @@
-﻿## This script will search a PST file and a Mailbox for all items that have either the text 'How to' in the subject,
+## This script will search a PST file and a Mailbox for all items that have either the text 'How to' in the subject,
 ## a zip file attachment, or with the word 'download' present in the body more than 3 times.
 ## for any items found, it will save them to the file system as xml and then will delete them.
 

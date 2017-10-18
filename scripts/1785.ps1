@@ -1,4 +1,4 @@
-﻿function Reset-Tray {
+function Reset-Tray {
 
    Add-Type -Assembly UIAutomationClient
 

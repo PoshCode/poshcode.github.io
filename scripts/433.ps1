@@ -1,4 +1,4 @@
-﻿# From "Unix like command for tac?" thread on posh NG
+# From "Unix like command for tac?" thread on posh NG
 # solution by Keith Hill
 
 param([string]$path)

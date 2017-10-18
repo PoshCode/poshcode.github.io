@@ -1,4 +1,4 @@
-﻿function Get-DirectoryTree {
+function Get-DirectoryTree {
   <#
     .SYNOPSIS
         Prints a directory tree.

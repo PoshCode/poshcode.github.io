@@ -1,4 +1,4 @@
-﻿<#
+<#
 Hi, my name is Kali Al Bin Jazis. I was looking for a way to create structures in PowerShell as it is done in C. I quite accidentally found the project on github named ""scope"". Author of this project has found a way to create structures very elegant way. For example:
 
 struct IMAGE_DOS_HEADER {

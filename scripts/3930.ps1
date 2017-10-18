@@ -1,4 +1,4 @@
-﻿# HelpModules 
+# HelpModules 
 #    A Module for generating module stubs so you can Update-Help (or Save-Help)
 #    Includes two options for reading the help from those modules (StubFunctions or Get-ModuleHelp)
 # 1.0 - 2013/2/1 - Initial release Friday, Feb 1st, 2013 

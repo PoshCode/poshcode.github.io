@@ -1,4 +1,4 @@
-﻿function get-roman ([int]$myNum)
+function get-roman ([int]$myNum)
 {
     if ($myNum -ge 4000 -or $myNum -le 0) 
     {

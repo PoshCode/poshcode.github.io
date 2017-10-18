@@ -1,4 +1,4 @@
-﻿#Script Author Information
+#Script Author Information
 $script:ProgramName = "AD Site Info"
 $script:ProgramDate = "10 Feb 2014"
 $script:ProgramAuthor = "Geoffrey Guynn"

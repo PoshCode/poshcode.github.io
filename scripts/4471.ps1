@@ -1,4 +1,4 @@
-﻿Function Read-HostMultiple {
+Function Read-HostMultiple {
 ## Dave Johnson 07/09/2013
 ## Allows Read-Host to gather multiple lines of input and return an array of the strings.
 ## Type paste input. When done, send the Termininating character on its own.

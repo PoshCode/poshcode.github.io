@@ -1,4 +1,4 @@
-﻿# Release COM Object
+# Release COM Object
 function Remove-ComObject {
  # Requires -Version 2.0
  [CmdletBinding()]

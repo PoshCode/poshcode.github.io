@@ -1,4 +1,4 @@
-﻿Function Invoke-ElevatedCommand {
+Function Invoke-ElevatedCommand {
 	<#
 		.DESCRIPTION
 			Invokes the provided script block in a new elevated (Administrator) powershell process, 

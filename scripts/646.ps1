@@ -1,4 +1,4 @@
-﻿function Invoke-SSH {
+function Invoke-SSH {
 	param (
 		[string]$Server = "$(throw 'Server is a mandatory parameter.')",
 		$Credential = "$(throw 'Credential is a mandatory parameter.')",

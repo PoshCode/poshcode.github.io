@@ -1,4 +1,4 @@
-﻿function Get-OleDBPSObject ([string]$ConnectionString, [string]$Query) {
+function Get-OleDBPSObject ([string]$ConnectionString, [string]$Query) {
 	$ConnObj = new-object System.Data.OleDb.OleDbConnection $ConnectionString
 	$command = New-Object System.Data.OleDb.OleDbCommand $Query, $ConnObj
 	try {

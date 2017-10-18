@@ -1,4 +1,4 @@
-﻿Param(
+Param(
     [Parameter(Mandatory=$true)][string]$SiteAddress,
     [Parameter(Mandatory=$true)][string]$WinDomain,
     [Parameter(Mandatory=$true)][string]$DomainController,

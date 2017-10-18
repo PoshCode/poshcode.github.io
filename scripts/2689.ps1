@@ -1,4 +1,4 @@
-﻿<#
+<#
 Save this with a .PSM1 extension and use Import-Module to properly load the functions.
 ie: Install-Patches.psm1
 Import-Module Install-Patches.psm1

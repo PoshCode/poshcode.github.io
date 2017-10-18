@@ -1,4 +1,4 @@
-﻿# Get data from factual.com. Currently you need an API key to even query data so you'll
+# Get data from factual.com. Currently you need an API key to even query data so you'll
 # have to set one up before you can use this. Set your API key to the global variable
 # APIKEY. Hopefully one day factual will allow reads without requiring API keys, which
 # is why I chose not to make it an argument to the function.

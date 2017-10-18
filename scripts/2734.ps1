@@ -1,4 +1,4 @@
-﻿function Get-Path {
+function Get-Path {
 [CmdletBinding(DefaultParameterSetName="DriveQualified")]
 Param(
    [Parameter(Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]

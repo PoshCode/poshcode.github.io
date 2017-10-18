@@ -1,4 +1,4 @@
-﻿# Author: Doug Finke http://www.dougfinke.com/blog/
+# Author: Doug Finke http://www.dougfinke.com/blog/
 # Originally Posted: 08/13/08 (Microsoft Research .NetMap and PowerShell)
 # http://www.dougfinke.com/blog/?p=465
 # Modified by Steven Murawski http://www.mindofroot.com

@@ -1,4 +1,4 @@
-﻿###################################################################
+###################################################################
 # Script:     Configuration Manager Collection Tree Documenter    #
 # Description Creates a CSV file detailing collectionid, name and #
 #             limittocollectionid fields in a suitable format to  #

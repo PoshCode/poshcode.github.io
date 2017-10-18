@@ -46,8 +46,15 @@ $extension = switch($Language) {
     "xml"        { ".xml" }
 }
 
+# Work around PowerShell's insistence on BOMs
+function Write-AllLines {
+    param($Path, $Content)
+    $null = New-Item $Path -Type File -Force
+    [IO.File]::WriteAllLines((Convert-Path $Path), $content)
+}
 
-@"
+
+Write-AllLines "scripts\$id.md" @"
 ---
 pid:            $id
 poster:         $author
@@ -68,9 +75,11 @@ $description
 ``````$language
 $code
 ``````
-"@ | Out-File "scripts\$id.md"
+"@
 
-$code | Out-File "scripts\$id$extension"
+
+
+Write-AllLines "scripts\$id$extension" $code
 
 }
 }

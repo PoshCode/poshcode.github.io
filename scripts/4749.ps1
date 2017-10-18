@@ -1,4 +1,4 @@
-﻿function Get-HostPaste {
+function Get-HostPaste {
   <#
     .NOTES
         Author: greg zakharov

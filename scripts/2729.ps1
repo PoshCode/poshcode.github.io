@@ -1,4 +1,4 @@
-﻿Function Backup-EventLogs
+Function Backup-EventLogs
 {
     <#
         .SYNOPSIS

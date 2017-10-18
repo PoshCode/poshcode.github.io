@@ -1,4 +1,4 @@
-﻿<#
+<#
 Found at https://mobile.twitter.com/gregzakharov/status/778985999007354880
 #>
 function Get-RegModifyTime {

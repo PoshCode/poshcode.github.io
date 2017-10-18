@@ -1,4 +1,4 @@
-﻿<#
+<#
 This script queries the entire forest and a) dumps all GPO names with last modified and GUID to \All_GPOs and b) Compares the current run
 against the last run and will list all modified GPOs in the \Modified_GPOs folder. The intention of this is to audit GPO modifications. Obviously the
 first run will not report any changes and simply dump all of the current GPOs.

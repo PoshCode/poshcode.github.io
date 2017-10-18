@@ -1,4 +1,4 @@
-﻿$LAN = Get-WmiObject Win32_NetworkAdapter -Filter "AdapterType='Ethernet 802.3'" |
+$LAN = Get-WmiObject Win32_NetworkAdapter -Filter "AdapterType='Ethernet 802.3'" |
         Where-Object { ($_.NetConnectionID -notlike '*Wireless*' -or $_.NetConnectionID -notlike '*WiFi*' -or $_.NetConnectionID -notlike '*Wi-Fi*' ) -and $_.ServiceName -notlike '*NETw*' } |
         ForEach-Object { $_.GetRelated('Win32_NetworkAdapterConfiguration') } | Where-Object {$_.IPEnabled -eq '$True'}
 $WLAN = Get-WmiObject Win32_NetworkAdapter -Filter "AdapterType='Ethernet 802.3'" |

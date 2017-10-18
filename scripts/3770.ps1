@@ -1,4 +1,4 @@
-﻿function Out-CliXml
+function Out-CliXml
 {
 <#
 .SYNOPSIS

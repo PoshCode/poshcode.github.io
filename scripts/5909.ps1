@@ -1,4 +1,4 @@
-﻿
+
 VERBOSE: Throttle: '20' SleepTimer '200' runSpaceTimeout '60' maxQueue '0' logFile 'C:\temp\log.log'
 VERBOSE: Creating runspace pool and session states
 VERBOSE: Creating empty collection to hold runspace jobs

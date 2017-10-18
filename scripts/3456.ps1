@@ -1,4 +1,4 @@
-﻿Google is now using business reviews to determine business ranking. A search for your business shows at least one negative review.
+Google is now using business reviews to determine business ranking. A search for your business shows at least one negative review.
 
 We can help you.
 

@@ -1,4 +1,4 @@
-﻿param(
+param(
 $Domen,
 [string[]]$ObjectsDeleted
 )

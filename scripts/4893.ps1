@@ -1,4 +1,4 @@
-﻿# Script to fetch all FC adapter WWN's per Cluster
+# Script to fetch all FC adapter WWN's per Cluster
 # By Leon Scheltema AVANCE ICT Groep Nederland
 
 # Begin variables

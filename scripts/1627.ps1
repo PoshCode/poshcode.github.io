@@ -1,4 +1,4 @@
-﻿param ( $Credential, $ComputerName )
+param ( $Credential, $ComputerName )
 
 # The official way to detect .NET versions is to look at their known location on the hard drive as per
 # this article: http://msdn.microsoft.com/en-us/kb/kb00318785.aspx

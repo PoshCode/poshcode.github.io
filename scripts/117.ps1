@@ -1,4 +1,4 @@
-﻿## New-GenericObject.ps1
+## New-GenericObject.ps1
 ## Creates an object of a generic type:
 ##
 ## Usage:

@@ -1,4 +1,4 @@
-﻿function Test-Help {
+function Test-Help {
     <#
     .Synopsis
         Test-Help -Function Get-USB

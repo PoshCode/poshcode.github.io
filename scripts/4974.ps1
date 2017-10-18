@@ -1,4 +1,4 @@
-﻿Filter Enquote-CmdlineArgument #Escapes according to CmdlineToArgvW's rules
+Filter Enquote-CmdlineArgument #Escapes according to CmdlineToArgvW's rules
 {
     '"{0}"' -f $($($_ -replace '(\x5C*)$', '$1$1') -replace '(\x5C*)(\x22)', '$1$1\"')
 }

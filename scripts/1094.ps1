@@ -1,4 +1,4 @@
-﻿# First, start asynchronous tools update. We need to do it in a separate process
+# First, start asynchronous tools update. We need to do it in a separate process
 # because the update is a beta version which contains unsigned drivers and will
 # be blocked by Windows' driver confirmation prompt
 $updateScript = "

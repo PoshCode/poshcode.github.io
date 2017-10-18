@@ -1,4 +1,4 @@
-﻿function Get-Type {
+function Get-Type {
     <#
     .SYNOPSIS
         Get exported types in the current session

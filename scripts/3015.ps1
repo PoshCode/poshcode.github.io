@@ -1,4 +1,4 @@
-﻿function Trace-Route
+function Trace-Route
 {
    param(
    # The URL to trace

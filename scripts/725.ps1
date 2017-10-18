@@ -1,4 +1,4 @@
-﻿## Requires HttpRest http://poshcode.org/691
+## Requires HttpRest http://poshcode.org/691
 ## Add-Module HttpRest ##Or:## . HttpRest.ps1
 ## YOU MUST Provide an Amazon Web Services key (AWSKey) and a $Book title
 ####################################################################################################

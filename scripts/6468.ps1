@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         List installed .Net Framework versions
 

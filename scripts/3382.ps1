@@ -1,4 +1,4 @@
-﻿#Change these settings as needed
+#Change these settings as needed
 $filepath = 'C:\Users\u00\Documents\backupset.xlsx'
 #Comment/Uncomment connection string based on version
 #Connection String for Excel 2007:

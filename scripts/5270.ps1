@@ -1,4 +1,4 @@
-﻿#Windows PowerShell live session dump
+#Windows PowerShell live session dump
 PS D:\> $dll = (gcm -ea 0 -c Application compatui.dll).Definition
 PS D:\> PS D:\> if ($dll -ne $null) {
 >> Import-Module strings #I used my own module (analog of Sysinternals strings)

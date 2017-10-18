@@ -1,4 +1,4 @@
-﻿#Twitbrain Cheat PowerShell script
+#Twitbrain Cheat PowerShell script
 #Description: PowerShell script to beat everyone at the Twitter twitbrain game
 #             For more info follow @twitbrain at www.twitter.com
 #Change the Twitter Username and Password in the script.

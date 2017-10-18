@@ -1,4 +1,4 @@
-﻿function Find-Executable {
+function Find-Executable {
   [CmdletBinding(SupportsShouldProcess=$true)]
   param(
     [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]

@@ -1,4 +1,4 @@
-﻿function Get-MacAddressOui {
+function Get-MacAddressOui {
 <#
 	.SYNOPSIS
 		Gets a MAC address OUI (Organizationally Unique Identifier).

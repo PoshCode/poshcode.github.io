@@ -1,4 +1,4 @@
-﻿function Test-EmptyFolder {
+function Test-EmptyFolder {
 <#
 	.SYNOPSIS
 		Tests for empty folders.

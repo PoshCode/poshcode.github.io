@@ -1,4 +1,4 @@
-﻿##################################
+##################################
 #This errors out in ISE, so use cmd window.
 #The script below fixes the error just below.
 #Cannot access the local farm. Verify that the local farm is 

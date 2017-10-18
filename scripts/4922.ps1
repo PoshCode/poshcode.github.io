@@ -1,4 +1,4 @@
-﻿### Finding tabs:
+### Finding tabs:
 $file =  "C:\data\test1.xlsx"
 
 $objExcel = new-object -comobject excel.application 

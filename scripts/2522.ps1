@@ -1,4 +1,4 @@
-﻿#this function takes nested hashtables and converts them to nested pscustomobjects
+#this function takes nested hashtables and converts them to nested pscustomobjects
 #it can also contain arrays of hashtables, and it will turn those hashtables in the arrays
 #also into PScustomobjects
 function new-pshash 

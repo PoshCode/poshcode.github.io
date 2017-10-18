@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 
 ## Version 1.0 First post http://poshcode.org/1459
 ## Version 1.1 Fixed column uniqueness bug

@@ -1,4 +1,4 @@
-﻿Function Get-FunctionParameters
+Function Get-FunctionParameters
 {
     <#
         .SYNOPSIS

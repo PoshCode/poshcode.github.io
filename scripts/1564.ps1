@@ -1,4 +1,4 @@
-﻿function getMyModulePrefix {
+function getMyModulePrefix {
 <#
 	.SYNOPSIS
 		An internal support routine for imported modules to retrieve a prefix

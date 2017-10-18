@@ -1,4 +1,4 @@
-﻿# Module version 0.1
+# Module version 0.1
 # Author: Bartek Bielawski (@bielawb on twitter)
 # Purpose: Add functionality to PowerShell ISE
 # Description: Adds Add-ons menu 'ISEFun' with all functions included.

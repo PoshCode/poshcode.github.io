@@ -1,4 +1,4 @@
-﻿#region vars
+#region vars
 $global:maileditor = "C:\Programme\vim\vim72\vim.exe"
 $global:encryption = "C:\Programme\GNU\GnuPG\gpg.exe"
 $global:enckey = "s.patrick1982@gmail.com"

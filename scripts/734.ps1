@@ -1,4 +1,4 @@
-﻿# Author: Steven Murawski http://www.mindofroot.com
+# Author: Steven Murawski http://www.mindofroot.com
 # This script requires the modified Show-NetMap script (originally from Doug Finke)
 # Show-NodeXLMap which can be found on http://poshcode.org/733
 # and the NodeXL files

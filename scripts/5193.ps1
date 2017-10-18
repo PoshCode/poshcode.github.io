@@ -1,4 +1,4 @@
-﻿#requieres -version 2.0
+#requieres -version 2.0
 if (!(Test-Path alias:gacview)) { Set-Alias gacview Invoke-GACView }
 
 function Invoke-GACView {

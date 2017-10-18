@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Compares two result sets from SQL queries for differences.
 .DESCRIPTION

@@ -1,4 +1,4 @@
-﻿Function Test-XVM
+Function Test-XVM
 {
     [cmdletbinding()]
     Param

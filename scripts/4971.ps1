@@ -1,4 +1,4 @@
-﻿function Get-LocalGroupMembers {
+function Get-LocalGroupMembers {
 	param($groupname,$computer)
 
 	$pattern = "'\\\\$computer\\root\\cimv2:Win32_Group.Domain=`"$computer`",Name=`"$groupname`"'"

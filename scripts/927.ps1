@@ -1,4 +1,4 @@
-﻿#
+#
 # Script from SVN Utility
 # ~~~~~~~~~~~~~~~~~~~~~~~
 # This script processes template files and produces and output file.

@@ -1,4 +1,4 @@
-﻿#Written for training Materials by James Vahanian
+#Written for training Materials by James Vahanian
 
 #region - define Objects/Characters
 $jedi = @()

@@ -1,4 +1,4 @@
-﻿function Get-WmiNSTree {
+function Get-WmiNSTree {
   <#
     .SYNOPSIS
         Prints WMI NameSpaces tree.

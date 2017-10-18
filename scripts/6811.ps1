@@ -1,4 +1,4 @@
-﻿<#
+<#
  $byte[0] -eq 0xef -and $byte[1] -eq 0xbb -and $byte[2] -eq 0xbf Gets files that are UTF-8 with BOM
 #>
 function Get-FileEncoding

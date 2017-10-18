@@ -1,4 +1,4 @@
-﻿# vCheck - Daily Error Report 
+# vCheck - Daily Error Report 
 # 
 # Changes:
 # Version 1.11 - Simplified mail function.

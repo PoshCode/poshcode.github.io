@@ -1,4 +1,4 @@
-﻿#Requires -Version 2
+#Requires -Version 2
 param ( $Credential, $ComputerName )
 
 # The official way to detect .NET versions is to look at their known location on the hard drive as per

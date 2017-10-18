@@ -1,4 +1,4 @@
-﻿if (Get-Process 'WRemote' -ea SilentlyContinue) { 
+if (Get-Process 'WRemote' -ea SilentlyContinue) { 
   if (Get-Process 'POS2100' -ea -ErrorAction SilentlyContinue) {
     Write-Host "Restarting WinRemote" 
     Stop-Process -processname WRemote

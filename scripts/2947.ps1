@@ -1,4 +1,4 @@
-﻿function Reset-OutlookLivePassword {
+function Reset-OutlookLivePassword {
 <#
 	.SYNOPSIS
 		Resets an Outlook Live account password.

@@ -1,4 +1,4 @@
-﻿# Limited Notepad++ support with the simple call 'Note'   So long Notepad!
+# Limited Notepad++ support with the simple call 'Note'   So long Notepad!
 function Note
 {
 	<#

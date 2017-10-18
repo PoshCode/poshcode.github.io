@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 $DebugPreference = "Continue"
 Set-Location (Split-Path $MyInvocation.MyCommand.Path)
 if(Test-Path (".\" + $MyInvocation.MyCommand.Name.TrimEnd(".ps1") + "_config.xml")) {

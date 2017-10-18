@@ -1,4 +1,4 @@
-﻿# AutoArchive PowerShell Script
+# AutoArchive PowerShell Script
 # http://powershell.codeplex.com
 
 param (

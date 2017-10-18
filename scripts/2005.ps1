@@ -1,4 +1,4 @@
-﻿#Requires -version 2.0
+#Requires -version 2.0
 #.Synopsys
 #  Enumerates the parameters of one or more commands
 #.Notes

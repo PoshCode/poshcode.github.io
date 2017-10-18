@@ -1,4 +1,4 @@
-﻿## Get-RemoteRegistry
+## Get-RemoteRegistry
 ########################################################################################
 ## Version: 2.0
 ##  + I added the "Properties" parameter so you can select specific registry values

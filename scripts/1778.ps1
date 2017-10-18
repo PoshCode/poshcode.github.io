@@ -1,4 +1,4 @@
-﻿function Skip-Object {
+function Skip-Object {
 param( 
    [int]$First = 0, [int]$Last = 0, [int]$Every = 0, [int]$UpTo = 0,  
    [Parameter(Mandatory=$true,ValueFromPipeline=$true)]

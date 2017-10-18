@@ -1,4 +1,4 @@
-﻿# Roll-Dice.ps1
+# Roll-Dice.ps1
 # Cody Bunch
 # ProfessionalVMware.com
 

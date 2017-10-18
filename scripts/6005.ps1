@@ -1,4 +1,4 @@
-﻿Function ConvertFrom-HTMLTable {
+Function ConvertFrom-HTMLTable {
     <#
         .SYNOPSIS
             Convert HTML tables to Powershell objects

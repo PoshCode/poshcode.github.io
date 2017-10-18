@@ -1,4 +1,4 @@
-﻿<#
+<#
 Version 2.1:
 - fixes a couple of typos
 

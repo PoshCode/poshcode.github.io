@@ -1,4 +1,4 @@
-﻿## scraping method for ajax driven websites. in this example, google marketplace is the target.
+## scraping method for ajax driven websites. in this example, google marketplace is the target.
 ## requires: watin, htmlagilitypack
 ##     http://watin.org/
 ##     http://htmlagilitypack.codeplex.com/

@@ -1,4 +1,4 @@
-﻿function Get-StockQuote {
+function Get-StockQuote {
 	param($symbols)
 
 	process {

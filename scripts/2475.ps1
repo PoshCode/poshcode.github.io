@@ -1,4 +1,4 @@
-﻿function Get-PerformanceCounter {
+function Get-PerformanceCounter {
   <#
     .Synopsis
       Gets one or more Performance Counter objects.

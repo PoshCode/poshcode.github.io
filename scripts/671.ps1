@@ -1,4 +1,4 @@
-﻿## DekiWiki Module -note this is a v2 module, but I think you can dot-source in v1 if you remove the last line ;)
+## DekiWiki Module -note this is a v2 module, but I think you can dot-source in v1 if you remove the last line ;)
 ####################################################################################################
 ## The first of many script cmdlets for working with DekiWiki, based on their REST api sdk "Dream"
 ## You need log4net.dll mindtouch.core.dll mindtouch.dream.dll and SgmlReaderDll.dll from the SDK

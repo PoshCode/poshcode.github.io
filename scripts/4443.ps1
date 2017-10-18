@@ -1,4 +1,4 @@
-﻿# Ported from C# technique found here: http://forums.asp.net/p/1298956/2529558.aspx
+# Ported from C# technique found here: http://forums.asp.net/p/1298956/2529558.aspx
 param ( [string]$SidString )
 
 # Create SID .NET object using SID string provided

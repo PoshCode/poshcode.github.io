@@ -1,4 +1,4 @@
-﻿function Get-WifiProfiles {
+function Get-WifiProfiles {
 $tmpFolder = Join-Path $env:temp ([Guid]::NewGuid().ToString().Replace('-',''))
 mkdir $tmpFolder | Out-Null
 

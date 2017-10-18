@@ -1,4 +1,4 @@
-﻿# Functions for connecting to and working with Access databases
+# Functions for connecting to and working with Access databases
 # Matt Wilson
 # May 2009
 

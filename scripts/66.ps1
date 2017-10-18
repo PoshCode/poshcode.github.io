@@ -1,4 +1,4 @@
-﻿# Invoke-VMCommand.ps1
+# Invoke-VMCommand.ps1
 # Purpose     : Run a remote command and return the results
 # Requirements: plink.exe from the Putty project must be in $env:path
 # Use -help parameter for instructions

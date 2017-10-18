@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Performs a join of all properties from two objects
 .Description

@@ -1,4 +1,4 @@
-﻿Function Get-ServerUptime {
+Function Get-ServerUptime {
 <#
 	.SYNOPSIS
 		gets Server Uptime Info

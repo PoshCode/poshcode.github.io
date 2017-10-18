@@ -1,4 +1,4 @@
-﻿#.Synopsis 
+#.Synopsis 
 #  Show the last n lines of a text file
 #.Description
 #  This is just a tail script for PowerShell, using seekable streams to avoid reading the whole file and using v2 eventing to detect changes and provide a -Continuous mode.

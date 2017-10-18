@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 
 #if your favorite DE is GNOME
 gnome-terminal -x bash -c "ls -a;echo Press any key to continue...;read"

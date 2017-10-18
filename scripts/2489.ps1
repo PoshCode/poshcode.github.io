@@ -1,4 +1,4 @@
-﻿PARAM ( $MaxEntryCount = 50) 
+PARAM ( $MaxEntryCount = 50) 
 <# 
     Author: Bartek Bielawski (@bielawb on Twitter)
     Adds cd- functionality known in bash, an probably some other shells.

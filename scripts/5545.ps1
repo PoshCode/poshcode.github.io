@@ -1,4 +1,4 @@
-﻿cls
+cls
 
 $ws  =  New-WebServiceProxy -Uri "http://192.168.1.1/sdk/vimService?wsdl" -namespace VIM -class VIM;
 

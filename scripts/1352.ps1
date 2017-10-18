@@ -1,4 +1,4 @@
-﻿$cnt = 'Bytes Total/sec'
+$cnt = 'Bytes Total/sec'
 $cat = 'Network Interface'
 $cnt2 = 'Current Bandwidth'
 foreach ($inst in ((new-object System.Diagnostics.PerformanceCounterCategory("network interface")).GetInstanceNames())){

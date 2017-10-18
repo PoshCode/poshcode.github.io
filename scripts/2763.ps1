@@ -1,4 +1,4 @@
-﻿Function Get-MACFromIP {
+Function Get-MACFromIP {
 param ($IPAddress)
 
 $sign = @"

@@ -1,4 +1,4 @@
-﻿$computerlist = Get-Content "C:\computerlist.txt"
+$computerlist = Get-Content "C:\computerlist.txt"
 $cred = Get-Credential
 
 foreach ($computername in $computerlist)

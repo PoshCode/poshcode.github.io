@@ -1,4 +1,4 @@
-﻿
+
 # see http://poshcode.org/751
 
 $jirasvc = New-WebServiceProxy -Uri "http://jra.netpost/jira//rpc/soap/jirasoapservice-v2?wsdl"

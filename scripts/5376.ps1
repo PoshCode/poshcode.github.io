@@ -1,4 +1,4 @@
-﻿## DuckDNS Powershell
+## DuckDNS Powershell
 [scriptblock]$UpdateDuckDns = {
     $Encoding = [System.Text.Encoding]::UTF8;
     $duckdns_url = "https://www.duckdns.org/update?domains=YOUR_DOMAIN&token=YOUR_TOKEN&ip=";

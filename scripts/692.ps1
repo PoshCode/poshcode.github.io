@@ -1,4 +1,4 @@
-﻿## DekiWiki Module 1.5
+## DekiWiki Module 1.5
 #require -version 2.0
 ## Depends on the HttpRest script-module:
 ##              http :// huddledmasses.org/using-rest-apis-from-powershell-with-the-dream-sdk/ 

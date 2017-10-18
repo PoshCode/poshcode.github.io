@@ -1,4 +1,4 @@
-﻿## Send-SmtpMessage -- a special implementation to show how to send via GMail
+## Send-SmtpMessage -- a special implementation to show how to send via GMail
 ## GMail is a bit more complicated than most....
 ###################################################################################################
 ## Examples:

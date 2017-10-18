@@ -1,4 +1,4 @@
-﻿Function global:GET-NEWpassword( $Length, $Complexity) {
+Function global:GET-NEWpassword( $Length, $Complexity) {
 
 # $Length variable serves a dual Purpose
 # It assumes nobody wants a tiny password less than

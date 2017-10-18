@@ -1,4 +1,4 @@
-﻿#groups by a set of properties, but returns then rather than as a string, as seperate properties on an object with _count , and _group for the original
+#groups by a set of properties, but returns then rather than as a string, as seperate properties on an object with _count , and _group for the original
 #ones returned from group object
 
 function group-byobject {

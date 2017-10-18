@@ -1,4 +1,4 @@
-﻿Function Get-Uptime {
+Function Get-Uptime {
 <#
 .SYNOPSIS 
 	Displays Uptime since last reboot

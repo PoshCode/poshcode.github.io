@@ -1,4 +1,4 @@
-﻿#Generamos los usuarios por buzon
+#Generamos los usuarios por buzon
 #Autor: Pedro Genil			
 #Fecha: 2014/03/17
 #Version: 1.0

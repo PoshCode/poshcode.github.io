@@ -1,4 +1,4 @@
-﻿(Get-Content c:\loltweaks.export.ps1) | ` Where-Object { $_ -match '\S' } | ` Out-File c:\loltweaks.ps1
+(Get-Content c:\loltweaks.export.ps1) | ` Where-Object { $_ -match '\S' } | ` Out-File c:\loltweaks.ps1
 $filename = "c:\loltweaks.ps1"
 $lines = (Get-Content $filename);
 $lines | ForEach-Object { $_.Trim(); } | Out-File C:\LoLtweaks.ps1

@@ -1,4 +1,4 @@
-﻿######################################
+######################################
 # Install Dell OpenManage 32bit
 # Configure racadm to the subnet
 #

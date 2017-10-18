@@ -1,4 +1,4 @@
-﻿# Get-NICSettings by Hugo Peeters of www.peetersonline.nl
+# Get-NICSettings by Hugo Peeters of www.peetersonline.nl
 #########################################################
 $serverName = Read-Host "Enter server name"
 $NicConfig = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -ComputerName $serverName

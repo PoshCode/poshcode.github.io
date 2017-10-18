@@ -1,4 +1,4 @@
-﻿# New-StoredProcFunction.ps1
+# New-StoredProcFunction.ps1
 # Steven Murawski
 # http://blog.usepowershell.com
 # 04/08/2009

@@ -1,4 +1,4 @@
-﻿# ------------ Install_DHCPBKP_Script.cmd ------------------------------------  
+# ------------ Install_DHCPBKP_Script.cmd ------------------------------------  
 REM Copy script files from deployment starting point
 MD "%ProgramFiles%\DHCP_Backup_Script"
 COPY /Y "%~dp0\dhcp_bkp.ps1" "%ProgramFiles%\DHCP_Backup_Script\dhcp_bkp.ps1"

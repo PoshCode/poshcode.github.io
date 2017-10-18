@@ -1,4 +1,4 @@
-﻿Function Compare-InstalledHotfix {
+Function Compare-InstalledHotfix {
 param (
 [parameter(Mandatory=$true,Position=0)]
 $server1,

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
     Connects to multiple UCS environments listed in a text file and generates a basic fault report for each one, then sends one email with the results.  In the report are unacknowledged faults, hardware locator LEDs that are on, and if you are short on port licenses it will show that.  Variables and paths will have to be changed to match your environment.
 .Blog

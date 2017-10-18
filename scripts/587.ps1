@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # Out-HTML - converts cmdlets help to HTML format
 # Based on Out-wiki by Dimitry Sotnikov (http://dmitrysotnikov.wordpress.com/2008/08/18/out-wiki-convert-powershell-help-to-wiki-format/)
 #

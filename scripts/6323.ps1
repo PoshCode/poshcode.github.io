@@ -1,4 +1,4 @@
-﻿    function Show-AsciiFace{
+    function Show-AsciiFace{
         param(
             $Name = "Shrug",
             [switch]$Clipboard

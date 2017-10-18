@@ -1,4 +1,4 @@
-﻿Function Stop-ProcessRemote()
+Function Stop-ProcessRemote()
 {
 <#
 .SYNOPSIS

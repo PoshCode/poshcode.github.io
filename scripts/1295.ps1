@@ -1,4 +1,4 @@
-﻿#region @3
+#region @3
 ## Function to do a regex replace of all matches with an expression per match that has local variables
 ##created automatically for the named groups so that you can use those varibles in your expression
 function replace-regexgroup ([regex]$regex, [string]$text ,[scriptblock] $replaceexpression)

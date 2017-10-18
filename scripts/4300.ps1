@@ -1,4 +1,4 @@
-﻿<# 
+<# 
    Script By Matthew Painter 15-July-2013
    Copyright Sunshine Coast Council
 #>

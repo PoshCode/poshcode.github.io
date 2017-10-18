@@ -1,4 +1,4 @@
-﻿# daniel.cheng@thomsonreuters.com
+# daniel.cheng@thomsonreuters.com
 # Function: Stop service and its associated processID (PID).
 #           Sometimes homegrown services has its PID still terminating gracefully in the background, but the service is reported as stopped.
 

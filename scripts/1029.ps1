@@ -1,4 +1,4 @@
-﻿## Write a program which draws a diamond of the form illustrted 
+## Write a program which draws a diamond of the form illustrted 
 ## below. The letter which is to appear at the widest point of the 
 ## figure (E in the example) is to be specified as the input data.
 ##           A

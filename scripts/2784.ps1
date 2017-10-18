@@ -1,4 +1,4 @@
-﻿Add-SharePointLibraryFile
+Add-SharePointLibraryFile
 {
 	param
 	(

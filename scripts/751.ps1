@@ -1,4 +1,4 @@
-﻿# jirafunctions.ps1
+# jirafunctions.ps1
 #
 # Note: Some functions are incomplete/untested. Be sure to TEST before placing in production!!
 #

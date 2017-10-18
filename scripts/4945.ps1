@@ -1,4 +1,4 @@
-﻿#rquires -version 2.0
+#rquires -version 2.0
 Set-Alias crc32 Get-Crc32
 
 $asm = Add-Type -Mem @'

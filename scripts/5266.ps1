@@ -1,4 +1,4 @@
-﻿Function Get-LocalGroupMembers {
+Function Get-LocalGroupMembers {
 	# Function to query a remote machine's WMI namespace and retrieve the membership of requested local groups
 	# Returns a hash table object with the group names as keys, and an array of members for that group as associated value
 	#

@@ -1,4 +1,4 @@
-﻿function Assert {
+function Assert {
 #.Example
 # set-content C:\test2\Documents\test2 "hi"
 # C:\PS>assert { get-item C:\test2\Documents\test2 } "File wasn't created by Set-Content!"

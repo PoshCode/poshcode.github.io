@@ -1,4 +1,4 @@
-﻿function Get-MembersFromAD{
+function Get-MembersFromAD{
     [cmdletbinding()]
     Param(
         [Parameter(Mandatory=$true)]

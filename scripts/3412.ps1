@@ -1,4 +1,4 @@
-﻿function New-DatastoreByLun { param( [string]$vmHost, [string]$hbaId, [int]$targetId, [int]$lunId, [string]$dataStoreName )
+function New-DatastoreByLun { param( [string]$vmHost, [string]$hbaId, [int]$targetId, [int]$lunId, [string]$dataStoreName )
 
   $view = Get-VMHost $vmHost | get-view
 

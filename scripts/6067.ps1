@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Drive Space Report
 

@@ -1,4 +1,4 @@
-﻿#function Get-ProcessorGraph {
+#function Get-ProcessorGraph {
   begin {
     $pc = New-Object Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total")
     $raw = $host.UI.RawUI

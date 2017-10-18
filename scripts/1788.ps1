@@ -1,4 +1,4 @@
-﻿
+
 	$global:wmilocalcomputer = get-WMIObject -class Win32_OperatingSystem -computer "."
 	$global:lastboottime=[System.Management.ManagementDateTimeconverter]::ToDateTime($wmilocalcomputer.lastbootuptime)
 	$global:originaltitle = [console]::title

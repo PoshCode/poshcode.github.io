@@ -1,4 +1,4 @@
-﻿filter global:get-firewallstatus2 ([string]$computer = $env:computername)
+filter global:get-firewallstatus2 ([string]$computer = $env:computername)
 	{
 	if ($_) { $computer = $_ }
 

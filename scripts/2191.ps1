@@ -1,4 +1,4 @@
-﻿## From Windows PowerShell Cookbook (O'Reilly)
+## From Windows PowerShell Cookbook (O'Reilly)
 ## by Lee Holmes (http://www.leeholmes.com/guide)
 
 Set-StrictMode -Version Latest

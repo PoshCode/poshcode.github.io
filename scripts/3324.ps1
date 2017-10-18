@@ -1,4 +1,4 @@
-﻿function Show-Image {
+function Show-Image {
   param([string]$file = $(throw "No file specified."))
 
   [void][Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")

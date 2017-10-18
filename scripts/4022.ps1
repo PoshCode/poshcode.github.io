@@ -1,4 +1,4 @@
-﻿Add-Type -AssemblyName PresentationCore
+Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName PresentationFramework
 
 [xml]$XAML = @'

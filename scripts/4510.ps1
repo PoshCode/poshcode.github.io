@@ -1,4 +1,4 @@
-﻿function Get-TDDevice
+function Get-TDDevice
 {
     <#
     .SYNOPSIS

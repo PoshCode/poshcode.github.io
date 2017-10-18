@@ -1,4 +1,4 @@
-﻿from System import Array, Char, Console
+from System import Array, Char, Console
 from System.Collections import ArrayList
 from Microsoft.Win32 import Registry
 

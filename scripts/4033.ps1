@@ -1,4 +1,4 @@
-﻿function Get-SQLSaturdaySessionList { 
+function Get-SQLSaturdaySessionList { 
         param(
         [string] $Number =  "111",
         $GetUnscheduled

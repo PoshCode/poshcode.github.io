@@ -1,4 +1,4 @@
-﻿## Get-RemoteRegistry
+## Get-RemoteRegistry
 ########################################################################################
 ## Version: 2.1
 ##  + Fixed a pasting bug 

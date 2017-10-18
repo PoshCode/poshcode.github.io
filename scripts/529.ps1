@@ -1,4 +1,4 @@
-﻿function Set-IPAddress {
+function Set-IPAddress {
 		param(	[switch]$help,
 				[string]$networkinterface =$(read-host "Enter the name of the NIC (ie Local Area Connection)"),
 				[string]$ip = $(read-host "Enter an IP Address (ie 10.10.10.10)"),

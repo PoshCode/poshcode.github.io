@@ -1,4 +1,4 @@
-﻿function Get-NType {
+function Get-NType {
   <#
     .NOTES
         Author: greg zakharov

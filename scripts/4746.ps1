@@ -1,4 +1,4 @@
-﻿Set-Alias mfdump  Get-Manifest
+Set-Alias mfdump  Get-Manifest
 Set-Alias strings Get-Strings
 
 function Get-Manifest {

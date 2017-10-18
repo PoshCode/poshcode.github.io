@@ -1,4 +1,4 @@
-﻿function Push-Module {
+function Push-Module {
     param(
         [parameter(position=0, mandatory=$true)]
         [validatenotnullorempty()]

@@ -1,4 +1,4 @@
-﻿# Report VMs created per month.
+# Report VMs created per month.
 # Before you begin run Alan's "Who Created that VM?" script.
 # http://www.virtu-al.net/2010/02/23/who-created-that-vm/
 function Get-VMCreationReport {

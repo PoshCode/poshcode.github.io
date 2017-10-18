@@ -1,4 +1,4 @@
-﻿#region Log File Management 
+#region Log File Management 
 $ScriptName = $MyInvocation.mycommand.name 
 $LocalAppDir = "$(gc env:LOCALAPPDATA)\PS_Data" 
 $LogName = $ScriptName.replace(".ps1", ".log") 

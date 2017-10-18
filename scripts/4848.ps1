@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function frmMain_Show {
   Add-Type -AssemblyName System.Windows.Forms
   [Windows.Forms.Application]::EnableVisualStyles()

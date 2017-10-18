@@ -1,4 +1,4 @@
-﻿#This is actually code written from scratch (not an update to anyone else’s script) based on a problem posted in the PowerShell.org forums. The original posting can be found here: http://powershell.org/wp/forums/topic/how-to-make-this-more-useful-for-my-situation/ and the following is a copy of that post:
+#This is actually code written from scratch (not an update to anyone else’s script) based on a problem posted in the PowerShell.org forums. The original posting can be found here: http://powershell.org/wp/forums/topic/how-to-make-this-more-useful-for-my-situation/ and the following is a copy of that post:
 
 Hopefully I understand this correctly. Part 1: You're attempting to find all Active Directory users who have an old server name used in their HomeDirectory path or in their ProfilePath. Part 2: you want that path replaced with exactly the same thing except for the server name to be the new server. Correct?
 Here's a fairly simple script to accomplish that task:

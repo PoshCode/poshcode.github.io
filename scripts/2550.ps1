@@ -1,4 +1,4 @@
-﻿#==================================================================================================
+#==================================================================================================
 #              File Name : CiscoInventory.ps1
 #        Original Author : Kenneth C. Mazie (kcmjr)
 #            Description : As written it will poll Cisco routers and switches and if the snmp OID's

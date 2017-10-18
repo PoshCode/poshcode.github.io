@@ -1,4 +1,4 @@
-﻿#region Global var
+#region Global var
 $script:viserver = "esx.local"
 $script:vmrc = "C:\Program Files\VMwareVMRC\vmware-vmrc.exe"
 $script:vm = ""

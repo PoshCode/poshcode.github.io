@@ -1,4 +1,4 @@
-﻿#For intel concerning how to convert raw hex SID to Standard  SID got to
+#For intel concerning how to convert raw hex SID to Standard  SID got to
 #http://blogs.msdn.com/b/oldnewthing/archive/2004/03/15/89753.aspx
 
 #to convert Hex to Dec

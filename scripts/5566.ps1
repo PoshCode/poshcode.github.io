@@ -1,4 +1,4 @@
-﻿$in_file = "C:\*LOCATION_TO_YOUR_FILE*\users.csv"
+$in_file = "C:\*LOCATION_TO_YOUR_FILE*\users.csv"
 $out_file = "C:\*LOCATION_TO_YOUR_FILE*\users_out.csv"
 
 $out_data = @()

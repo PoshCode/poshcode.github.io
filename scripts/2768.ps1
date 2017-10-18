@@ -1,4 +1,4 @@
-﻿## NAME: Get-Dirty.ps1 
+## NAME: Get-Dirty.ps1 
 ## AUTHOR: Barry Morrison 
 ## LASTEDIT: 07/05/2011 16:18:33 
 <#

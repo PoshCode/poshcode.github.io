@@ -1,4 +1,4 @@
-﻿Param([Parameter(ValueFromPipeline=$true)]$object,[switch]$AsString,[switch]$jagged)
+Param([Parameter(ValueFromPipeline=$true)]$object,[switch]$AsString,[switch]$jagged)
 BEGIN { $headers = @() }
 PROCESS {
    if(!$headers -or $jagged) {

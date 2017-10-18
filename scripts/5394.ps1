@@ -1,4 +1,4 @@
-﻿# Get-Regex.ps1
+# Get-Regex.ps1
 #
 # Displays .NET/C#/Powershell Regular Expression Quick Reference
 #

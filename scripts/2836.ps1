@@ -1,4 +1,4 @@
-﻿# calculate SHA512 of file.
+# calculate SHA512 of file.
 
 function Get-SHA512([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
 {

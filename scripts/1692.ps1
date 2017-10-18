@@ -1,4 +1,4 @@
-﻿
+
 function Get-FtpList {
 #.Synopsis
 #  Read a list of files (and directories) from FTP

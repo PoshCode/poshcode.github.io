@@ -1,4 +1,4 @@
-﻿function RadialPoint([Int32]$radius, [Int32]$seconds) {
+function RadialPoint([Int32]$radius, [Int32]$seconds) {
   $center = New-Object Drawing.Point(($this.ClientRectangle.Width / 2), ($this.ClientRectangle.Height / 2))
   [Double]$angle =- (($seconds - 15) % 60) * [Math]::PI / 30
   $ret = New-Object Drawing.Point(($center.X + [Int32]($radius * [Math]::Cos($angle))), `

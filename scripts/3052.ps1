@@ -1,4 +1,4 @@
-﻿function Set-LocalUserAccount {
+function Set-LocalUserAccount {
 	param (
 		[parameter(Mandatory=$true)]
 		[string] $Username,

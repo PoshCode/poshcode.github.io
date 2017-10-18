@@ -1,4 +1,4 @@
-﻿function New-UrlFile
+function New-UrlFile
 {
 	param( $URL = "http://www.google.com")
 	$UrlFile = [system.io.Path]::ChangeExtension([system.io.Path]::GetTempFileName(),".url")

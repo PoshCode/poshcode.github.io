@@ -1,4 +1,4 @@
-﻿# Lists AD users who are members in too many groups
+# Lists AD users who are members in too many groups
 # (c) Dmitry Sotnikov
 # Details at:
 # http://dmitrysotnikov.wordpress.com/2009/10/12/find-users-in-too-many-groups/

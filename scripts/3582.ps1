@@ -1,4 +1,4 @@
-﻿#Parameter- Name of the VMware cluster the VM will be assigned to
+#Parameter- Name of the VMware cluster the VM will be assigned to
 function Get-DatastoreMostFree ($Cluster, [switch] $Second)
 {
 <#

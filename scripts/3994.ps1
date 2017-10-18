@@ -1,4 +1,4 @@
-﻿function Get-Entropy
+function Get-Entropy
 {
 <#
 .SYNOPSIS

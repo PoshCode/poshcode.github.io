@@ -1,4 +1,4 @@
-﻿function Get-CrystalReportTable()
+function Get-CrystalReportTable()
 {
     #Requires -Version 2
     <#

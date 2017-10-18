@@ -1,4 +1,4 @@
-﻿        [parameter(ParameterSetName='Convert')]
+        [parameter(ParameterSetName='Convert')]
         [string]
         [ValidateScript({
             #Check to see if the edition is in the iso... if not, list valid editions.

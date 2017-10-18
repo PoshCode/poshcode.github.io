@@ -1,4 +1,4 @@
-﻿# $Id: Convert-BounceToX500.ps1 608 2010-10-31 02:12:44Z jon $
+# $Id: Convert-BounceToX500.ps1 608 2010-10-31 02:12:44Z jon $
 # $Revision: 608 $
 
 #.Synopsis

@@ -1,4 +1,4 @@
-﻿Add-Type @"
+Add-Type @"
 
 namespace Win32 {
   using System;

@@ -1,4 +1,4 @@
-﻿ipmo WPK
+ipmo WPK
 Function Get-TechEDSession {                
 
     $url = "https://channel9.msdn.com/Events/TechEd/NorthAmerica/2011/RSS/"

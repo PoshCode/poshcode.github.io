@@ -1,4 +1,4 @@
-﻿Function Get-ClipboardText
+Function Get-ClipboardText
 {
     [CmdletBinding()]
     [OutputType([String])]

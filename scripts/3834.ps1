@@ -1,4 +1,4 @@
-﻿$executionContext.SessionState.InvokeCommand.PreCommandLookupAction = {
+$executionContext.SessionState.InvokeCommand.PreCommandLookupAction = {
     param($CommandName, $CommandLookupEventArgs)
 
     if($CommandName.StartsWith("?")) {

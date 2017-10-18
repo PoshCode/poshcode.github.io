@@ -1,4 +1,4 @@
-﻿function Monitor-FileSize
+function Monitor-FileSize
 {
 
 <#

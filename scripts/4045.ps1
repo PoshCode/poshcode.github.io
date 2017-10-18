@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 <#
 .Synopsis
    Downloads Channel 9 Defrag Tool Episode Video

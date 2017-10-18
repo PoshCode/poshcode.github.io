@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Analyzes SQL Server Index Fragmentation and creates a csv report
 

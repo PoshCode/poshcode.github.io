@@ -1,4 +1,4 @@
-﻿# Very simple script to use in Exchange 2007 with a dead simple task
+# Very simple script to use in Exchange 2007 with a dead simple task
 # Create an email enabled user with the local Email Address Policy Disabled with a SINGLE email address
 # Attached to it
 #

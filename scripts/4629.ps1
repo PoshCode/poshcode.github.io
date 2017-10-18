@@ -1,4 +1,4 @@
-﻿function Set-JavaPropertyFileValue($propFile, $propName, $propValue){
+function Set-JavaPropertyFileValue($propFile, $propName, $propValue){
 
 	[string]$finalFile=""
 	

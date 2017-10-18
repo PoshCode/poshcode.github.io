@@ -1,4 +1,4 @@
-﻿function CreateVDS(
+function CreateVDS(
    $dvsName, $datacenter, $vmHost, $physicalNic, $portGroupType = "earlyBinding", `
    [array]$portGroupNameList = @(),[array]$uplinkList = @() ) {
    

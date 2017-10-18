@@ -1,4 +1,4 @@
-﻿<#
+<#
 
     .NOTES
     Name     : Exchange Automatic Replies Administrator.ps1

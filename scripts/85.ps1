@@ -1,4 +1,4 @@
-﻿Param([string]$srv,$port=135,$timeout=3000,[switch]$verbose)
+Param([string]$srv,$port=135,$timeout=3000,[switch]$verbose)
  
 # Test-Port.ps1
 # Does a TCP connection on specified port (135 by default)

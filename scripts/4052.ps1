@@ -1,4 +1,4 @@
-﻿param(
+param(
 [Parameter(Position=0,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
 [alias("Name","ComputerName")][string[]] $Computers = @($env:computername),
 #works automagically for domain members or local computer,

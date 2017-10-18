@@ -1,4 +1,4 @@
-﻿#requires -module PackageManagement
+#requires -module PackageManagement
 
 function Package-Module {
     #.Synopsis

@@ -1,4 +1,4 @@
-﻿function Get-InstalledProgram()
+function Get-InstalledProgram()
 {
 param (
 [String[]]$Computer,

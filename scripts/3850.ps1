@@ -1,4 +1,4 @@
-﻿[string[]]$key = "SOFTWARE\Classes\CLSID\{083863F1-70DE-11d0-BD40-00A0C911CE86}\Instance",
+[string[]]$key = "SOFTWARE\Classes\CLSID\{083863F1-70DE-11d0-BD40-00A0C911CE86}\Instance",
                  "SOFTWARE\Microsoft\Windows NT\CurrentVersion\Drivers32"
 
 function ModuleInfo([string]$path) {

@@ -1,4 +1,4 @@
-﻿[cmdletbinding()]
+[cmdletbinding()]
 param (
 	[Parameter(Mandatory=$true)] [ValidateNotNullOrEmpty()] [string]
 	$Username,

@@ -1,4 +1,4 @@
-﻿Function Get-ChildItem {
+Function Get-ChildItem {
 <#
 
 .ForwardHelpTargetName Get-ChildItem

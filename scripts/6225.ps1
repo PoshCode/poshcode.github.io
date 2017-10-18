@@ -1,4 +1,4 @@
-﻿<#
+<#
    Tested on files over 10Mb =)
    Thanks to alpap, Dragokas and greg zakharov for this trick
 #>

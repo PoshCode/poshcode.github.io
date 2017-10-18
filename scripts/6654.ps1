@@ -1,4 +1,4 @@
-﻿function Get-LogonSessions {
+function Get-LogonSessions {
   Set-Content function:Add-Type (Unlock-Python)
 Add-Type -Language Python -TypeDefinition @'
 from calendar import timegm

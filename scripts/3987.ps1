@@ -1,4 +1,4 @@
-﻿#TheGameOfLife.ps1
+#TheGameOfLife.ps1
 
 [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
 $SCRIPT:hostProperties = @{};

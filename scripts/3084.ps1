@@ -1,4 +1,4 @@
-﻿function Run-Script {
+function Run-Script {
    if ($psISE.CurrentFile.DisplayName.StartsWith("Untitled")) {
       return
    }

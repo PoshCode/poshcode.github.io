@@ -1,4 +1,4 @@
-﻿## WARNING: I take no responsibility for how weird this is.
+## WARNING: I take no responsibility for how weird this is.
 function Import-UniqueModule { 
 
 param([Parameter(Mandatory=$true)][String]$ModuleName)

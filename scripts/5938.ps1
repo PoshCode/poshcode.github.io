@@ -1,4 +1,4 @@
-﻿function Demo-Pipeline {
+function Demo-Pipeline {
    #.Synopsis
    #    Useful for demonstrating how pipeline output works
    #.Example

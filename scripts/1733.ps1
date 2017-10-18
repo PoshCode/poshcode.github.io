@@ -1,4 +1,4 @@
-﻿#requires -version 2
+#requires -version 2
 
 #Chad Miller
 #http://www.sev17.com/

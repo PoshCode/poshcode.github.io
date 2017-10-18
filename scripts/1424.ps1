@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # This script will maintain the PS Transcript file at a fixed length and can be 
 # used to prevent such files, etc, from becoming too large. It is best placed in
 # the $profile. Defaults to 10000 lines. Parameters allow use for other files.

@@ -1,4 +1,4 @@
-﻿function where-in {
+function where-in {
 [cmdletbinding()]
 param (
 [parameter(mandatory = $true,position = 1)]

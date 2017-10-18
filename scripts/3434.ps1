@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #   Pivot multiple objects which are normalized with properties that are name, value pairs.
 #.Description
 #  Takes a series of objects where there are multiple rows to represent each object, with a pair of columns with the name and value of an additional property, and outputs new objects which have those new properties on them.

@@ -1,4 +1,4 @@
-﻿Add-Type -Name Threader -Namespace "" -Member @"
+Add-Type -Name Threader -Namespace "" -Member @"
    [Flags]
    public enum ThreadAccess : int
    {

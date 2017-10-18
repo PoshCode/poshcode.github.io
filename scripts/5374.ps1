@@ -1,4 +1,4 @@
-﻿# First, you have to install WinPcap
+# First, you have to install WinPcap
 # http://www.winpcap.org/install/default.htm
 
 # Then, you have to download SharpPcap

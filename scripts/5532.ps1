@@ -1,4 +1,4 @@
-﻿function Get-PEHeader {
+function Get-PEHeader {
   <#
     .EXAMPLE
         PS C:\debug> (Get-PEHeader app.exe).DosHeader

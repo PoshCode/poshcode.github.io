@@ -1,4 +1,4 @@
-﻿Function New-Zip
+Function New-Zip
 {
 <#
 .SYNOPSIS

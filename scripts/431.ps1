@@ -1,4 +1,4 @@
-﻿param([string]$path)
+param([string]$path)
 Set-PSDebug -Strict
 
 $fs = New-Object System.IO.FileStream ((Resolve-Path $path), 'Open', 'Read')

@@ -1,4 +1,4 @@
-﻿Function Get-RollbackPolicy { 
+Function Get-RollbackPolicy { 
 <#   
 .SYNOPSIS   
      Retieves the current rollback policy on a local or remote computer 

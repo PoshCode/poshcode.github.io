@@ -1,4 +1,4 @@
-﻿workflow UninstallSoftware
+workflow UninstallSoftware
 {
 	Param(
 		[Parameter(Mandatory=$True)]

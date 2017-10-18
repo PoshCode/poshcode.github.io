@@ -1,4 +1,4 @@
-﻿function global:Get-BracketContent {
+function global:Get-BracketContent {
 	PARAM	(
 		  [string[]] $txtInput = $(Throw "Please provide input string(s)!")
 		, [string] $patternString = '<.*>'

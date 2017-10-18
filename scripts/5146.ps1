@@ -1,4 +1,4 @@
-﻿Function Find-TaskServiceUser { 
+Function Find-TaskServiceUser { 
 <# 
 .SYNOPSIS 
    Finding Tasks, Services on remote/local computer.  

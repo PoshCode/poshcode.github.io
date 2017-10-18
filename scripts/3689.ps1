@@ -1,4 +1,4 @@
-﻿#Ty Lopes - Calgary - Oct 2012
+#Ty Lopes - Calgary - Oct 2012
 #(Troy is a huge nerd)
 
 #How to kill a process by username

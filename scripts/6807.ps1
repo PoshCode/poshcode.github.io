@@ -1,4 +1,4 @@
-﻿function frmMain_Show {
+function frmMain_Show {
   Add-Type -Assembly System.Windows.Forms
   [Windows.Forms.Application]::EnableVisualStyles()
   

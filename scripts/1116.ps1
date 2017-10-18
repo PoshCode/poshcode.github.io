@@ -1,4 +1,4 @@
-﻿# function ConvertFrom-Hashtable {
+# function ConvertFrom-Hashtable {
 PARAM([[HashTable]$hashtable,[switch]$combine)
 BEGIN { $output = New-Object PSObject }
 PROCESS {

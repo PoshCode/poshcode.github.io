@@ -1,4 +1,4 @@
-﻿#This script is designed to set a test server to use a specific directory for App-V Apps, to enable testing
+#This script is designed to set a test server to use a specific directory for App-V Apps, to enable testing
 #Without having to publish to an external repository.
 #REQUIREMENTS: Windows 2008
 

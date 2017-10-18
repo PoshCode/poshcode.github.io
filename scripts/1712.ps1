@@ -1,4 +1,4 @@
-﻿#alias,addnewemailaddress
+#alias,addnewemailaddress
 
 import-csv .\source.csv | foreach {
 $user = Get-Mailbox $_.alias

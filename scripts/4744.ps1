@@ -1,4 +1,4 @@
-﻿function Get-ReversedString {
+function Get-ReversedString {
   <#
     .EXAMPLE
         PS C:\>Get-ReversedStrin ".gnirts gnol hcum oot ,gnol yrev ,gnol ,gnol ,gnol a si sihT"

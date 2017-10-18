@@ -1,4 +1,4 @@
-﻿Param($file,$cmd,[switch]$whatif,[switch]$verbose)
+Param($file,$cmd,[switch]$whatif,[switch]$verbose)
 Begin{
     function Ping-Server {
         Param([string]$srv)

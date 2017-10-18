@@ -1,4 +1,4 @@
-﻿function Get-MethodOpCodes {
+function Get-MethodOpCodes {
   <#
     .EXAMPLE
         PS C:\>Get-MethodOpCodes ([AppDomain].GetMembers() | ? {$_.Name -eq 'CreateDomain'})[2]

@@ -1,4 +1,4 @@
-﻿Function Get-ChildItemProxy {
+Function Get-ChildItemProxy {
 [CmdletBinding(DefaultParameterSetName='Items', SupportsTransactions=$true)]
 param(
     [Parameter(ParameterSetName='Items', Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]

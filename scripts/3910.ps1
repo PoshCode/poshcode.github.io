@@ -1,4 +1,4 @@
-﻿<# 	   .SYNOPSIS
+<# 	   .SYNOPSIS
         Collects statistics and settings for Hosts, Datastores, and Virtual Machines
 		from multiple VCenters.
 	   .DESCRIPTION

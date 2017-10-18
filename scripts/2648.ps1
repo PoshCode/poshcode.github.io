@@ -1,4 +1,4 @@
-﻿param($Path = "~\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Windows PowerShell.lnk" )
+param($Path = "~\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Windows PowerShell.lnk" )
 
 # SOLARIZED HEX     16/8 TERMCOL  XTERM/HEX   L*A*B      RGB         HSB
 # --------- ------- ---- -------  ----------- ---------- ----------- -----------

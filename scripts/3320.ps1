@@ -1,4 +1,4 @@
-﻿$frmMain_OnLoad= {
+$frmMain_OnLoad= {
   $m_BrushSize = New-Object Drawing.Rectangle(0, 0, $picDemo.Width, $picDemo.Height)
 
   $wm = [Drawing.Drawing2D.WrapMode]

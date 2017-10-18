@@ -1,4 +1,4 @@
-﻿# Call WCF Services With PowerShell V1.0 22.12.2008
+# Call WCF Services With PowerShell V1.0 22.12.2008
 # 
 # by Christian Glessner
 # Blog: http://www.iLoveSharePoint.com

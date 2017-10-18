@@ -1,4 +1,4 @@
-﻿# script parameters
+# script parameters
 param(
 [string[]] $Computers = $env:computername,
 [switch] $ChangeSettings,

@@ -1,4 +1,4 @@
-﻿function copy-data {
+function copy-data {
 	param($source, $dest)
 	$counter = 0
 	$files = Get-ChildItem $source -Force -Recurse

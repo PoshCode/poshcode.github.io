@@ -1,4 +1,4 @@
-﻿<#  This scriptlet is a table driven template tool. 
+<#  This scriptlet is a table driven template tool. 
     It's a refinement of an earlier attempt.
 
     It generates an output file from a template and

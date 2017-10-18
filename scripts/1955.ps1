@@ -1,4 +1,4 @@
-﻿**********EDIT: See Carter's Example, it's way simpler: http://poshcode.org/1559**********
+**********EDIT: See Carter's Example, it's way simpler: http://poshcode.org/1559**********
 
 ###ESXi Configuration Backup Script
 #DESCRIPION: This Script takes a CSV file with the hostname, username, and password of a list of ESXi servers, and backs up their configurations to a specified Destination

@@ -1,4 +1,4 @@
-﻿$BiosRev = Get-WmiObject -Class Win32_BIOS -ComputerName $ComputerName -Credential $Credentials
+$BiosRev = Get-WmiObject -Class Win32_BIOS -ComputerName $ComputerName -Credential $Credentials
 
 # Shortened URL for the Dell Support page, fileid=441102, appears to be the identifier for BIOS downloads
 # I tested this on a few different models of Dell workstations.

@@ -1,4 +1,4 @@
-﻿#======================================================================================
+#======================================================================================
 #              File Name : DataStoreBalancer.ps1
 #        Original Author : Kenneth C. Mazie 
 #            Description : Scans VM datastores and moves  a single VM from the most heavily

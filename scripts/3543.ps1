@@ -1,4 +1,4 @@
-﻿param(
+param(
 $RootFolder = "\\domain.local\users",
 $NewRootFolder = "\\domain.local\users2",
 $LogFolder = "c:\Projects\HomeDirs",

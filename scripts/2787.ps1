@@ -1,4 +1,4 @@
-﻿$backuppath = "\\server\sqlbackups\"
+$backuppath = "\\server\sqlbackups\"
 $alertaddress = "jrich523@domain.com"
 $smtp = "smtp.domain.com"
 $retaindays = 14

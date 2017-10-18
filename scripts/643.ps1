@@ -1,4 +1,4 @@
-﻿function LookUp-Location {
+function LookUp-Location {
 param([String] $mac)
 $mac = $mac.Replace(":","").Replace("-","")
 

@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 .SYNOPSIS 
     The script saves a username and password, encrypted with a custom key to to a file.
 .DESCRIPTION 

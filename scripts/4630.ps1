@@ -1,4 +1,4 @@
-﻿$oldserver = "hostname"
+$oldserver = "hostname"
 # Exclude the following shares. Update to particular needs of your environment.
 $excludes = @("DLOAgent","faxclient","CertEnroll","Resources$","FxsSrvCp$","tsweb","NETLOGON","WSUSTemp","prnproc$","SYSVOL","Address","tsclient","WsusContent","UpdateServicesPackages","print$")
 $shares = get-wmiobject -computername $oldserver -Class win32_share|where-object {($_.type -eq 0) -and ($excludes -notcontains $_.name)}

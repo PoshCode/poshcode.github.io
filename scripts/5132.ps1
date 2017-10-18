@@ -1,4 +1,4 @@
-﻿function buffer {
+function buffer {
 #.SYNOPSIS
 #  Like gather/take but for strings
 #.PARAMETER Using

@@ -1,4 +1,4 @@
-﻿param( $SqlServerOne = 'YourDatabaseServer',
+param( $SqlServerOne = 'YourDatabaseServer',
 	$FirstDatabase = 'FirstDatabaseToCompare', 
 	$SqlUsernameOne = 'SQL Login',
 	$SqlPasswordOne = 'SQL Password',

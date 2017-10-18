@@ -1,4 +1,4 @@
-﻿$DHCP_EnumSubnetClients = @'          
+$DHCP_EnumSubnetClients = @'          
     [DllImport("dhcpsapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
 public static extern uint DhcpEnumSubnetClients(
     string ServerIpAddress,

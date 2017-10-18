@@ -1,4 +1,4 @@
-﻿## du.ps1 Get-DiskUsage
+## du.ps1 Get-DiskUsage
 ###############################
 ## Note: $unit can be: kb, mb, gb, or an empty string (to get bytes)
 ###############################

@@ -1,4 +1,4 @@
-﻿# Load assembly
+# Load assembly
 [System.Reflection.Assembly]::LoadWithPartialName("Oracle.DataAccess")
 
 # Connection information

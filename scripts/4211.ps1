@@ -1,4 +1,4 @@
-﻿function Get-Temperature {
+function Get-Temperature {
   # .Link http://cdiac.ornl.gov/epubs/ndp/ushcn/monthly_doc.html
 [CmdletBinding()]
 param(

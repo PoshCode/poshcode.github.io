@@ -1,4 +1,4 @@
-﻿## Get-Screenshot -- THIS ONE works on PowerShell 1.0 and .Net 2.0 (or better) 
+## Get-Screenshot -- THIS ONE works on PowerShell 1.0 and .Net 2.0 (or better) 
 ############################################################################################################
 ## Usage:
 ##    Get-Screenshot "C:\Screencaps\Screenshot.jpg"

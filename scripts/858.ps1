@@ -1,4 +1,4 @@
-﻿###############################################################################
+###############################################################################
 ## Get-SpecialPath Function (should be an external function in your profile, really)
 ##   This is an enhancement of [Environment]::GetFolderPath($folder) to add 
 ##   support for 8 additional folders, including QuickLaunch, and the common 

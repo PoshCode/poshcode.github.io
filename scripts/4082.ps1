@@ -1,4 +1,4 @@
-﻿#code showing in RichTextBox
+#code showing in RichTextBox
 $code = @'
 using System;
 using System.Linq;

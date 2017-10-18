@@ -1,4 +1,4 @@
-﻿## Get-Credential 
+## Get-Credential 
 ## An improvement over the default cmdlet which has no options ...
 ###################################################################################################
 ## History

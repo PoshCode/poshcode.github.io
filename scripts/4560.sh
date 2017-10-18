@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 
 num="\033[1;36m"
 end="\033[0m"

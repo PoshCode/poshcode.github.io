@@ -1,4 +1,4 @@
-﻿# 
+# 
 # returns available parsers 
 # 
 function parsers {

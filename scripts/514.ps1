@@ -1,4 +1,4 @@
-﻿function Get-EnumValues ( $EnumType ) {
+function Get-EnumValues ( $EnumType ) {
 # Code somewhat stolen from Joel here: http://huddledmasses.org/ideas-for-writing-composable-powershell-scripts/
 	Begin {
 		$listItems = @()

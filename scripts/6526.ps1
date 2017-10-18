@@ -1,4 +1,4 @@
-﻿<#
+<#
 Found at https://mobile.twitter.com/gregzakharov/status/779344856103649280
 #>
 function Get-Pipelist {

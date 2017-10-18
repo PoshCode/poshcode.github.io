@@ -1,4 +1,4 @@
-﻿function Compress-Bitmap {
+function Compress-Bitmap {
 PARAM(
    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
    [IO.FileInfo]$SourceFile

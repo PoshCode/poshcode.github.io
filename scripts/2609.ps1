@@ -1,4 +1,4 @@
-﻿function Initialize-WindowsInstallPoint {
+function Initialize-WindowsInstallPoint {
 <#
 	.SYNOPSIS
 		Initializes a drive to become a Windows OS install point.

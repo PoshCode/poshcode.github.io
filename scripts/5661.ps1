@@ -1,4 +1,4 @@
-﻿###
+###
 # Purpose        : Export vCenter roles and permissions
 # Created        : 18/08/2010
 # Author         : VMware Community, namely Alan Renouf and Luc Dekens

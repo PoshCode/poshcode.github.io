@@ -1,4 +1,4 @@
-﻿# remove outlook duplicate notes and put the removed note in a file
+# remove outlook duplicate notes and put the removed note in a file
 
 $outlook = new-object -comobject outlook.application
 

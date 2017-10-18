@@ -1,4 +1,4 @@
-﻿$system = Get-WMIObject -class Win32_systemenclosure
+$system = Get-WMIObject -class Win32_systemenclosure
 $type = $system.chassistypes
 
 Switch ($Type)

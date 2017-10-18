@@ -1,4 +1,4 @@
-﻿# ModuleWriteErrorUsageExample.psm1
+# ModuleWriteErrorUsageExample.psm1
 
 # To use this you need to have the ModuleWriteError module loaded.
 #Import-Module c:\scripts\ModuleWriteError

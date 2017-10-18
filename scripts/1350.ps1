@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
     Cleanup after SMVI
 .PARAMETER Max

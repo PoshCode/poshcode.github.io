@@ -1,4 +1,4 @@
-﻿# Demo showing how to connect to VMware Lab Manager.
+# Demo showing how to connect to VMware Lab Manager.
 # Download LabManager.ps1 from http://www.poshcode.org/753.
 . .\LabManager.ps1
 

@@ -1,4 +1,4 @@
-﻿function Find-Application {
+function Find-Application {
 [CmdletBinding()]
    param( [string]$Name )
 begin {

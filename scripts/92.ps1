@@ -1,4 +1,4 @@
-﻿Param([string]$server,[string]$service,[string]$user,[string]$password)
+Param([string]$server,[string]$service,[string]$user,[string]$password)
 Begin{
     function ChangeServicePassword{
         Param([string]$srv,[string]$ms,[string]$usr,[string]$pwd)

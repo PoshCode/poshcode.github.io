@@ -1,4 +1,4 @@
-﻿function Find-PotentialAdmin {
+function Find-PotentialAdmin {
   <#
     .NOTES
         Author: greg zakharov

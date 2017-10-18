@@ -1,4 +1,4 @@
-﻿# Its a modification from the version in http://blogs.technet.com/jamesone/archive/2009/02/16/how-to-drive-twitter-or-other-web-tools-with-powershell.aspx
+# Its a modification from the version in http://blogs.technet.com/jamesone/archive/2009/02/16/how-to-drive-twitter-or-other-web-tools-with-powershell.aspx
 # usees https and gets all replies
 
 Function Get-TwitterReply { 

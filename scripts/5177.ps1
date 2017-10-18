@@ -1,4 +1,4 @@
-﻿function Invoke-Sql {
+function Invoke-Sql {
     <#
     .SYNOPSIS
         Invokes a SQL command.

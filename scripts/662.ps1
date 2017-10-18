@@ -1,4 +1,4 @@
-﻿##Purpose: Search Active Directory for all users, add them to specific groups based on homemta value, remove disabled users from same groups, and export all users to excel. 
+##Purpose: Search Active Directory for all users, add them to specific groups based on homemta value, remove disabled users from same groups, and export all users to excel. 
 
 ##Requires Excel 2003 or 2007 be installed on the local machine for exporting.
 ##Requires Quest ActiveRoles Management Shell for Active Directory

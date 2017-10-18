@@ -1,4 +1,4 @@
-﻿function Set-PrimaryDnsSuffix {
+function Set-PrimaryDnsSuffix {
 	param ([string] $Suffix)
 	
 	# http://msdn.microsoft.com/en-us/library/ms724224(v=vs.85).aspx

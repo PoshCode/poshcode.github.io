@@ -1,4 +1,4 @@
-﻿# encoding: utf-8
+# encoding: utf-8
 # api: ps
 # type: functions
 # category: data

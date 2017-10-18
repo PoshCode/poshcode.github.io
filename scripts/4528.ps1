@@ -1,4 +1,4 @@
-﻿function Search-WithMode {
+function Search-WithMode {
   if (-not [String]::IsNullOrEmpty($txtFile.Text)) {
     foreach ($p in ($env:path -split ';')) {
       foreach ($e in ($env:pathext -split ';')) {

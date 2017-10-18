@@ -1,4 +1,4 @@
-﻿function Invoke-CommandEx
+function Invoke-CommandEx
 {
 	param
 	(

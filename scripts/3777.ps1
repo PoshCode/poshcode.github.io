@@ -1,4 +1,4 @@
-﻿param(
+param(
 [Parameter(Position=0,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)]
 [alias("Name","ComputerName")] $Computer = @($env:computername),
 [switch] $ClearProxy

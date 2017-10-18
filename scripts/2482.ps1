@@ -1,4 +1,4 @@
-﻿function Get-DellWarranty {
+function Get-DellWarranty {
     <#
     .Synopsis
         Provides warranty information for one or more Dell service tags.

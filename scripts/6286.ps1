@@ -1,4 +1,4 @@
-﻿
+
 # Target and remove Lenovo Software
 $lenguids = get-wmiobject -class win32_product | where-object {$_.Name -like "Lenovo *"} | where-object {$_.Name -notmatch "Auto Scroll"} | where-object {$_.Name -notmatch "USB"}
 foreach($guid in $hpguids){

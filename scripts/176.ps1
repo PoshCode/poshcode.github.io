@@ -1,4 +1,4 @@
-﻿## Start-Demo.ps1
+## Start-Demo.ps1
 ##################################################################################################
 @@## This is an overhaul of Jeffrey Snover's original Start-Demo script by Joel "Jaykul" Bennett
 ##

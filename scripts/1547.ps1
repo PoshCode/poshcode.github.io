@@ -1,4 +1,4 @@
-﻿# Connect to vCenter
+# Connect to vCenter
 Connect-VIServer vcenter.domain.com
 
 # root folder is used for datacenter location

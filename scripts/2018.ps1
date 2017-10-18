@@ -1,4 +1,4 @@
-﻿Add-Type -TypeDefinition @"
+Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 

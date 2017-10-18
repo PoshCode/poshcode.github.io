@@ -1,4 +1,4 @@
-﻿### NOTE: the <#PS ... #> is the prompt!
+### NOTE: the <#PS ... #> is the prompt!
 
 <#PS [40] #> $ConfirmPreference
 

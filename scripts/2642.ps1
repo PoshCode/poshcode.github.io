@@ -1,4 +1,4 @@
-﻿function Get-Scope{
+function Get-Scope{
     $rtnScope = 0
     $global:scope = $false
     $scope = $true

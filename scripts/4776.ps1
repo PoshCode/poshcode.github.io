@@ -1,4 +1,4 @@
-﻿function Test-Assembly {
+function Test-Assembly {
   param(
     [Parameter(Mandatory=$true)]
     [String]$Assembly

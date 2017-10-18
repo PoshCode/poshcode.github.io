@@ -1,4 +1,4 @@
-﻿function getmoviestat ($drives) { 
+function getmoviestat ($drives) { 
 
 $drives=$drives | %{if ($_.systemname -eq $env:computername) {add-member -inputobject $_ -name BRs -membertype noteproperty -value ( gci -ea 0 "$($_.name)\media\BR movies\*" -include *.mkv,*.m2ts  ) -passthru } else {add-member -inputobject $_ -name BRs -membertype noteproperty -value ( invoke-command -session $s -scriptblock { param ($name) gci -ea 0 "$name\media\BR movies\*" -include *.mkv,*.m2ts } -argumentlist $_.name ) -passthru}}
 

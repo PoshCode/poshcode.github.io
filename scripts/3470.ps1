@@ -1,4 +1,4 @@
-﻿#function Get-Scope {
+#function Get-Scope {
 #.Synopsis 
 #  Determine the scope of execution (are you in a module? how many scope layers deep are you?)
 #.Parameter Invocation

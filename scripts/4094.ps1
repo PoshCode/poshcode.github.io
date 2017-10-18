@@ -1,4 +1,4 @@
-﻿$nul = "<NULL>"
+$nul = "<NULL>"
 
 function Get-AssembliesTree {
   [AppDomain]::CurrentDomain.GetAssemblies() | % {

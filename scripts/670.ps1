@@ -1,4 +1,4 @@
-﻿## ConvertTo-DekiContent (aka Convert Help to Html)
+## ConvertTo-DekiContent (aka Convert Help to Html)
 ####################################################################################################
 ## Converts the -Full help output to HTML markup for insertion into web pages.
 ####################################################################################################

@@ -1,4 +1,4 @@
-﻿# setup the test folders
+# setup the test folders
    md c:\grandfather\father\son
    md c:\grandmother\mother\daughter
 

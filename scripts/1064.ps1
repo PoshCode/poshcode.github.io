@@ -1,4 +1,4 @@
-﻿#Change these settings as needed
+#Change these settings as needed
 #MS Access 2007 Data Components required
 $connString = 'Provider=Microsoft.ACE.OLEDB.12.0;WSS;IMEX=2;RetrieveIds=Yes; DATABASE=http://sharepoint.acme.com/;LIST={96801432-2d03-42b8-82b0-ac96ca9fea8a};'
 #See http://chadwickmiller.spaces.live.com/blog/cns!EA42395138308430!275.entry for instructions on obtaining list GUID

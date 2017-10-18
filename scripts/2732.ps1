@@ -1,4 +1,4 @@
-﻿#######################
+#######################
 <#
 Version History
 v1.0   - Chad Miller - Initial release

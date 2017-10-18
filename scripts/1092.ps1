@@ -1,4 +1,4 @@
-﻿#The PowerShell Talk
+#The PowerShell Talk
 #Virtualization Congress 2009
 #
 #Provision from CSV (csv-provision.ps1)

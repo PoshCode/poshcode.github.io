@@ -1,4 +1,4 @@
-﻿#Jason Ochoa 9/16/09
+#Jason Ochoa 9/16/09
 #Set up NaServerObject
 $null = [reflection.assembly]::loadfile('C:\DotNet\ManageOntap.dll')
 $Toaster1 = new-Object netapp.manage.naserver('Toaster1',1,0)

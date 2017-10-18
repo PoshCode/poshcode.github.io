@@ -1,4 +1,4 @@
-﻿#Import-Module showui
+#Import-Module showui
 $Windowparam = @{
     Width = 500
     Height = 400

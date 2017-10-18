@@ -1,4 +1,4 @@
-﻿function Get-User($user)
+function Get-User($user)
 {
 	# this function should be passed the CN of the user to be returned
 	$dom = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain() 

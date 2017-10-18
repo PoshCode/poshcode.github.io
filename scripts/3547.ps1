@@ -1,4 +1,4 @@
-﻿# .SYNOPSIS
+# .SYNOPSIS
 # Import environment variables from cmd to PowerShell
 # .DESCRIPTION
 # Invoke the specified command (with parameters) in cmd.exe, and import any environment variable changes back to PowerShell

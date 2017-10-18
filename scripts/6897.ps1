@@ -1,4 +1,4 @@
-﻿## Start-Encryption
+## Start-Encryption
 ##################################################################################################
 ## Rijndael symmetric key encryption ... with no passes on the key. Very lazy.
 ## USAGE:

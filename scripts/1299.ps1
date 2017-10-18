@@ -1,4 +1,4 @@
-﻿# This function returns all datastores that can be shared amongst ESX hosts.
+# This function returns all datastores that can be shared amongst ESX hosts.
 function Get-ShareableDatastore {
 	# Get all datastores.
 	$datastores = Get-Datastore

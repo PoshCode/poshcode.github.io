@@ -1,4 +1,4 @@
-﻿import-module activedirectory
+import-module activedirectory
 
 "Active Directory Module Initiated"
 

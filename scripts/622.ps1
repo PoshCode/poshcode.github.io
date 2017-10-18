@@ -1,4 +1,4 @@
-﻿function connect-domain_X {
+function connect-domain_X {
 		BEGIN {$foregroundcolor= (get-host).ui.rawui.get_foregroundcolor()
 			Write-Host "";
 					"---------------------------------" ;

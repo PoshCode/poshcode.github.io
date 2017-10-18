@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 Set-Alias junction Set-JunctionPoint
 
 $script:ini = @'

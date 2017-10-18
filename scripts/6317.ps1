@@ -1,4 +1,4 @@
-﻿## CONFIG START ##
+## CONFIG START ##
 
 	# Trap exit codes. Log when script/service stops.
 	trap { (get-date -Format g) + "Service stopped`: {0}" -f $_.Exception.Message | Out-File $configfile.settings.siglogerror -Append; continue  }

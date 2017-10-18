@@ -1,4 +1,4 @@
-﻿# Declare custom object 
+# Declare custom object 
 $CustObj = @()
 
 # Get PID and %CPU. doesn't display owner and other information though

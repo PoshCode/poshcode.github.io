@@ -1,4 +1,4 @@
-﻿function Connect-OnlinePizza
+function Connect-OnlinePizza
 {
     [cmdletbinding()]
     param(

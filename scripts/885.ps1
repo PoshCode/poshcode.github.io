@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Pivot multiple objects which have properties that are name, value pairs
 #.Description
 #  Takes a series of objects where there are multiple rows which have a pair of columns where the values are different on ech row with the name and value of an additional property, and outputs new objects which have those new properties on them.

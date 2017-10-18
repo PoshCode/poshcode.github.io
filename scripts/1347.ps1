@@ -1,4 +1,4 @@
-﻿$sevenz = 'D:\u\7-Zip\current\7z.exe'
+$sevenz = 'D:\u\7-Zip\current\7z.exe'
 $drops = 'D:\chromium\drops'
 
 $VerbosePreference = 'Continue'

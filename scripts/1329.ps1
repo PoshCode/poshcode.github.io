@@ -1,4 +1,4 @@
-﻿Function Get-ExpiredCert {
+Function Get-ExpiredCert {
 <#
 	.SYNOPSIS
 		Reports the number of expired certificates published to a user account

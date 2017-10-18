@@ -1,4 +1,4 @@
-﻿function Get-FeedInfo([string[]]$feeds) {
+function Get-FeedInfo([string[]]$feeds) {
 # $feeds is an array of rss/atom URLs 
 $blogs=@(); $broken=@(); $feeds = $feeds | sort -unique {$_}
 foreach($feed in $feeds){ 

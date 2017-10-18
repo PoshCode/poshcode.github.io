@@ -1,4 +1,4 @@
-﻿Set-StrictMode -off
+Set-StrictMode -off
 
 #
 # Module: PowerShell Console ScreenSaver Version 0.1

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis 
    Open a file for editing in notepad++
 .Description

@@ -1,4 +1,4 @@
-﻿<#  view all template wsp on custom site url
+<#  view all template wsp on custom site url
 
     based on
     http://www.danielbrown.id.au/Lists/Posts/Post.aspx?ID=74

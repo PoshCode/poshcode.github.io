@@ -1,4 +1,4 @@
-﻿$folder = "C:\Users\jrg26\Pictures\"
+$folder = "C:\Users\jrg26\Pictures\"
 $wait = 10
 
 function New-PInvoke

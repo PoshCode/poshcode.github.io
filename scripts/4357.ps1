@@ -1,4 +1,4 @@
-﻿###Variable to be changed
+###Variable to be changed
 ##Server Setup
 Write-host "Start time: "(get-date).ToShortTimeString()""
 $rc = 1

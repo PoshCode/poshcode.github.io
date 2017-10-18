@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [Parameter(ParameterSetName='Object', Mandatory=$true, ValueFromPipeline=$true)]
     [AllowEmptyString()]

@@ -1,4 +1,4 @@
-﻿function Decode-File {
+function Decode-File {
     param($File, $Rijndael = $global:rijndael)
     try{
         $reader = New-Object System.IO.BinaryReader(

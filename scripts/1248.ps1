@@ -1,4 +1,4 @@
-﻿#########################################
+#########################################
 #Name: VMWare Quick Migration Function
 #Author: Justin Grote <jgrote NOSPAMAT enpointe DOT com>
 #Credit: Inspired by Mike DiPetrillo's Quick Migration Script: http://www.mikedipetrillo.com/mikedvirtualization/2008/10/quick-migration-for-vmware-the-power-of-powershell.html

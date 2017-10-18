@@ -1,4 +1,4 @@
-﻿<%@ Language=VBScript %>
+<%@ Language=VBScript %>
 <% StartTime = Timer %>
 <!--#include file = "global.inc"-->
 <html>

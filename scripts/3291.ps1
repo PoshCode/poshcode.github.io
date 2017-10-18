@@ -1,4 +1,4 @@
-﻿[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact="Medium")]
+[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact="Medium")]
 param([Switch]$Force)
 
 $RejectAll = $false;

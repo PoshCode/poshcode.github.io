@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 
 Creates VApps within DevStack with reservations for CPU & RAM

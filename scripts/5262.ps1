@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 if (!(Test-Path alias:dllexp)) { Set-Alias dllexp Read-DllExportFunctions }
 
 function Read-DllExportFunctions {

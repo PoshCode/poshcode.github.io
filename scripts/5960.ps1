@@ -1,4 +1,4 @@
-﻿function ConvertFrom-DN {
+function ConvertFrom-DN {
     
     
     #Based on: http://practical-admin.com/blog/convert-dn-to-canoincal-and-back/

@@ -1,4 +1,4 @@
-﻿function Get-User($user)
+function Get-User($user)
 {
 	$dom = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain() 
 	$root = [ADSI] "LDAP://$($dom.Name)"

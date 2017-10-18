@@ -1,4 +1,4 @@
-﻿# Svendsen Tech's .Net version finding script.
+# Svendsen Tech's .Net version finding script.
 # See the full documentation at:
 # http://www.powershelladmin.com/wiki/Script_for_finding_which_dot_net_versions_are_installed_on_remote_workstations
 

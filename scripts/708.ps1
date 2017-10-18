@@ -1,4 +1,4 @@
-﻿function Get-Payment {
+function Get-Payment {
 	param ( $LoanAmount, [double]$InterestRatePerPeriod, $NumberPayments )
 	$a = $LoanAmount
 	$b = $InterestRatePerPeriod*[math]::Pow(($InterestRatePerPeriod + 1),$NumberPayments)

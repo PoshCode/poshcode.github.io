@@ -1,4 +1,4 @@
-﻿Add-PSSnapin Microsoft.SharePoint.PowerShell -ErrorAction SilentlyContinue
+Add-PSSnapin Microsoft.SharePoint.PowerShell -ErrorAction SilentlyContinue
 
 $ParamObject = new-object PSObject
 

@@ -1,4 +1,4 @@
-﻿param ( $Age = 30 )
+param ( $Age = 30 )
 
 Connect-VIServer vcenter.domain.com
 $vm = Get-VM

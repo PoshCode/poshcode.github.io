@@ -1,4 +1,4 @@
-﻿Function GetTOCStats {
+Function GetTOCStats {
     $TOCsummary = get-content -path "$env:USERPROFILE\desktop\testReport.log"
     [array]::Reverse($TOCsummary)
     [int] $i = "0"

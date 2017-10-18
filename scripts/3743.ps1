@@ -1,4 +1,4 @@
-﻿function Get-Installed 
+function Get-Installed 
 {
       <#
   .SYNOPSIS

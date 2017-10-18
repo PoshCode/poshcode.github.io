@@ -1,4 +1,4 @@
-﻿
+
 function Show-Object{
 param(
     ## The object to examine

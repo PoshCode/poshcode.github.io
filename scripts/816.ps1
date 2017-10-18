@@ -1,4 +1,4 @@
-﻿
+
 ## Check-ClusterPatches.ps1
 
 param($ClusterNode=$Env:ComputerName)

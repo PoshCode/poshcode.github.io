@@ -1,4 +1,4 @@
-﻿$spaces=0
+$spaces=0
 for ([int]$rownum=1;;$rownum++) 
     {
     

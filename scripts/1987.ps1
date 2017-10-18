@@ -1,4 +1,4 @@
-﻿function ConvertVMDiskToThin($vm, $datastore) {
+function ConvertVMDiskToThin($vm, $datastore) {
    $vmView = Get-View $vm
    $dsView = Get-View $datastore
    

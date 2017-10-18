@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Sets my favorite prompt functions
 #.Notes
 #  I put the id in my prompt because it's very, very useful.

@@ -1,4 +1,4 @@
-﻿function Get-ProductKey {
+function Get-ProductKey {
   param(
     [Parameter(Mandatory=$false,
                ValueFromPipeline=$true)]

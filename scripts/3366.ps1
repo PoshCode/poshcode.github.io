@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 .NOTES
     AUTHOR: Sunny Chakraborty(sunnyc7@gmail.com)

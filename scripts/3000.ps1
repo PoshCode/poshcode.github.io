@@ -1,4 +1,4 @@
-﻿#--------------------------------------------------------------------------------------------------------------
+#--------------------------------------------------------------------------------------------------------------
 #Convert Untitled1.ps1 to ASCII encoding
 $psise.CurrentPowerShellTab.Files | % { 
     # set private field which holds default encoding to ASCII 

@@ -1,4 +1,4 @@
-﻿function New-PemFile {
+function New-PemFile {
 <#
 	.SYNOPSIS
 		Creates a new PEM file from one or more certificate files.

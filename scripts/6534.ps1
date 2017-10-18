@@ -1,4 +1,4 @@
-﻿<# https://mobile.twitter.com/gregzakharov/status/781216796443602945 #>
+<# https://mobile.twitter.com/gregzakharov/status/781216796443602945 #>
 
 function Get-DisplayDevices {
   <#

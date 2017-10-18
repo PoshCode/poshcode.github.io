@@ -1,4 +1,4 @@
-﻿' Script:    Master_Audit_AD_Account_Management - 2008 v4 S1S2.vbs (Version 4 Section1 and Section2 combi script) 
+' Script:    Master_Audit_AD_Account_Management - 2008 v4 S1S2.vbs (Version 4 Section1 and Section2 combi script) 
 ' Purpose:  Parse a DC's security event log and generate account management events, log and e-mail for past 24hs 
 ' Author:   Paperclips (The Dark Lord) 
 ' Email:    magiconion_M@hotmail.com 

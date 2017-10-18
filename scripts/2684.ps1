@@ -1,4 +1,4 @@
-﻿function Add-SSLCertificate{
+function Add-SSLCertificate{
     param([string]$pfxPath,[string]$pfxPassword,[string]$hostHeader,[string]$siteName)
 
     $certMgr = New-Object -ComObject IIS.CertObj -ErrorAction SilentlyContinue    

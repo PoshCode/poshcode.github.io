@@ -1,4 +1,4 @@
-﻿function Get-Constructor {
+function Get-Constructor {
 PARAM( [Type]$type )
 $type.GetConstructors() | 
 	Format-Table @{

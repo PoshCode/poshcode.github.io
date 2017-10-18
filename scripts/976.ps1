@@ -1,4 +1,4 @@
-﻿#requires -Version 2.0
+#requires -Version 2.0
 Function Ping-Subnet {
     #.Synopsis
     # Ping a subnet returning all alive hosts.

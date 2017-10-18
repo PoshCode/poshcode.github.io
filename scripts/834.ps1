@@ -1,4 +1,4 @@
-﻿function Play-Notes
+function Play-Notes
 {
 $defaultduration = 5;if($args[0] -is [int]) {$defaultduration = $args[0]}
 for($i = 0;$i -lt $args.length;$i++)

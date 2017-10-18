@@ -1,4 +1,4 @@
-﻿function Get-CryptoBytes {
+function Get-CryptoBytes {
 #.Synopsis
 #  Generate Cryptographically Random Bytes
 #.Description

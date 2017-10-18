@@ -1,4 +1,4 @@
-﻿function Remove-Alpha {
+function Remove-Alpha {
 	param([Parameter(Mandatory=$true)]
 		  [string]$ForegroundHex,
 		  [string]$BackgroundHex = '#000000')

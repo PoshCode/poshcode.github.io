@@ -1,4 +1,4 @@
-﻿Function Start-UsingLongDirectories
+Function Start-UsingLongDirectories
         {
         <#
         .DESCRIPTION

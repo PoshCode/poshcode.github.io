@@ -1,4 +1,4 @@
-﻿cd M:\Files\Netcasts\ShowName		# switch to the diretory to store your content
+cd M:\Files\Netcasts\ShowName		# switch to the diretory to store your content
 Import-Module BitsTransfer 			# enable BITS on host machine as a file transfer method
 $start=47 					# start epidode number
 $end=170 					# end epidode number

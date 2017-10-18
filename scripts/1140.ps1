@@ -1,4 +1,4 @@
-﻿function upload-directory {
+function upload-directory {
   param( [string] $server = $( Throw "You must specify an FTP server to logon to."),
 	 [string] $dir = $( Throw "You must specify a local directory to upload (ie, C:\Testing\FTPTest\)"),
 	 [switch] $overwrite = $false,

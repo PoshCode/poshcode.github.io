@@ -1,4 +1,4 @@
-﻿function RemoveSpace([string]$text) {  
+function RemoveSpace([string]$text) {  
     $private:array = $text.Split(" ", `
     [StringSplitOptions]::RemoveEmptyEntries)
     [string]::Join(" ", $array) }

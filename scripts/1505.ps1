@@ -1,4 +1,4 @@
-﻿# see http://msdn2.microsoft.com/en-us/library/bb201634.aspx
+# see http://msdn2.microsoft.com/en-us/library/bb201634.aspx
 #
 # *NdisDeviceType 
 #

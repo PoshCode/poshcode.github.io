@@ -1,4 +1,4 @@
-﻿function Get-PEManifest {
+function Get-PEManifest {
   <#
     .EXAMPLE
         PS C:\>Get-PEManifets E:\SysInternals\whois.exe

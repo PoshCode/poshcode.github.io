@@ -1,4 +1,4 @@
-﻿$ServerInstance = "YourCMSServerInstance"
+$ServerInstance = "YourCMSServerInstance"
 $query = @"
 SELECT DISTINCT s.name
 FROM msdb.dbo.sysmanagement_shared_registered_servers s

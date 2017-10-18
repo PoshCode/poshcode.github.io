@@ -1,4 +1,4 @@
-﻿
+
 
 	Write-Host ""
 	Write-Host "This is dangerous - beware!"

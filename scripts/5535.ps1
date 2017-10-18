@@ -1,4 +1,4 @@
-﻿while ($TRUE) {
+while ($TRUE) {
 	$Requests = get-moverequest|get-moverequeststatistics
 	$Requests | Foreach-Object {
 		if ($_.status -eq "InProgress") {

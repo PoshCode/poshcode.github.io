@@ -1,4 +1,4 @@
-﻿workflow Send-Tweet {
+workflow Send-Tweet {
     param (
     [Parameter(Mandatory=$true)][string]$Message
     )

@@ -1,4 +1,4 @@
-﻿<#
+<#
  # Script FileName: func_Invoke-RemoteCommand.ps1
  # Current Version: A03
  # Description: Run command on a remote computer as the currently logged on user.

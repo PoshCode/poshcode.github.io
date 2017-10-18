@@ -1,4 +1,4 @@
-﻿function cim-ei {
+function cim-ei {
 <#
 .SYNOPSIS
     Enumerate Instances of a class on a CIMOM via CIM-XML interface

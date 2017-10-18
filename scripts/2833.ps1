@@ -1,4 +1,4 @@
-﻿function get-binary($number,$words=1+(1*[int]($number -gt 255))) {
+function get-binary($number,$words=1+(1*[int]($number -gt 255))) {
 	# Takes the passed numerical value and converts to a Binary word.
 	# Pads 0 to the left to make it a proper set of 8 or 16
 	#

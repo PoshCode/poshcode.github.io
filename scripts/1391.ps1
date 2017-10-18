@@ -1,4 +1,4 @@
-﻿# Get-CalendarWeek by Holger Adam
+# Get-CalendarWeek by Holger Adam
 # Simple function to retrieve the calendar week to a given or the current date.
 
 function Get-CalendarWeek {

@@ -1,4 +1,4 @@
-﻿function Touch-File {
+function Touch-File {
 #.SYNOPSIS
 #  Port of the UNIX touch command
 #.EXAMPLE

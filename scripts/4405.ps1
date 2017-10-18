@@ -1,4 +1,4 @@
-﻿    #.Synopsis
+    #.Synopsis
     #   Does a raw WHOIS query and returns the results
     #.Example
     #   whois poshcode.org

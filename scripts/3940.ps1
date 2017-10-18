@@ -1,4 +1,4 @@
-﻿$AD = 'C:\temp\ad.csv'
+$AD = 'C:\temp\ad.csv'
 $o365 = 'C:\temp\o365.csv'
 $duplicates = 'C:\temp\Duplicate Office 365 users.csv'
 $log = 'C:\temp\Duplicate Office 365 users.log'

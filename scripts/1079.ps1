@@ -1,4 +1,4 @@
-﻿# In order to enumerate all the WMI namespaces, you must first connect to the "root" namespace,
+# In order to enumerate all the WMI namespaces, you must first connect to the "root" namespace,
 # query for all the "__NAMESPACE" instances, and for each instance recursively repeat this process.
 # You can use the computerName parameter of Get-WmiNamespace to list the WMI namespaces on the remote computer.
 

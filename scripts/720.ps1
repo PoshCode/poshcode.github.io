@@ -1,4 +1,4 @@
-﻿## New-Type (like Add-Type, but for PowerShell 1.0)
+## New-Type (like Add-Type, but for PowerShell 1.0)
 ## Takes C# source code, and compiles it (in memory) for use in scripts ...
 ####################################################################################################
 ## USAGE EXAMPLE:

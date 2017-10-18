@@ -1,4 +1,4 @@
-﻿## .\SharePoint_Users_Read.ps1 "http://some.urlname.com/" "User Information List" ""
+## .\SharePoint_Users_Read.ps1 "http://some.urlname.com/" "User Information List" ""
 ## .\SharePoint_Users_Read.ps1 "http://some.urlname.com/" "User Information List" "user, someone"
 
 param(

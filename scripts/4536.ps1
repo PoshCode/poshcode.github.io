@@ -1,4 +1,4 @@
-﻿#Follow me on twitter @gregzakharov
+#Follow me on twitter @gregzakharov
 
 $btnBut1_Click= {
   $txtBox1.Text = [String]::Empty

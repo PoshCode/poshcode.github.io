@@ -1,4 +1,4 @@
-﻿function Select-Expand {
+function Select-Expand {
 <# 
 .Synopsis
    Like Select-Object -Expand, but with recursive iteration of a select chain

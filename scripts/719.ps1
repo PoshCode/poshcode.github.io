@@ -1,4 +1,4 @@
-﻿function Compare-ADUserGroups
+function Compare-ADUserGroups
 {
 	#requires -pssnapin Quest.ActiveRoles.ADManagement
 	param (

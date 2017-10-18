@@ -1,4 +1,4 @@
-﻿if (!(Test-Path alias:whatis)) { Set-Alias whatis Get-ObjectType }
+if (!(Test-Path alias:whatis)) { Set-Alias whatis Get-ObjectType }
 
 function Get-ObjectType {
   <#

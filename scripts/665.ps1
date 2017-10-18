@@ -1,4 +1,4 @@
-﻿# Create-Sequence.ps1
+# Create-Sequence.ps1
 # requires -version 1
 #
 # Create a sequence object similar to an Oracle sequence.

@@ -1,4 +1,4 @@
-﻿    # When in the cert provider - objects returned by gci must be completed by a particular member (not by ToString).
+    # When in the cert provider - objects returned by gci must be completed by a particular member (not by ToString).
     # This can be done more generically but for now this is super handy to complete with these types
 
       $firstChildType = $childitems[0].GetType()

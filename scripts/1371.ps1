@@ -1,4 +1,4 @@
-﻿# Get a VM's last power on date based on the VM's events.
+# Get a VM's last power on date based on the VM's events.
 # Requires PowerCLI 4.0 and PowerShell v2.
 function Get-LastPowerOn {
 	param(

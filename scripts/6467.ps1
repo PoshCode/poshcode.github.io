@@ -1,4 +1,4 @@
-﻿Set-Alias ~! Invoke-LostOperator
+Set-Alias ~! Invoke-LostOperator
 
 function Invoke-LostOperator {
   <#

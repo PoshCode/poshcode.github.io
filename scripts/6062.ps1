@@ -1,4 +1,4 @@
-﻿trap { Write-Warning ($_.ScriptStackTrace | Out-String) }
+trap { Write-Warning ($_.ScriptStackTrace | Out-String) }
 
 # This timer is used by Trace-Message, I want to start it immediately
 $Script:TraceVerboseTimer = New-Object System.Diagnostics.Stopwatch

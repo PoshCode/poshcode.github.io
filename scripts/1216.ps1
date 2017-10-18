@@ -1,4 +1,4 @@
-﻿## Works great for a..f or g..a
+## Works great for a..f or g..a
 ## BUT WEIRD for Z..a or A..a or anything non-latin
 function Get-CharRange ( [char]$Start, [char]$End ) {
 	[char[]]($Start..$End)

@@ -1,4 +1,4 @@
-﻿function Get-DomainPasswordPolicy  
+function Get-DomainPasswordPolicy  
 
 {
 	$domain = [ADSI]"WinNT://$env:userdomain"

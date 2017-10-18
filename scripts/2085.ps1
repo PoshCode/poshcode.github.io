@@ -1,4 +1,4 @@
-﻿# Get the start date for the tracking log search
+# Get the start date for the tracking log search
 $Start = (Get-Date -Hour 00 -Minute 00 -Second 00).AddDays(-1)
 
 # Get the end date for the tracking log search

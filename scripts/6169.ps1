@@ -1,4 +1,4 @@
-﻿function Convert-MacAddress {
+function Convert-MacAddress {
 <#
 	.SYNOPSIS
 		Converts a MAC address from one valid format to another.

@@ -1,4 +1,4 @@
-﻿#There are a lot of ways to copy\paste text from the clipboard. For example, you can use context menu of host which
+#There are a lot of ways to copy\paste text from the clipboard. For example, you can use context menu of host which
 #is called with Alt+Space combination or use standard clip utility or third party modules and extensions. But all
 #this is not a way a true Jedi ;) At firstly you can use Clipboard class which defined into System.Windows.Forms
 #namespace but note that it requires STA mode.

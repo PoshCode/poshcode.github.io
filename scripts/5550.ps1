@@ -1,4 +1,4 @@
-﻿if (!(Test-Path alias:cal)) { Set-Alias cal Get-Calendar }
+if (!(Test-Path alias:cal)) { Set-Alias cal Get-Calendar }
 
 function Get-Calendar {
   <#

@@ -1,4 +1,4 @@
-﻿## Requires the Experimental.IO "LongPath" library from the BCL team: http://bcl.codeplex.com/
+## Requires the Experimental.IO "LongPath" library from the BCL team: http://bcl.codeplex.com/
 ## Compile it against .Net 3.5 (for PowerShell's sake) and place it the module folder with this psm1
 if(!("Microsoft.Experimental.IO.LongPathDirectory" -as [type])) {
    Add-Type -Path $PSScriptRoot\Microsoft.Experimental.IO.dll

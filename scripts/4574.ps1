@@ -1,4 +1,4 @@
-﻿$FriendlyFolderName = "MyFriendlyAppV"
+$FriendlyFolderName = "MyFriendlyAppV"
 $appvroot = $(Get-Itemproperty HKLM:\SOFTWARE\Microsoft\AppV\Client\Streaming).PackageInstallationRoot
 $appvPSroot = $appvroot.Replace('%programdata%',$env:ProgramData)
 

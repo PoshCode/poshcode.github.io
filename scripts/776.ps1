@@ -1,4 +1,4 @@
-﻿function invoke-caretline
+function invoke-caretline
 {
 invoke-expression $([Regex]::Split($psISE.CurrentOpenedFile.Editor.text,"`r`n" )[$psISE.CurrentOpenedFile.Editor.caretline-1])
 }

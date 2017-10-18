@@ -1,4 +1,4 @@
-﻿$cleanDirectory = "C:\CLEAN"
+$cleanDirectory = "C:\CLEAN"
 $dirtyDirectory = "C:\DIRTY"
 $monitoredFolders = "A", "B", "C"
 

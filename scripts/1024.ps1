@@ -1,4 +1,4 @@
-﻿$excel = New-Object -comobject Excel.Application
+$excel = New-Object -comobject Excel.Application
 $excel.visible = $False #Change to True to see the excel build
 $wbook = $excel.Workbooks.Add()
 $wsheet = $wbook.Worksheets.Item(1)

@@ -1,4 +1,4 @@
-﻿# Export sharepoint web contents with powershell like
+# Export sharepoint web contents with powershell like
 # stsadm -o export -url http://localhost:80/wiki -filename export.cab -overwrite -versions 1
 #
 # http://www.sharepointblogs.com/mossms/default.aspx

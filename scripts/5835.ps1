@@ -1,4 +1,4 @@
-﻿#requires -version 4
+#requires -version 4
 function Get-APIKey {
   <#
     .SYNOPSIS

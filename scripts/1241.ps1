@@ -1,4 +1,4 @@
-﻿$forest = [DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest()
+$forest = [DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest()
 $Schema = $forest.schema 
 $Properties = $Schema.FindAllProperties()
 foreach($property in $Properties)

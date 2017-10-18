@@ -1,4 +1,4 @@
-﻿
+
 function Get-SCCMUserComputer
 {
     [CmdletBinding(DefaultParameterSetName="Identity")]

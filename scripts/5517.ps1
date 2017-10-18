@@ -1,4 +1,4 @@
-﻿# function Edit-Function {
+# function Edit-Function {
     [CmdletBinding()]
     param(
         [Parameter(ValueFromPipelineByPropertyName=$true, Mandatory=$true)]

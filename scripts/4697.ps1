@@ -1,4 +1,4 @@
-﻿#########################################
+#########################################
 # MaintenanceMode.ps1
 # Created by NinjaTechie 2013-12-12
 # http://ninjatechie.net/

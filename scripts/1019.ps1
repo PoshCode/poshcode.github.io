@@ -1,4 +1,4 @@
-﻿#region setup AS function
+#region setup AS function
 function new-selectexpression
 {
 if ($args.count -eq 1) { $theargs = $args[0] } else {$theargs= $args }

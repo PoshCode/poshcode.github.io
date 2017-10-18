@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
    This is a powershell script form to remove a users local profile from a workstation and
    and gives the option to remove the users profile fromt he network.

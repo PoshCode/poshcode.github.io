@@ -1,4 +1,4 @@
-﻿#from calendar import month; print month(2013, 11)
+#from calendar import month; print month(2013, 11)
 Set-Alias cal Get-Calendar
 
 function Get-Calendar {

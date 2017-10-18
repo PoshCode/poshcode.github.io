@@ -1,4 +1,4 @@
-﻿#########################################################################
+#########################################################################
 ## DuckDNS Powershell                                                  ##
 ## This script needs to be run from an Administrator Powershell prompt ##
 ## Otherwise it won't be able to create the Eventlog entry to post     ##

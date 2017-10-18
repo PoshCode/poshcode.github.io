@@ -1,4 +1,4 @@
-﻿#
+#
 # import-VCBImage.ps1    : use the Converter to import a VCB created disk image into a datacenter
 #
 # Author:       LucD

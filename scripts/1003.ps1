@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Download comic strip images
 #.Description
 #  Gets the latest comic from any of several different comic strips and downloads it to "My Pictures\Comix"

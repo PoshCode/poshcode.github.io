@@ -1,4 +1,4 @@
-﻿$a="<style>"
+$a="<style>"
 $a=$a+"BODY{background-color :#FFFFF}"
 $a=$a+"TABLE{Border-width:thin;border-style: solid;border-color:Black;border-collapse: collapse;}"
 $a=$a+"TH{border-width: 0px;padding: 0px;border-style: solid;border-color: black;background-color: ThreeDShadow}"

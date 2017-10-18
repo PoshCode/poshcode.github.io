@@ -1,4 +1,4 @@
-﻿<#
+<#
 -------------------------------------------------------------------------------
 Name:    Social Media Scripting Framework
 Module:  Twitter

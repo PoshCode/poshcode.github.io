@@ -1,4 +1,4 @@
-﻿# - SnapReminder V1.0 By Virtu-Al - http://virtu-al.net
+# - SnapReminder V1.0 By Virtu-Al - http://virtu-al.net
 #
 # Please use the below variables to define your settings before use
 #

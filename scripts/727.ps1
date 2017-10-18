@@ -1,4 +1,4 @@
-﻿## PowerBot 2.0
+## PowerBot 2.0
 ## A simple framework to get you started writing your own IRC bots in PowerShell
 ####################################################################################################
 ## Requires Meebey.SmartIrc4net.dll to be in your ...\WindowsPowerShell\Libraries\

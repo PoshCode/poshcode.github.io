@@ -1,4 +1,4 @@
-﻿function ConvertTo-PseudoType {
+function ConvertTo-PseudoType {
 <#
 .Synopsis
    Converts objects to custom PSObjects with robust type support

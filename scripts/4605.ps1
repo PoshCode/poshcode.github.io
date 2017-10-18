@@ -1,4 +1,4 @@
-﻿#skrypt agregujace rozne raporty o obiektach AD
+#skrypt agregujace rozne raporty o obiektach AD
 #author: voytas
 #date: 11.2013
 

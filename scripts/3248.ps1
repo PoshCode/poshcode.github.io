@@ -1,4 +1,4 @@
-﻿function SearchZIPfiles {
+function SearchZIPfiles {
 <#
 .SYNOPSIS 
 Search for (filename) strings inside compressed ZIP or RAR files (V2.4).

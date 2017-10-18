@@ -1,4 +1,4 @@
-﻿var pe = pe || {
+var pe = pe || {
   getRawData : function(fileName) {
     try {
       var xml = new ActiveXObject('Microsoft.XMLDOM').createElement('Binary'),

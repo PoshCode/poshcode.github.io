@@ -1,4 +1,4 @@
-﻿Function Write-Console
+Function Write-Console
 {
   <#
     .SYNOPSIS

@@ -1,4 +1,4 @@
-﻿###  A first stab at the worlds simplest DSL:
+###  A first stab at the worlds simplest DSL:
 ###  How to generate XML from PowerShell, in code instead of string-substitution
 
 $xlr8r = [type]::gettype("System.Management.Automation.TypeAccelerators")  

@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.AUTHOR
 		Will Steele (wlsteele@gmail.com)
 

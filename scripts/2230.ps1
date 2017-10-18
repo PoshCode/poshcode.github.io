@@ -1,4 +1,4 @@
-﻿##############################################################
+##############################################################
 #Author: Ravikanth Chaganti (http://www.ravichaganti.com/blog)
 #Script: SaveISEPrefs.ps1
 #Description: PowerShell ISE profile script to automatically

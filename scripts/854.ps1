@@ -1,4 +1,4 @@
-﻿# These functions are meant to help generate a table that shows differences between
+# These functions are meant to help generate a table that shows differences between
 # cmdlets among different versions of a module.
 # You will need a MoinMoin wiki to render the output.
 # If you don't have a MoinMoin wiki you might be able to use the sandbox at http://moinmo.in/WikiSandBox

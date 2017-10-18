@@ -1,4 +1,4 @@
-﻿function Write-Choice {
+function Write-Choice {
 	param($prompt, $choice)
 
 	write-host -n "["

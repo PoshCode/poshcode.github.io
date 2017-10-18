@@ -1,4 +1,4 @@
-﻿function Invoke-CIM_EnumerateInstances {
+function Invoke-CIM_EnumerateInstances {
 <#
 .SYNOPSIS
     Enumerate Instances of a class on a CIMOM via CIM-XML interface

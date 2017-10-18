@@ -1,4 +1,4 @@
-﻿function Reset-Tray {
+function Reset-Tray {
    Add-Type -Assembly UIAutomationClient
 
    $Window = Add-Type -Name ([char[]](65..90 | Get-Random -count 10) -join "") -Member @"

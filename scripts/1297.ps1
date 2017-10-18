@@ -1,4 +1,4 @@
-﻿#Hightlight the name of a file or URL and this will opened or shown in browser
+#Hightlight the name of a file or URL and this will opened or shown in browser
 if ($PSVersionTable.BuildVersion.build -le 7000)
 {
     # PowerShell V2 CTP3

@@ -1,4 +1,4 @@
-﻿param(
+param(
     $projectDirectoryName = "MyProject"
     )
 $thisDir = Split-Path $MyInvocation.MyCommand.Path

@@ -1,4 +1,4 @@
-﻿$path = "$env:programfiles\Reference Assemblies\Microsoft\Framework\v3.0"
+$path = "$env:programfiles\Reference Assemblies\Microsoft\Framework\v3.0"
 $TypesAssembly = [Reflection.Assembly]::LoadFile("$path\UIAutomationTypes.dll")
 $ClientAssembly = [Reflection.Assembly]::LoadFile("$path\UIAutomationClient.dll")
 

@@ -1,4 +1,4 @@
-﻿# vCheck - Daily Error Report 
+# vCheck - Daily Error Report 
 # 
 # Changes:
 # Version 1.12 - Added Hosts in Maintenance Mode and not responding + Bug Fixes

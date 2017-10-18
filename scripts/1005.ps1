@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
     Makes a baloon tip in the notification area
 .Description

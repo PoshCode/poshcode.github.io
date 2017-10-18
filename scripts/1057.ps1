@@ -1,4 +1,4 @@
-﻿function Start-ProcessAsAdministrator
+function Start-ProcessAsAdministrator
 {
     <#
     .ForwardHelpTargetName Start-Process

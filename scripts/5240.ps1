@@ -1,4 +1,4 @@
-﻿param(  [string]$Path,
+param(  [string]$Path,
         [string]$LogFile = "")
 
 $FolderList = Get-ChildItem $Path | Where-Object {$_.PSIsContainer}

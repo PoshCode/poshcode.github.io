@@ -1,4 +1,4 @@
-﻿<#
+<#
 Twitter
    https://mobile.twitter.com/gregzakharov/status/774672253049008128
 #>

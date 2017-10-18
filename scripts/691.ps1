@@ -1,4 +1,4 @@
-﻿## Http Rest
+## Http Rest
 ####################################################################################################
 ## The first implementation of the HttpRest module, as a bunch of script functions 
 ## Based on the REST api from MindTouch's Dream SDK

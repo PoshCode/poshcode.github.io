@@ -1,4 +1,4 @@
-﻿function Get-UserStatus {
+function Get-UserStatus {
   $script:usr = [Security.Principal.WindowsIdentity]::GetCurrent()
   return (New-Object Security.Principal.WindowsPrincipal $usr).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator

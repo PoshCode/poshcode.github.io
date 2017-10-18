@@ -1,4 +1,4 @@
-﻿// 
+// 
 /**
  * PowerShell 2.0 Brush for highlighter 2.0
  * 

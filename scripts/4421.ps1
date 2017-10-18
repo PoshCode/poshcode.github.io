@@ -1,4 +1,4 @@
-﻿# There are three kinds of menu items in WPF (and thus, in ShowUI):
+# There are three kinds of menu items in WPF (and thus, in ShowUI):
 
 Window -Width 300 -Height 150 {
    DockPanel {

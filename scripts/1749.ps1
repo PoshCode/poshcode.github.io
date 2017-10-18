@@ -1,4 +1,4 @@
-﻿function Skip-Object {
+function Skip-Object {
 param( 
    [int]$First = 0
 , 

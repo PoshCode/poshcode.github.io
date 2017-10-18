@@ -1,4 +1,4 @@
-﻿function get-gender {
+function get-gender {
    param([string]$name)
    
    if($name.Length -lt 2) { throw "You need at least two letters in the name" }

@@ -1,4 +1,4 @@
-﻿## Google Chart API extended value encoding function
+## Google Chart API extended value encoding function
 #########################################################################
 #function Encode-GoogleChart {
 BEGIN {

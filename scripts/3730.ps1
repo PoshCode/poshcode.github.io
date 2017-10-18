@@ -1,4 +1,4 @@
-﻿<#
+<#
 ALZDBA SQLServer_Export_SQLPlans_SMO.ps1
 Export top n consuming sqlplans (avg_worker_time=cpu) for a given SQLServer (SQL2005+) Instance
 #>

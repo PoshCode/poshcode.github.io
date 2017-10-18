@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Displays a Binary Coded Sexagesimal clock using the ShowUI module.
 

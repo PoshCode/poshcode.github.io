@@ -1,4 +1,4 @@
-﻿$Workdir = 'C:\scripts\'
+$Workdir = 'C:\scripts\'
 $Computer = $env:COMPUTERNAME
 $ExcludedAccounts = '^Administrator|^Guest'
 $Output = $Workdir + 'Output.csv'

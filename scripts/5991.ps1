@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.Synopsis
 	Sets volume to 10% if run between 10pm and 7am.
     .Notes

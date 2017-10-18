@@ -1,4 +1,4 @@
-﻿## Generate a dummy dataset for testing
+## Generate a dummy dataset for testing
 Param(
    $path = $pwd,
    $files = $(ls $path)

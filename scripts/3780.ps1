@@ -1,4 +1,4 @@
-﻿Param (
+Param (
 [Parameter(Position=0,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)]
 [alias("Name","ComputerName")]$Computer=@("xcserver01")
 )

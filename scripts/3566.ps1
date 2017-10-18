@@ -1,4 +1,4 @@
-﻿Function Get-NestedGroups {
+Function Get-NestedGroups {
 	<#
 		.SYNOPSIS
 			Enumerate all AD group memberships of an account (including nested membership).

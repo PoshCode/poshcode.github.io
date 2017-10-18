@@ -1,4 +1,4 @@
-﻿function get-IsWritable(){
+function get-IsWritable(){
 <#
     .Synopsis
         Command tests if a file is present and writable.

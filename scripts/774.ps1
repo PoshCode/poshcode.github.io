@@ -1,4 +1,4 @@
-﻿Set-Alias ISE Invoke-ISE  
+Set-Alias ISE Invoke-ISE  
 function Invoke-ISE ()
 <#
 .SYNOPSIS

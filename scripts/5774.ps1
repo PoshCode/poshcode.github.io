@@ -1,4 +1,4 @@
-﻿gci 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList' | % {
+gci 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList' | % {
   if (($ta = [Type]::GetType(
     'System.Management.Automation.TypeAccelerators'
   )).Get.Keys -notcontains 'marshal') {

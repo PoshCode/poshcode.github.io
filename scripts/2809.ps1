@@ -1,4 +1,4 @@
-﻿
+
 ## And a slick weather widget using Yahoo's forecast and images
 New-UIWidget -AsJob { 
     Grid {

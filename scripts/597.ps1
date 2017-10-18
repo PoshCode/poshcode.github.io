@@ -1,4 +1,4 @@
-﻿# SystemsManagementServer.psm1
+# SystemsManagementServer.psm1
 # written by Tojo2000 <tojo2000@tojo2000.com>
 # Last updated on 20080921
 #

@@ -1,4 +1,4 @@
-﻿function New-SelfRestartingTask {
+function New-SelfRestartingTask {
 #.Notes
 #  For production use you should consider investigating more specific matching in the Query clause.
 #

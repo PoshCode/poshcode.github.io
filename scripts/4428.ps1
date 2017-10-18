@@ -1,4 +1,4 @@
-﻿#initial directiry
+#initial directiry
 $dir = (gci $MyInvocation.MyCommand.Name).Directory
 #path of MUICache on WInXP
 $key = "Software\Microsoft\Windows\ShellNoRoam\MUICache"

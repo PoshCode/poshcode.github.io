@@ -1,4 +1,4 @@
-﻿Function Release-Ref ($ref) 
+Function Release-Ref ($ref) 
     {
         ([System.Runtime.InteropServices.Marshal]::ReleaseComObject(
         [System.__ComObject]$ref) -gt 0)

@@ -1,4 +1,4 @@
-﻿#Author Grigori Zakharov
+#Author Grigori Zakharov
 #Original https://github.com/gregzakh/alt-ps/blob/master/Get-MacAddress.ps1
 
 

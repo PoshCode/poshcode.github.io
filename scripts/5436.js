@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <software_identification_tag xmlns="http://standards.iso.org/iso/19770/-2/2009/schema.xsd">
 	<entitlement_required_indicator>true</entitlement_required_indicator>
 	<product_title>Windows 8.1</product_title>

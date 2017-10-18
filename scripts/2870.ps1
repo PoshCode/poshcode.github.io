@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
 		List users in specified local group
 	.DESCRIPTION

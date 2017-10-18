@@ -1,4 +1,4 @@
-﻿# Author: Steven Murawski http://www.mindofroot.com
+# Author: Steven Murawski http://www.mindofroot.com
 # This script requires the Show-NetMap script from Doug Finke and the NetMap files
 # These can be found at http://dougfinke.com/blog/?p=465
 #

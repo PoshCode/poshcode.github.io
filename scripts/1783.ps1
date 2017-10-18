@@ -1,4 +1,4 @@
-﻿# new version has more error handling, "-delete" and "-noprompt" options.
+# new version has more error handling, "-delete" and "-noprompt" options.
 
 function Get-MD5([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
 

@@ -1,4 +1,4 @@
-﻿function Update-Ipod {
+function Update-Ipod {
 	$start = Get-Date
 	$iTunesCOM = New-Object -comObject iTunes.Application
 	$iTunesCOM.UpdateIPod()

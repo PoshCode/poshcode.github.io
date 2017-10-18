@@ -1,4 +1,4 @@
-﻿$DriveLetter = "D:"
+$DriveLetter = "D:"
 $MaxShrink = 0.30	# 0.30 equals 30%
 $MinShrink = 0.20	# 0.20 equals 20%
 $FileLocation = $env:Temp

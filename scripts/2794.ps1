@@ -1,4 +1,4 @@
-﻿$rs=[RunspaceFactory]::CreateRunspace() 
+$rs=[RunspaceFactory]::CreateRunspace() 
 $rs.ApartmentState = "STA" 
 $rs.ThreadOptions = "ReuseThread" 
 $rs.Open() 

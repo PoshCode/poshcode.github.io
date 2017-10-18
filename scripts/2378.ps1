@@ -1,4 +1,4 @@
-﻿$mykey = "xxx"
+$mykey = "xxx"
 $newkey = "yyy"
 $OFS = ""
 

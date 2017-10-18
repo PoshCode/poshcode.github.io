@@ -1,4 +1,4 @@
-﻿#######################################################################################################################
+#######################################################################################################################
 # File:             ESXiMgmt_search_for_guest_hostname_sample.ps1                                                     #
 # Author:           Alexander Petrovskiy                                                                              #
 # Publisher:        Alexander Petrovskiy, SoftwareTestingUsingPowerShell.WordPress.Com                                #

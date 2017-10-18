@@ -1,4 +1,4 @@
-﻿The full 7 syntax errors as reported by powershell 3 & 4 are:
+The full 7 syntax errors as reported by powershell 3 & 4 are:
 
 @@ At C:\temp\Invoke-Web 4.2.ps1:147 char:57
 @@ +       [ValidateScript({if(!($Credential -or $WebSession){ throw

@@ -1,4 +1,4 @@
-﻿# Copy this to Documents\WindowsPowerShell\Modules\
+# Copy this to Documents\WindowsPowerShell\Modules\
 # Generates extmap for a given strong-named assembly
 # example:
 #   ToExtMap "System.Threading.Tasks.dll" | Out-File -encoding ASCII System.Threading.Tasks.extmap.dll

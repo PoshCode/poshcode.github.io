@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 
  .Title
  PS-NTDSUTIL Script

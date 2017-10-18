@@ -1,4 +1,4 @@
-﻿# TITLE: 	Get-SameTimeChatHistory.ps1
+# TITLE: 	Get-SameTimeChatHistory.ps1
 # PURPOSE:	Reads Sametime R8 chat transcript HTML files and outputs custom objects
 # AUTHOR:	Hal Rottenberg <hal@halr9000.com
 

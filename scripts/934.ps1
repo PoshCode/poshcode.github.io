@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Copies a file from one location to another while displaying a GUI progress window.
 .PARAMETER Path

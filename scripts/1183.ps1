@@ -1,4 +1,4 @@
-﻿#
+#
 # vProfiles V1
 # By Alan Renouf
 # http://virtu-al.net

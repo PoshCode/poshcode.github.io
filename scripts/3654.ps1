@@ -1,4 +1,4 @@
-﻿# (C) 2012 Dr. Tobias Weltner, MVP PowerShell
+# (C) 2012 Dr. Tobias Weltner, MVP PowerShell
 # www.powertheshell.com
 # you can freely use and distribute this code
 # we only ask you to keep this comment including copyright and url

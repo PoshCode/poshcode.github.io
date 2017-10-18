@@ -1,4 +1,4 @@
-﻿Set-Alias psgetsid Get-UserSID
+Set-Alias psgetsid Get-UserSID
 
 function Get-UserSID([String]$Computer = '.', [String]$User) {
   <#

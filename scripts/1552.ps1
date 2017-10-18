@@ -1,4 +1,4 @@
-﻿#Params is file or folder
+#Params is file or folder
 param([string] $PSUnitTestFile, [string] $Category ="All", [switch] $ShowReportInBrowser)
 
 Write-Debug "PSUnit.Run.ps1: Parameter `$PSUnitTestFile=`"$PSUnitTestFile`""

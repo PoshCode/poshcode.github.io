@@ -1,4 +1,4 @@
-﻿# Synopsis:
+# Synopsis:
 # Windows Script to collect Hardware information on a local system
 # And Convert it to a JSON String and Upload that to a CouchDB
 # Database for newly installed servers.

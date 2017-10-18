@@ -1,4 +1,4 @@
-﻿function Restart-IISAppPool {
+function Restart-IISAppPool {
    [CmdletBinding(SupportsShouldProcess=$true)]
    #.Synopsis
    #  Restarts an IIS AppPool

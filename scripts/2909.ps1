@@ -1,4 +1,4 @@
-﻿#######################################################################################################################
+#######################################################################################################################
 # File:             ESXiMgmt_machines_poweron_sample.ps1                                                              #
 # Author:           Alexander Petrovskiy                                                                              #
 # Publisher:        Alexander Petrovskiy, SoftwareTestingUsingPowerShell.WordPress.Com                                #

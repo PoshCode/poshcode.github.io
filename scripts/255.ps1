@@ -1,4 +1,4 @@
-﻿function Get-Parameter ($Cmdlet) {
+function Get-Parameter ($Cmdlet) {
 	foreach ($paramset in (Get-Command $Cmdlet).ParameterSets){
 		$Output = @()
 		foreach ($param in $paramset.Parameters) {

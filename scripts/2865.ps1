@@ -1,4 +1,4 @@
-﻿function Get-LocalGroupMember
+function Get-LocalGroupMember
     <#
         .Synopsis
             Get the local group membership.

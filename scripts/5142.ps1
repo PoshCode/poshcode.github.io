@@ -1,4 +1,4 @@
-﻿###################################################################################################
+###################################################################################################
 #    Script Name                 -    CommArchive.ps1
 #    Script Description            -    Exports Lync and mailbox data for members of security group
 #    Last Modified                -    04/31/2014

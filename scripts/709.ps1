@@ -1,4 +1,4 @@
-﻿## Simplest RSS Reader
+## Simplest RSS Reader
 ####################################################################################################
 ## Save this file as Start-RssReader.ps1
 ## Run it like:

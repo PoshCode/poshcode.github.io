@@ -1,4 +1,4 @@
-﻿<#
+<#
 .NOTES 
 Name: Number of VLFs
 Author: Rob Sewell http://sqldbawithabeard.com

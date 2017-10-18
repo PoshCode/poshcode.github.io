@@ -1,4 +1,4 @@
-﻿Function Get-DiskUsage {
+Function Get-DiskUsage {
 
 <#
 

@@ -1,4 +1,4 @@
-﻿######## CSV DATA #############
+######## CSV DATA #############
 # Save the following data to a csv.
 
 

@@ -1,4 +1,4 @@
-﻿$PSConfig = Get-ItemProperty "HKLM:\$([PSObject].Assembly.GetType(
+$PSConfig = Get-ItemProperty "HKLM:\$([PSObject].Assembly.GetType(
   'System.Management.Automation.Utils'
 ).GetMethod(
   'GetRegistryConfigurationPath', [Reflection.BindingFlags]40

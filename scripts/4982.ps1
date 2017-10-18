@@ -1,4 +1,4 @@
-﻿$Script:PastebinDeveloperKey = 'Put your dev key here'
+$Script:PastebinDeveloperKey = 'Put your dev key here'
 $Script:PastebinPasteURI     = 'http://pastebin.com/api/api_post.php'
 Function Script:EncodeForPost ( [Hashtable]$KeyValues )
 {

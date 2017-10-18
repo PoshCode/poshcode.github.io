@@ -1,4 +1,4 @@
-﻿# Set-WinSchedule
+# Set-WinSchedule
 # Written by Tome Tanasovski
 # http://powertoe.wordpress.com
 # version 1.0

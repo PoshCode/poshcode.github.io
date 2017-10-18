@@ -1,4 +1,4 @@
-﻿A syntax error on your $Status array definition - you forgot the braces around the elements;
+A syntax error on your $Status array definition - you forgot the braces around the elements;
 
 [string[]]$status=("Cooking","Burning")
 

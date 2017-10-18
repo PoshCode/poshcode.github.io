@@ -1,4 +1,4 @@
-﻿###
+###
 # TruncatePath
 # Version 1.0.6 (05 Nov 2008)
 # Description: Replaces long provider paths in the prompt with ellipses

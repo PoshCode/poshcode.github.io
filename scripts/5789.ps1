@@ -1,4 +1,4 @@
-﻿function filecount {            
+function filecount {            
 param (            
  [string]$path            
 )            

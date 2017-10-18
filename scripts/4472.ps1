@@ -1,4 +1,4 @@
-﻿# Include trailing backslash
+# Include trailing backslash
 $dstFolder = "D:\SomeExportDirectory\"
 $evtsession = New-Object System.Diagnostics.Eventing.Reader.EventLogSession($env:computername)
 [string[]] $ProviderList = $evtsession.GetProviderNames() | Select-String asp 

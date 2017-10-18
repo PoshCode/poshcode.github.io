@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 #### NOTE: you can revert this to work in PowerShell 1.0 by just removing the [Parameter(...)] lines
 ####       BUT YOU WILL HAVE TO pass the $Version $Encoding $Standalone parameters EACH TIME
 ####       UNLESS you remove them, and switch back to a hardcoded XDeclaration ... or something.

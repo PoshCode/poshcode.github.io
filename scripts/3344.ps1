@@ -1,4 +1,4 @@
-﻿#region << ePO Connection and Initialization >>
+#region << ePO Connection and Initialization >>
 function McAfee-Connect{
 	param([String]$script:ServerURL="SERVERNAME:8443")
 	$c = McAfee-Credential

@@ -1,4 +1,4 @@
-﻿param([array]$Collection)
+param([array]$Collection)
  
 begin {
     $result = $Seed

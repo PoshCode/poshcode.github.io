@@ -1,4 +1,4 @@
-﻿#Parameter- Name of the VMware cluster to work in
+#Parameter- Name of the VMware cluster to work in
 param($cluster)
 
 Write-Output "`n$(Get-Date)- Script started`n"

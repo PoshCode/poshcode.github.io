@@ -1,4 +1,4 @@
-﻿<Types>
+<Types>
     <Type>
         <Name>System.Byte[]</Name>
         <Members>

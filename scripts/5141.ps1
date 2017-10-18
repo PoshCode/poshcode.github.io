@@ -1,4 +1,4 @@
-﻿function Catch-LongNames
+function Catch-LongNames
 <#
 .SYNOPSIS
 This function stores the error from Get-ChildItem when it encounters files longer than the 260 Character Limit.

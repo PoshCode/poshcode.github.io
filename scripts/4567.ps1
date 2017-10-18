@@ -1,4 +1,4 @@
-﻿$ta = [Type]::GetType("System.Management.Automation.TypeAccelerators")
+$ta = [Type]::GetType("System.Management.Automation.TypeAccelerators")
 $ta::Get.Keys.GetEnumerator() | % {$arr = @()}{
   $arr += $($_ -ne 'accelerators')
 }{

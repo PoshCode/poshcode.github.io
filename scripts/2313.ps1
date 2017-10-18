@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 #History:
 # 1.0  - First public release (March 19, 2010)
 # 2.0  - Private Build

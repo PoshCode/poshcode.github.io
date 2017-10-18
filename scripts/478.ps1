@@ -1,4 +1,4 @@
-﻿function Get-UNCPath {param(	[string]$HostName,
+function Get-UNCPath {param(	[string]$HostName,
 				[string]$LocalPath)
 	$NewPath = $LocalPath -replace(":","$")
 	#delete the trailing \, if found

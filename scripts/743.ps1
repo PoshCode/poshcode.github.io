@@ -1,4 +1,4 @@
-﻿#requires -version 2.0 
+#requires -version 2.0 
 # Author: Glenn Sizemore 12/19/2009
 # Source: http://get-admin.com/blog/?p=239
 #

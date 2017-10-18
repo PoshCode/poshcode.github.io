@@ -1,4 +1,4 @@
-﻿function Get-FridaysThirteenth {
+function Get-FridaysThirteenth {
 	param (
 		[datetime]$end = "12/31/2010"
 	)

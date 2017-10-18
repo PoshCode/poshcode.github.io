@@ -1,4 +1,4 @@
-﻿
+
 #-------------------------------------------------------------
 # install http://www.quest.com/powershell/activeroles-server.aspx
  Add-PSSnapin Quest.ActiveRoles.ADManagement

@@ -1,4 +1,4 @@
-﻿#region vars
+#region vars
 $statvalues=("mem.usage.average", "cpu.usage.average")
 $nsca_stat = ""
 [int]$warnlevel = 85

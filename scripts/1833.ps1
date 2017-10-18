@@ -1,4 +1,4 @@
-﻿<#
+<#
 Author: mazakane
 This short script converts Time settings and displays a "productivity" Report with a goal of 81%
 

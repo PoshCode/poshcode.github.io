@@ -1,4 +1,4 @@
-﻿# Find all files which does not contains the text in $Pattern
+# Find all files which does not contains the text in $Pattern
 function ssHasNot(
 [string] $Path="*.txt"
 ,[string] $pattern=""

@@ -1,4 +1,4 @@
-﻿########################################################
+########################################################
 # Created by Brian English 
 #   Brian.English@charlottefl.com
 #   eddiephoenix@gmail.com

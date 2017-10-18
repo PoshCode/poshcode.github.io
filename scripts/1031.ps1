@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Calculate sums on top of Measure-Object
 #.Description
 #  Pipe in objects with numerical properties, and get an extra output item

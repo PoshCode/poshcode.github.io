@@ -1,4 +1,4 @@
-﻿function get-windowsproductkey([Parameter(ValueFromPipeline=$true)][string[]]$computer)
+function get-windowsproductkey([Parameter(ValueFromPipeline=$true)][string[]]$computer)
 {
 PROCESS{
 foreach($comp in $computer) {

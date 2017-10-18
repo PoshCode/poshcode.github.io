@@ -1,4 +1,4 @@
-﻿function Repair-ScriptQuotes {
+function Repair-ScriptQuotes {
     param (
         [Parameter(Mandatory=$true,ValueFromPipeline=$true)]
         [string]$path

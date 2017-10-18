@@ -1,4 +1,4 @@
-﻿Function Test-Func {
+Function Test-Func {
 
     param(
         [Parameter(ValueFromPipeline=$true, Mandatory=$true, Position=0)]

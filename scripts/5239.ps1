@@ -1,4 +1,4 @@
-﻿#all functions are in globalfunctions.ps1
+#all functions are in globalfunctions.ps1
 . "$(Split-Path $MyInvocation.MyCommand.Path -Parent)\globalfunctions.ps1"
 
 ## get the two required argument values from the command line

@@ -1,4 +1,4 @@
-﻿function Get-WindowsExperienceRating {
+function Get-WindowsExperienceRating {
 #.Synopsis
 #  Gets the Windows Experience Ratings
 #.Parameter ComputerName

@@ -1,4 +1,4 @@
-﻿## Get-XamlControlTemplate
+## Get-XamlControlTemplate
 ## Dump a WPF control's default XAML template
 ########################################################################################################################
 ## Usage:

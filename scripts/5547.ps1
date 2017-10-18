@@ -1,4 +1,4 @@
-﻿Import-Module Microsoft.WSMan.Management
+Import-Module Microsoft.WSMan.Management
 Add-Type @"
   [System.Flags]
   public enum WSManSessionFlags {

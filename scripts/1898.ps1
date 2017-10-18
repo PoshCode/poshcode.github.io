@@ -1,4 +1,4 @@
-﻿ipmo PowerBoots # Require PowerBoots
+ipmo PowerBoots # Require PowerBoots
 
 ## More readable:
 New-BootsWindow { 

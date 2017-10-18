@@ -1,4 +1,4 @@
-﻿function Trace-Message {
+function Trace-Message {
     <#
         .Synopsis
             Wrap Verbose, Debug, or Warning output with command profiling trace showing script line and time elapsed

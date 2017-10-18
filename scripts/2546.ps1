@@ -1,4 +1,4 @@
-﻿function Set-ToStringMethod {
+function Set-ToStringMethod {
 
 <#
     .Synopsis

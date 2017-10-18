@@ -1,4 +1,4 @@
-﻿function Remove-XmlNamespace {
+function Remove-XmlNamespace {
 #.Synopsis
 #  Removes namespace definitions and prefixes from xml documents
 #.Description

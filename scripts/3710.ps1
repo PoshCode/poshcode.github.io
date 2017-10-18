@@ -1,4 +1,4 @@
-﻿#requires -Assembly System.Web
+#requires -Assembly System.Web
 #requires -Assembly System.Web.Services
 #.Example
 # 	Get-SPListItem "Scrum Team Assignments" 

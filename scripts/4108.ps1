@@ -1,4 +1,4 @@
-﻿param($computer,$instance,$database)
+param($computer,$instance,$database)
 
 import-module sqlps -disablenamechecking
 

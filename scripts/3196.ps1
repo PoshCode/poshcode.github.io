@@ -1,4 +1,4 @@
-﻿function Debug-Regex {
+function Debug-Regex {
 <#
 .SYNOPSIS
 A very simple function to debug a Regex search operation and show any 'Match' 

@@ -1,4 +1,4 @@
-﻿#Edit SSIS.psm1 and Comment/Uncomment 2005 or 2008 version of SSIS assembly
+#Edit SSIS.psm1 and Comment/Uncomment 2005 or 2008 version of SSIS assembly
 #add-type -AssemblyName "Microsoft.SqlServer.ManagedDTS, Version=9.0.242.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91"
 add-type -AssemblyName "Microsoft.SqlServer.ManagedDTS, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91"
 

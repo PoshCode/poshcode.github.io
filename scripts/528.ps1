@@ -1,4 +1,4 @@
-﻿function Set-WebConfigSqlConnectionString {
+function Set-WebConfigSqlConnectionString {
 	param(  [switch]$help,
 	        [string]$configfile = $(read-host "Please enter a web.config file to read"),
 	        [string]$connectionString = $(read-host "Please enter a connection string"),

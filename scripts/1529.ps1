@@ -1,4 +1,4 @@
-﻿function ConvertFrom-Json {
+function ConvertFrom-Json {
 	param (
 		[Parameter(	Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
 		[Alias("Json")]

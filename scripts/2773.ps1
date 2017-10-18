@@ -1,4 +1,4 @@
-﻿#.Example
+#.Example
 #   Get-WmiObject -computername Z002 Win32_LogicalDisk -filter "DriveType=3" | New-DiskSpace
 #.Note
 #   Requires ShowUI 1.1 and Visifire (You must use Add-UIModule on the Visifire dll and then import it)

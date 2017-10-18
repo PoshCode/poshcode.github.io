@@ -1,4 +1,4 @@
-﻿param (
+param (
 	$UserName,
 	$FilePath,
 	[switch]$SaveCredential=$False,

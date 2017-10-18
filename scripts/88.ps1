@@ -1,4 +1,4 @@
-﻿    # From: Brandon Shell
+    # From: Brandon Shell
     # Purpose: To Reset Local User Account
     # Example:
     # -- To Reset user Password

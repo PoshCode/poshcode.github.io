@@ -1,4 +1,4 @@
-﻿Add-Type -Type @"
+Add-Type -Type @"
 using System;
 using System.Runtime.InteropServices;
 

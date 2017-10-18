@@ -1,4 +1,4 @@
-﻿<# 
+<# 
             .SYNOPSIS  
             Shows a graphical message box, with various prompt types available. 
  

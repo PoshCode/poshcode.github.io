@@ -1,4 +1,4 @@
-﻿#hashtable to object function.
+#hashtable to object function.
 #used to be able to make custom objects with math inside the pipeline 
 #examples 
 #    1..10 | h20 { @{karl = $_;dude = $_+1} }

@@ -1,4 +1,4 @@
-﻿# Reverse filename sequence v 0.9
+# Reverse filename sequence v 0.9
 # Author: Sean Wendt
 # 
 # This script will rename a sequenced set of files in a directory.

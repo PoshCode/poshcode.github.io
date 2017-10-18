@@ -1,4 +1,4 @@
-﻿$date = Get-Date -Format "yyyyMMdd"
+$date = Get-Date -Format "yyyyMMdd"
 $source = 'C:\dir'
 $destination = "C:\someotherdir\$date\"
 

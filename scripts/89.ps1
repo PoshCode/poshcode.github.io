@@ -1,4 +1,4 @@
-﻿Param($BackupLocation,$list,$FromAD,[switch]$clear)
+Param($BackupLocation,$list,$FromAD,[switch]$clear)
 # For more info read the following blog entry
 # http://www.bsonposh.com/modules/wordpress/?p=41
 function Get-ADComputers{

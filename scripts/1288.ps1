@@ -1,4 +1,4 @@
-﻿function Remove-AeroPeek {
+function Remove-AeroPeek {
 PARAM(
    [string]$Title="*", 
    [string]$Process="*"

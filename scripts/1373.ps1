@@ -1,4 +1,4 @@
-﻿Function Set-dvSwitch {
+Function Set-dvSwitch {
 	param($vmName,$dvPG) # the two parameters.
 
 	$nic = "Network adapter 1"	# change this line if you want to change network adapter 2

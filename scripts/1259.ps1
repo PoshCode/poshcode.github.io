@@ -1,4 +1,4 @@
-﻿[reflection.assembly]::LoadWithPartialName("Microsoft.SharePoint") | out-null
+[reflection.assembly]::LoadWithPartialName("Microsoft.SharePoint") | out-null
 [reflection.assembly]::LoadWithPartialName("Microsoft.Office.Server") | out-null
 [reflection.assembly]::LoadWithPartialName("Microsoft.Office.Server.Search") | out-null
 

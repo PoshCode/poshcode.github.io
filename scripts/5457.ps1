@@ -1,4 +1,4 @@
-﻿$key = 'HKLM:\SYSTEM\CurrentControlSet'
+$key = 'HKLM:\SYSTEM\CurrentControlSet'
 
 (gp ($key + '\Services\Tcpip\Parameters\Interfaces\' + `
 (Split-Path -Leaf (gp ($key + '\Control\Network\*\*\Connection') | ? {

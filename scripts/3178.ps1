@@ -1,4 +1,4 @@
-﻿Function Test-Server{
+Function Test-Server{
 [cmdletBinding()]
 param(
 	[parameter(Mandatory=$true,ValueFromPipeline=$true)]

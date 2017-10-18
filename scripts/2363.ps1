@@ -1,4 +1,4 @@
-﻿Write-Host "`n" 
+Write-Host "`n" 
 Write-Host "`t`tWSUS Administrator Module 1.0" 
 Write-Host "`n" 
 Write-Host -nonewline "Make initial connection to WSUS Server:`t" 

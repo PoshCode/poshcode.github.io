@@ -1,4 +1,4 @@
-﻿#Returns the priority SRV hostname and port for a particular service and domain.
+#Returns the priority SRV hostname and port for a particular service and domain.
 function Get-SRVPriority {
 param( [string] $query = $( Throw "Query required in the format _Service._Proto.DomainName (ie, `"_ftp._tcp.myserver.net`" or `"_xmpp-client._tcp.gmail.com`").") )
 	

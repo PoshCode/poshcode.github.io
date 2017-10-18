@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
 Function to find the last day, last weekday, or last named day of a month,
 based on an input date.

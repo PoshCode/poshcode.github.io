@@ -1,4 +1,4 @@
-﻿## One Time only to create the password file
+## One Time only to create the password file
 Read-Host -AsSecureString | ConvertFrom-SecureString | Out-File encrypted_password.txt
 $vpn_profile = 'Profile name'
 

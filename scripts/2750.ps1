@@ -1,4 +1,4 @@
-﻿function New-TiedVariable {
+function New-TiedVariable {
 #.Synopsis
 #   Creates a ReadOnly variable that recalculates it's value each time it's read
 #.Description

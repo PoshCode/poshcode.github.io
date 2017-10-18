@@ -1,4 +1,4 @@
-﻿function Find-SoapAction
+function Find-SoapAction
 {
     [CmdletBinding(PositionalBinding=$false)]
     param(

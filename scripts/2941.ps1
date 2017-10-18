@@ -1,4 +1,4 @@
-﻿$SystemEnclosure = Get-WMIObject -Class Win32_SystemEnclosure; $Type = $SystemEnclosure.ChassisTypes; CLS ; Write-Host -BackgroundColor White -ForegroundColor Blue "Chassis Type:"
+$SystemEnclosure = Get-WMIObject -Class Win32_SystemEnclosure; $Type = $SystemEnclosure.ChassisTypes; CLS ; Write-Host -BackgroundColor White -ForegroundColor Blue "Chassis Type:"
 	if ($Type -eq 1)
 		{Write-Host "$Type - Other"}
 	elseif ($Type -eq 2)

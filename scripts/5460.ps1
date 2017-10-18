@@ -1,4 +1,4 @@
-﻿0..(($row = get-process | Format-Table * -AutoSize | Out-String -Stream).count - 1) | % {
+0..(($row = get-process | Format-Table * -AutoSize | Out-String -Stream).count - 1) | % {
     if ([bool]($_ % 2)) {
         Write-Host $row.item($_)
     } else {

@@ -1,4 +1,4 @@
-﻿function New-CLLocalLibrary
+function New-CLLocalLibrary
 {
     param(
         [string]$Name, 

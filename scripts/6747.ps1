@@ -1,4 +1,4 @@
-﻿
+
 	##### Get current Content-ID in Preamble.xml
 	cat ./Preamble.xml | findstr Content-ID: > ./Content-ID
 	$ID = Get-Content ./Content-ID

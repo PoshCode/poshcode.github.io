@@ -1,4 +1,4 @@
-﻿function AD-GroupMembers() {
+function AD-GroupMembers() {
 param (
 $Domen,
 $Group,

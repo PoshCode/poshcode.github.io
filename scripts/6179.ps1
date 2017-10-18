@@ -1,4 +1,4 @@
-﻿$SiteName = "MySite"
+$SiteName = "MySite"
 $HostName = "localhost"
 $CertificatePassword = '1234'
 $UAPWebBrowserUrl ='https://localhost'

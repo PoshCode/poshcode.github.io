@@ -1,4 +1,4 @@
-﻿<#
+<#
 This Script will check the MSOnline Office 365 setup. It will prompt the user running it to specify the 
 credentials. It will then check compare the onsite information with the online information and inform the 
 user if it is out of sync. 

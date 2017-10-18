@@ -1,4 +1,4 @@
-﻿Function GetMsgBody {
+Function GetMsgBody {
 	Write-Output @"
 		<p>Dear $name,</p>
 		Your ABC network account is about to expire.<br/>

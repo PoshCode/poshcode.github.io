@@ -1,4 +1,4 @@
-﻿<#Script Synopsis
+<#Script Synopsis
 #Script Name: Clear_SoftwareDistribution.PS1
 #Creator: Kevin Jackson 
 #Date: 09/05/2016

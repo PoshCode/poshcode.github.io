@@ -1,4 +1,4 @@
-﻿Function Stop-ServiceandProcess
+Function Stop-ServiceandProcess
 # daniel.cheng@thomsonreuters.com
 # Function: Stop service and associated Pid. Sometimes homegrown services has its Pid still terminating gracefully in the background.
 {

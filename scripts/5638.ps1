@@ -1,4 +1,4 @@
-﻿function Add-Junction {
+function Add-Junction {
   <#
     .DESCRIPTION
         Windows junction creator.

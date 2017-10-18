@@ -1,4 +1,4 @@
-﻿function Draw-Circle
+function Draw-Circle
 {
 param
 (

@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function Set-RandomFile {
   param(
     [Parameter(Mandatory=$true,

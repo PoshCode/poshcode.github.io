@@ -1,4 +1,4 @@
-﻿Add-Type -AssemblyName Office
+Add-Type -AssemblyName Office
 Add-Type -AssemblyName Microsoft.Office.Interop.PowerPoint
 
 function Out-Pptx {

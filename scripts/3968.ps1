@@ -1,4 +1,4 @@
-﻿Add-PSSnapin Microsoft.Adfs.Powershell 
+Add-PSSnapin Microsoft.Adfs.Powershell 
 Import-Module MSOnline
 
 $cred = Get-Credential 

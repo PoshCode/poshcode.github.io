@@ -1,4 +1,4 @@
-﻿#this is just a quite proof of concept, totally useless in of itself, with functions not fleshed out
+#this is just a quite proof of concept, totally useless in of itself, with functions not fleshed out
 function get-jobrepository
 {
 [CmdletBinding()] 

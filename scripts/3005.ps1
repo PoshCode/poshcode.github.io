@@ -1,4 +1,4 @@
-﻿$vv = get-vm testsql17b | get-view
+$vv = get-vm testsql17b | get-view
 $si = Get-View ServiceInstance -Server $global:DefaultVIServers[1]
 $hs = get-vmhost infesx52*
 $hv = $hs | Get-View

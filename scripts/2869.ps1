@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         A script that removes a local user account
     .DESCRIPTION

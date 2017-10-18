@@ -1,4 +1,4 @@
-﻿param(
+param(
 [Parameter(Position=0,ValueFromPipeline=$True)]
 [ValidateNotNullorEmpty()] $User,
 [switch]$ClearXCAttributes

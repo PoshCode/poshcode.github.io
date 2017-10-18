@@ -1,4 +1,4 @@
-﻿function Get-ParentProcess {
+function Get-ParentProcess {
   [CmdletBinding()]
   param(
     [Parameter(Mandatory=$true)]

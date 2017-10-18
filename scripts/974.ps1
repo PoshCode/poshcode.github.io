@@ -1,4 +1,4 @@
-﻿param( 	[String[]]$Table = $null,
+param( 	[String[]]$Table = $null,
 		$SqlServerOne = 'YourDatabaseServer',
         $FirstDatabase = 'FirstDatabaseToCompare',
         $SqlUsernameOne = 'SQL Login',

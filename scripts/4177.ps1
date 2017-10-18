@@ -1,4 +1,4 @@
-﻿
+
 function New-RandomArray{
     #.SYNOPSIS
     #Generates a random number array.

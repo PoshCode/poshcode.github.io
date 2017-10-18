@@ -1,4 +1,4 @@
-﻿function ConvertTo-StringData
+function ConvertTo-StringData
 { 
     Begin 
     { 

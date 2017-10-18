@@ -1,4 +1,4 @@
-﻿#
+#
 # get-packet.ps1
 #
 # Receives and displays all incoming IP packets.  NIC driver must support promiscuous mode.

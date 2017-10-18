@@ -1,4 +1,4 @@
-﻿function Import-FromDll {
+function Import-FromDll {
   <#
     .SYNOPSIS
         Allows to invoke some WinAPI functions without using Add-Type

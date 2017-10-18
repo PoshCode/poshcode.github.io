@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Hadoop HDFS client for Windows
 

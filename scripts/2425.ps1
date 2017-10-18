@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 #Run the following code to create OpsMgr module
 #To Use run import-module OpsMgr; Start-OperationsManagerClientShell -ManagementServerName: "" -PersistConnection: $true -Interactive: $true;
 if (-not (test-path $home\Documents\WindowsPowerShell\Modules\OpsMgr))

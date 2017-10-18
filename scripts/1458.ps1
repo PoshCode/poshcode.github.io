@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 
 ## Version 1.0 - First release outside of the PoshCode module.
 $PSScriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent

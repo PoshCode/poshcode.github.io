@@ -1,4 +1,4 @@
-﻿function Format-PoshTable {
+function Format-PoshTable {
 #.Synopsis
 #  Format-PoshTable puts the output in a WPF DataGrid (inline in PoshConsole)
 #.Description 

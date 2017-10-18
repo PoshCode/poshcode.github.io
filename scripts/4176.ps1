@@ -1,4 +1,4 @@
-﻿function New-ObjectFromGenericType {
+function New-ObjectFromGenericType {
 	<#
 		.SYNOPSIS
 			Get an instances of a Generic Type.

@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 .SYNOPSIS 
     The script creates an HTML report for given vSphere VM's, that contains VM performance data over a given period. The script then emails the report to a given address.
 .DESCRIPTION 

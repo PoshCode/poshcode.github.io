@@ -1,4 +1,4 @@
-﻿<#  
+<#  
 .SYNOPSIS  
 	Functions to call WCF Services With PowerShell.
 .NOTES

@@ -1,4 +1,4 @@
-﻿function Query-SQLCETable{
+function Query-SQLCETable{
     <#
     .SYNOPSIS
     Given a query statement, a proper dll, and a database file the command will run a query and return a table.

@@ -1,4 +1,4 @@
-﻿#function Get-ProcessorInfo {
+#function Get-ProcessorInfo {
   $flags = [Reflection.BindingFlags]
   
   $NativeMethods = [PSObject].Assembly.GetType(

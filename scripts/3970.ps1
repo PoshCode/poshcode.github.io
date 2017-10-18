@@ -1,4 +1,4 @@
-﻿# This script runs a different OVF conversion depending on the Day of the week.
+# This script runs a different OVF conversion depending on the Day of the week.
 $VeeamJob = "JobName"
 $server1 = 'ServerName'
 

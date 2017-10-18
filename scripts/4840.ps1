@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function Get-CurrentState {
   $k = 1
   for ($i = 0; $i -lt $pnt; $i++) {

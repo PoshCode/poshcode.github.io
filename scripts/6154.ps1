@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## ISE-Lines module v 1.2
 ##############################################################################################################
 ## Provides Line cmdlets for working with ISE

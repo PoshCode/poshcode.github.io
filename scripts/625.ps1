@@ -1,4 +1,4 @@
-﻿# FormsLib.ps1
+# FormsLib.ps1
 # contains some helper functions to create and modify Form controls
 # in a PowerShell script used by RoboGUI.ps1
 #

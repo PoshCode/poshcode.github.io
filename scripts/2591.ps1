@@ -1,4 +1,4 @@
-﻿function Get-DistanceOnEarth {
+function Get-DistanceOnEarth {
 <#
 .SYNOPSIS
   Calculates distance between points on the Earth.

@@ -1,4 +1,4 @@
-﻿# Version History
+# Version History
 # 1.1a - Added check for pre-existence of type
 # 1.1 - Added aliases, error handling, help, and cleanup
 

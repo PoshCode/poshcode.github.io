@@ -1,4 +1,4 @@
-﻿#######################
+#######################
 <#
 .SYNOPSIS
 Adds a SQL Server Client Alias by setting registry key. 

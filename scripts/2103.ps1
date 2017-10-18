@@ -1,4 +1,4 @@
-﻿#.SYNOPSIS
+#.SYNOPSIS
 #  Query the registry on a remote machine
 #.NOTE
 #  You have to have access, and the remote registry service has to be running

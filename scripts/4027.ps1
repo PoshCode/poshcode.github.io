@@ -1,4 +1,4 @@
-﻿# Connect-VIServer <vCenter server>
+# Connect-VIServer <vCenter server>
 # Uncomment the next line to test this script
 # $WhatIfPreference = $true
 if (-not (Get-PSSnapin VMware.VimAutomation.Core -ErrorAction SilentlyContinue)) {

@@ -1,4 +1,4 @@
-﻿
+
         function Find-Editor {
             #.Synopsis
             #   Find a simple code editor

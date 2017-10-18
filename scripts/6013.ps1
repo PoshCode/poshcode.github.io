@@ -1,4 +1,4 @@
-﻿
+
 Function New-TextIcon {
     [CmdletBinding()] 
 	Param(

@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string] $ProcedureName,
     [string] $Path = "$($ProcedureName).sql",
     [string] $ConnectionString = 'Data Source=.\sqlexpress;Initial Catalog=master;Integrated Security=SSPI;'

@@ -1,4 +1,4 @@
-﻿$code =  @'
+$code =  @'
 using System;
 using System.Threading;
 using System.Reflection;

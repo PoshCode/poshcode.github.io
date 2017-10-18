@@ -1,4 +1,4 @@
-﻿function Get-LocalGroupMembers {
+function Get-LocalGroupMembers {
 	param($groupname)
 
 	$pattern = "*Name=`"$groupname`""

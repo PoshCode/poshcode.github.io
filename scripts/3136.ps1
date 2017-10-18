@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
  A very simple module to retrieve the Set-StrictMode setting of the session.
 .DESCRIPTION

@@ -1,4 +1,4 @@
-﻿#Requires input from the user
+#Requires input from the user
 $Server = read-host "Enter Exchange Server Name"
 
 #Finds only the services that contain "Exchange"

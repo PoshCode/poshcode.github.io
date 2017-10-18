@@ -1,4 +1,4 @@
-﻿Import-Module ShowUI
+Import-Module ShowUI
 Function New-ISEMenu {
    New-Grid -AllowDrop:$true -Name "ISEAddonCreator" -columns Auto, * -rows Auto,Auto,Auto,*,Auto,Auto -Margin 5 {
       New-Label -Name Warning -Foreground Red -FontWeight Bold -Column 1

@@ -1,4 +1,4 @@
-﻿## Get-WebFile.ps1 (aka wget for PowerShell)
+## Get-WebFile.ps1 (aka wget for PowerShell)
 ##############################################################################################################
 ## Downloads a file or page from the web
 ## History:

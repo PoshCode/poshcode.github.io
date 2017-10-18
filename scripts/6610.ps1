@@ -1,4 +1,4 @@
-﻿<#
+<#
   https://mobile.twitter.com/gregzakharov/status/794628504679747584
 #>
 function Hide-ConsoleCursor {

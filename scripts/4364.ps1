@@ -1,4 +1,4 @@
-﻿## Version 1.00
+## Version 1.00
 Function Get-DiskTemperature {
 <#
 .Synopsis

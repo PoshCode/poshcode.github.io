@@ -1,4 +1,4 @@
-﻿function ConvertFrom-CliXml {
+function ConvertFrom-CliXml {
     param(
         [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
         [ValidateNotNullOrEmpty()]

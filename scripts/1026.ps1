@@ -1,4 +1,4 @@
-﻿Function Get-Proxy()
+Function Get-Proxy()
 {
 Process
 {

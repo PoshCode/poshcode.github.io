@@ -1,4 +1,4 @@
-﻿function Get-Parameter ( $Cmdlet, [switch]$ShowCommon, [switch]$Full ) {
+function Get-Parameter ( $Cmdlet, [switch]$ShowCommon, [switch]$Full ) {
 	
 	$command = Get-Command $Cmdlet -ea silentlycontinue	
 	

@@ -1,4 +1,4 @@
-﻿$col = [Enum]::GetValues([ConsoleColor])
+$col = [Enum]::GetValues([ConsoleColor])
 
 for ($i = 0; $i -lt $col.Length; $i++) {
   if ($col[$i] -ne $host.UI.RawUI.BackGroundColor) {

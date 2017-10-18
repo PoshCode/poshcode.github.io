@@ -1,4 +1,4 @@
-﻿$ScriptBlock = {
+$ScriptBlock = {
                     function Compare_PrintServer
                     {
                     $PrintPaperSizeArray2 = @()

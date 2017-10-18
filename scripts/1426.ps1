@@ -1,4 +1,4 @@
-﻿function Get-LunVM {
+function Get-LunVM {
 	param($Lun)
 
 	Get-VM | Where {

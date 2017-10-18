@@ -1,4 +1,4 @@
-﻿Function Set-EnabledKey([string]$KeyPath,[switch]$Disable)
+Function Set-EnabledKey([string]$KeyPath,[switch]$Disable)
 {
     if($(Test-Path $KeyPath) -eq $false)
     { 

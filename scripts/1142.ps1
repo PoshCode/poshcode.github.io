@@ -1,4 +1,4 @@
-﻿#draw output
+#draw output
 function drawlines($colors, $lines) {
 	foreach ($line in $lines) {
 		$color = $colors[[string]$line[0]]

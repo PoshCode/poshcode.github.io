@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Disk Check and email alert for Servers
 .DESCRIPTION

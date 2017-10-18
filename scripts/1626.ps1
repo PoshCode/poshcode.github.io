@@ -1,4 +1,4 @@
-﻿function Delete-TrailingBlanks
+function Delete-TrailingBlanks
 {
     $editor = $psISE.CurrentFile.Editor
     $caretLine = $editor.CaretLine

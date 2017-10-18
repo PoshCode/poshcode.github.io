@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
         Get-ExchangeDBSizes - Gather data on Exchange 2007 / 2010 Mailbox Databases.
 .DESCRIPTION

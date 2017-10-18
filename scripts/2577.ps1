@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Analyzes script and gives starting lines & columns of script components 
 .DESCRIPTION

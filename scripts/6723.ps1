@@ -1,4 +1,4 @@
-﻿<#
+<#
   .SYNOPSIS
       Analogue of Sysinternals LoadOrd tool.
   .NOTES

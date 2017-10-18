@@ -1,4 +1,4 @@
-﻿# Replace-InTextFile.ps1
+# Replace-InTextFile.ps1
 # Replace Strings in files
 param ( 
         [string] $Path = "."

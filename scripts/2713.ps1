@@ -1,4 +1,4 @@
-﻿
+
 function Select-CLSCompliant {
 #.Synopsis
 #  Outputs the same as "Select-Object *" with basic error handling for properties that are not CLS Compliant

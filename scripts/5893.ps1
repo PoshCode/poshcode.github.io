@@ -1,4 +1,4 @@
-﻿#Author:    	Glenn Sizemore glnsize@get-admin.com
+#Author:    	Glenn Sizemore glnsize@get-admin.com
 #
 #Purpose:	Convert a DN to a Canonical name, and back again.
 #

@@ -1,4 +1,4 @@
-﻿Function Test-IsAdmin   
+Function Test-IsAdmin   
 {  
 <#     
 .SYNOPSIS     

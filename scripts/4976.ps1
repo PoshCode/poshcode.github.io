@@ -1,4 +1,4 @@
-﻿param (
+param (
     [string]$ConnectionString,
     [string]$DataSource,
     [string]$FileName,

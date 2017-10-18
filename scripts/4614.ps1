@@ -1,4 +1,4 @@
-﻿# Checks if Quest Active Roles Management snapin is running and if not, loads it. 
+# Checks if Quest Active Roles Management snapin is running and if not, loads it. 
 if ((get-pssnapin |% {$_.name}) -notcontains "Quest.ActiveRoles.ADManagement")
 {Add-PSSnapin Quest.ActiveRoles.ADManagement}
 

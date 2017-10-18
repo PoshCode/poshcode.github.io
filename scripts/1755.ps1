@@ -1,4 +1,4 @@
-﻿write-host "Usage: finddupe.ps1 <directory1> <directory2> ... <directoryN>"
+write-host "Usage: finddupe.ps1 <directory1> <directory2> ... <directoryN>"
 
 function Get-MD5([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
 

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Displays Desktop Size
 .DESCRIPTION

@@ -1,4 +1,4 @@
-﻿param
+param
 (
     ## The script block to invoke elevated
     [Parameter(Mandatory = $true)]

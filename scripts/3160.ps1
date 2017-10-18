@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
    Updates the Sophos Message Relay configuration.
 .DESCRIPTION

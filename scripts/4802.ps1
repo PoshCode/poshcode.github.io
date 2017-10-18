@@ -1,4 +1,4 @@
-﻿function Get-ProductKey([String]$Computer = '.') {
+function Get-ProductKey([String]$Computer = '.') {
   begin {
     $val = [Byte[]]([wmiclass]('\\' + $Computer + '\root\default:StdRegProv')).GetBinaryValue(
       2147483650, 'SOFTWARE\Microsoft\Windows NT\CurrentVersion', 'DigitalProductId'

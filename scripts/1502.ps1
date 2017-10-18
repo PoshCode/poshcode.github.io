@@ -1,4 +1,4 @@
-﻿###Network Policy Server Synchronization Script
+###Network Policy Server Synchronization Script
 #This script copies the configuration from the NPS Master Server and imports it on this server.
 #The Account that this script runs under must have Local Administrator rights to the NPS Master.
 #This was designed to be run as a scheduled task on the NPS Secondary Servers on an hourly,daily, or as-needed basis.

@@ -1,4 +1,4 @@
-﻿# Synopsis:
+# Synopsis:
 # Windows Script to collect usernames and OU locations
 # for User Account with Password Set to Never Expire
 # and email .txt list to email address

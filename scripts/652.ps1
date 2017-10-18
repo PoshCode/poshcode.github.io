@@ -1,4 +1,4 @@
-﻿# Run-Defrag
+# Run-Defrag
 # Defragments the targeted hard drives.
 #
 # Args:

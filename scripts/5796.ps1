@@ -1,4 +1,4 @@
-﻿function set-ipmetricWLAN {
+function set-ipmetricWLAN {
 
 param ( [uint32]$metric ) 
 

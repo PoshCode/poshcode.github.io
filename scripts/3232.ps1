@@ -1,4 +1,4 @@
-﻿function Out-LogFile {
+function Out-LogFile {
 <#
 	.SYNOPSIS
 		Output to log file.

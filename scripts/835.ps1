@@ -1,4 +1,4 @@
-﻿function Play-Note([string]$note,[int] $duration = 5)  
+function Play-Note([string]$note,[int] $duration = 5)  
 {  
   if (!($note -match '(\d+)')) { $note+='4' };[void]($note -match '([A-G#]{1,2})(\d+)')  
   [console]::Beep((440 * [math]::Pow([math]::pow(2,(1/12)),

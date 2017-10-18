@@ -1,4 +1,4 @@
-﻿#Requires -version 2
+#Requires -version 2
 #Author: Nathan Linley
 #Script: Computer-DellUpdates
 #Site: http://myitpath.blogspot.com

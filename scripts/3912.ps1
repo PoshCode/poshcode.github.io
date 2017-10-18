@@ -1,4 +1,4 @@
-﻿if($Args) { 
+if($Args) { 
 	[string]$script:LocalStorageModuleName = $Args[0] 
 } elseif($LocalStorageModuleName) { 
 	[string]$script:LocalStorageModuleName = $LocalStorageModuleName

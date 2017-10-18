@@ -1,4 +1,4 @@
-﻿# List of receiving server members (sites prefixes) to be added.
+# List of receiving server members (sites prefixes) to be added.
 $array = "SITE01","SITE02","SITE03","SITE04","SITE05"
 
 # Get replication group object.

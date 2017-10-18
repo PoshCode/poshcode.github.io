@@ -1,4 +1,4 @@
-﻿function Require-Function
+function Require-Function
 {
   <# 
 .SYNOPSIS 

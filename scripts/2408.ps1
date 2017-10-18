@@ -1,4 +1,4 @@
-﻿# .Summary
+# .Summary
 # Download and execute a script block from PoshCode.org
 # .Description
 # Download the code for a PoshCode script based on search of by specific index.

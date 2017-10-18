@@ -1,4 +1,4 @@
-﻿
+
 # The $test variable can be pretty much whatever you want it to be, or with a little adjustment it isn't even necessary.
 # I just wanted to set it up like this for the $match variable later on
 $test=(get-folder testing|get-vm)

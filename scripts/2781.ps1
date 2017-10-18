@@ -1,4 +1,4 @@
-﻿function New-PowerChart() {
+function New-PowerChart() {
 #.Synopsis
 #   Create a chart using the WPF DataVisualization Toolkit (WPFToolkit)
 #.Example

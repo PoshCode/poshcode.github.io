@@ -1,4 +1,4 @@
-﻿function Get-WebServiceConnections()
+function Get-WebServiceConnections()
 {
   $results = @{}
   $perfmon = new-object System.Diagnostics.PerformanceCounter

@@ -1,4 +1,4 @@
-﻿###################################################################
+###################################################################
 ##  Description:  Generic script for publishing and launching App-V
 ##  packages in Citrix published app is calls the script and passes
 ##  it the name of the package and the name of the EXE to launch.  

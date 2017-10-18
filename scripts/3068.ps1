@@ -1,4 +1,4 @@
-﻿$date = ( get-date ).ToString('yyyy-MM-dd-hh-mm')
+$date = ( get-date ).ToString('yyyy-MM-dd-hh-mm')
 
 $inpath = "C:\InputDir\"
 

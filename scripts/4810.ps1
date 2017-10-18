@@ -1,4 +1,4 @@
-﻿#Created by toussman@gmail.com on 17/01/2014 
+#Created by toussman@gmail.com on 17/01/2014 
 #http://theplatformadmin.blogspot.co.uk/
 
 param(

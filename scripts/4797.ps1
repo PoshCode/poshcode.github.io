@@ -1,4 +1,4 @@
-﻿Set-Alias sdelete Remove-FileAbnormally
+Set-Alias sdelete Remove-FileAbnormally
 
 function Remove-FileAbnormal {
   <#

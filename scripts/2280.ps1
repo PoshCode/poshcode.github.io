@@ -1,4 +1,4 @@
-﻿#Autor:  Mateusz &#346;wietlicki 
+#Autor:  Mateusz &#346;wietlicki 
 #Site:   mateusz.swietlicki.net
 #Create: 2010-10-04
 

@@ -1,4 +1,4 @@
-﻿$i=[float]-16;
+$i=[float]-16;
 $j=[float]-16;
 $r=[float]-16;
 $x=[float]-16;

@@ -1,4 +1,4 @@
-﻿foreach ($DL in $DLList) {
+foreach ($DL in $DLList) {
  
     $Dmember= get-distributiongroupmember -Identity $DL.Name
  

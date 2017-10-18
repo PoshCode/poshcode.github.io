@@ -1,4 +1,4 @@
-﻿
+
 $VMs = get-vm
 $Results = @()
 foreach ($VM in $VMs) {

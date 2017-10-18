@@ -1,4 +1,4 @@
-﻿Function Get-ApplicationPath {
+Function Get-ApplicationPath {
     Param ([string[]]$extension)
     Write-Verbose "Saving current location"
     Push-Location

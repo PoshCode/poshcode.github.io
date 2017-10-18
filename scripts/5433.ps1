@@ -1,4 +1,4 @@
-﻿function Get-DonSysInfo {
+function Get-DonSysInfo {
 <#
 .SYNOPSIS
 Gets computer info. From computers. Many, many computers.

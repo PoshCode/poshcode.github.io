@@ -1,4 +1,4 @@
-﻿#function ConvertTo-PseudoType {
+#function ConvertTo-PseudoType {
 
 
 <#

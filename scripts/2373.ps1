@@ -1,4 +1,4 @@
-﻿Function Get-IISLogLocation {
+Function Get-IISLogLocation {
 <#  
 .SYNOPSIS  
     This function can be ran against a server or multiple servers to locate

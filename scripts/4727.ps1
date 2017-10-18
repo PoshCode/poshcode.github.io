@@ -1,4 +1,4 @@
-﻿#function Get-InstalledPrinters {
+#function Get-InstalledPrinters {
   Add-Type -Assembly System.Drawing
   $count = [Drawing.Printing.PrinterSettings]::InstalledPrinters
   

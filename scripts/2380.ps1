@@ -1,4 +1,4 @@
-﻿Function Get-Excuse {
+Function Get-Excuse {
   <#
     .Synopsis
       Retrieves a BOFH excuse from Jeff Ballard's website (http://jeffballard.us/).

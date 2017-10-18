@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(position=0)]$SrcFolder = '\\YourWorkstation\PathHere',
     [switch]$NoBackupDestinationProfile
 )

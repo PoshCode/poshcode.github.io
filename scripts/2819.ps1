@@ -1,4 +1,4 @@
-﻿Function Start-BinaryClock {
+Function Start-BinaryClock {
 <#
 .SYNOPSIS
     This is a binary clock that lists the time in hours, minutes and seconds

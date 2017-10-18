@@ -1,4 +1,4 @@
-﻿Function Get-O365 {
+Function Get-O365 {
 $cred = Get-Credential -Message "Your username is your email address for O365"
 $session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "https://ps.outlook.com/powershell/" -Credential $cred -Authentication Basic -AllowRedirection
 Import-PSSession $session

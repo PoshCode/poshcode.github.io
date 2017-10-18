@@ -1,4 +1,4 @@
-﻿#< #
+#< #
 #.Synopsis
 @@#   Create a class instance and/or invoke a method on C# source code.
 @@#   For details, see:

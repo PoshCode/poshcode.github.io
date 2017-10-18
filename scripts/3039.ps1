@@ -1,4 +1,4 @@
-﻿$script:dse = 'LDAP://my.domain.com'
+$script:dse = 'LDAP://my.domain.com'
 
 function script:User-Exists([string]$username)
 {

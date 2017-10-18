@@ -1,4 +1,4 @@
-﻿function Find-FileWithSignature {
+function Find-FileWithSignature {
   <#
     .DESCRIPTION
         Looks for file(s) by specific signature.

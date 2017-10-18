@@ -1,4 +1,4 @@
-﻿# Environment proprties
+# Environment proprties
 
 [string]$QTDIR = "C:\Qt\4.8.3-msvc2008"
 [string]$rootDir = "C:\Build\"

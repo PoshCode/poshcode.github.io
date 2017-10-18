@@ -1,4 +1,4 @@
-﻿function Get-Constructor {
+function Get-Constructor {
 PARAM( [Type]$type, [Switch]$Simple)
    if($Simple) {
    $type.GetConstructors() | 

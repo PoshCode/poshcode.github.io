@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="ISO-8859-1"?>
+<?xml version="1.0" encoding="ISO-8859-1"?>
 <xsl:transform xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
                xmlns="http://logging.apache.org/log4net/schemas/log4net-events-1.2"
                version="1.0">

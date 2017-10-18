@@ -1,4 +1,4 @@
-﻿Function Shuffle-String ([string]$String, [switch]$IgnoreSpaces, [switch]$IgnoreCRLF, [switch]$IgnoreWhitespace) {
+Function Shuffle-String ([string]$String, [switch]$IgnoreSpaces, [switch]$IgnoreCRLF, [switch]$IgnoreWhitespace) {
 ##
 ## Simple enough, input a string or here-string, return it randomly shuffled, whitespace, carriage returns and all
 ## -IgnoreSpaces removes spaces from output

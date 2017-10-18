@@ -1,4 +1,4 @@
-﻿Import-Module activedirectory
+Import-Module activedirectory
 $ou1 = Read-Host "Enter the name of the 1st OU"
 $ou2 = Read-Host "Enter the name of the 2ed OU"
 $a = get-adgroupmember -Identity $ou1 | get-aduser -properties displayname | select name, displayname

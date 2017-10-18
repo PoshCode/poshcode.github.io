@@ -1,4 +1,4 @@
-﻿function Get-UcsServerVlan {
+function Get-UcsServerVlan {
     Get-UcsServiceProfile | Foreach-Object {
         $sp = $_
         $sp | Get-UcsVnic | Foreach-Object {

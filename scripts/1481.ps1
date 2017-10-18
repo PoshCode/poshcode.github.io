@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 PARAM ( 
    [Parameter(Position=1, Mandatory=$true)]
    [ValidateSet("wmv","wmvhigh","ppt")] # the "mp4" files aren't there yet

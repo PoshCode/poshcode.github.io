@@ -1,4 +1,4 @@
-﻿Function New-LocalUser
+Function New-LocalUser
 	{
 		<#
 			.SYNOPSIS

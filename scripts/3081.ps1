@@ -1,4 +1,4 @@
-﻿# function Set-HostColor {
+# function Set-HostColor {
 param(
 [Switch]$Light = $(
                      ## Based on whether we're elevated or not, switch between DARK and LIGHT versions of Solarized:

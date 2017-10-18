@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## An update using New-WebServiceProxy to the MSDN ContentService instead of HttpRest
 ## See: http: //services.msdn.microsoft.com/ContentServices/ContentService.asmx
 

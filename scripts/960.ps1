@@ -1,4 +1,4 @@
-﻿param (
+param (
 	$Path
 )
 [xml]$flt = Get-Content -Path $Path

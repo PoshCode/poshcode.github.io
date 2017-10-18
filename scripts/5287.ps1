@@ -1,4 +1,4 @@
-﻿# clamscan version 0.1
+# clamscan version 0.1
 # Note that this assumes a standardized installation of the software
 # You will also need a valid conf file such as the following:
 @"

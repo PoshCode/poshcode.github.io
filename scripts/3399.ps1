@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Download video-files from the specified RSS-feed URL, based on HTML scraping and a regular expression.
 

@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$Path,[Parameter(Mandatory=$true)][string]$Destination)
+param([Parameter(Mandatory=$true)][string]$Path,[Parameter(Mandatory=$true)][string]$Destination)
 
 Get-ChildItem -Path $Path | Where-Object { !$_.PSIsContainer } | foreach {
 	$Target = Join-Path -Path $Destination -ChildPath (Split-Path -Leaf $_)

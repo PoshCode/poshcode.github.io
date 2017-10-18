@@ -1,4 +1,4 @@
-﻿PARAM(
+PARAM(
 	$location=$(throw "Make sure to specify a location for old machines to be imported")
 )
 $oldVM = Get-ChildItem "$location\*.xml"

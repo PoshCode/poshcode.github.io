@@ -1,4 +1,4 @@
-﻿function Send-XMLFile ($Path, $IP, $Username, $Password)
+function Send-XMLFile ($Path, $IP, $Username, $Password)
 {
 	[Net.ServicePointManager]::ServerCertificateValidationCallback = { $True }
 	if (!(Test-Path $Path\SSP.XML))

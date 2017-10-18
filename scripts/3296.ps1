@@ -1,4 +1,4 @@
-﻿#
+#
 #.SYNOPSIS
 # Svendsen Tech's PowerShell ASCII art script creates ASCII art characters
 # from a subset of common letters, numbers and punctuation characters.

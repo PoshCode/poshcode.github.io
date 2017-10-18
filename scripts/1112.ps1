@@ -1,4 +1,4 @@
-﻿
+
 
 $ping = new-object System.Net.NetworkInformation.Ping
 $isbad = $true;

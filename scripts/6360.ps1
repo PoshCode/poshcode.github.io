@@ -1,4 +1,4 @@
-﻿<#
+<#
  .SYNOPSIS
     This module automates many of the tasks involved in processing a new starter on key Contoso systems.
  .DESCRIPTION 

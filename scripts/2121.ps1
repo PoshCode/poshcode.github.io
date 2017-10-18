@@ -1,4 +1,4 @@
-﻿# Original posting on how to access a remote Registry from The Powershell Guy
+# Original posting on how to access a remote Registry from The Powershell Guy
 # 
 # http://thepowershellguy.com/blogs/posh/archive/2007/06/20/remote-registry-access-and-creating-new-registry-values-with-powershell.aspx
 #

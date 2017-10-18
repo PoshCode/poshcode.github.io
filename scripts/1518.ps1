@@ -1,4 +1,4 @@
-﻿# Description:  State Changes for specified OpsMgr Monitor
+# Description:  State Changes for specified OpsMgr Monitor
 # Date:         09-12-2009
 # Author:       Stefan Stranger 
 # Explanation:  If you want to know the State Changes for a specific Monitor you can run the next PowerShell script

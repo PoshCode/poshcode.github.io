@@ -1,4 +1,4 @@
-﻿# Get-RemoteRegistry
+# Get-RemoteRegistry
 # NOTE: you have to have access, and the remote registry service has to be running
 param(
   [string]$computer = $(Read-Host "Remote Computer Name")

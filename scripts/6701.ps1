@@ -1,4 +1,4 @@
-﻿function Get-LogonEvents{
+function Get-LogonEvents{
 
 [CmdletBinding()]
 

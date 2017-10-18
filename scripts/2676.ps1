@@ -1,4 +1,4 @@
-﻿if (!( gmo ShowUI)) {ipmo showui}
+if (!( gmo ShowUI)) {ipmo showui}
 
 if(!(Get-Command DataGrid -ErrorAction SilentlyContinue)) {
     Add-UIFunction -Type System.Windows.Controls.DataGrid

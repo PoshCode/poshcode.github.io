@@ -1,4 +1,4 @@
-﻿$frmMain_Load= {
+$frmMain_Load= {
   [Text.Encoding]::GetEncodings() | % {
     $e = $_.GetEncoding()
     $dgvGrid.Rows.Add($e.CodePage, $e.BodyName, $e.EncodingName, $e.WindowsCodePage, `

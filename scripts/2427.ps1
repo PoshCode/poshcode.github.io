@@ -1,4 +1,4 @@
-﻿<#
+<#
 
  NAME: New-DFSRHealthReport.ps1
 

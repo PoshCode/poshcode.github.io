@@ -1,4 +1,4 @@
-﻿#Capture the PC Name
+#Capture the PC Name
 $PCNAME = Read-Host -Prompt "Which is the user's PC?"
 #Test the Connection
 $PING = (test-connection $PCNAME -count 1 -quiet)

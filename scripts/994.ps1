@@ -1,4 +1,4 @@
-﻿#Usage: ./WPFTableSpace.ps1 'Z002\SqlExpress' AdventureWorks
+#Usage: ./WPFTableSpace.ps1 'Z002\SqlExpress' AdventureWorks
 #Note: Requires .NET 3.5, Visifire Charts (tested on v2.1.0), Powerboots (tested on v0.1), and SQLPSX (tested on v1.5)
 param($sqlserver=$(throw 'sqlserver is required.'),$dbname=$(throw 'dbname is required.'),$top=10)
 

@@ -1,4 +1,4 @@
-﻿#PomoDoro Module (make sure its a PS1)
+#PomoDoro Module (make sure its a PS1)
 #12-3-2011 Karl Prosser
 
 #example

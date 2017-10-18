@@ -1,4 +1,4 @@
-﻿$def = $(if ((gi .).FullName -eq (gi .).Root) {
+$def = $(if ((gi .).FullName -eq (gi .).Root) {
            ([string](gi .).Root).TrimEnd("\")
          }
          else { (gi .).FullName }

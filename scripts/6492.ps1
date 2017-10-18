@@ -1,4 +1,4 @@
-﻿# Script is not mine, see
+# Script is not mine, see
 # Post on Twitter https://mobile.twitter.com/gregzakharov/status/769974270046904320
 
 

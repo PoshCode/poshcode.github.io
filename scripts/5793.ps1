@@ -1,4 +1,4 @@
-﻿function Get-CACertificateDatabase
+function Get-CACertificateDatabase
 {
     <#
     .SYNOPSIS

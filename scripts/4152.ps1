@@ -1,4 +1,4 @@
-﻿mkdir SelfHostDemo | cd
+mkdir SelfHostDemo | cd
 nuget install Microsoft.AspNet.WebApi.SelfHost
 
 # You probably don't have the PowerShell module to Import-NuGetPackage *; so do it by hand:

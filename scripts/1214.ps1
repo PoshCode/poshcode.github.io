@@ -1,4 +1,4 @@
-﻿
+
 Function Convert-TemplateToVM($template){
 	
 	Write-Host "Converting" $vm -ForegroundColor Yellow		

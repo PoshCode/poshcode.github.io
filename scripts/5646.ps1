@@ -1,4 +1,4 @@
-﻿$AllValues = @()
+$AllValues = @()
 $Values = @()
 
 $Migrations = Get-MoveRequest

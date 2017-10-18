@@ -1,4 +1,4 @@
-﻿$VerbosePreference = 'continue'
+$VerbosePreference = 'continue'
 # Get Start Time
 $StartTime = (Get-Date)
 

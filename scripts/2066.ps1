@@ -1,4 +1,4 @@
-﻿#Powershell Script To Install SNMP Services (SNMP Service, SNMP WMI Provider)
+#Powershell Script To Install SNMP Services (SNMP Service, SNMP WMI Provider)
 
 #Variables :)
 $pmanagers = "ADD YOUR MANAGER(s)"

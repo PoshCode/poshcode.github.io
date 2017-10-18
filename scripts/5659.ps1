@@ -1,4 +1,4 @@
-﻿function ConvertFrom-RomanNumeral
+function ConvertFrom-RomanNumeral
 {
   <#
     .SYNOPSIS

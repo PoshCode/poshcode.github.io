@@ -1,4 +1,4 @@
-﻿if (!(Test-Path alias:gfe)) { Set-Alias tfe Get-FileEncoding }
+if (!(Test-Path alias:gfe)) { Set-Alias tfe Get-FileEncoding }
 
 function Get-FileEncoding {
   <#

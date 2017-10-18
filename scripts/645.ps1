@@ -1,4 +1,4 @@
-﻿# Author: Hal Rottenberg
+# Author: Hal Rottenberg
 # Purpose: Find matching members in a local group
 # Used tip from RichS here: http://powershellcommunity.org/Forums/tabid/54/view/topic/postid/1528/Default.aspx
 

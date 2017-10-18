@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Backup-ToUSB.ps1 (Version 2.0, 6 Jan 2012)
 The author may be contacted via www.SeaStarDevelopment.Bravehost.com 

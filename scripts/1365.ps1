@@ -1,4 +1,4 @@
-﻿function Run-DosCommand($program, [string[]]$programArgs)
+function Run-DosCommand($program, [string[]]$programArgs)
 {
 	write-host "Running command: $program";
 	write-host " Args:"

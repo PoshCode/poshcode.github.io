@@ -1,4 +1,4 @@
-﻿Function New-SymLink {
+Function New-SymLink {
     <#
         .SYNOPSIS
             Creates a Symbolic link to a file or directory

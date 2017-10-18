@@ -1,4 +1,4 @@
-﻿# script parameters
+# script parameters
 param(
 [Parameter(Position=0,ValueFromPipeline=$True)]
 [ValidateNotNullorEmpty()][string[]] $Computers = $env:computername,

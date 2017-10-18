@@ -1,4 +1,4 @@
-﻿Function Import-ASUP 
+Function Import-ASUP 
 {
     param(
         [string]

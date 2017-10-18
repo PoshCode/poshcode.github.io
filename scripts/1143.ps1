@@ -1,4 +1,4 @@
-﻿# draw output
+# draw output
 function drawlines($colors, $lines) {
 	if (!$lines) { return }
 	foreach ($line in $lines) {

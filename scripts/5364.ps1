@@ -1,4 +1,4 @@
-﻿Function Set-FolderCompression
+Function Set-FolderCompression
 {
 	Param(
 		[Parameter(

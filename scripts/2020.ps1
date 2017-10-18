@@ -1,4 +1,4 @@
-﻿$getVmScript = { 
+$getVmScript = { 
 	Connect-VIServer yourVCenterServer
 	Get-VM
 }

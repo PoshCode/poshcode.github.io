@@ -1,4 +1,4 @@
-﻿#
+#
 #restore-LastSnapshot 
 #Reverts specified VM to last (most current) snapshot
 #

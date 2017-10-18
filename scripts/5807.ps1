@@ -1,4 +1,4 @@
-﻿Function Get-PasswordFromEncryptedFile {
+Function Get-PasswordFromEncryptedFile {
 <#
 .Synopsis
    Converts a password stored as a secure string to a file to plain text.

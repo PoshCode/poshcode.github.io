@@ -1,4 +1,4 @@
-﻿# Script to export Datastore information per Datastore cluster to csv
+# Script to export Datastore information per Datastore cluster to csv
 # By Leon Scheltema AVANCE ICT Groep Nederland
 
 # Begin variables

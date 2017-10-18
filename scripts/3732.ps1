@@ -1,4 +1,4 @@
-﻿<#
+<#
 ALZDBA SQLServer_Export_SQLPlans_SMO.ps1
 Export top n consuming sqlplans via avg_worker_time (=cpu) for all databases of a given SQLServer (SQL2005+) Instance
 results in a number of .SQLPlan files and the consumption overview .CSV file

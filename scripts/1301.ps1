@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ###############################################################################
 ## New-ElevatedTask is a script (for Vista) which creates "elevated" scheduled 
 ## tasks by exploiting the import-from XML feature of schtasks.exe /Create /XML

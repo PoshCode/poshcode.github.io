@@ -1,4 +1,4 @@
-﻿#load boots#
+#load boots#
 Import-Module Powerboots
 
 

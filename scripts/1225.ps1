@@ -1,4 +1,4 @@
-﻿
+
 param( 
     [string] $sortCriteria = "Processor", 
     [int] $Count = 5

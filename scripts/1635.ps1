@@ -1,4 +1,4 @@
-﻿function Get-Computer {
+function Get-Computer {
 <#
   .Synopsis
     Retrieves basic information about a computer. 

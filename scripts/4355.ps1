@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
    Get inventory data for specified computer system.
 .DESCRIPTION

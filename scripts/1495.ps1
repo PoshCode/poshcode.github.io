@@ -1,4 +1,4 @@
-﻿function Get-VirtualEsxiIp {
+function Get-VirtualEsxiIp {
 	param($vm)
 	$tmpFileTemplate = ($env:TEMP + "\ipdetect-")
 	$tmpFile = $tmpFileTemplate + (Get-Random) + ".png"

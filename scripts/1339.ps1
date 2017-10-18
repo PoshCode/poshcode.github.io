@@ -1,4 +1,4 @@
-﻿#
+#
 # New-WebServiceProxy.ps1 (v3.0 Sep 23, 2009)
 #
 # Oisin Grehan <oising@gmail.com> (x0n)

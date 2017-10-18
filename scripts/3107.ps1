@@ -1,4 +1,4 @@
-﻿########
+########
 #
 #Used for enumerating local workstation for user details
 #Author: Adam Liquorish

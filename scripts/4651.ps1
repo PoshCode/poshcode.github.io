@@ -1,4 +1,4 @@
-﻿Import-Module Activedirectory
+Import-Module Activedirectory
 
 #Lower Case!!
 $oldserver = "hostname"

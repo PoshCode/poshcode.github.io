@@ -1,4 +1,4 @@
-﻿#Requires -version 2
+#Requires -version 2
 <#
 Microsoft PowerShell Source File
 NAME  : UserManagement.ps1 v3.10

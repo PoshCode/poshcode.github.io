@@ -1,4 +1,4 @@
-﻿# Requires Version 2.0
+# Requires Version 2.0
 # Requires ManageOntap.Dll
 # Plenty of room left for documentation
 # Andy Schneider - http://get-powershell.com

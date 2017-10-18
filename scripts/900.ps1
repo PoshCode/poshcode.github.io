@@ -1,4 +1,4 @@
-﻿#requires -version 2 -pssnapin VMware.VimAutomation.Core 
+#requires -version 2 -pssnapin VMware.VimAutomation.Core 
 Function Disconnect-VMHost {
     <#
     .Summary

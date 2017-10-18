@@ -1,4 +1,4 @@
-﻿function Disable-SSLValidation
+function Disable-SSLValidation
 {
 <#
 .SYNOPSIS

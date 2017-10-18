@@ -1,4 +1,4 @@
-﻿param (
+param (
     [string]$ConnectionString,
     [string]$Driver,
     [string]$Dsn

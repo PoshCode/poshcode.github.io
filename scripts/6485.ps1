@@ -1,4 +1,4 @@
-﻿$e = ([char]27) + "["
+$e = ([char]27) + "["
 $global:ANSI = @{
    ESC = ([char]27) + "["
    Clear = "${e}0m"

@@ -1,4 +1,4 @@
-﻿#.Example
+#.Example
 # 	Get-SPListItem "Scrum Team Assignments" 
 # 	Gets all the items in the list with the default columns on them
 #.Example

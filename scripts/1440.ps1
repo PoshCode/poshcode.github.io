@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # Set-FileLines.ps1 (V 1003)
 # This script will maintain the PS Transcript file (default setting), or any 
 # text file, at a fixed length, ie matching the number of lines entered.

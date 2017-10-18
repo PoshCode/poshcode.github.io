@@ -1,4 +1,4 @@
-﻿function Extract-FiddlerSaz
+function Extract-FiddlerSaz
 {
     param([string]$zipfilename)
 

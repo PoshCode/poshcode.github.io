@@ -1,4 +1,4 @@
-﻿#Make new CSV File
+#Make new CSV File
 $CSVFileName = "\\networkshare\folder\filename.csv"
 "CSV,Header,With,Well,Named,Data,Columns" > $CSVFileName
 

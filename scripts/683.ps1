@@ -1,4 +1,4 @@
-﻿##requires -version 2.0
+##requires -version 2.0
 ## Get-PerformanceHistory.ps1
 ##############################################################################################################
 ## Lets you see the amount of time recent commands in your history have taken

@@ -1,4 +1,4 @@
-﻿***********************************************************************
+***********************************************************************
 * Developed by: Morne Loubser (aka Morlokor)
 * Purpose: To mass query Active Directory for user first, last and display names
 * Date: 11/04/2014

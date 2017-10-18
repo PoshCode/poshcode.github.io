@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #  Convert Bounce to X500
 #.Description
 #  Convert URL Encoded address in a Bounce message to an X500 address

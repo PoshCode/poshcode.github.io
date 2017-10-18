@@ -1,4 +1,4 @@
-﻿function get-ContentFromString{
+function get-ContentFromString{
 	param(
 		[Parameter(Mandatory=$True,Position=0)]
 		[string]$inputstring, 

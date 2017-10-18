@@ -1,4 +1,4 @@
-﻿
+
 function Get-Parameters {
 	param([string]$CommandName, [switch]$IncludeCommon)
 	

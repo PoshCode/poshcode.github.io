@@ -1,4 +1,4 @@
-﻿[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | Out-Null
+[Reflection.Assembly]::LoadWithPartialName("System.Drawing") | Out-Null
 
 #Version History
 #v1.0   - Chad Miller - Initial release

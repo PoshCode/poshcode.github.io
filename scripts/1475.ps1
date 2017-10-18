@@ -1,4 +1,4 @@
-﻿Begin {
+Begin {
 
         $disableCopy = "isolation.tools.copy.enable"
         $disableCopy_value = "false"

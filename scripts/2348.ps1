@@ -1,4 +1,4 @@
-﻿function ConvertTo-MultiArray {
+function ConvertTo-MultiArray {
     <#
  .Notes
  NAME: ConvertTo-MultiArray

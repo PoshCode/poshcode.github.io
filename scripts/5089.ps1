@@ -1,4 +1,4 @@
-﻿
+
 
 $servers=get-content c:\temp\serverlist.txt 
 $username="username" 

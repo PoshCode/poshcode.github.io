@@ -1,4 +1,4 @@
-﻿Function FormatDate {
+Function FormatDate {
 <#
 .SYNOPSIS
 Get input date string or get T-n or T+n dates in the specified format.

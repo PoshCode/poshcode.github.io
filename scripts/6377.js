@@ -1,4 +1,4 @@
-﻿## And a slick weather widget using Yahoo's forecast and images
+## And a slick weather widget using Yahoo's forecast and images
 New-UIWidget -AsJob { 
     Grid {
         Rectangle -RadiusX 10 -RadiusY 10 -StrokeThickness 0 -Width 170 -Height 80 -HorizontalAlignment Left -VerticalAlignment Top -Margin "60,40,0,0" -Fill { 

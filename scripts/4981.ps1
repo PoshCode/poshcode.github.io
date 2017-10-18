@@ -1,4 +1,4 @@
-﻿Function Out-ClipboardText
+Function Out-ClipboardText
 {
     [CmdletBinding()]
     

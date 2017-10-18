@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## ISE-Snippets module v 1.0
 ## DEVELOPED FOR CTP3 
 ## See comments for each function for changes ...

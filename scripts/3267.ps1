@@ -1,4 +1,4 @@
-﻿#Find out how many accounts we should delete ( I'll make this interogate UPS at some point in future
+#Find out how many accounts we should delete ( I'll make this interogate UPS at some point in future
 #for now this fudge will do
 Param ([int]$limit)
 

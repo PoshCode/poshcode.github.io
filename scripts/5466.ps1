@@ -1,4 +1,4 @@
-﻿function Get-Uptime([String]$Computer = '.') {
+function Get-Uptime([String]$Computer = '.') {
   <#
     .NOTES
         Author: greg zakharov

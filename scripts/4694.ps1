@@ -1,4 +1,4 @@
-﻿function New-Closure {
+function New-Closure {
 #.SYNOPSIS
 #  A more fine grained approach to capturing variables than GetNewClosure
 #.EXAMPLE

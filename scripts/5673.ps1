@@ -1,4 +1,4 @@
-﻿#Returns the priority mail server (SMTP) for a particular email address.
+#Returns the priority mail server (SMTP) for a particular email address.
 function Get-MX {
 param([string] $domain = $( Throw "Query required in the format domain.com or email@domain.com.") )
 	

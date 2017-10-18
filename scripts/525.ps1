@@ -1,4 +1,4 @@
-﻿# AutoMount.psm1 v1.0   
+# AutoMount.psm1 v1.0   
 # Oisin "x0n" Grehan (MVP)   
   
 $query = new-object System.Management.WqlEventQuery   

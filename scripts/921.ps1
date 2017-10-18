@@ -1,4 +1,4 @@
-﻿# Glenn Sizemore www . Get-Admin . com
+# Glenn Sizemore www . Get-Admin . com
 # Requires the NetApp OnTap SDK v3.5
 
 # Get-NaAPI

@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Log a print job to a file.
     .DESCRIPTION

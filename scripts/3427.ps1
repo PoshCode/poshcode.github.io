@@ -1,4 +1,4 @@
-﻿<#
+<#
   .SYNOPSIS
   This function is used for finding all AD objects with a given SPN.
   

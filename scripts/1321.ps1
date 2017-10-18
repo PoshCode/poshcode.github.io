@@ -1,4 +1,4 @@
-﻿# get-mystattype.ps1	: Proxy cmdlet for the Get-StatType cmdlet.
+# get-mystattype.ps1	: Proxy cmdlet for the Get-StatType cmdlet.
 # The scripts add the parameter -ShowInstances to the cmdlet
 # Parameters:
 #	ShowInstances	: switch to define if all the instances for each metric will be shown

@@ -1,4 +1,4 @@
-﻿$Computers = DATA {
+$Computers = DATA {
   ConvertFrom-StringData -stringdata @'
     Server1 = 0E:A7:DE:AD:BE:EF
     Server2 = DE:AD:BE:EF:70:E5

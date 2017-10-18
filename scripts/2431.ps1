@@ -1,4 +1,4 @@
-﻿
+
 function New-AdUserAccount {
     param (
         [string] $Username = $(throw "Parameter -Username [System.String] is required."),

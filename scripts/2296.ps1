@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
 	Searches text files by pattern and displays the results.
 .Description

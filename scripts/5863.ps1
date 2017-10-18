@@ -1,4 +1,4 @@
-﻿function Set-IseZoom {
+function Set-IseZoom {
   param(
     [Parameter(Mandatory=$true)]
     [ValidateRange(20,400)]

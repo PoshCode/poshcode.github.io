@@ -1,4 +1,4 @@
-﻿#-------------------------------------------------------------------------    
+#-------------------------------------------------------------------------    
 # Script that will: 
 # 1. Create a workspace. Workspacce Name: _Root
 # 2. Get the latest code from repository

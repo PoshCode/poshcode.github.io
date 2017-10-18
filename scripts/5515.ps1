@@ -1,4 +1,4 @@
-﻿function Invoke-LateBoundMember {
+function Invoke-LateBoundMember {
     [cmdletbinding(supportsshouldprocess)]
     param(
         [parameter(valuefrompipeline, mandatory)]

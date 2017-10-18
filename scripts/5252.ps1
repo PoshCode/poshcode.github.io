@@ -1,4 +1,4 @@
-﻿function Get-OSInfo {
+function Get-OSInfo {
 <#
 .SYNOPSIS
 Gets OS info.

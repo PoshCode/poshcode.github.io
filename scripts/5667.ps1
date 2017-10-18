@@ -1,4 +1,4 @@
-﻿# Script to create Datastore clusters and add datastores from csv
+# Script to create Datastore clusters and add datastores from csv
 # By Leon Scheltema AVANCE ICT Groep Nederland
 
 # Begin variables

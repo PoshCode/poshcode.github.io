@@ -1,4 +1,4 @@
-﻿function Trap-CtrlC {
+function Trap-CtrlC {
    ## Stops Ctrl+C from exiting this function
    [console]::TreatControlCAsInput = $true
    ## And you have to check every keystroke to see if it's a Ctrl+C

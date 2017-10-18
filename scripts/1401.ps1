@@ -1,4 +1,4 @@
-﻿Function Split-Every($list, $count=4) {
+Function Split-Every($list, $count=4) {
     $aggregateList = @()
     
     $blocks = [Math]::Floor($list.Count / $count)

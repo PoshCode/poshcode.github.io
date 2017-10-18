@@ -1,4 +1,4 @@
-﻿function Get-CountDown() {
+function Get-CountDown() {
 
 <#
     .Synopsis

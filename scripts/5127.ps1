@@ -1,4 +1,4 @@
-﻿function Read-Choice {
+function Read-Choice {
    <#
       .Synopsis
         Prompt the user for a choice, and return the (0-based) index of the selected item

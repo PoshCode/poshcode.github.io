@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Prepares your dev environment for working with Apache Hadoop.
 #>

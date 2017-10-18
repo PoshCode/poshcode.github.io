@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 		Move mailboxes from one mailbox database to another mailbox database
 		or balance them across a group of mailbox databases. 

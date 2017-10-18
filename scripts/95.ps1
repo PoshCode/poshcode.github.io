@@ -1,4 +1,4 @@
-﻿Param([string]$server)
+Param([string]$server)
 Begin{
     function CheckRegKey{
         param([string]$srv)

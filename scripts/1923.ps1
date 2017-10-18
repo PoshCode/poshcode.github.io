@@ -1,4 +1,4 @@
-﻿#Purpose:  		To remotely query select machines for system information	
+#Purpose:  		To remotely query select machines for system information	
 #Author:  		Alex Smith
 #Created:		6/11/2010
 #Arguments:		IP Addresses or Hostnames of target PCs then path and file name

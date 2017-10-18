@@ -1,4 +1,4 @@
-﻿Param($VC,$ESXCreds=(Get-Credential))
+Param($VC,$ESXCreds=(Get-Credential))
 
 Write-Host "Connecting to VC to get ESX Hosts"
 Connect-VIServer $VC | out-null

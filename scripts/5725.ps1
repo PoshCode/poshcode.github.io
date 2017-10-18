@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Gets file encoding.
 .DESCRIPTION

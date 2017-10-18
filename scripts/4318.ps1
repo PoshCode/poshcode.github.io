@@ -1,4 +1,4 @@
-﻿function foo {
+function foo {
 param(
 [Parameter(Mandatory=$true,ValueFromPipelineByPropertyName=$true)]
 [string]

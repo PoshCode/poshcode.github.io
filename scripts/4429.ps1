@@ -1,4 +1,4 @@
-﻿# Network scanner del pover'uomo, versione 0.1 31/08/2013
+# Network scanner del pover'uomo, versione 0.1 31/08/2013
 
 $code = @"
 using System;

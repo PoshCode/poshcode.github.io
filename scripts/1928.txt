@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 # Version History:
 # v 0.5 - First Public version
 # v 1.0 - Made ConvertFrom-Json work with arbitrary JSON 

@@ -1,4 +1,4 @@
-﻿$Reg = [WMIClass]"root\default:StdRegProv"
+$Reg = [WMIClass]"root\default:StdRegProv"
 $values = [byte[]]($reg.getbinaryvalue(2147483650,"SOFTWARE\Microsoft\Windows NT\CurrentVersion","DigitalProductId").uvalue)
 $lookup = [char[]]("B","C","D","F","G","H","J","K","M","P","Q","R","T","V","W","X","Y","2","3","4","6","7","8","9")
 

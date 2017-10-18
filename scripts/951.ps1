@@ -1,4 +1,4 @@
-﻿#-------------------------------------------------
+#-------------------------------------------------
 # Send-HTMLFormattedEmail
 #-------------------------------------------------
 # Usage:	Used to send an HTML Formatted Email that is based on an XSLT template.

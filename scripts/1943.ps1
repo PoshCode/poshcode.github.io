@@ -1,4 +1,4 @@
-﻿function global:Move-FileSafely {
+function global:Move-FileSafely {
 #.Synopsis
 #  Moves files and folders from $source folder to $destination
 #.Description 

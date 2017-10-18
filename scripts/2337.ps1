@@ -1,4 +1,4 @@
-﻿## Start with a seed list of primes you know:
+## Start with a seed list of primes you know:
 $global:primes = 2,3,5 #,7,11,13,17,19,23
 
 ## This function will get the "next" one, add it to the list, and return it

@@ -1,4 +1,4 @@
-﻿#wakeonlan $computer
+#wakeonlan $computer
 function WakeOnLan($computer)
 {
 	$select=$select |where-object {$_.computername -eq $computer} |Select-Object mac

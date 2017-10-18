@@ -1,4 +1,4 @@
-﻿function Get-UACManifest
+function Get-UACManifest
 {
 <#
 .SYNOPSIS

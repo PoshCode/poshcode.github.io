@@ -1,4 +1,4 @@
-﻿Param (
+Param (
     [string]$computerName = $env:computerName
 )
 

@@ -1,4 +1,4 @@
-﻿function Get-NistNtpServer {
+function Get-NistNtpServer {
 <#
 	.SYNOPSIS
 		Gets the list NIST NTP servers.

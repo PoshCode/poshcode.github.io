@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Runs a T-SQL Script using SQL Server Management Objects (SMO)
 

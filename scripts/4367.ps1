@@ -1,4 +1,4 @@
-﻿function Get-ComputerAssetInformation
+function Get-ComputerAssetInformation
 {
 <#
 .SYNOPSIS

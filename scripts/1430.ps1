@@ -1,4 +1,4 @@
-﻿function Set-DownloadFlag {
+function Set-DownloadFlag {
 <#
 .Synopsis
 	Sets the ZoneTransfer flag which marks a file as being downloaded from the internet.

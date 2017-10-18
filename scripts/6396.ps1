@@ -1,4 +1,4 @@
-﻿function Get-CpuCache {
+function Get-CpuCache {
   begin {
     if (($ta = [PSObject].Assembly.GetType(
       'System.Management.Automation.TypeAccelerators'

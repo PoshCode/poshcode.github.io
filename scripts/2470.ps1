@@ -1,4 +1,4 @@
-﻿if(!(gwmi -list Win32_AddRemovePrograms)) {
+if(!(gwmi -list Win32_AddRemovePrograms)) {
 
 set-content $pwd\RegProgs.mof @'
 #pragma namespace("\\\\.\\root\\cimv2")

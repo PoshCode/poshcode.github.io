@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 After running this, it adds a static [sat] class to PowerShell:
 

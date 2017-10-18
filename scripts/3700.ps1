@@ -1,4 +1,4 @@
-﻿Function Get-SvnInfo {
+Function Get-SvnInfo {
 [cmdletbinding()]
 
 Param(

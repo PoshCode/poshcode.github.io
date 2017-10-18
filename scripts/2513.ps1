@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param (	
 	[parameter(Mandatory=$true)]
 	[ValidateScript( {[IO.File]::Exists($_)} )]

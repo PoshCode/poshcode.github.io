@@ -1,4 +1,4 @@
-﻿#Required 2.0
+#Required 2.0
 $def = $(if ((gi .).FullName -eq (gi .).Root) {
           ([string](gi .).Root).TrimEnd("\")
          }

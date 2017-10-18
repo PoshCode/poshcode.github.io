@@ -1,4 +1,4 @@
-﻿Function New-DummyVM {
+Function New-DummyVM {
 	param(
 	[Parameter(Mandatory=$true,HelpMessage="Target Host")]
 	[VMware.VimAutomation.Types.VMHost]

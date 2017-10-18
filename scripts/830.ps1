@@ -1,4 +1,4 @@
-﻿@@# Author: Jon Webster
+@@# Author: Jon Webster
 @@# Name: Enable-MailboxJunkEmail
 @@# Created: 1/27/2009
 #

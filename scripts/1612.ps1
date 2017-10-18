@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # Out-HTML - converts module functions or cmdlet help to HTML format
 # Minor modification of Vegard Hamar's OUT-HTML to support modules instead of pssnapin's
 # Based on Out-wiki by Dimitry Sotnikov (http://dmitrysotnikov.wordpress.com/2008/08/18/out-wiki-convert-powershell-help-to-wiki-format/)

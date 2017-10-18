@@ -1,4 +1,4 @@
-﻿function Copy-MAGig
+function Copy-MAGig
 {
     param(
         [string]$src,

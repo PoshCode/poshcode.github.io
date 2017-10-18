@@ -1,4 +1,4 @@
-﻿function Name3 {
+function Name3 {
 	param(
 		$Name3,
 		$Name4,

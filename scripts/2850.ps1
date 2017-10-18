@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS 
 Compares Registry Key Properties and subkeys across multiple computers
 .DESCRIPTION

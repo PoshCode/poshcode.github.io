@@ -1,4 +1,4 @@
-﻿###Variable to be changed
+###Variable to be changed
 ##Server Setup
 @@###Variable to be changed
 @@##Server Setup

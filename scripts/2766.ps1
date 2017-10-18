@@ -1,4 +1,4 @@
-﻿#Install and run BGInfo at startup using registry method as described here:
+#Install and run BGInfo at startup using registry method as described here:
 #http://forum.sysinternals.com/bginfo-at-startup_topic2081.html
 #Setup 
 #1. Download BgInfo http://technet.microsoft.com/en-us/sysinternals/bb897557

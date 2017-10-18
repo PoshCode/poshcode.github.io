@@ -1,4 +1,4 @@
-﻿param(
+param(
 $searchBase = "OU=Organisation,DC=uza,DC=local",
 $NewOUs = @(Import-csv -Path "d:\projects\AD\departments.csv" -Delimiter ";"),
 $SubOUs = @("Computers","Users"),

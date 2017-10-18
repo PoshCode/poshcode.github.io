@@ -1,4 +1,4 @@
-﻿Hello,
+Hello,
 
 I wanted to reach out to inquire about the possibility of advertising on your blog in the form of sponsored guest posts.  
 

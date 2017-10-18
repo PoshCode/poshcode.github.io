@@ -1,4 +1,4 @@
-﻿Function Get-HostsFile {
+Function Get-HostsFile {
 <#  
 .SYNOPSIS  
    Retrieves the contents of a hosts file on a specified system

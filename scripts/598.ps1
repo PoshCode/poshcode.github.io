@@ -1,4 +1,4 @@
-﻿#------------------------------------------------------------------
+#------------------------------------------------------------------
 # Produces report for McAfee AntiVirus on a set of remote computers
 # Usage: get-content <list of servers.txt> | .\GetMcAfeeInfo.ps1
 #        Optionally pipe output to Export-Csv, ConverTo-Html

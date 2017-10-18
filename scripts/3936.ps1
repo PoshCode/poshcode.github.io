@@ -1,4 +1,4 @@
-﻿Function Get-DiskSizeInfo {
+Function Get-DiskSizeInfo {
         <#
         .DESCRIPTION
         Check the Disk(s) Size and remaining freespace.

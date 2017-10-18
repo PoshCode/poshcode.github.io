@@ -1,4 +1,4 @@
-﻿## UI Automation v 1.10 -- REQUIRES the Reflection module
+## UI Automation v 1.10 -- REQUIRES the Reflection module
 ## 
 # WASP 2.0 is getting closer, but this is still just a preview:
 # -- a lot of the commands have weird names still because they're being generated ignorantly

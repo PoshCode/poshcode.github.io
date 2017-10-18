@@ -1,4 +1,4 @@
-﻿Show -Width 300 -Height 150 {
+Show -Width 300 -Height 150 {
    DockPanel {
       Menu -DockPanel-Dock Top -Height 20 {
          MenuItem -Header "_File" {

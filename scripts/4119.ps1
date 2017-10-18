@@ -1,4 +1,4 @@
-﻿#Write-Twilight
+#Write-Twilight
 while(1){
     $wc = Get-Random -Minimum (Get-Random -Minimum 1 -Maximum 3) -Maximum (Get-Random -Minimum 4 -Maximum 14)
     for($y=0; $y-lt$wc; $y++){

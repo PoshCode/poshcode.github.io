@@ -1,4 +1,4 @@
-﻿Function Replace-TabsWithSpace
+Function Replace-TabsWithSpace
 {
     <#
         .SYNOPSIS

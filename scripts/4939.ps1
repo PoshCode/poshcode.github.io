@@ -1,4 +1,4 @@
-﻿import sublime, sublime_plugin, subprocess
+import sublime, sublime_plugin, subprocess
 
 
 CONEMU = "C:\Program Files\Tools\ConEmu\ConEmu\ConEmuC64.exe"

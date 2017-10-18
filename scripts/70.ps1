@@ -1,4 +1,4 @@
-﻿filter Select-Alive {
+filter Select-Alive {
 	param ( [switch]$Verbose )
 	trap {
 		Write-Verbose "$(get-date -f 's') ping failed: $computer"

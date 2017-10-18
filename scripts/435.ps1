@@ -1,4 +1,4 @@
-﻿param($Cmdlet) foreach ($paramset in (Get-Command $Cmdlet).ParameterSets) {
+param($Cmdlet) foreach ($paramset in (Get-Command $Cmdlet).ParameterSets) {
 	$Output = @()
 	foreach ($param in $paramset.Parameters) {
 		$process = "" | Select-Object Name, ParameterSet, Aliases, IsMandatory, CommonParameter

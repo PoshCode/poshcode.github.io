@@ -1,4 +1,4 @@
-﻿function findPermission ([string]$a, [string]$b)
+function findPermission ([string]$a, [string]$b)
 {
 $string = $a
 $user = $b

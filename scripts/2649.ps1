@@ -1,4 +1,4 @@
-﻿
+
 function Invoke-Generic {
 #.Synopsis
 #  Invoke Generic method definitions via reflection:

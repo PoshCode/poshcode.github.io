@@ -1,4 +1,4 @@
-﻿# Write a blank new line for easy, spaced reading
+# Write a blank new line for easy, spaced reading
 Write-Host
 
 # Full file path location of source file

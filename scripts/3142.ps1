@@ -1,4 +1,4 @@
-﻿function Remove-FTPFile ($Source,$UserName,$Password)
+function Remove-FTPFile ($Source,$UserName,$Password)
 {
   #Create FTP Web Request Object to handle connnection to the FTP Server
   $ftprequest = [System.Net.FtpWebRequest]::Create($Source)

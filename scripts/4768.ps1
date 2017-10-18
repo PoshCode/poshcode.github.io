@@ -1,4 +1,4 @@
-﻿function Get-DevicePath
+function Get-DevicePath
 {
 <#
 .SYNOPSIS

@@ -1,4 +1,4 @@
-﻿#requires -version 2
+#requires -version 2
 
 # some PowerShell Functions to scan VB 6 Projects for patterns
 # e.g. some SQL calls

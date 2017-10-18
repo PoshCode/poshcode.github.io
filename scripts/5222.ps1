@@ -1,4 +1,4 @@
-﻿<#
+<#
 	Powershell Lync Bot
 	This will respond to the commands below in the switch statement.
 

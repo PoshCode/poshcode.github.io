@@ -1,4 +1,4 @@
-﻿function Get-VMKeyExchangeProperty
+function Get-VMKeyExchangeProperty
 {
     param($VMName, $Name)
 

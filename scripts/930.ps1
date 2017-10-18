@@ -1,4 +1,4 @@
-﻿#This script requires:
+#This script requires:
 #Windows Powershell 1.0 = http://www.microsoft.com/windowsserver2003/technologies/management/powershell/download.mspx
 #PowerGui = http://www.powergui.org/downloads.jspa
 #Quest ActiveRoles Management Shell for Active Directory = http://www.quest.com/powershell/activeroles-server.aspx

@@ -1,4 +1,4 @@
-﻿function Get-UIInput {
+function Get-UIInput {
       #.Synopsis
       #  Prompt the user for input with a pretty dialog
       #.Parameter PromptText

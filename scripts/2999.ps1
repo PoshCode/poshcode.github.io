@@ -1,4 +1,4 @@
-﻿cd c:\windows\temp\common
+cd c:\windows\temp\common
 
 foreach($File in get-childitem | where-object{($_.Extension -ieq '.PS1') -or ($_.Extension -ieq '.PSM1')})
 {

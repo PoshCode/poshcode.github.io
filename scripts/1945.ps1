@@ -1,4 +1,4 @@
-﻿function global:GET-NewPassword($PasswordLength, $Complexity) {
+function global:GET-NewPassword($PasswordLength, $Complexity) {
 
 <#
 

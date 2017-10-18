@@ -1,4 +1,4 @@
-﻿function Test-Hash { 
+function Test-Hash { 
 #.Synopsis
 #   Test the HMAC hash(es) of a file
 #.Description

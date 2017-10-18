@@ -1,4 +1,4 @@
-﻿<# 	   .SYNOPSIS
+<# 	   .SYNOPSIS
         WMI Events Handler
 	   .DESCRIPTION
 		Handles WMI Events Based on Queries

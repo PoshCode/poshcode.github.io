@@ -1,4 +1,4 @@
-﻿$Start = (get-date).AddDays(-1)
+$Start = (get-date).AddDays(-1)
 $End = Get-Date
 $EventLog = Get-WinEvent -ComputerName atdb02 -FilterHashtable @{
 	Logname = 'Security';

@@ -1,4 +1,4 @@
-﻿function Copy-File {
+function Copy-File {
 #.Synopsis
 # Copies all files and folders in $source folder to $destination folder, but with .copy inserted before the extension if the file already exists
 param($source,$destination)

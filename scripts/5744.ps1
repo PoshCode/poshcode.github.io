@@ -1,4 +1,4 @@
-﻿Function Invoke-FolderCompression
+Function Invoke-FolderCompression
 {
     Param
     (

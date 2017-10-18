@@ -1,4 +1,4 @@
-﻿function Test-WebDav ()
+function Test-WebDav ()
 {
 	param ( $Url = "$( throw 'URL parameter is required.')" )
 	$xhttp = New-Object -ComObject msxml2.xmlhttp

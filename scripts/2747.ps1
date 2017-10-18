@@ -1,4 +1,4 @@
-﻿<#
+<#
     .Synopsis
         Download Google Chromium if there is a later build.
     .Description

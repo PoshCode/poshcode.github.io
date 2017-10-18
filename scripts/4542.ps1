@@ -1,4 +1,4 @@
-﻿param(
+param(
 #The data group to process, such as server names.
 [parameter(Mandatory=$true,ValueFromPipeLine=$true)]
 [object[]]$Set,

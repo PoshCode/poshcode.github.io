@@ -1,4 +1,4 @@
-﻿#Typewriter Text
+#Typewriter Text
 function Write-Typewriter
 {
 <#

@@ -1,4 +1,4 @@
-﻿######################################################
+######################################################
 # Script to remove unauthorized objects from AD group
 # (c) Josh Coen
 # Requires AD cmdlets

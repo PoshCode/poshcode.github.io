@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         Update permissions on Departmental GPO's
     .DESCRIPTION

@@ -1,4 +1,4 @@
-﻿function Remove-ViewComputer{
+function Remove-ViewComputer{
     [CmdletBinding()]
 
     #Requires -Modules ActiveDirectory

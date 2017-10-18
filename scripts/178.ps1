@@ -1,4 +1,4 @@
-﻿@@## Depends on the PoshXmpp.dll from http://CodePlex.com/PoshXmpp
+@@## Depends on the PoshXmpp.dll from http://CodePlex.com/PoshXmpp
 @@#requires -pssnapin PoshXmpp
 ##########################################################################################
 # @Author: Joel Bennnett

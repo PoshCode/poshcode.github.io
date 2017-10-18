@@ -1,4 +1,4 @@
-﻿# lists
+# lists
 $devList = New-Object System.Collections.ArrayList
 $prodList = New-Object System.Collections.ArrayList
 

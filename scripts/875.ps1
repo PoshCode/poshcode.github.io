@@ -1,4 +1,4 @@
-﻿function ConvertTo-JaggedObjects {
+function ConvertTo-JaggedObjects {
 ###################################################################################################
 # .Synopsis
 #    Convert a hashtable full of arrays into formattable objects

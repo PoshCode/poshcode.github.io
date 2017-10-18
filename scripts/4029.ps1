@@ -1,4 +1,4 @@
-﻿Add-Type -Assembly PresentationFramework
+Add-Type -Assembly PresentationFramework
 
 [xml]$xaml = @'
 <Window

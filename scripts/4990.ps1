@@ -1,4 +1,4 @@
-﻿$blnCheckSnappin = Get-PSSnapin | where {$_.Name -eq "microsoft.exchange.management.powershell.e2010"}
+$blnCheckSnappin = Get-PSSnapin | where {$_.Name -eq "microsoft.exchange.management.powershell.e2010"}
 
 if ($blnCheckSnappin -eq $null)
 {    

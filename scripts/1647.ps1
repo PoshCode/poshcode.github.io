@@ -1,4 +1,4 @@
-﻿$vmlist = Import-Csv toolboxesx.csv
+$vmlist = Import-Csv toolboxesx.csv
 
 #vsphere settings
 $vsphere_server = ""

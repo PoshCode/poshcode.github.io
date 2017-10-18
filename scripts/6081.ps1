@@ -1,4 +1,4 @@
-﻿$a = New-Object psobject @{
+$a = New-Object psobject @{
     a = "Example"
     b = "Time"
 }

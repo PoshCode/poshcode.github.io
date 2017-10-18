@@ -1,4 +1,4 @@
-﻿$chars = "b","c","d","f","g","h","j","k","l","m","n","p","q","r","s","t","v","w","x","y","z" 
+$chars = "b","c","d","f","g","h","j","k","l","m","n","p","q","r","s","t","v","w","x","y","z" 
 
 foreach($char1 in $chars){ 
 foreach($char2 in $chars){ 

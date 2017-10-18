@@ -1,4 +1,4 @@
-﻿<#################################################################
+<#################################################################
 #          Print Cluster - Printer Comparison                   #
 #                                                               #
 # This script does a comparison between two print clusters and  #

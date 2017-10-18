@@ -1,4 +1,4 @@
-﻿function View-Process(){
+function View-Process(){
 	param(
 	[string[]]$ComputerNames,
 	[string[]]$ProcessNames,

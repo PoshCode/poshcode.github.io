@@ -1,4 +1,4 @@
-﻿#######################
+#######################
 function Get-SqlData
 {
     param([string]$serverName=$(throw 'serverName is required.'), [string]$databaseName=$(throw 'databaseName is required.'),

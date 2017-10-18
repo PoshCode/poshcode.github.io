@@ -1,4 +1,4 @@
-﻿function Add-AboutPages {
+function Add-AboutPages {
   $tsCbo_2.Items.Clear()
   $tsCbo_2.Items.AddRange(($arr | % {Split-Path -leaf $_}))
   $tsCbo_2.SelectedIndex = (Get-Random -max ($arr.Length))

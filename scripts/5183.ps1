@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Bulk export Excel worksheet ranges to images (PNG)
 

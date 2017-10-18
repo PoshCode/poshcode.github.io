@@ -1,4 +1,4 @@
-﻿# just to know which file is invoked by my profile
+# just to know which file is invoked by my profile
 write-host "loaded . $($MyInvocation.MyCommand.Path)"
 
 if(!$global:WindowTitlePrefix) {

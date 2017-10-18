@@ -1,4 +1,4 @@
-﻿#requires -version 2
+#requires -version 2
 
 if (-not ("win32.nativemethods" -as [type])) {
     # import sendmessagetimeout from win32

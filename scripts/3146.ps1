@@ -1,4 +1,4 @@
-﻿function New-Struct {
+function New-Struct {
 #.Synopsis
 #   Creates Struct types from a list of types and properties
 #.Description

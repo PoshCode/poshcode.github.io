@@ -1,4 +1,4 @@
-﻿function cpu-usage
+function cpu-usage
  { if ($Args)
         {$machine=$Args}
     else

@@ -1,4 +1,4 @@
-﻿## This is the first version of a Growl module (just dot-source to use in PowerShell 1.0)
+## This is the first version of a Growl module (just dot-source to use in PowerShell 1.0)
 ## v 1.0 supports a very simple notice, and no callbacks
 ## v 2.0 supports registering multiple message types
 ##       supports callbacks

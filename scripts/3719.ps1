@@ -1,4 +1,4 @@
-﻿$x = New-Object PSObject | Add-Member -MemberType ScriptMethod -Name Test -Value {
+$x = New-Object PSObject | Add-Member -MemberType ScriptMethod -Name Test -Value {
     .{
         param (	
             [Parameter(Mandatory=$true)]

@@ -1,1 +1,1 @@
-﻿forever
+forever

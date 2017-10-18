@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.TITLE
 		Haal-WisMasLeerling.ps1
 	.AUTHOR

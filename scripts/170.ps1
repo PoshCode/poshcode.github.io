@@ -1,4 +1,4 @@
-﻿
+
 ## Get-App
 ## Attempt to resolve the path to an executable using Get-Command and the AppPaths registry key
 ##################################################################################################

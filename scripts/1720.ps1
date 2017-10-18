@@ -1,4 +1,4 @@
-﻿function Get-ParameterEnum
+function Get-ParameterEnum
 {
 <#
 .Synopsis

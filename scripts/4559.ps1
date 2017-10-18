@@ -1,4 +1,4 @@
-﻿[Enum]::GetNames([Security.Principal.WellKnownSidType]) | % {
+[Enum]::GetNames([Security.Principal.WellKnownSidType]) | % {
   $itm = [Security.Principal.WellKnownSidType]::$_
   try {
     $sid = New-Object Security.Principal.SecurityIdentifier($itm, $null)

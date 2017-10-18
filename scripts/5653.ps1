@@ -1,4 +1,4 @@
-﻿# Inside Clear-Host
+# Inside Clear-Host
 #
 # cls is just an alias of function Clear-Host
 (Get-Item function:"$((Get-Item alias:cls).Definition)").Definition

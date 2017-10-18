@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Get-InactiveActiveSyncDevices pulls all user mailboxes with an Active Sync partnership and then selects the Active Sync devices that haven't synced in the specified period. These devices are sorted in ascending order and placed in a HTML table which is emailed to the specified user using a specified reply to address and SMTP server
 PLEASE TEST BEFORE RUNNING THIS SCRIPT IN PRODUCTION

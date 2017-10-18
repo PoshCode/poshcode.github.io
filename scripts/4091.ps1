@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Writes out the the words for 99 Bottle of Beer on the wall.
 

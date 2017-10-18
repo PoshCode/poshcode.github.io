@@ -1,4 +1,4 @@
-﻿## EnvStacks.psm1 module
+## EnvStacks.psm1 module
 ## NOTE: If you "download" this, make sure it's a psm1 extension before you Add-Module
 ## NOTE: this will work as a regular v1.0 script if you dot-source it, but it *will* pollute your variable space a bit
 ##       you'll need to comment out the Export-ModuleMember line at the bottom ...

@@ -1,4 +1,4 @@
-﻿#PrinterChecking Script By Henrik Pedersen Åmark and Daniel Lundgren
+#PrinterChecking Script By Henrik Pedersen Åmark and Daniel Lundgren
 
 #This script is designed to check what printers that is still in use.
 #It's assumed the printer is classed as inactive if it hasnt been used in X months

@@ -1,4 +1,4 @@
-﻿Function createSignature {
+Function createSignature {
 	param([string]$Template, [string]$Name, [string]$title, [string]$streetAddress, [string]$City, [string]$postalCode, [string]$officePhone, [string]$mobilePhone, [string]$sigpath, [string]$company)
 
 	$Template = Get-Content -Path $Template

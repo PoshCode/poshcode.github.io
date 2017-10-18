@@ -1,4 +1,4 @@
-﻿# PSISE Snippet Editor
+# PSISE Snippet Editor
 function Select-ItemV2 {
     PARAM (
         [Parameter(Mandatory=$true, ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true,Position=0)]

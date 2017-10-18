@@ -1,4 +1,4 @@
-﻿#Requires -Version 2.0
+#Requires -Version 2.0
 ## Automatically load functions from scripts on-demand, instead of having to dot-source them ahead of time, or reparse them from the script every time.
 ## Provides significant memory benefits over pre-loading all your functions, and significant performance benefits over using plain scripts.  Can also *inject* functions into Modules so they inherit the module scope instead of the current local scope.
 ## Please see the use example in the script below

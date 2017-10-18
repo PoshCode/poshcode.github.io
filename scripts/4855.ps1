@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Download all images from privately shared Google Picasa web album in full resolution
 .DESCRIPTION

@@ -1,4 +1,4 @@
-﻿
+
 # add enumerations and types required for functions
 Add-Type @'
 using System;

@@ -1,4 +1,4 @@
-﻿$DeploymentDir = '\\Server\Deployment\DotNET4.6_WMF4'
+$DeploymentDir = '\\Server\Deployment\DotNET4.6_WMF4'
 
 function message
 {

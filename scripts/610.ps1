@@ -1,4 +1,4 @@
-﻿function Get-WordOutline ( $Path, [int]$MaxDepth = 9 ) {
+function Get-WordOutline ( $Path, [int]$MaxDepth = 9 ) {
 	if ( $Path -is [System.IO.FileInfo] ) { $Path = $_.FullName }
 	$word = New-Object -comObject word.application
 	$document = $wordd.documents.open( $path )

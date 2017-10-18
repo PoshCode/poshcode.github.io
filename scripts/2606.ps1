@@ -1,4 +1,4 @@
-﻿Function Invoke-NamedParameters {
+Function Invoke-NamedParameters {
 <#
 .SYNOPSIS
     Invokes a method using named parameters.

@@ -1,4 +1,4 @@
-﻿$Shell = New-Object -com shell.application
+$Shell = New-Object -com shell.application
 $NetCons = $Shell.Namespace(0x31)
 $NetCons.Items() | 
 	where {$_.Name -like 'Local Area Connection*'} | 

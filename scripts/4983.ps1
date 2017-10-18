@@ -1,4 +1,4 @@
-﻿###########################
+###########################
 # Drive Usage Report Generator
 # By Jared Shippy
 # Published: ?

@@ -1,4 +1,4 @@
-﻿$insParm = '/s /v"/qn /norestart"' 
+$insParm = '/s /v"/qn /norestart"' 
 $updList = get-cluster -name $YouClusterNameHere | get-vm |
 	where-object {$_.powerstate -eq "PoweredON"} |
 		foreach-object { get-view $_.ID } |

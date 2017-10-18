@@ -1,4 +1,4 @@
-﻿function Start-BootsTimer {
+function Start-BootsTimer {
 #.Syntax
 #  Creates a stay-on-top countdown timer
 #.Description

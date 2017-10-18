@@ -1,4 +1,4 @@
-﻿#Requires -version 2
+#Requires -version 2
 
 #Author: Nathan Linley
 #More details: http://myitpath.blogspot.com/2012/02/dell-components-check-for-updates-via.html

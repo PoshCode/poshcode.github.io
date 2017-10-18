@@ -1,4 +1,4 @@
-﻿function Get-MacAddress {
+function Get-MacAddress {
   <#
     .SYNOPSIS
         Gets MAC address.

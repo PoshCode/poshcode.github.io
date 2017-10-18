@@ -1,4 +1,4 @@
-﻿function Get-ProtectionInfo([String]$Computer = '.', [Switch]$Toggle) {
+function Get-ProtectionInfo([String]$Computer = '.', [Switch]$Toggle) {
   <#
     .SYNOPSIS
         Retrieves basic information about deployed security pockets such as

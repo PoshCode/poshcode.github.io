@@ -1,4 +1,4 @@
-﻿function SendUdpWol {
+function SendUdpWol {
 	#Packet construction reference: 
 	#- http://wiki.wireshark.org/WakeOnLAN
 	#- http://en.wikipedia.org/wiki/Wake-on-LAN

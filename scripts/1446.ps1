@@ -1,4 +1,4 @@
-﻿#requires -version 2
+#requires -version 2
 
 #Uses SQLParser.ps1 script http://poshcode.org/1445 to return Stored Procedure Call Tree
 #Chad Miller

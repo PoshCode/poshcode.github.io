@@ -1,4 +1,4 @@
-﻿# Description: 	Create Events in Application log
+# Description: 	Create Events in Application log
 # Date:			03-05-2007
 # Author:		Stefan Stranger & Ken 
 # Explanation:	If you only wish to write to the event log you must do two things. The first is to create or specify a Source. 

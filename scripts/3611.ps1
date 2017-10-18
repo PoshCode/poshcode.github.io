@@ -1,4 +1,4 @@
-﻿#Examples
+#Examples
 
 <#
 New-XVM -Name "WS2012-TestServer01" -SwitchName "Switch(192.168.2.0/24)" -VhdType NoVHD

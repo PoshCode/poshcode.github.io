@@ -1,4 +1,4 @@
-﻿# basic disk report tool that generates an excel report. 
+# basic disk report tool that generates an excel report. 
 # usually you should just need to edit the line indicated below. 
 $erroractionpreference = “SilentlyContinue” 
 $a = New-Object -comobject Excel.Application 

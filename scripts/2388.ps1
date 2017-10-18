@@ -1,4 +1,4 @@
-﻿function Compare-DataRow
+function Compare-DataRow
 {
     param( $a, $b)
     

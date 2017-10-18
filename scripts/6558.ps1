@@ -1,4 +1,4 @@
-﻿########################################################
+########################################################
 # Created by Prashant Dev Pandey
 #   pandey.nic@rediffmail.com
 #   prashantdev.pandey@gmail.com

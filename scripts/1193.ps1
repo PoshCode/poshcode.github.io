@@ -1,4 +1,4 @@
-﻿# http://blogs.msdn.com/powershell/archive/2008/05/09/fun-with-script-cmdlets.aspx
+# http://blogs.msdn.com/powershell/archive/2008/05/09/fun-with-script-cmdlets.aspx
 ########################################################################################
 # function New-ScriptCmdlet() {
 [CmdletBinding(DefaultParameterSetName="Type")]

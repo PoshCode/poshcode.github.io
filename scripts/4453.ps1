@@ -1,4 +1,4 @@
-﻿function ExecSQLcmd{
+function ExecSQLcmd{
       param(
             [string]$ServerName,
             [string]$DatabaseName,

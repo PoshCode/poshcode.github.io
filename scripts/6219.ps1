@@ -1,4 +1,4 @@
-﻿Ipmo 'C:\Program Files\AWS Tools\PowerShell\AWSPowerShell\AWSPowerShell.psd1'
+Ipmo 'C:\Program Files\AWS Tools\PowerShell\AWSPowerShell\AWSPowerShell.psd1'
 
 function Get-EC2RunningInstancesConsoleOutput ($AccessKey, $SecretKey)
 {

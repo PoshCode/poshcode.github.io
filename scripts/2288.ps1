@@ -1,4 +1,4 @@
-﻿function Set-Encoding{
+function Set-Encoding{
 <#
 .Synopsis
    Takes a Script file or any other text file into memory and Re-Encodes it in the format specified.

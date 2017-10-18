@@ -1,4 +1,4 @@
-﻿if(!$global:CommandTranscriptPrompt) {
+if(!$global:CommandTranscriptPrompt) {
    ## Record the original prompt so we can put it back if they change their minds...
    $global:CommandTranscriptPrompt = ${Function:Prompt}
 }

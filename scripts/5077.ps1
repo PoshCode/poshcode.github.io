@@ -1,4 +1,4 @@
-﻿#Created By: Ty Lopes
+#Created By: Ty Lopes
 #Sept 2012
 #Sript to be run by a scheduled task that monitors for a specific event ID (in this case account locked)
 #The sript then reads the last correstponding event ID and emails the details

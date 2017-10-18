@@ -1,4 +1,4 @@
-﻿function Start-Demo {
+function Start-Demo {
     param(
        $Text = $PSISE.CurrentFile.Editor.Text
     )

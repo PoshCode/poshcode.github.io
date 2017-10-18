@@ -1,4 +1,4 @@
-﻿function Open-Solution([string]$path = ".") {
+function Open-Solution([string]$path = ".") {
   $sln_files = Get-ChildItem $path -Include *.sln -Recurse
   if($sln_files -eq $null) {
     Write-Host "No Solution file found"

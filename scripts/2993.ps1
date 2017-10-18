@@ -1,4 +1,4 @@
-﻿function Split {
+function Split {
 <#
 .Synopsis
 Splits up a file into smaller files.

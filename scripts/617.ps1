@@ -1,4 +1,4 @@
-﻿## Get-ImageMetaData -- pull EXIF, XMP, and other data from images using the BitmapMetaData
+## Get-ImageMetaData -- pull EXIF, XMP, and other data from images using the BitmapMetaData
 ##   Usage:  ls *.jpg | Get-ImageMetaData | ft Length, LastWriteTime, Name, "36867"
 ##   Note that '36867' is the decimal value of (0x9003) the EXIF tag for DateTimeOriginal
 ##   For more information see: http://owl.phy.queensu.ca/~phil/exiftool/TagNames/EXIF.html

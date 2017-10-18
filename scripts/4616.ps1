@@ -1,4 +1,4 @@
-﻿This folder contains files that build GMAT's Windows installer and .zip bundles.
+This folder contains files that build GMAT's Windows installer and .zip bundles.
 The current installer is based on NSIS (http://nsis.sf.net), but a new installer
 based on MSI (using WiX) is a long-term goal.
 

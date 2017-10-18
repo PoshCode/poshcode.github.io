@@ -1,4 +1,4 @@
-﻿# Author: Steven Murawski http://www.mindofroot.com
+# Author: Steven Murawski http://www.mindofroot.com
 
 # This script creates two functions (and a helper function).  One starts logging all commands entered,
 # and the second removes the logging.

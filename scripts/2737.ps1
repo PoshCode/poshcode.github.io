@@ -1,4 +1,4 @@
-﻿New-Grid -ControlName SelectUserGroups -Columns Auto,* -Rows 4 {
+New-Grid -ControlName SelectUserGroups -Columns Auto,* -Rows 4 {
     $GetGroups = { 
         $user = Get-QADUuser $this.Text -SizeLimit 1
         if($User.LogonName -eq $this.Text -or $User.Email -eq $this.Text) {

@@ -1,4 +1,4 @@
-﻿# this is a testcase for http://code.google.com/p/poshcodegen/ 
+# this is a testcase for http://code.google.com/p/poshcodegen/ 
 # a project for generating PowerShell function wrappers around stored procedure call, and more. 
 
 # Here we show how to return a resultsets (aka ref cursors) from an Orcale stored procedures using ADO.NET with PowerShell

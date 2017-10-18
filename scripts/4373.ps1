@@ -1,4 +1,4 @@
-﻿function Get-Credential { 
+function Get-Credential { 
    # .Synopsis
    #    Gets a credential object based on a user name and password.
    # .Description

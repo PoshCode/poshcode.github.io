@@ -1,4 +1,4 @@
-﻿###################################
+###################################
 ## Figure out the real url behind those shortened forms
 function Resolve-URL([string[]]$urls) { 
    [regex]$snip  = "(?:https?://)?(?:snurl|snipr|snipurl)\.com/([^?/ ]*)\b"

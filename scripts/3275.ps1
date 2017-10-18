@@ -1,4 +1,4 @@
-﻿function ConvertTo-Dictionary {
+function ConvertTo-Dictionary {
     param(
         [Parameter(Mandatory=$true,ValueFromPipeline=$true,ParameterSetName="Hashtable")]
         [Hashtable[]]$Hashtable,

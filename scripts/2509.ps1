@@ -1,4 +1,4 @@
-﻿Function Get-Weather {
+Function Get-Weather {
 <#  
 .SYNOPSIS  
    Display weather data for a specific country and city.

@@ -1,4 +1,4 @@
-﻿New-UIWidget -AsJob -Content {
+New-UIWidget -AsJob -Content {
     $shadow = DropShadowEffect -Color Black -Shadow 0 -Blur 8
     $now = Get-Date;
     StackPanel {

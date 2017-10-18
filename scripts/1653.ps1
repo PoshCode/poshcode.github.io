@@ -1,4 +1,4 @@
-﻿function Get-ObservedIPRange {
+function Get-ObservedIPRange {
 	param(
 		[Parameter(Mandatory=$true,ValueFromPipeline=$true,HelpMessage="Physical NIC from Get-VMHostNetworkAdapter")]
 		[VMware.VimAutomation.ViCore.Impl.V1.Host.Networking.Nic.PhysicalNicImpl]

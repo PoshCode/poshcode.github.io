@@ -1,4 +1,4 @@
-﻿function New-VIAccount($principal) {
+function New-VIAccount($principal) {
 	$flags = `
 		[System.Reflection.BindingFlags]::NonPublic    -bor
 		[System.Reflection.BindingFlags]::Public       -bor

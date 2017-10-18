@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS 
 Makes a local copy of one or more remote svn repositories.
 .DESCRIPTION 

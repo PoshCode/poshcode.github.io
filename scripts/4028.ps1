@@ -1,4 +1,4 @@
-﻿ps | % -b {$arr = @()} -p {
+ps | % -b {$arr = @()} -p {
   $str = "" | select Name, PID, Time
   $str.Name = $_.ProcessName
   $str.PID  = $_.Id

@@ -1,4 +1,4 @@
-﻿#function Set-AttachedProperty {
+#function Set-AttachedProperty {
 [CmdletBinding()]
 PARAM(
    [Parameter(Position=0,Mandatory=$true)

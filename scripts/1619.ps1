@@ -1,4 +1,4 @@
-﻿function Write-IseFile($file, $msg)
+function Write-IseFile($file, $msg)
 {
     $Editor = $file.Editor
     $Editor.SetCaretPosition($Editor.LineCount, 1)

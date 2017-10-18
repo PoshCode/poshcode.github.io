@@ -1,4 +1,4 @@
-﻿function Get-PEManifest {
+function Get-PEManifest {
   param(
     [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]
     [ValidateScript({Test-Path $_})]

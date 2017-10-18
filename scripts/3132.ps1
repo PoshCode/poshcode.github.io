@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Get-GprsTime (V4.0 Update for Windows 7 and allow time correction)
              (V4.2 'Interval' now incorporate previous 'FormatSpan' function)

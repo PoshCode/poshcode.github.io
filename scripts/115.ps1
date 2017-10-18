@@ -1,4 +1,4 @@
-﻿# Start-Sql.ps1
+# Start-Sql.ps1
 ###################################################################################################
 # This is a SCRIPT which emits functions and variables into the global scope
 # Most importantly, it uses a variable $SqlConnection which is expected to exist....

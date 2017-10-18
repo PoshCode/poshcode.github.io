@@ -1,4 +1,4 @@
-﻿## UI Automation v 1.8 -- REQUIRES the Reflection module (current version: http://poshcode.org/3174 )
+## UI Automation v 1.8 -- REQUIRES the Reflection module (current version: http://poshcode.org/3174 )
 ## 
 # WASP 2.0 is getting closer, but this is still just a preview:
 # -- a lot of the commands have weird names still because they're being generated ignorantly

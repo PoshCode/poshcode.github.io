@@ -1,4 +1,4 @@
-﻿#The PowerShell Talk
+#The PowerShell Talk
 #Demo 2 - VM Easy Bake Oven
 #XenServer
 

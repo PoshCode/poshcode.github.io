@@ -1,4 +1,4 @@
-﻿Set-Alias hex2dec Convert-Hex2Dec
+Set-Alias hex2dec Convert-Hex2Dec
 
 function Convert-Hex2Dec {
   param(

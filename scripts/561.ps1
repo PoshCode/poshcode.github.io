@@ -1,4 +1,4 @@
-﻿# Parse tables within HTML files and return the rows as PowerShell objects.
+# Parse tables within HTML files and return the rows as PowerShell objects.
 # The idea here is similar to (though not nearly as complete as) Perl's HTML::TableParse.
 # This function should run anywhere but it's a bit slow because of the COM interface
 # it uses. There seem to be a few .NET libraries out there that would make it a lot

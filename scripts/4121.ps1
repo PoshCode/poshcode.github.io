@@ -1,4 +1,4 @@
-﻿## Dane Kantner 4/19/2013
+## Dane Kantner 4/19/2013
 ##
 
 $computers="localhost","Chiv5908-2009","anyothercomputers","NYSPC-JJAJ68YG6"

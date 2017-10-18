@@ -1,4 +1,4 @@
-﻿Function Get-WMILoggedOnUser {
+Function Get-WMILoggedOnUser {
 <#
 .SYNOPSIS
     Function to get all logged on sessions (numbers) and coresponding users (domain name) on a local or remote system with WMI

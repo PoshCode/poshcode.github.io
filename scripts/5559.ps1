@@ -1,4 +1,4 @@
-﻿function dostuffToAccounts{
+function dostuffToAccounts{
 param(
 	$theseaccounts
 )

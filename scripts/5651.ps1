@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     This script retrieves one or more facts from the Quizzle.me API
 .DESCRIPTION

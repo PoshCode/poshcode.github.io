@@ -1,4 +1,4 @@
-﻿function Split-String {
+function Split-String {
 #.Synopsis
 #  Split a string and execute a scriptblock to give access to the pieces
 #.Description

@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 After you execute Add-Type, use it like:
 

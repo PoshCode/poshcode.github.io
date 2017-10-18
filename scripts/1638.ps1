@@ -1,4 +1,4 @@
-﻿Get-WmiObject -Class Win32_MountPoint | 
+Get-WmiObject -Class Win32_MountPoint | 
 where {$_.Directory -like ‘Win32_Directory.Name="D:\\MDBDATA*"’} | 
 foreach {
     $vol = $_.Volume

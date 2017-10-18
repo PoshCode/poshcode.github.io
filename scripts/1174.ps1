@@ -1,4 +1,4 @@
-﻿#
+#
 # Summer 2009 Scripting games 
 # Beginner Event 10 - The 1,500-Meter race
 # http://blogs.technet.com/heyscriptingguy/archive/2009/06/18/hey-scripting-guy-2009-scripting-games-event-10-details-beginner-and-advanced-1-500-meter-race.aspx

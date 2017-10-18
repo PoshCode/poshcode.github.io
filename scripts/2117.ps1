@@ -1,4 +1,4 @@
-﻿#Get information on everybodies inbox and spit it out with total sizes #in MB.  Sorts the list by StorageLimitStatus
+#Get information on everybodies inbox and spit it out with total sizes #in MB.  Sorts the list by StorageLimitStatus
 #NOTE THAT I HAD TO USE ASCII WITH OUT-FILE AS NO OTHER ENCODING WOULD #PROPERLY IMPORT CSV INTO EXCEL
 
 #create a date var to stick in the filename

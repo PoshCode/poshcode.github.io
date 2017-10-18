@@ -1,4 +1,4 @@
-﻿<#
+<#
 
 Version 2.0:
 - fixes a couple of integer widening bugs

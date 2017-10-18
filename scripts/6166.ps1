@@ -1,4 +1,4 @@
-﻿#  Reads all of the GPOs out of the domain, parses them, and then sends the output of settings to a GridView
+#  Reads all of the GPOs out of the domain, parses them, and then sends the output of settings to a GridView
 
 #  Reduces the total lines in a string to 9, because out-gridview doesn't like more than 9 lines in an entry
 Function Replace-ExtraLines

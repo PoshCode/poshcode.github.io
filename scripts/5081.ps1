@@ -1,4 +1,4 @@
-﻿param (
+param (
     [System.Data.SqlClient.ApplicationIntent]$ApplicationIntent,
     [string]$ApplicationName,
     [switch]$AsynchronousProcessing,

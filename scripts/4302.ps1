@@ -1,4 +1,4 @@
-﻿function Query-SQLCETable{
+function Query-SQLCETable{
     <#
     .SYNOPSIS
     Establishes a connection and runs a query with a SQL CE database.

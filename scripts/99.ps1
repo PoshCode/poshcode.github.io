@@ -1,4 +1,4 @@
-﻿# Compile-Help.ps1
+# Compile-Help.ps1
 # by Jeff Hillman
 #
 # this script uses the text and XML PowerShell help files to generate HTML help

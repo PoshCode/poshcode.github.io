@@ -1,4 +1,4 @@
-﻿function Deleted-Folders(){
+function Deleted-Folders(){
 param (
 $Computer,
 [String[]]$SeachFoldersDeleted

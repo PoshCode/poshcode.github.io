@@ -1,4 +1,4 @@
-﻿# Get-DominosOrderStatus.psm1
+# Get-DominosOrderStatus.psm1
 # Author:       xcud.com
 #
 # Inspired by Dana Merrick's Dominos Pizza Script

@@ -1,4 +1,4 @@
-﻿#Generated Form Function
+#Generated Form Function
 function GenerateForm {
 ########################################################################
 # THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE RISK

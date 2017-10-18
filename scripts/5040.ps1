@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 PARAM(
 	[Parameter(Position=0,ValueFromPipeline=$true,ValueFromPipelineByValue=$true)]
 	[string[]]$UserName

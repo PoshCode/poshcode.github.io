@@ -1,4 +1,4 @@
-﻿Function Confirm-DiskExists
+Function Confirm-DiskExists
 {
 <#
 .Synopsis

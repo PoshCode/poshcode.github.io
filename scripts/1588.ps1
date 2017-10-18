@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Gets the Astronomy Picture of the Day and sets it as your wallpaper.
 .DESCRIPTION

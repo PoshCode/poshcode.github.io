@@ -1,4 +1,4 @@
-﻿# function Read-Choice {
+# function Read-Choice {
 [CmdletBinding()]
 param(
    [Parameter(Mandatory=$true, ValueFromRemainingArguments=$true)]

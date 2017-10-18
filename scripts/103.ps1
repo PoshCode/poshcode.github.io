@@ -1,4 +1,4 @@
-﻿# Download XMPP SDK from http://www.ag-software.de/index.php?page=agsxmpp-sdk
+# Download XMPP SDK from http://www.ag-software.de/index.php?page=agsxmpp-sdk
 function Send-XmppMessage {
 	param (
 		$From = $( Throw "You must specify a Jabber ID for the sender." ),

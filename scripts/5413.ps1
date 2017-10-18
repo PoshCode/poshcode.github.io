@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 .NOTES 
     Name: Refresh Mirrored Database
     Author: Rob Sewell  http://sqldbawithabeard.com

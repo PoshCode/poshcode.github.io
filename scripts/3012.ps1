@@ -1,4 +1,4 @@
-﻿# Depends on Invoke-SQLCmd2 http://poshcode.org/2950
+# Depends on Invoke-SQLCmd2 http://poshcode.org/2950
 # Depends on Get-ADComputer http://poshcode.org/3011
 
 function New-SqlComputerLogin {

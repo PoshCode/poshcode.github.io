@@ -1,4 +1,4 @@
-﻿# Script to create scratch location directory per host
+# Script to create scratch location directory per host
 # By Leon Scheltema AVANCE ICT Groep Nederland
 
 # Begin variables

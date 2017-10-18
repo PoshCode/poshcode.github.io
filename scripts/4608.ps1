@@ -1,4 +1,4 @@
-﻿function AssembliesTree {
+function AssembliesTree {
   $tvAssem.Nodes.Clear()
   
   [AppDomain]::CurrentDomain.GetAssemblies() | % {

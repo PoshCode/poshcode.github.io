@@ -1,4 +1,4 @@
-﻿function Write-EventDetail {
+function Write-EventDetail {
 	param(
 		$id
 	)

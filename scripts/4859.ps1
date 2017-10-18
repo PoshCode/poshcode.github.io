@@ -1,4 +1,4 @@
-﻿<#
+<#
 .NOTES
     Author: Carsten Krüger - cakruege+poshcode@gmail.com
 #>

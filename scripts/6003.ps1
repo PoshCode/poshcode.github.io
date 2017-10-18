@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
    Joins a list of text files into 1 large text file.
 .DESCRIPTION

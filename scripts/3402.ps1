@@ -1,4 +1,4 @@
-﻿# $Excel = New-Object -ComObject Excel.Application
+# $Excel = New-Object -ComObject Excel.Application
 
 Function Excel-LoadFile {
 	Param (

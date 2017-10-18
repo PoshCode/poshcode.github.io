@@ -1,4 +1,4 @@
-﻿function Get-Parameter
+function Get-Parameter
 {
                 
 	[OutputType('System.String')]

@@ -1,4 +1,4 @@
-﻿#requires -pssnapin PSCX
+#requires -pssnapin PSCX
 #Author:     Glenn Sizemore gesize@get-admin.com
 #Purpose:    Scan a remote system for any services running under a non standard account.
 #            Standard accounts would be considered, NT AUTHORITY\NetworkService, 

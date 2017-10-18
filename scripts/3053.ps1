@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
 Let's fill the logs of the US House and Senate servers with the message we don't want SOPA or E-Parasite!
 .Description

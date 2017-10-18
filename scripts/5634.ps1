@@ -1,4 +1,4 @@
-﻿# This script lists Shadow Copies on specified servers created over past 7 days
+# This script lists Shadow Copies on specified servers created over past 7 days
 # 
 # Author: Andy McKnight
 # Created: 08/12/2014

@@ -1,4 +1,4 @@
-﻿filter Test-FileLock {
+filter Test-FileLock {
     if ($args[0]) {$filepath = gi $(Resolve-Path $args[0]) -Force} else {$filepath = gi $_.fullname -Force}
     if ($filepath.psiscontainer) {return}
     $locked = $false

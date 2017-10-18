@@ -1,4 +1,4 @@
-﻿function Get-CPUID {
+function Get-CPUID {
   <#
     .SYNOPSIS
         Queries the CPU for information about its type.

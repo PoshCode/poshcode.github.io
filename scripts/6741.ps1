@@ -1,4 +1,4 @@
-﻿$ThreadTimeout = 300
+$ThreadTimeout = 300
 
 #Check for jobs we can timeout
 $RunningJobs = get-job -State Running

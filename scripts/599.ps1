@@ -1,4 +1,4 @@
-﻿function Ping-Host {param(	[string]$HostName,
+function Ping-Host {param(	[string]$HostName,
 							[int32]$Requests = 3)
 	
 	for ($i = 1; $i -le $Requests; $i++) {

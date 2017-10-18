@@ -1,4 +1,4 @@
-﻿## this filer passes through only objects that are pingable
+## this filer passes through only objects that are pingable
 ## it takes any object as input, but the property containing the hostname
 ## to ping must be specified if the object is not a string
 function Select-Alive {param(	[object]$InputObject,

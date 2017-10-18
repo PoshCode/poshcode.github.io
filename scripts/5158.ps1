@@ -1,4 +1,4 @@
-﻿Function Setup-Profile{
+Function Setup-Profile{
     
     $hasProfile = Test-Path -Path $profile
 

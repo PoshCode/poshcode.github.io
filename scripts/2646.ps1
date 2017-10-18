@@ -1,4 +1,4 @@
-﻿## Select-ViaGui.ps1
+## Select-ViaGui.ps1
 ## Use a graphical interface to select (and pass-through) pipeline objects
 ## originally by Lee Holmes (http://www.leeholmes.com/blog), although he might not recognize it now ;-)
 Import-Module ShowUI

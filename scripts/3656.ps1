@@ -1,4 +1,4 @@
-﻿function ConvertTo-Module {
+function ConvertTo-Module {
 <#
     .SYNOPSIS
     Quickly convert a .NET type's static methods into functions

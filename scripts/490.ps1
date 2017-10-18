@@ -1,4 +1,4 @@
-﻿connect-VIServer yourserver
+connect-VIServer yourserver
 
 # Written by Alan Renouf - Check http://teckinfo.blogspot.com for more examples
 # This can easily be changed to pass parameters or be used as a function

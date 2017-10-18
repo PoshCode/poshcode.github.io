@@ -1,4 +1,4 @@
-﻿#code which need highlight
+#code which need highlight
 $code = @'
 #just example
 Get-Process | % {

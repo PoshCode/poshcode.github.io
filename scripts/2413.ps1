@@ -1,4 +1,4 @@
-﻿# use it as follows:
+# use it as follows:
 # PS C:\> ps explorer | trim
 
 add-type -Namespace Win32 -Name Psapi -MemberDefinition @"

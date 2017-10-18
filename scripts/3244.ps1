@@ -1,4 +1,4 @@
-﻿param (
+param (
 [string]$Filename
 )
 # Save script as NEWRTF.PS1

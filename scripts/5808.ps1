@@ -1,4 +1,4 @@
-﻿function New-ACE{
+function New-ACE{
     [CmdletBinding()]
     param (
       [Parameter(Mandatory=$True)]

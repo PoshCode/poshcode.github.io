@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Backup-ToUSB.ps1 (Version 3.1, 19 Jan 2012)
 .DESCRIPTION 

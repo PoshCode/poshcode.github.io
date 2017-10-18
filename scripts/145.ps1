@@ -1,4 +1,4 @@
-﻿## Sort-Random.ps1
+## Sort-Random.ps1
 ## Shuffle pipeline input into a random order...
 ## Note that, as with any Sort- function, this is a natural holdup in your pipeline
 begin {

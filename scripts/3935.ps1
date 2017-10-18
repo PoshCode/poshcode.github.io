@@ -1,4 +1,4 @@
-﻿# Uses NativeConsole, which is available under a bunch of Open Source licenses
+# Uses NativeConsole, which is available under a bunch of Open Source licenses
 # http://poshconsole.codeplex.com/SourceControl/changeset/view/f9bb2b127402#Huddled/Interop/NativeConsole.cs
 add-type -Path ~\Projects\PoshConsole\Huddled\Interop\NativeConsole.cs
 

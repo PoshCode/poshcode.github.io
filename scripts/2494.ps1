@@ -1,4 +1,4 @@
-﻿<# 
+<# 
        .SYNOPSIS 
         Sets the Compatibility flags for an application. 
        

@@ -1,4 +1,4 @@
-﻿# The Get-HotFix function gets the quick-fix engineering (QFE) updates that have been applied to the local computer or to remote computers and filter those hotfixes named "file 1".
+# The Get-HotFix function gets the quick-fix engineering (QFE) updates that have been applied to the local computer or to remote computers and filter those hotfixes named "file 1".
 # There is Get-HotFix cmdlet in PowerShell V2. This is an attempt to bring similar functionality to V1.
 
 function Get-HotFix {

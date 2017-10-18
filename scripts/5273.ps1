@@ -1,4 +1,4 @@
-﻿#this is the account
+#this is the account
 $accountName = "BLA\user"
 
 #this cruft here is so that we get UPN for the WindowsIdentity conscturctor

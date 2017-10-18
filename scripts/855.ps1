@@ -1,4 +1,4 @@
-﻿Connect-VIServer MYVISERVER
+Connect-VIServer MYVISERVER
 $filename = "c:\DetailedNetworkInfo.csv"
 Write "Gathering VMHost objects"
 $vmhosts = Get-VMHost | Sort Name | Where-Object {$_.State -eq "Connected"} | Get-View

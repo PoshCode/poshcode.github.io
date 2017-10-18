@@ -1,4 +1,4 @@
-﻿function Get-RebootHistory{
+function Get-RebootHistory{
     <#
     .SYNOPSIS
     PSTip Get your reboot history.

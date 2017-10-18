@@ -1,4 +1,4 @@
-﻿
+
 function New-ZipFile {
     #.Synopsis
     #  Create a new zip file, optionally appending to an existing zip...

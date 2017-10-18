@@ -1,4 +1,4 @@
-﻿# PowerSmug photo sync script v1.0
+# PowerSmug photo sync script v1.0
 # This PowerShell script will syncronize a folder of images with a users SmugMug account
 # Please set the appropriate variables in the User Defined Variables region
 # For more information visit 

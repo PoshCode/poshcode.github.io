@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
 		Will enter a wait/loop if there are running vMotion or svMotion tasks.
 	.DESCRIPTION

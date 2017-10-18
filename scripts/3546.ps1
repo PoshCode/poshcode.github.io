@@ -1,4 +1,4 @@
-﻿function ConvertFrom-PropertyString {
+function ConvertFrom-PropertyString {
 <#
 .SYNOPSIS
    Converts data from flat or single-level property files into PSObjects

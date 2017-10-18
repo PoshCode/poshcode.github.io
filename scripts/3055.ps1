@@ -1,4 +1,4 @@
-﻿function Test-TCPPort {
+function Test-TCPPort {
 	param (
 		[parameter(Mandatory=$true)]
 		[string] $ComputerName,

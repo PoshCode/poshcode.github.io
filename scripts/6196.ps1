@@ -1,4 +1,4 @@
-﻿function Get-FormatData {
+function Get-FormatData {
 	[CmdletBinding(HelpUri='http://go.microsoft.com/fwlink/?LinkID=144303', DefaultParameterSetName='S')]
 	param(
 		[Parameter(Position=0, ParameterSetName='S')]

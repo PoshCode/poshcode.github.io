@@ -1,4 +1,4 @@
-﻿function get-localadministrators {
+function get-localadministrators {
     param ([string]$computername=$env:computername)
 
     $computername = $computername.toupper()

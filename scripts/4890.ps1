@@ -1,4 +1,4 @@
-﻿# Written by John Brearley, Fall 2013
+# Written by John Brearley, Fall 2013
 # email: brearley@bell.net
 # email: jrbrearley4@gmail.com
 

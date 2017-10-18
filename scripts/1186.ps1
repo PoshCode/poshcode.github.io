@@ -1,4 +1,4 @@
-﻿# detect source control management software
+# detect source control management software
 function findscm {
 	$scm = ''
 	:selectscm foreach ($_ in @('svn', 'hg')) {

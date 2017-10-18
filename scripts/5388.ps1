@@ -1,4 +1,4 @@
-﻿@@# 1. signin to your tripit account
+@@# 1. signin to your tripit account
 @@# 2. click on "Trips" on top
 @@# 3. click on "Calendar integration" in the left pane
 @@# 4. click on "Subscribe to calendar feed"

@@ -1,4 +1,4 @@
-﻿function Get-EasterEastern {
+function Get-EasterEastern {
 	Param(
 		[Parameter(Mandatory=$true)]
         [int] $Year

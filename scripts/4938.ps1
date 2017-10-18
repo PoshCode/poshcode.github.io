@@ -1,4 +1,4 @@
-﻿    #requires -version 2.0
+    #requires -version 2.0
     Set-Alias hex2dec Convert-Hex2Dec
      
     function Convert-Hex2Dec {

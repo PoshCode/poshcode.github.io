@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
 	Highlights MatchInfo objects similar to the output from grep.
 .Description

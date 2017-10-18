@@ -1,4 +1,4 @@
-﻿function New-ImaginaryFriend {
+function New-ImaginaryFriend {
 ##.Note
 ##    DEPENDS on the WatiN module in http`://poshcode.org/1108
 ##.Synopsis

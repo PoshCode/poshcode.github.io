@@ -1,4 +1,4 @@
-﻿$frmMain_Load= {
+$frmMain_Load= {
   for ($i = 0; $i -lt 2; $i++) {
     for ($j = 0; $j -lt 5; $j++) {
       $num[$i, $j] = $i * 5 + $j + 1

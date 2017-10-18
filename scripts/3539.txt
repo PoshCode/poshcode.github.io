@@ -1,4 +1,4 @@
-﻿CREATE LOGIN [vCenter_Owner] WITH PASSWORD=N'KVx$!|mhQ^', CHECK_EXPIRATION=OFF, CHECK_POLICY=OFF
+CREATE LOGIN [vCenter_Owner] WITH PASSWORD=N'KVx$!|mhQ^', CHECK_EXPIRATION=OFF, CHECK_POLICY=OFF
 GO
 
 --Modify Drive and size to match your environment

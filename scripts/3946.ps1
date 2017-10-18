@@ -1,4 +1,4 @@
-﻿function Get-CInfo {
+function Get-CInfo {
     param($Comp)
 
   Function PC-Name{

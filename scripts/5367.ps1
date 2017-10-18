@@ -1,4 +1,4 @@
-﻿$OldServer = 'OldServer'
+$OldServer = 'OldServer'
 $NewServer = 'NewServer'
  
 Import-Module ActiveDirectory

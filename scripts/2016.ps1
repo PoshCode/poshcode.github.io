@@ -1,4 +1,4 @@
-﻿$vmPath = "[Storage1] MyVM/MyVM.vmx"
+$vmPath = "[Storage1] MyVM/MyVM.vmx"
 $vm = New-VM –VMHost "192.168.1.10" –VMFilePath $vmPath -Name MyVM
 
 # Check if there is an error and if so – handle it

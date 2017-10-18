@@ -1,4 +1,4 @@
-﻿# Script to set NTP / Syslog values for all ESXi hosts within a specific Cluster
+# Script to set NTP / Syslog values for all ESXi hosts within a specific Cluster
 # By Leon Scheltema AVANCE ICT Groep Nederland
 
 # Begin variables

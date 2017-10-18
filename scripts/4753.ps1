@@ -1,4 +1,4 @@
-﻿#function Find-InstalledNETFrameworks {
+#function Find-InstalledNETFrameworks {
   $asm = [PSObject].Assembly.GetType('System.Management.Automation.PsUtils')
   $dot = $asm.GetMethod(
     'IsDotNetFrameworkVersionInstalled', [Reflection.BindingFlags]'NonPublic, Static'

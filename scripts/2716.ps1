@@ -1,4 +1,4 @@
-﻿Function Get-VMHostNetworks
+Function Get-VMHostNetworks
 {
     <#
         .SYNOPSIS

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Sets the Default Printer for any user on any machine in active directory.
 .DESCRIPTION

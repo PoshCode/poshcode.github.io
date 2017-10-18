@@ -1,4 +1,4 @@
-﻿#Add-ADPhoto   Powershell v1 compatibile script for updating
+#Add-ADPhoto   Powershell v1 compatibile script for updating
 #user thumbnailphoto attribute.  Resizes input photo to recommended
 #dimensions and size.  Only updates for the currently logged in user.
 #This is a script for user self service.

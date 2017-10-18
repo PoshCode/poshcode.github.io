@@ -1,4 +1,4 @@
-﻿# begin of settings
+# begin of settings
 $VC1 = "VC server"
 # end of settings
 if (-not (Get-PSSnapin VMware.VimAutomation.Core -ErrorAction SilentlyContinue)) {

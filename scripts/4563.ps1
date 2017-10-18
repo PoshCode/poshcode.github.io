@@ -1,4 +1,4 @@
-﻿#checking with COM - be sure that you have CompatUI.Util
+#checking with COM - be sure that you have CompatUI.Util
 "Is {0} admin? {1}`n" -f $env:username, [bool](New-Object -com CompatUI.Util).CheckAdminPrivileges()
 
 #traditional way

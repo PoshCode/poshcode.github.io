@@ -1,4 +1,4 @@
-﻿# original by c_shanklin @ http://communities.vmware.com/message/1013362#1013362
+# original by c_shanklin @ http://communities.vmware.com/message/1013362#1013362
 function New-VMHostShellAccount {
 	param (
 		$Name,

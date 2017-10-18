@@ -1,4 +1,4 @@
-﻿# to load c:\powershellscripts\cluster_utils.ps1 if it isn't already loaded
+# to load c:\powershellscripts\cluster_utils.ps1 if it isn't already loaded
 @@. require cluster_utils
 
 Here are the functions:

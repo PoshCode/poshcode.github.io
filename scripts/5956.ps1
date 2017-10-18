@@ -1,4 +1,4 @@
-﻿#constants for crypt32.dll methods
+#constants for crypt32.dll methods
 [int]$CERT_STORE_PROV_SYSTEM_REGISTRY = 0x0D
 [int]$CERT_STORE_OPEN_EXISTING_FLAG = 0x00004000
 [int]$CERT_SYSTEM_STORE_SERVICES = 	 0x00050000

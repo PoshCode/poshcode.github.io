@@ -1,4 +1,4 @@
-﻿Function ConvertTo-BinaryIP {
+Function ConvertTo-BinaryIP {
     #.Synopsis
     # Convert an IP address to binary
     #.Example 

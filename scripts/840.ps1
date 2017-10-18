@@ -1,4 +1,4 @@
-﻿# Name  : Check-LatestChromium.ps1
+# Name  : Check-LatestChromium.ps1
 # Author: David "Makovec" Moravec
 # Web   : http://www.powershell.cz
 # Email : powershell.cz@googlemail.com

@@ -1,4 +1,4 @@
-﻿#Run winrm quickconfig defaults
+#Run winrm quickconfig defaults
 echo Y | winrm quickconfig
 
 #Run enable psremoting command with defaults

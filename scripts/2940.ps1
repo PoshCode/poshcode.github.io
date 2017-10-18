@@ -1,4 +1,4 @@
-﻿# Create a new Excel object using COM
+# Create a new Excel object using COM
 $Excel = New-Object -ComObject Excel.Application
 $Excel.Visible = $True
 $Excel.DisplayAlerts = $False

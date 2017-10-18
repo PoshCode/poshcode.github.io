@@ -1,4 +1,4 @@
-﻿
+
 <#
 .Synopsis
    Pulls the printer history from the target computer.

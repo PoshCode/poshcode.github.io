@@ -1,4 +1,4 @@
-﻿# author: jeffrey snover
+# author: jeffrey snover
 # url: http://blogs.msdn.com/powershell/archive/2008/09/02/speeding-up-powershell-startup-updating-update-gac-ps1.aspx
 Set-Alias ngen (Join-Path ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()) ngen.exe)
 [AppDomain]::CurrentDomain.GetAssemblies() |

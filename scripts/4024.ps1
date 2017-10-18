@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 ## ISE-Lines module v 1.1
 ## DEVELOPED FOR CTP3 
 ## See comments for each function for changes ...

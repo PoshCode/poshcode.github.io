@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   Author:...Vidrine
   Date:.....2012/04/08

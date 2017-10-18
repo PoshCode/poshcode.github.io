@@ -1,4 +1,4 @@
-﻿$ITunes = New-Object -ComObject iTunes.Application
+$ITunes = New-Object -ComObject iTunes.Application
 # The count is dynamic when you call this so you can't use it in the loop
 # as you're deleting things or else Write-Progress throws errors at the end
 $ItemCount = $ITunes.LibraryPlaylist.Tracks.Count 

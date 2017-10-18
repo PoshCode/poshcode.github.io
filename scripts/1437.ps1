@@ -1,4 +1,4 @@
-﻿function calculateurl ([string]$source)
+function calculateurl ([string]$source)
 {
 $encoded =  ([byte[]]([regex]::matches($source,'\w{2}') |% {"0x$_"}))
 $a = 0

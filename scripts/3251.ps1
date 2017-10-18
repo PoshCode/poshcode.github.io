@@ -1,4 +1,4 @@
-﻿
+
 #region Function: Get-DTWFileEncoding
 
 <#

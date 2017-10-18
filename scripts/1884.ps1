@@ -1,4 +1,4 @@
-﻿###########################################
+###########################################
 # Get-DLRestriction
 #
 # Uses QAD cmdlets to retrieve distribution list restriction attributes 

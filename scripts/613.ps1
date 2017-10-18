@@ -1,4 +1,4 @@
-﻿# Pause-Script
+# Pause-Script
 #
 # Pauses execution until a key is pressed.
 

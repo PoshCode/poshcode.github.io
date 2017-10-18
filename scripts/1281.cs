@@ -1,4 +1,4 @@
-﻿//Adapted from code @ http://mow001.blogspot.com/2006/01/msh-snap-in-to-translate.html Thanks!
+//Adapted from code @ http://mow001.blogspot.com/2006/01/msh-snap-in-to-translate.html Thanks!
 
 using System;
 using System.ComponentModel;

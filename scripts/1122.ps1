@@ -1,4 +1,4 @@
-﻿#You Need Quest AD Powershell Plugin
+#You Need Quest AD Powershell Plugin
 #You Need VMWare VI Toolkit
 
 $Null = Connect-VIServer Your-VM-Server-Here;

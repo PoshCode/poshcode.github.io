@@ -1,4 +1,4 @@
-﻿I think OUT-FORM is a very usefull function. I've added code to sort columns by clicking on headers.
+I think OUT-FORM is a very usefull function. I've added code to sort columns by clicking on headers.
 
 You nedd just add the columnTag parameters specifing if colunm value is text or numeric:
 

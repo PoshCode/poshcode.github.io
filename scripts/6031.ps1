@@ -1,4 +1,4 @@
-﻿#Script Author Information
+#Script Author Information
 $script:ProgramName = "Forest FSMO"
 $script:ProgramDate = "11 Dec 2013"
 $script:ProgramAuthor = "Geoffrey Guynn"

@@ -1,4 +1,4 @@
-﻿$dbServer = "servername\instance"
+$dbServer = "servername\instance"
 $db = "VeeamBackup"
 $veeamJob = "VeeamJobName"
 $Query = "SELECT [job_name],CONVERT(char(10),[creation_time], 101) AS start_date `

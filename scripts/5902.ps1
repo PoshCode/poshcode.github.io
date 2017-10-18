@@ -1,4 +1,4 @@
-﻿function RunSendEmail
+function RunSendEmail
 {
 	$date = Get-Date -Format F
     Send-MailMessage -To "HelpDesk <helpdesk@company.com>" -cc "IT Tech #1 <ittech@company.com>" -From "Server Service Monitor <no-reply-services@company.com>" -Subject "[SERVER.company.com] Service Failure(s)" -Body "Report generated on: $date

@@ -1,4 +1,4 @@
-﻿#As you know there is Stream key in Get-Item cmdlet (in PowerShell ver. -gt 2.0)
+#As you know there is Stream key in Get-Item cmdlet (in PowerShell ver. -gt 2.0)
 #so you do not need any third party utilities to determaine alternative streams
 #but PowerShell -le v2 does not support this feature that's why you should
 #A)write your own extension, for example:

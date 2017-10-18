@@ -1,4 +1,4 @@
-﻿# Manage_ASP_NET_Providers.ps1
+# Manage_ASP_NET_Providers.ps1
 # by Chistian Glessner
 # http://iLoveSharePoint.com
 

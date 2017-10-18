@@ -1,4 +1,4 @@
-﻿#Email Options
+#Email Options
 $from = "mailboxreport@yourdomain.com"
 $to = "reports@yourdomain.com"
 $smtpserver = "your_smtp_server_address"

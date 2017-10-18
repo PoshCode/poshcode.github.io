@@ -1,4 +1,4 @@
-﻿
+
 function Check-WindowsPreview
 {
 	PARAM(

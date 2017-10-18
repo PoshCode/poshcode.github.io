@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version Latest
+Set-StrictMode -Version Latest
 
 ## Create some default messages for English cultures, and
 ## when culture-specific messages are not available.

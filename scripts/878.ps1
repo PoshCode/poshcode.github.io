@@ -1,4 +1,4 @@
-﻿function Get-ChildItemColor {
+function Get-ChildItemColor {
 <#
 .Synopsis
   Returns childitems with colors by type.

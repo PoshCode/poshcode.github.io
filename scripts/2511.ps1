@@ -1,4 +1,4 @@
-﻿function demo-attributes
+function demo-attributes
 {
 
 [System.Configuration.SettingsDescription({

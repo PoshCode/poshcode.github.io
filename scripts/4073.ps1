@@ -1,4 +1,4 @@
-﻿# PowerShell RESTful server by Parul Jain paruljain@hotmail.com
+# PowerShell RESTful server by Parul Jain paruljain@hotmail.com
 # Version 0.1 April 4th, 2013
 # 
 # Use to offer services to other programs as a simple alternative to remoting and webservice technologies

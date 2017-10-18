@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 PARAM (
 	[Parameter(Mandatory=$true,HelpMessage="The filter to use for checking paths")]
 	[ValidateNotNullOrEmpty()]

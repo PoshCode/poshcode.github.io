@@ -1,4 +1,4 @@
-﻿function Using-Culture
+function Using-Culture
 {
     <#
         .SYNOPSIS

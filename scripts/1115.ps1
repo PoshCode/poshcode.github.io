@@ -1,4 +1,4 @@
-﻿function Get-ChildItemRecurse {
+function Get-ChildItemRecurse {
 <#
 .Synopsis
   Does a recursive search through a PSDrive up to n levels.

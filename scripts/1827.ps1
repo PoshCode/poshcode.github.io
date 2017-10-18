@@ -1,4 +1,4 @@
-﻿function Compare-Foldertrees 
+function Compare-Foldertrees 
 {
     param(
         $path1, 

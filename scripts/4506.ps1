@@ -1,4 +1,4 @@
-﻿#Sample usage:
+#Sample usage:
 #1. run HexChat and turn on logging. Leave HexChat on forever.
 #2. Copy this script file to a "clean" directory where the script can dump its output.
 #3. Open PowerShell and cd to the directory containing this script, then run:

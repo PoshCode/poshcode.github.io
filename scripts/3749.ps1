@@ -1,4 +1,4 @@
-﻿function Get-RecurseMember {
+function Get-RecurseMember {
 <#
 .Synopsis
   Does a recursive search for unique users that are members of an AD group.

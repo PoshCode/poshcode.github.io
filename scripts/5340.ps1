@@ -1,4 +1,4 @@
-﻿# if you're running "elevated" we want to know that:
+# if you're running "elevated" we want to know that:
 $PSProcessElevated = ([System.Environment]::OSVersion.Version.Major -gt 5) -and ( # Vista and ...
                                     new-object Security.Principal.WindowsPrincipal (
                                     [Security.Principal.WindowsIdentity]::GetCurrent()) # current user is admin

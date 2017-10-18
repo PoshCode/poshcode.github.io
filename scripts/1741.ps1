@@ -1,4 +1,4 @@
-﻿#Requires -version 2.0
+#Requires -version 2.0
 ## Stupid PowerShell Tricks
 ###################################################################################################
 add-type @"

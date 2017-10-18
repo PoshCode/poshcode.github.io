@@ -1,4 +1,4 @@
-﻿# Follwoing code to install and deploye site
+# Follwoing code to install and deploye site
 
 # Parameter Section Start
 $languagePack="{1033}" # this line is used to notify the language pack used by the sharepoint server

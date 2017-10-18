@@ -1,4 +1,4 @@
-﻿####################################################################################
+####################################################################################
 #  Script: parse-nmap.ps1
 # Purpose: Parse the XML output file of the nmap port scanner and emit custom 
 #          objects with properties containing data from XML file.

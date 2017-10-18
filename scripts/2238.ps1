@@ -1,4 +1,4 @@
-﻿####################################################################################################
+####################################################################################################
 ## This script is just a demonstration of some of the things you can do with the buffer
 ## in the default PowerShell host... it serves as a reminder of how much work remains on
 ## PoshConsole, and as an inspirations to anyone who is thinking about trying to create

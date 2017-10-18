@@ -1,4 +1,4 @@
-﻿function Run ([String]$scriptName = '-BLANK-') {
+function Run ([String]$scriptName = '-BLANK-') {
 <# The next function records any running scripts started in the console
    session (from $pwd) in the Scripts Event Log.
    It should be placed in the Console $profile. Scripts should be started

@@ -1,4 +1,4 @@
-﻿## With thanks to Steve McMahon and his article:
+## With thanks to Steve McMahon and his article:
 ## http://vbaccelerator.com/home/NET/Code/Libraries/Shell_Projects/Creating_and_Modifying_Shortcuts/article.asp
 ##
 ## After executing Add-Type, below, you'll be able to:

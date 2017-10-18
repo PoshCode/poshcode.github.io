@@ -1,4 +1,4 @@
-﻿function New-ParameterTransform {
+function New-ParameterTransform {
 #.Synopsis
 #	Generates Parameter Transformation Attributes in simple PowerShell syntax
 #.Description

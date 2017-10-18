@@ -1,4 +1,4 @@
-﻿$mappoint = New-WebServiceProxy http://staging.mappoint.net/standard-30/mappoint.wsdl -Namespace MapPoint
+$mappoint = New-WebServiceProxy http://staging.mappoint.net/standard-30/mappoint.wsdl -Namespace MapPoint
 $FindService = new-object MapPoint.FindServiceSoap
 # You need an account, sign up here: https://mappoint-css.live.com/mwssignup
 $FindService.Credentials = Get-Credential 

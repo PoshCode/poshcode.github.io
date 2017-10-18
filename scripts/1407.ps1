@@ -1,4 +1,4 @@
-﻿Function Get-ShortURL {
+Function Get-ShortURL {
 	Param($longURL, $login, $apiKey)	
 	$url = "http://api.bit.ly/shorten?version=2.0.1&format=xml&longUrl=$longURL&login=$login&apiKey=$apikey"
 	$request = [net.webrequest]::Create($url)

@@ -1,4 +1,4 @@
-﻿# by @bernd_k aka @sqlsulidae  http://sqlsulidae.blogspot.com/            
+# by @bernd_k aka @sqlsulidae  http://sqlsulidae.blogspot.com/            
 #             
             
 # This is an extension of the script you find at            

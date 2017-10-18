@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 	Reports on Fibre Channel Adapters in the ESX hosts for a vCenter environment.
 .DESCRIPTION

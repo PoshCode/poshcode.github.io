@@ -1,4 +1,4 @@
-﻿## Add-UniqueEndings
+## Add-UniqueEndings
 ## Takes an array of strings and forces them to be unique by adding _<number> tails to duplicates.
 ####################################################################################################
 ## Usage:

@@ -1,4 +1,4 @@
-﻿function Get-Handles {
+function Get-Handles {
   <#
     .SYNOPSIS
         Enumarates handles of the specified process.

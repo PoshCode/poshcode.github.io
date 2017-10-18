@@ -1,4 +1,4 @@
-﻿### Written by Mark A. Weaver
+### Written by Mark A. Weaver
 ##  Date: 7/27/2008
 ##  Version: 1.0
 ##  Blog site: blog.vmweaver.com

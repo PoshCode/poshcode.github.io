@@ -1,4 +1,4 @@
-﻿<# Begin ---- Global Variables - Script Limited Scope ---- #>
+<# Begin ---- Global Variables - Script Limited Scope ---- #>
 #Script Author Information
 $script:ProgramName = "Admin Launcher"
 $script:ProgramDate = "4 Oct 2011"

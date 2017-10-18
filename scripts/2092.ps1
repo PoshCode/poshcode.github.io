@@ -1,4 +1,4 @@
-﻿Function New-Script
+Function New-Script
 {
 $strName = $env:username
 $date = get-date -format d

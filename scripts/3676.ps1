@@ -1,4 +1,4 @@
-﻿function Combine-CSV{
+function Combine-CSV{
 <#
 	.Synopsis
 	

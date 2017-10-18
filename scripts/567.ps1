@@ -1,4 +1,4 @@
-﻿# $Id: New-ComplexPassword.ps1 170 2008-09-05 19:49:48Z jon $
+# $Id: New-ComplexPassword.ps1 170 2008-09-05 19:49:48Z jon $
 # $Revision: 170 $
 
 Function New-ComplexPassword ([int]$Length=8, $digits=$null, $alphaUpper=$null, $alphaLower=$null, $special=$null)

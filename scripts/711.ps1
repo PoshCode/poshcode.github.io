@@ -1,4 +1,4 @@
-﻿#function get-help() {
+#function get-help() {
 cmdlet -DefaultParameterSet AllUsersView `
 
 param(

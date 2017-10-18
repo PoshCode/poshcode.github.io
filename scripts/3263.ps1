@@ -1,4 +1,4 @@
-﻿function Set-IPAddress {
+function Set-IPAddress {
 		param(	[string]$networkinterface =$(read-host "Enter the name of the NIC (ie Local Area Connection)"),
 			[string]$ip = $(read-host "Enter an IP Address (ie 10.10.10.10)"),
 			@@[string]$mask = $(read-host "Enter the subnet mask (ie 255.255.255.0)"),

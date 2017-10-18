@@ -1,4 +1,4 @@
-﻿function ISE-CopyOutPutToEditor () {
+function ISE-CopyOutPutToEditor () {
     $count = $psise.CurrentPowerShellTab.Files.count
     $psIse.CurrentPowerShellTab.Files.Add()
     $Newfile = $psIse.CurrentPowerShellTab.Files[$count]

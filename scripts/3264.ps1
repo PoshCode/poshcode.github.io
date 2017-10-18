@@ -1,4 +1,4 @@
-﻿# corrected version - $mask variable corrected to match in both places
+# corrected version - $mask variable corrected to match in both places
 function Set-IPAddress {
 		param(	[string]$networkinterface =$(read-host "Enter the name of the NIC (ie Local Area Connection)"),
 			[string]$ip = $(read-host "Enter an IP Address (ie 10.10.10.10)"),

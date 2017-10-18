@@ -1,4 +1,4 @@
-﻿function New-PasswordFile
+function New-PasswordFile
 {
 	param (
 		[parameter(Mandatory = $True)]

@@ -1,4 +1,4 @@
-﻿function Set-Constant {
+function Set-Constant {
   <#
     .SYNOPSIS
         Creates constants.

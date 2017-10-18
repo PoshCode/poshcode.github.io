@@ -1,4 +1,4 @@
-﻿# this script is a part of Func module (https://github.com/gregzakh/Func)
+# this script is a part of Func module (https://github.com/gregzakh/Func)
 function Set-Privilege {
   param(
     [Parameter(Position=0)]

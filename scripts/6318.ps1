@@ -1,4 +1,4 @@
-﻿$VerbosePreference="continue"
+$VerbosePreference="continue"
 $FileSeparator=" "
 $menufile="C:\Temp\menu1.txt"
 $keys=@{

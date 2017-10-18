@@ -1,4 +1,4 @@
-﻿$Parser = [System.Management.Automation.PsParser]
+$Parser = [System.Management.Automation.PsParser]
 $script:lastMemory = Get-Process -id $PID
 $global:LastTweets = new-object System.Collections.Generic.List[PSObject]
 $global:PerformanceHistory = @{}

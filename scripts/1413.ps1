@@ -1,4 +1,4 @@
-﻿Param ( $DestinationHost )
+Param ( $DestinationHost )
 Add-Type -Path "C:\Program Files\LeXtudio Software\sharpsnmplib.dll"
 Add-Type -Path "C:\Program Files\LeXtudio Software\SharpSnmpLib.Controls.dll"
 $manager = [system.Net.Dns]::Resolve( $DestinationHost ).AddressList[0]

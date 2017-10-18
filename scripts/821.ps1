@@ -1,4 +1,4 @@
-﻿#require -version 2.0
+#require -version 2.0
 #require -shellid PoshConsole
 ###################################################################################################
 ## Get-Weather 

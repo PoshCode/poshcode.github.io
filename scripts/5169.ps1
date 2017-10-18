@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 if (!(Test-Path alias:jumper)) { Set-Alias jumper Push-Path }
 
 $asm = Add-Type -MemberDefinition @'

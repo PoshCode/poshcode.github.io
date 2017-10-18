@@ -1,4 +1,4 @@
-﻿#requires -version 2.0
+#requires -version 2.0
 function ConvertFrom-CliXml {
     param(
         [Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]

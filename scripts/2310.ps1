@@ -1,4 +1,4 @@
-﻿<#
+<#
   .Description
     A C# P/Invoke wrapper for DhcpEnumSubnetClients from the DHCP API
   .Parameter Server

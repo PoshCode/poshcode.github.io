@@ -1,4 +1,4 @@
-﻿#.Synopsis
+#.Synopsis
 #   Test the HMAC hash(es) of a file
 #.Description
 #   Takes the HMAC hash of a file using specified algorithm, and optionally, compare it to a baseline hash

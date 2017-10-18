@@ -1,4 +1,4 @@
-﻿$Wasp = Add-Type -MemberDefinition @'
+$Wasp = Add-Type -MemberDefinition @'
 [DllImport("user32.dll")]
 [return: MarshalAs(UnmanagedType.Bool)]
 public static extern bool SetForegroundWindow(IntPtr hWnd);

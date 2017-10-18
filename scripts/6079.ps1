@@ -1,4 +1,4 @@
-﻿
+
 #use this batch file run both scripts. The scripts must all be in the same folder
 #---------------------------------------------------------------------------------------------------------------------------
 # Remove_All_Java.cmd

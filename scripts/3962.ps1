@@ -1,4 +1,4 @@
-﻿<# 
+<# 
 This script stops the service, then waits for the service to stop before continuing with the reboot/shutdown 
 The scritp can be pushed to a server/Pc using Group Policy or Registry or run manually.
 The shutdown script Registry key is:

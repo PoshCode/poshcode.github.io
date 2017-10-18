@@ -1,4 +1,4 @@
-﻿function Get-IniSection($inifile,$section)
+function Get-IniSection($inifile,$section)
 {
    $sections = select-string "^\[.*\]" $inifile
    if(!$section) {

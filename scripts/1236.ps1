@@ -1,4 +1,4 @@
-﻿## This script requires ...\WindowsPowerShell\Libraries\Meebey.SmartIrc4net.dll
+## This script requires ...\WindowsPowerShell\Libraries\Meebey.SmartIrc4net.dll
 ## You can get Meebey.SmartIrc4net.dll from 
 ## http://voxel.dl.sourceforge.net/sourceforge/smartirc4net/SmartIrc4net-0.4.0.bin.tar.bz2
 ## And the docs are at http://smartirc4net.meebey.net/docs/0.4.0/html/

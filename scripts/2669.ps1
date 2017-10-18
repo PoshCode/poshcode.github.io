@@ -1,4 +1,4 @@
-﻿if(!(Get-Command New-System.Windows.Input.CommandBinding -ErrorAction SilentlyContinue)) {
+if(!(Get-Command New-System.Windows.Input.CommandBinding -ErrorAction SilentlyContinue)) {
    Add-UIFunction -Type System.Windows.Input.CommandBinding
 }
 

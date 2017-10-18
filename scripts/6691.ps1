@@ -1,4 +1,4 @@
-﻿Download Oracle Data Provider for .NET (ODP.NET). (Just search for “Oracle ODP.NET”.)
+Download Oracle Data Provider for .NET (ODP.NET). (Just search for “Oracle ODP.NET”.)
 1)Select “Download the latest ODP.NET production release.”
 2)Select “64-bit ODAC Downloads”
 3)Select “ODP.NET_Managed_ODAC12cR4.zip”

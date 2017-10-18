@@ -1,4 +1,4 @@
-﻿# validate given IP address as an IPAdress (given string input)
+# validate given IP address as an IPAdress (given string input)
 PARAM($ip=$(read-host "Enter any IP Address"))
 
 try

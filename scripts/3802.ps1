@@ -1,4 +1,4 @@
-﻿<#
+<#
   Author:   Matt Schmitt
   Date:     11/29/12 
   Version:  1.0 

@@ -1,4 +1,4 @@
-﻿#This script is designed to grab mailbox statistics for every user and give a more detailed
+#This script is designed to grab mailbox statistics for every user and give a more detailed
 #level of output about mailbox statistics in .html format
 
 param(

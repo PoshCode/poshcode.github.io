@@ -1,4 +1,4 @@
-﻿Do {
+Do {
 Write-Host "
 ----------360 Visibility - Signature Generator ----------
 

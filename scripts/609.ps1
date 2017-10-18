@@ -1,4 +1,4 @@
-﻿function WhileTimeout ( [int]$interval, [int]$maxTries, [scriptblock]$condition )
+function WhileTimeout ( [int]$interval, [int]$maxTries, [scriptblock]$condition )
 {
 	$i = 0
 	$startTime = Get-Date

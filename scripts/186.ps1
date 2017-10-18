@@ -1,4 +1,4 @@
-﻿param($Cmdlet) $CmdletInfo = Get-Command -CommandType Cmdlet -Name $Cmdlet
+param($Cmdlet) $CmdletInfo = Get-Command -CommandType Cmdlet -Name $Cmdlet
     if ( $? ) {
         if ($CmdletInfo.GetType().Name -eq "CmdletInfo" ) {
             $parsed = $CmdletInfo.Definition `

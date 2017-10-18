@@ -1,4 +1,4 @@
-﻿Function Get-ComputerSession {
+Function Get-ComputerSession {
 <#  
 .SYNOPSIS  
     Retrieves all user sessions from local or remote server/s

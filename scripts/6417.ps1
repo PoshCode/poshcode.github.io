@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
 Takes a text string and word-wraps it to a specific length. 
 

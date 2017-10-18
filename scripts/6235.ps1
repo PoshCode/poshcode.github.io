@@ -1,4 +1,4 @@
-﻿function Get-GitInfoForDirectory {
+function Get-GitInfoForDirectory {
 
     param (
     )

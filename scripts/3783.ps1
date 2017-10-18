@@ -1,4 +1,4 @@
-﻿#######################
+#######################
 <#
 .SYNOPSIS
 Execute T-SQL Statments and return messages from SQL Server (print).

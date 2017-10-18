@@ -1,4 +1,4 @@
-﻿# [CmdletBinding()]
+# [CmdletBinding()]
 param(
    #[Parameter(Position=1,ValueFromPipeline=$true)]
    [type]$type

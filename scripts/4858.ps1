@@ -1,4 +1,4 @@
-﻿Add-Type @'
+Add-Type @'
 public class MyAccounts
 {
     public System.Collections.ArrayList localusers; 

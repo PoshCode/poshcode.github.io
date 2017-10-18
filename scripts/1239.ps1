@@ -1,4 +1,4 @@
-﻿Add-BootsFunction -Type "System.Windows.Threading.DispatcherTimer"
+Add-BootsFunction -Type "System.Windows.Threading.DispatcherTimer"
 
 function Start-BootsTimer {
 #.Syntax

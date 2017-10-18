@@ -1,4 +1,4 @@
-﻿function sync-time(
+function sync-time(
 [string] $server = "sync-time 0.pool.ntp.org, clock.psu.edu",
 [int] $port = 37)
 {

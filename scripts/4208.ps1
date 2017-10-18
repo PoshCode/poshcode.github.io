@@ -1,4 +1,4 @@
-﻿$frmMain_KeyDown= {
+$frmMain_KeyDown= {
   if ($_.KeyCode -eq "F12") {
     switch ($vis) {
       $true {

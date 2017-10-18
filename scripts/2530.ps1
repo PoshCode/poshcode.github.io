@@ -1,4 +1,4 @@
-﻿param($sqlserver, $filepath)
+param($sqlserver, $filepath)
 
 #Note: Uses Changeset 59378 or higher of SQLPSX SQLServer module http://sqlpsx.codeplex.com/SourceControl/changeset/view/58378#564810
 #Added FileListOnly option to Invoke-SqlRestore. The option will be included in releases after 2.3.1

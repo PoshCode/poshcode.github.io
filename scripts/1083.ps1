@@ -1,4 +1,4 @@
-﻿param([String] $phrase) 
+param([String] $phrase) 
 
 $words = $phrase.Split()
 $MaxLettersPerWord = 3

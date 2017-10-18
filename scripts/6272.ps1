@@ -1,4 +1,4 @@
-﻿Function New-RandomPassword {
+Function New-RandomPassword {
   Param(
     [parameter()]
     [ValidateRange(8,100)]

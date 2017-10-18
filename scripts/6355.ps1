@@ -1,4 +1,4 @@
-﻿function listen-port ($port=8989) {
+function listen-port ($port=8989) {
     $endpoint = new-object System.Net.IPEndPoint ([system.net.ipaddress]::any, $port)
     $listener = new-object System.Net.Sockets.TcpListener $endpoint
     $listener.start()

@@ -1,4 +1,4 @@
-﻿function get-whoisabuse ([string]$ipaddress)
+function get-whoisabuse ([string]$ipaddress)
 {
 
 [xml]$a = (Invoke-WebRequest -Uri "http://whois.arin.net/rest/ip/$ip" -ContentType "text/xml").content

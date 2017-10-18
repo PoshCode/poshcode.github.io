@@ -1,4 +1,4 @@
-﻿filter ConvertFrom-SDDL
+filter ConvertFrom-SDDL
 {
 <#
 .SYNOPSIS

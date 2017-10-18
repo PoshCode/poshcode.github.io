@@ -1,4 +1,4 @@
-﻿<#
+<#
 .Synopsis
   Functions for managing SMS and SCCM.
 .Notes

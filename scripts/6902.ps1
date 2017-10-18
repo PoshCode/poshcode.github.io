@@ -1,4 +1,4 @@
-﻿function Install-Software{
+function Install-Software{
 #.Synopsis
 #  Install software from a UNC path to a remote computer
 #.Description

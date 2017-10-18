@@ -1,4 +1,4 @@
-﻿<#   
+<#   
 .SYNOPSIS   
     Interactive menu that allows a user to connect to a local or remote computer and remove a local profile. 
 .DESCRIPTION 
