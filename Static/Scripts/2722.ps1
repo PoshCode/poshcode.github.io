@@ -1,0 +1,343 @@
+#######################
+<#
+Version History
+v1.0   - Chad Miller - Initial release
+#>
+
+
+#######################
+function Test-Ping
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ComputerName)
+
+    process
+    { 
+        $ComputerName | foreach {$result=Test-Connection -ComputerName $_ -Count 1 -Quiet; 
+        new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args=$_;Result=$result;Message=$null}}
+    }
+
+} #Test-Ping
+
+#######################
+function Test-Wmi
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ComputerName)
+
+    process
+    { 
+        try { 
+            $ComputerName | foreach {$name=$_; Get-WmiObject -ComputerName $name -Class Win32_ComputerSystem -ErrorAction 'Stop' | out-null; 
+            new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$true;Message=$null}}
+            }
+        catch { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message="$($_.ToString())"} }
+    }
+
+} #Test-Wmi
+
+#######################
+function Test-Port
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ComputerName
+    ,[Parameter(Mandatory=$true)] [int32]$Port)
+     
+    Process {
+        try {
+            $Computername | foreach {
+            $sock = new-object System.Net.Sockets.Socket -ArgumentList $([System.Net.Sockets.AddressFamily]::InterNetwork),$([System.Net.Sockets.SocketType]::Stream),$([System.Net.Sockets.ProtocolType]::Tcp); $name=$_; `
+            $sock.Connect($name,$Port)
+            new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$true;Message=$null}
+            $sock.Close()}
+         
+        }
+        catch { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message="$($_.ToString())"} }
+    }
+
+} #Test-Port
+
+#######################
+function Test-SMB
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ComputerName)
+
+    process
+    { Test-Port $ComputerName 445 }
+    
+} #Test-SMB
+
+#######################
+function Test-SSIS
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ComputerName
+     ,[Parameter(Mandatory=$true)] [ValidateSet("2005", "2008")] [string]$Version
+    )
+
+    #Note: Unlike the database engine and replication SSIS is not backwards compatible
+    # Once an assembly is loaded, you can unload it. This means you need to fire up a powershell.exe process
+    # and mixing between 2005 and 2008 SSIS connections are not permitted in same powershell process.
+    # You'll need to test 2005 and 2008 SSIS in separate powershell.exe processes
+
+    Begin {
+        $ErrorAction = 'Stop'
+        if ($Version -eq 2008)
+        { add-type -AssemblyName "Microsoft.SqlServer.ManagedDTS, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91" }
+        else
+        { add-type -AssemblyName "Microsoft.SqlServer.ManagedDTS, Version=9.0.242.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91" }
+    }
+
+    process
+    { 
+        $ComputerName | foreach {
+        $name=$_; `
+        if ((test-SSISService -ComputerName $name).Result)
+        {
+            try { 
+                    
+                    $app = new-object ("Microsoft.SqlServer.Dts.Runtime.Application")
+                    $out = $null
+                    $app.GetServerInfo($name,[ref]$out) | out-null
+                    new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$true;Message=$null}
+            }
+            catch { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message="$($_.ToString())"}} 
+        }
+        else
+        { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message='SSIS Not Running'} }
+        }
+    }
+
+} #Test-SSIS
+
+#######################
+function Test-SQL
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ServerInstance)
+
+    process {
+        $ServerInstance | foreach {
+        $name = $ServerInstance; `
+        $connectionString = "Data Source={0};Integrated Security=true;Initial Catalog=master;Connect Timeout=3;" -f $name
+        $sqlConn = new-object ("Data.SqlClient.SqlConnection") $connectionString                                          
+        try { 
+            $sqlConn.Open()
+            new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$true;Message=$null}
+        }
+        catch { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message="$($_.ToString())"} }
+        finally { $sqlConn.Dispose() }
+        }
+    }
+
+} #Test-SQL
+
+#######################
+function Test-AgentService
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ComputerName)
+
+    process
+    { 
+        try {
+            $ComputerName | foreach {
+            $name=$_; `
+            if (Get-WmiObject -Class Win32_Service -ComputerName $name -Filter {Name Like 'SQLAgent%' and State='Stopped'} -ErrorAction 'Stop') {
+            new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message=$null} }
+            else {
+            new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$true;Message=$null} }
+            }
+        }
+        catch { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message="$($_.ToString())"} }
+    }
+
+} #Test-AgentService
+
+#######################
+function Test-SqlService
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ComputerName)
+
+    process
+    { 
+        try {
+            $ComputerName | foreach {
+            $name=$_; `
+            if (Get-WmiObject -ComputerName $name `
+            -query "select Name,State from Win32_Service where (NOT Name Like 'MSSQLServerADHelper%') AND (Name Like 'MSSQL%' OR Name Like 'SQLServer%') And State='Stopped'" `
+            -ErrorAction 'Stop')
+            { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message=$null} }
+            else
+            { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$true;Message=$null} }
+            }
+        }
+        catch { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message="$($_.ToString())"} }
+    }
+   
+} #Test-SqlService
+
+#######################
+function Test-SSISService
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ComputerName)
+
+    process
+    { 
+        try {
+            $ComputerName | foreach {
+            $name=$_; `
+            if (Get-WmiObject -Class Win32_Service -ComputerName $ComputerName -Filter {Name Like 'MsDtsServer%' And State='Stopped'} -ErrorAction 'Stop')
+            { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message=$null} }
+            else
+            { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$true;Message=$null} }
+            }
+        }
+        catch { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message="$($_.ToString())"} }
+    }
+
+} #Test-SSISService
+
+#######################
+<#
+.SYNOPSIS
+Runs a T-SQL script.
+.DESCRIPTION
+Runs a T-SQL script. Invoke-Sqlcmd2 only returns message output, such as the output of PRINT statements when -verbose parameter is specified
+.INPUTS
+None
+    You cannot pipe objects to Invoke-Sqlcmd2
+.OUTPUTS
+   System.Data.DataTable
+.EXAMPLE
+Invoke-Sqlcmd2 -ServerInstance "MyComputer\MyInstance" -Query "SELECT login_time AS 'StartTime' FROM sysprocesses WHERE spid = 1"
+This example connects to a named instance of the Database Engine on a computer and runs a basic T-SQL query.
+StartTime
+-----------
+2010-08-12 21:21:03.593
+.EXAMPLE
+Invoke-Sqlcmd2 -ServerInstance "MyComputer\MyInstance" -InputFile "C:\MyFolder\tsqlscript.sql" | Out-File -filePath "C:\MyFolder\tsqlscript.rpt"
+This example reads a file containing T-SQL statements, runs the file, and writes the output to another file.
+.EXAMPLE
+Invoke-Sqlcmd2  -ServerInstance "MyComputer\MyInstance" -Query "PRINT 'hello world'" -Verbose
+This example uses the PowerShell -Verbose parameter to return the message output of the PRINT command.
+VERBOSE: hello world
+.NOTES
+Version History
+v1.0   - Chad Miller - Initial release
+v1.1   - Chad Miller - Fixed Issue with connection closing
+v1.2   - Chad Miller - Added inputfile, SQL auth support, connectiontimeout and output message handling. Updated help documentation
+v1.3   - Chad Miller - Added As parameter to control DataSet, DataTable or array of DataRow Output type
+#>
+function Invoke-Sqlcmd2
+{
+    [CmdletBinding()]
+    param(
+    [Parameter(Position=0, Mandatory=$true)] [string]$ServerInstance,
+    [Parameter(Position=1, Mandatory=$false)] [string]$Database,
+    [Parameter(Position=2, Mandatory=$false)] [string]$Query,
+    [Parameter(Position=3, Mandatory=$false)] [string]$Username,
+    [Parameter(Position=4, Mandatory=$false)] [string]$Password,
+    [Parameter(Position=5, Mandatory=$false)] [Int32]$QueryTimeout=600,
+    [Parameter(Position=6, Mandatory=$false)] [Int32]$ConnectionTimeout=15,
+    [Parameter(Position=7, Mandatory=$false)] [ValidateScript({test-path $_})] [string]$InputFile,
+    [Parameter(Position=8, Mandatory=$false)] [ValidateSet("DataSet", "DataTable", "DataRow")] [string]$As="DataRow"
+    )
+
+    if ($InputFile)
+    {
+        $filePath = $(resolve-path $InputFile).path
+        $Query =  [System.IO.File]::ReadAllText("$filePath")
+    }
+
+    $conn=new-object System.Data.SqlClient.SQLConnection
+     
+    if ($Username)
+    { $ConnectionString = "Server={0};Database={1};User ID={2};Password={3};Trusted_Connection=False;Connect Timeout={4}" -f $ServerInstance,$Database,$Username,$Password,$ConnectionTimeout }
+    else
+    { $ConnectionString = "Server={0};Database={1};Integrated Security=True;Connect Timeout={2}" -f $ServerInstance,$Database,$ConnectionTimeout }
+
+    $conn.ConnectionString=$ConnectionString
+    
+    #Following EventHandler is used for PRINT and RAISERROR T-SQL statements. Executed when -Verbose parameter specified by caller
+    if ($PSBoundParameters.Verbose)
+    {
+        $conn.FireInfoMessageEventOnUserErrors=$true
+        $handler = [System.Data.SqlClient.SqlInfoMessageEventHandler] {Write-Verbose "$($_)"}
+        $conn.add_InfoMessage($handler)
+    }
+    
+    $conn.Open()
+    $cmd=new-object system.Data.SqlClient.SqlCommand($Query,$conn)
+    $cmd.CommandTimeout=$QueryTimeout
+    $ds=New-Object system.Data.DataSet
+    $da=New-Object system.Data.SqlClient.SqlDataAdapter($cmd)
+    [void]$da.fill($ds)
+    $conn.Close()
+    switch ($As)
+    {
+        'DataSet'   { Write-Output ($ds) }
+        'DataTable' { Write-Output ($ds.Tables) }
+        'DataRow'   { Write-Output ($ds.Tables[0]) }
+    }
+
+} #Invoke-Sqlcmd2
+
+#######################
+function ConvertTo-Hashtable
+{ 
+    param([string]$key, $value) 
+
+    Begin 
+    { 
+        $hash = @{} 
+    } 
+    Process 
+    { 
+        $thisKey = $_.$Key
+        $hash.$thisKey = $_.$Value 
+    } 
+    End 
+    { 
+        Write-Output $hash 
+    }
+
+} #ConvertTo-Hashtable
+
+#######################
+function Test-DatabaseOnline
+{
+    param([Parameter(Mandatory=$true, ValueFromPipeline = $true)] [string[]]$ServerInstance)
+    
+    begin
+    {
+$query = @"
+SELECT name, DATABASEPROPERTYEX(name,'Status') AS 'Status'
+FROM sysdatabases
+WHERE DATABASEPROPERTYEX(name,'Status') <> 'ONLINE'
+"@
+    }
+    process
+    { 
+        try {
+            $ServerInstance | foreach {
+            $name=$_; `
+            $ht = Invoke-Sqlcmd2 -ServerInstance $name -Database master -Query $query | ConvertTo-Hashtable -key name -value status
+            if ($ht.count -eq 0)
+            { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$true;Message=$null} }
+            else
+            { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message=$ht} }
+            }
+        }
+        catch { new-object psobject -property @{Test="$($myinvocation.mycommand.name)";Args="$name";Result=$false;Message="$($_.ToString())"} }
+    }
+
+} #Test-DatabaseOnline
+
+#######################
+filter ConvertTo-ComputerName
+{
+    param ($ServerInstance)
+     
+    if ($_)
+    { $ServerInstance = $_ }
+
+    $ServerInstance -replace "\\.*"
+
+} #ConvertTo-ComputerName
+
+

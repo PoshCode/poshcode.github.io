@@ -1,0 +1,16 @@
+$FabricA = @{}
+$FabricA.SwitchIP = "1.2.3.4"
+$FabricA.VsanID = "Vsan01"
+$FabricA.ZoneSetname = "FabricA"
+$FabricA.Array01 = @{}
+$FabricA.Array01.ArrayName = "Array01"
+$FabricA.Array01.Controller01Name = "vHBA1"
+$FabricA.Array01.Controller01WWN = "foobarfoobarfoobar01"
+$FabricA.Array01.Controller02Name = "vHBA2"
+$FabricA.Array01.Controller02WWN = "foobarfoobarfoobar02"
+$FabricA.Array02 = @{}
+$FabricA.Array02.ArrayName = "Array02"
+$FabricA.Array02.Controller01Name = "vHBA1"
+$FabricA.Array02.Controller01WWN = "foobarfoobarfoobar01"
+$FabricA.Array02.Controller02Name = "vHBA2"
+$FabricA.Array02.Controller02WWN = "foobarfoobarfoobar02"
