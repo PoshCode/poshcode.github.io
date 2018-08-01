@@ -53,22 +53,22 @@ function Write-AllLines {
     [IO.File]::WriteAllLines((Convert-Path $Path), $content)
 }
 
+if($Language -eq "posh") { $Langauge = "powershell" }
 
-Write-AllLines "scripts\$id.md" @"
+Write-AllLines "Pages\scripts\$id.md" @"
 ---
 pid:            $id
-poster:         $author
+author:         $author
 title:          $title
 date:           $date
 format:         $Language
-parent:         $parent
 $(if($parent){   "parent:         $($parent -join ',')"})
 $(if($children){ "children:       $($children -join ',')"})
 ---
 
 # $title
 
-### [download]($id$extension)$(if($parent -ne 0) { " - [parent]($parent.md)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child]($child.md)" }) -join ', ')" })
+### [download](//scripts/$id$extension)$(if($parent -ne 0) { " - [parent](//scripts/$parent.md)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child](//scripts/$child.md)" }) -join ', ')" })
 
 $description
 
@@ -77,9 +77,7 @@ $code
 ``````
 "@
 
-
-
-Write-AllLines "scripts\$id$extension" $code
+Write-AllLines "Static\scripts\$id$extension" $code
 
 }
 }
