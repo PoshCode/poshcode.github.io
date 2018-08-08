@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Kris Payne">
+    <title>IIS FTP Site Creation - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>IIS FTP Site Creation</h1>
+<h3><a href="//scripts/685.ps1">download</a></h3>
+<p>Automatically creates a Local User on server, Local directory on server, and Virtual directory in IIS based on User Inputs.  Also sets user flags to read/write on directory and sets password options for user</p>
+<pre><code class="language-posh">&quot;       -------------------------------------------&quot;
+&quot;       ##     FTP VIRTUAL DIRECTORY CREATION SCRIPT     ##&quot;
+&quot;&quot;
+&quot;&quot;
+&quot;       ## This script will create a new username, password, local directory, and virtual directory for a client &quot;
+&quot;&quot;
+&quot;       ## Please enter the following information &quot;
+&quot;&quot;
+&quot;       -------------------------------------------&quot;
+ 
+ 
+### PowerShell Script
+### Create local User Acount
+ 
+$AccountName = Read-Host &quot;Please enter user account name (i.e. krisp)&quot;
+$FullName = Read-Host &quot;Please enter the full name (i.e. Kris)&quot;
+$Description = Read-Host &quot;Please enter the description (i.e. Krisp FTP Login)&quot;
+$Password = Read-Host &quot;Please enter a password&quot;
+$Computer = &quot;FTPSERVER&quot;
+ 
+&quot;Creating user on $Computer&quot;
+ 
+# Access to Container using the COM library
+$Container = [ADSI] &quot;WinNT://$Computer&quot;
+ 
+# Create User
+$objUser = $Container.Create(&quot;user&quot;, $Accountname)
+$objUser.Put(&quot;Fullname&quot;, $FullName)
+$objUser.Put(&quot;Description&quot;, $Description)
+ 
+# Set Password
+$objUser.SetPassword($Password)
+ 
+# Save Changes
+$objUser.SetInfo()
+ 
+# Add User Flags
+# The numbers are bitwise - 65536 is Password Never Expires ; 64 is User Cannot Change Password
+ 
+$objUser.userflags = 65536 -bor 64
+$objUser.SetInfo()
+ 
+&quot;User $AccountName created!&quot;
+&quot; ------------------------&quot; 
+
+
+
+#	---Create FTP local directory---
+
+&quot;Creating directory D:\FTP\$AccountName&quot;
+
+New-Item D:\FTP\$AccountName -type directory  
+Start-Sleep -Seconds 5
+&quot;Directory $AccountName created!&quot;
+&quot; ------------------------&quot;
+
+
+#	---Set Permissions on Folder
+
+&quot;Setting Permissions on D:\FTP\$AccountName&quot;
+
+$colRights = [System.Security.AccessControl.FileSystemRights]&quot;Modify&quot;
+$Inherit = [System.Security.AccessControl.InheritanceFlags]&quot;ContainerInherit, ObjectInherit&quot;
+$Propagate = [System.Security.AccessControl.PropagationFlags]::None
+$objType =[System.Security.AccessControl.AccessControlType]::Allow
+$User = New-Object System.Security.Principal.NTAccount(&quot;$Computer\$AccountName&quot;)
+$objACE = New-Object System.Security.AccessControl.FileSystemAccessRule($User, $colRights , $Inherit, $Propagate, $objType)
+
+$objACL = Get-Acl &quot;D:\FTP\$AccountName&quot;
+
+$objACL.AddAccessRule($objACE)
+
+Set-Acl &quot;D:\FTP\$AccountName&quot; $objACL
+
+Start-Sleep -Seconds 5
+
+&quot;Permissions Successfully Applied!&quot;
+&quot; ------------------------&quot;
+
+
+
+
+#	---Add User to FTP Users Local Group
+
+&quot;Adding User to FTP Users Group&quot;
+
+
+$group = [ADSI]&quot;WinNT://$computer/FTP Users&quot;
+$group.add(&quot;WinNT://$computer/$AccountName&quot;) 
+
+&quot;User Added!&quot;
+&quot;-------------------------&quot; 
+
+
+
+
+
+#	---Create Temporary File with Username
+
+$accountname | Out-File name.txt     # &lt;----IIS part won't take direct input, wants to read from file.  Need to Research
+
+
+
+
+#	---Create Virtual Directory in IIS---
+
+&quot;Creating virtual directory in IIS&quot;
+Start-Sleep -Seconds 5
+foreach ($a in get-content name.txt)
+{
+$server = $env:computername
+$service = New-Object System.DirectoryServices.DirectoryEntry(&quot;IIS://$server/MSFTPSVC&quot;)
+$site = $service.psbase.children |Where-Object { $_.ServerComment -eq 'IntFTP' }
+$site = New-Object System.DirectoryServices.DirectoryEntry($site.psbase.path+&quot;/Root&quot;) for IIS 7.
+$virtualdir = $site.psbase.children.Add(&quot;$a&quot;,&quot;IIsFtpVirtualDir&quot;)
+$virtualdir.psbase.CommitChanges()
+$virtualdir.put(&quot;Path&quot;,&quot;D:\FTP\$a&quot;)
+$virtualdir.put(&quot;AccessRead&quot;,$true)
+$virtualdir.put(&quot;AccessWrite&quot;,$true)
+$virtualdir.psbase.CommitChanges()
+$service.psbase.refreshCache() # OPTIONAL
+
+}
+
+&quot;FTP site $AccountName created!&quot;
+&quot; ------------------------&quot;
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

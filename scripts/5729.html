@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Letoric">
+    <title>Start-Job help - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Start-Job help</h1>
+<h3><a href="//scripts/5729.ps1">download</a></h3>
+<p>Start-Job help</p>
+<pre><code class="language-posh">$ErrorActionPreference = &quot;Stop&quot;
+$DebugPreference = &quot;Continue&quot;
+Set-Location (Split-Path $MyInvocation.MyCommand.Path)
+if(Test-Path (&quot;.\&quot; + $MyInvocation.MyCommand.Name.TrimEnd(&quot;.ps1&quot;) + &quot;_config.xml&quot;)) {
+        [xml]$configfile = (Get-Content (&quot;.\&quot; + $MyInvocation.MyCommand.Name.TrimEnd(&quot;.ps1&quot;) + &quot;_config.xml&quot;))
+} else {
+        Write-Host &quot;Configuration file is missing, halting script&quot; -ForegroundColor Red
+        Start-Sleep -Seconds 10
+        Exit
+}
+ 
+#Define logging locations
+$LogDir = $configfile.Root.Configuration.LogDirectory
+$ScriptName = $MyInvocation.MyCommand.Name
+$datetime = (get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;)
+$LogFile = ($LogDir + &quot;\&quot; + $ScriptName.TrimEnd(&quot;.ps1&quot;) + &quot;_&quot; + $datetime + &quot;.log&quot;)
+$Global:Transcript = $LogFile
+ 
+#Checks whether powershell was launched as admin and launches as admin if not.
+$myWindowsID=[System.Security.Principal.WindowsIdentity]::GetCurrent()
+$myWindowsPrincipal=new-object System.Security.Principal.WindowsPrincipal($myWindowsID)
+$adminRole=[System.Security.Principal.WindowsBuiltInRole]::Administrator
+if ($myWindowsPrincipal.IsInRole($adminRole)) {
+   clear-host
+} else {
+   $sleeptimer = 10
+   $newProcess = new-object System.Diagnostics.ProcessStartInfo &quot;PowerShell&quot;;
+   $newProcess.WorkingDirectory = (Split-Path $MyInvocation.MyCommand.Path)
+   $newProcess.Arguments = $myInvocation.MyCommand.Definition;
+   $newProcess.Verb = &quot;runas&quot;;
+   [System.Diagnostics.Process]::Start($newProcess);
+   exit
+}
+ 
+function Test-Transcribing {
+        $externalHost = $host.gettype().getproperty(&quot;ExternalHost&quot;,
+                [reflection.bindingflags]&quot;NonPublic,Instance&quot;).getvalue($host, @())
+ 
+        try {
+            $externalHost.gettype().getproperty(&quot;IsTranscribing&quot;,
+                [reflection.bindingflags]&quot;NonPublic,Instance&quot;).getvalue($externalHost, @())
+        }
+        catch {
+                write-warning &quot;This host does not support transcription.&quot;
+        }
+}
+ 
+function main {
+        #Checks for Logging directory, creates it if it does not exist.
+        If(!(Test-Path $LogDir)) { New-Item &quot;$LogDir&quot; -Type Directory -Verbose }
+        #Checks if transcription is active, stops it if so, then starts it.
+        if(Test-Transcribing -eq &quot;True&quot;) {
+                Stop-Transcript
+                Start-Transcript
+        } else {
+                Start-Transcript
+        }
+        #Purging log files older than max log age configured
+        $a = Get-ChildItem $LogDir | Where-Object {$_.name -like ($ScriptName.TrimEnd(&quot;.ps1&quot;) + &quot;*&quot;)}
+        foreach($x in $a) {
+                $y = ((Get-Date) - $x.CreationTime).Days
+                if ($y -gt $configfile.Root.Configuration.MaxLogAge -and $x.PsISContainer -ne $True) { $x.Delete() }
+        }
+        #The meat of the script goes here.
+        $JobList = @()
+        $StartTime = (Get-Date)
+        $integrations = $configfile.root.integrations.integration
+        $integrations | ForEach-Object {
+                $ArgumentList = @($_,$configfile)
+                $InitializationScript = {
+                        function FTPMonitor {
+                                Param([Parameter(Mandatory=$true)]$integration)
+                                $ArgumentList = @($integration,$args[1])
+                                $ScriptBlock = {
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Starting function(FTPMonitor) to retrieve packages from SFTP for &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                        $PackIn = ($args[1].root.IntegrationDefaults.DefaultInstancePath + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultPackInFolder)
+                                        If(Test-Path $PackIn) {
+                                                if($args[0].FTPMonitorConfig -eq $null -or $args[0].FTPMonitorConfig -eq &quot;&quot;) {
+                                                        $IntegrationConfigFile = ($args[1].root.IntegrationDefaults.DefaultConfigurationPath + $env:COMPUTERNAME + &quot;\&quot; + $args[0].FolderName + &quot;\&quot; + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultFTPMonitorConfig)
+                                                } else {
+                                                        $IntegrationConfigFile = ($args[1].root.IntegrationDefaults.DefaultConfigurationPath + $env:COMPUTERNAME + &quot;\&quot; + $args[0].FolderName + &quot;\&quot; + $args[0].FTPMonitorConfig)
+                                                }
+                                                $NexusCMD = ($args[1].root.IntegrationDefaults.NexusExecutable + &quot; /c &quot; + $IntegrationConfigFile)
+Write-Host $NexusCMD
+#                                               &amp; $NexusCMD
+                                        } else {
+                                                Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: &quot; + $PackIn + &quot; was not found, unable to process FTP Monitor function&quot;)
+                                        }
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Ending function(FTPMonitor) to retrieve packages from SFTP for &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                }
+                                $job = Start-Job -Name ($args[0].FolderName + &quot;_FTPMonitor&quot;) -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList | Wait-Job
+#                               While($job.state -eq 'Running' -or $job.state -eq 'Not Started') {
+#                                       Start-Sleep -Milliseconds 200
+#                                       Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Waiting on &quot; + $job.name + &quot; to complete`r`n&quot;)
+#                               }
+                                $job | Receive-Job -Keep
+                        }
+                        function SJPPack {
+                                Param([Parameter(Mandatory=$true)]$integration)
+                                $ArgumentList = @($integration,$args[1])
+                                $ScriptBlock = {
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Starting function(SJPPack) to pack content for TMS Job submission for &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                        $PackIn = ($args[1].root.IntegrationDefaults.DefaultInstancePath + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultPackInFolder)
+                                        $PackOut = ($args[1].root.IntegrationDefaults.DefaultInstancePath + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultPackOutFolder)
+                                        $SJPCMD = ($args[1].root.IntegrationDefaults.SJPExecutable + &quot; /p /m -&quot; + $integration.FolderName + $integration.Environment)
+                                        If((Test-Path $PackIn) -and (Test-Path $PackOut)) {
+                                                if((Get-ChildItem $PackIn | Measure-Object).count -gt 1) {
+                                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Converting integration data into TMS packages&quot;)
+Write-Host $SJPCMD
+#                                                       &amp; $SJPCMD
+                                                } else {
+                                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: No data ready to be packaged, moving on&quot;)
+                                                }
+                                        } else {
+                                                Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: &quot; + $PackIn + &quot; was not found, unable to process SJP Pack function&quot;)
+                                        }
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Ending function(SJPPack) to pack content for TMS Job submission for &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                }
+                                $job = Start-Job -Name ($args[0].FolderName + &quot;_SJP_Pack&quot;) -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList | Wait-Job
+                                $job | Receive-Job -Keep
+                        }
+                        function PKGMonitor {
+                                Param([Parameter(Mandatory=$true)]$integration)
+                                $ArgumentList = @($integration,$args[1])
+                                $ScriptBlock = {
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Starting function(PKGMonitor) to submit jobs to TMS for &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                        $PackOut = ($args[1].root.IntegrationDefaults.DefaultInstancePath + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultPackOutFolder)
+                                        If(Test-Path $PackOut) {
+                                                if((Get-ChildItem $PackOut | Measure-Object).count -gt 1) {
+                                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Submitting packages to TMS for processing&quot;)
+                                                        if($args[0].PKGMonitorConfig -eq $null -or $args[0].PKGMonitorConfig -eq &quot;&quot;) {
+                                                                $IntegrationConfigFile = ($args[1].root.IntegrationDefaults.DefaultConfigurationPath + $env:COMPUTERNAME + &quot;\&quot; + $args[0].FolderName + &quot;\&quot; + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultPKGMonitorConfig)
+                                                        } else {
+                                                                $IntegrationConfigFile = ($args[1].root.IntegrationDefaults.DefaultConfigurationPath + $env:COMPUTERNAME + &quot;\&quot; + $args[0].FolderName + &quot;\&quot; + $args[0].PKGMonitorConfig)
+                                                        }
+                                                        $NexusCMD = ($args[1].root.IntegrationDefaults.NexusExecutable + &quot; /c &quot; + $IntegrationConfigFile)
+Write-Host $NexusCMD
+#                                                       &amp; $NexusCMD
+                                                } else {
+                                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: No data ready to be submitted to TMS, moving on&quot;)
+                                                }
+                                        } else {
+                                                Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: &quot; + $PackOut + &quot; was not found, unable to process PKG Monitor function&quot;)
+                                        }
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Ending function(PKGMonitor) to submit jobs to TMS for &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                }
+                                $job = Start-Job -Name ($args[0].FolderName + &quot;_PKGMonitor&quot;) -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList | Wait-Job
+                                $job | Receive-Job -Keep
+                        }
+                        function PKGRetrieve {
+                                Param([Parameter(Mandatory=$true)]$integration)
+                                $ArgumentList = @($integration,$args[1])
+                                $ScriptBlock = {
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Starting function(PKGRetrieve) to retrieve jobs from TMS for &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                        $UnpackIn = ($args[1].root.IntegrationDefaults.DefaultInstancePath + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultUnpackInFolder)
+                                        If(Test-Path $UnpackIn) {
+                                                if($args[0].PKGRetrieveConfig -eq $null -or $args[0].PKGRetrieveConfig -eq &quot;&quot;) {
+                                                        $IntegrationConfigFile = ($args[1].root.IntegrationDefaults.DefaultConfigurationPath + $env:COMPUTERNAME + &quot;\&quot; + $args[0].FolderName + &quot;\&quot; + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultPKGRetrieveConfig)
+                                                } else {
+                                                        $IntegrationConfigFile = ($args[1].root.IntegrationDefaults.DefaultConfigurationPath + $env:COMPUTERNAME + &quot;\&quot; + $args[0].FolderName + &quot;\&quot; + $args[0].PKGRetrieveConfig)
+                                                }
+                                                $NexusCMD = ($args[1].root.IntegrationDefaults.NexusExecutable + &quot; /c &quot; + $IntegrationConfigFile)
+Write-Host $NexusCMD
+#                                               &amp; $NexusCMD
+                                        } else {
+                                                Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: &quot; + $UnpackIn + &quot; was not found, unable to process PKG Retrieve function&quot;)
+                                        }
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Ending function(PKGRetrieve) to retrieve jobs from TMS for &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                }
+                                $job = Start-Job -Name ($args[0].FolderName + &quot;_PKGRetrieve&quot;) -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList | Wait-Job
+                                $job | Receive-Job -Keep
+                        }
+                        function SJPUnpack {
+                                Param([Parameter(Mandatory=$true)]$integration)
+                                $ArgumentList = @($integration,$args[1])
+                                $ScriptBlock = {
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Starting function(SJPUnpack) to unpack content from TMS for return to &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                        $UnpackIn = ($args[1].root.IntegrationDefaults.DefaultInstancePath + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultUnpackInFolder)
+                                        $UnpackOut = ($args[1].root.IntegrationDefaults.DefaultInstancePath + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultUnpackOutFolder)
+                                        $SJPCMD = ($args[1].root.IntegrationDefaults.SJPExecutable + &quot; /u /m -&quot; + $integration.FolderName + $integration.Environment)
+                                        If((Test-Path $UnpackIn) -and (Test-Path $UnpackOut)) {
+                                                if((Get-ChildItem $UnpackIn | Measure-Object).count -gt 1) {
+                                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Converting integration data from TMS packages&quot;)
+Write-Host $SJPCMD
+#                                                       &amp; $SJPCMD
+                                                } else {
+                                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: No data ready to be unpacked, moving on&quot;)
+                                                }
+                                        } else {
+                                                Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: &quot; + $PackOut + &quot; was not found, unable to process SJP Unpack function&quot;)
+                                        }
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Ending function(SJPUnpack) to unpack content from TMS for return to &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                }
+                                $job = Start-Job -Name ($args[0].FolderName + &quot;_SJP_Unpack&quot;) -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList | Wait-Job
+                                $job | Receive-Job -Keep
+                        }
+                        function FTPRetrieve {
+                                Param([Parameter(Mandatory=$true)]$integration)
+                                $ArgumentList = @($integration,$args[1])
+                                $ScriptBlock = {
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Starting function(FTPRetrieve) to return translated content to &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                        $UnpackOut = ($args[1].root.IntegrationDefaults.DefaultInstancePath + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultUnpackOutFolder)
+                                        If(Test-Path $UnpackOut) {
+                                                if($args[0].FTPMonitorConfig -eq $null -or $args[0].FTPMonitorConfig -eq &quot;&quot;) {
+                                                        $IntegrationConfigFile = ($args[1].root.IntegrationDefaults.DefaultConfigurationPath + $env:COMPUTERNAME + &quot;\&quot; + $args[0].FolderName + &quot;\&quot; + $args[0].FolderName + $args[1].root.IntegrationDefaults.DefaultFTPRetrieveConfig)
+                                                } else {
+                                                        $IntegrationConfigFile = ($args[1].root.IntegrationDefaults.DefaultConfigurationPath + $env:COMPUTERNAME + &quot;\&quot; + $args[0].FolderName + &quot;\&quot; + $args[0].FTPRetrieveConfig)
+                                                }
+                                                $NexusCMD = ($args[1].root.IntegrationDefaults.NexusExecutable + &quot; /c &quot; + $IntegrationConfigFile)
+Write-Host $NexusCMD
+#                                               &amp; $NexusCMD
+                                        } else {
+                                                Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: &quot; + $UnpackOut + &quot; was not found, unable to process FTP Retrieve function&quot;)
+                                        }
+                                        Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Ending function(FTPRetrieve) to return translated content to &quot; + $args[0].FolderName + &quot;`r`n&quot;)
+                                }
+                                $job = Start-Job -Name ($args[0].FolderName + &quot;_FTPRetrieve&quot;) -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList | Wait-Job
+                                $job | Receive-Job -Keep
+                        }
+                }
+                $ScriptBlock = {
+                        #Get files from Integration FTP
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Calling FTPMonitor&quot;)
+                        FTPMonitor $args[0]
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Exited FTPMonitor&quot;)
+ 
+                        #Check if SJP needs to pack content for submitting to TMS
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Calling SJPPack&quot;)
+                        SJPPack $args[0]
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Exited SJPPack&quot;)
+                       
+                        #Push files to TMS
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Calling PKGMonitor&quot;)
+                        PKGMonitor $args[0]
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Exited PKGMonitor&quot;)
+ 
+                        #Get files from TMS
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Calling PKGRetrieve&quot;)
+                        PKGRetrieve $args[0]
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Exited PKGRetrieve&quot;)
+ 
+                        #Check if SJP needs to unpack content for return to integration
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Calling SJPUnpack&quot;)
+                        SJPUnpack $args[0]
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Exited SJPUnpack&quot;)
+                       
+                        #Push files to Integration FTP
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Calling FTPRetrieve&quot;)
+                        FTPRetrieve $args[0]
+Write-Host ((get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Exited FTPRetrieve&quot;)
+                }
+                $ParentJob = Start-Job -Name ($_.FolderName + &quot;_Parent&quot;) -InitializationScript $InitializationScript -ScriptBlock $ScriptBlock -ArgumentList $ArgumentList
+                $JobList += $ParentJob
+                if($ParentJob.ChildJobs -ne $null) { $JobList += ($ParentJob.ChildJobs | Get-Job) }
+        }
+        [INT]$ScriptTimeOut = 1
+        $loop = 0
+        while ($loop -eq 0 -and (Get-Date) -lt $StartTime.AddMinutes($ScriptTimeOut)) {
+                $jobstatus = (Get-Job -State Running)
+                if($jobstatus -ne $null -and $jobstatus -ne &quot;&quot;) {
+                        if($DebugPreference -ne &quot;SilentlyContinue&quot;) {
+                                Get-Job -State Running | Format-Table -Property ID,Name,State
+                        }
+Write-Debug (&quot;`r`n&quot; + (get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;: Sleeping for 5 seconds then checking status of jobs again&quot;)
+                        Start-Sleep -Seconds 5
+                } else {
+                        if($DebugPreference -ne &quot;SilentlyContinue&quot;) {
+                                Get-Job | Where-Object {$_.state -ne &quot;Running&quot;} | Format-Table -Property ID,Name,State
+                        }
+Write-Debug (&quot;`r`n&quot; + (get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;All jobs are in a status other than running. Completing script&quot;)
+                        $loop = 1
+                }
+        }
+        if((Get-Date) -gt $StartTime.AddMinutes($ScriptTimeOut)) {
+                Write-Host (&quot;`r`n&quot; + (get-date -uformat &quot;%Y-%m-%d_%H-%M-%S&quot;) + &quot;Script has exceeded maximum allowed run time, aborting execution&quot;)
+                Get-Job -State Running | Format-Table -Property ID,Name,State
+                Get-Job -State Running | Stop-Job
+        }
+#       $JobList | Sort-Object -Property ID | Format-Table -Property ID,Name,State
+        $JobList | Sort-Object -Property ID | ForEach-Object {
+                $_ | Receive-Job
+        }
+               
+               
+               
+        #Checks if transcription is active, stops it if so.
+        if(Test-Transcribing -eq &quot;True&quot;) { Stop-Transcript }
+        Write-Host &quot;Script is complete!&quot;
+        Start-Sleep -Seconds 2
+}
+Get-Job | Remove-Job
+main
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

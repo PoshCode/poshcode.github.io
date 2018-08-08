@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Send-Growl 1.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Send-Growl 1.0</h1>
+<h3><a href="//scripts/1270.ps1">download</a></h3>
+<p>A first release of my module for user-notifications via &quot;Growl For Windows&quot;:http://GrowlForWindows.com ... includes only Send-Growl -- but has all the wiring up done so you can do custom notices, icons, etc.  Initial post &quot;here&quot;:http://HuddledMasses.org/growl-for-windows-from-powershell  and future posts &quot;here&quot;:http://HuddledMasses.org/tag/growl</p>
+<pre><code class="language-posh">## This is the first version of a Growl module (just dot-source to use in PowerShell 1.0)
+## Initially it only supports a very simple notice, and I haven't gotten callbacks working yet
+## Coming soon: 
+## * Send notices to other PCs directly
+## * Wrap the registration of new messages
+## * Figure out the stupid 
+
+## Change these to whatever you like, at least the first one, since it should point at a real ico file
+$defaultIcon = &quot;$PSScriptRoot\PowerGrowl.ico&quot;
+$appName = &quot;PowerGrowler&quot;
+
+[Reflection.Assembly]::LoadFrom(&quot;$(Split-Path (gp HKCU:\Software\Growl).'(default)')\Growl.Connector.dll&quot;) | Out-Null
+
+if(!(Test-Path Variable:Script:PowerGrowler)) {
+   $script:GrowlApp  = New-Object &quot;Growl.Connector.Application&quot; $appName
+   $script:PowerGrowler = New-Object &quot;Growl.Connector.GrowlConnector&quot;
+   $script:PowerGrowler.EncryptionAlgorithm = [Growl.Connector.Cryptography+SymmetricAlgorithmType]::AES
+
+   [Growl.Connector.NotificationType[]]$global:PowerGrowlerNotices = @(&quot;Default&quot;)
+   ## You should change this
+   $global:PowerGrowlerNotices[0].Icon = $defaultIcon
+}
+
+## I was going to store these ON the PowerGrowler object, but ...
+## I wanted to make the notices editable, without making it editable
+## So instead, I add them to it only after you register them....
+# Add-Member -InputObject $script:PowerGrowler -MemberType NoteProperty -Name Notices -Value $PowerGrowlerNotices
+
+## Should only (have to) do this once.
+$script:PowerGrowler.Register($script:GrowlApp, $global:PowerGrowlerNotices )
+
+
+## This is test code, it doesn't work -- as far as I can tell, the notification never gets called ...
+$script:PowerGrowler.Add_NotificationCallback( { 
+   Write-Host &quot;The object $this&quot; -fore Cyan
+   Write-Host $(&quot;Response Type: {0}\r\nNotification ID: {1}\r\nCallback Data: {2}\r\nCallback Data Type: {3}\r\n&quot; -f $_.Result, $_.NotificationID, $_.Data, $_.Type) -fore Yellow
+} )
+
+function Send-Growl {
+#.Synopsis
+#  Send a growl notice
+#.Description
+#  Send a growl notice with the scpecified values
+#.Parameter Caption
+#  The short caption to display
+#.Parameter Message
+#  The message to send (most displays will resize to accomodate)
+#.Parameter NoticeType
+#  The type of notice to send. This MUST be the name of one of the registered types, and senders should bear in mind that each registered type has user-specified settings, so you should not abuse the types, but create your own for messages that will recur.
+#  For example, the user settings allow certain messages to be disabled, set to a different &quot;Display&quot;, or to have their Duration and Stickyness changed, as well as have them be Forwarded to another device, have Sounds play, and set different priorities.
+#.Parameter Icon
+#  Overrides the default icon of the message (accepts .ico, .png, .bmp, .jpg, .gif etc)
+#.Parameter Priority
+#  Overrides the default priority of the message (use sparingly)
+#.Example
+#  Send-Growl &quot;Greetings&quot; &quot;Hello World!&quot;
+#
+#  The Hello World of Growl.
+#.Example
+#  Send-Growl &quot;You've got Mail!&quot; &quot;Message for you sir!&quot; -icon ~\Icons\mail.png
+#
+#  Displays a message with a couple of movie quotes and a mail icon.
+#
+PARAM (
+   [Parameter(Mandatory=$true, Position=0)]
+   [string]$Caption=$(Read-Host &quot;A SHORT caption&quot;)
+,
+   [Parameter(Mandatory=$true, Position=1)]
+   [string]$Message=$(Read-Host &quot;The detailed message&quot;)
+#,  [string]$CallbackData
+#,  [string]$CallbackType
+,
+   [Parameter(Mandatory=$false)][Alias(&quot;Type&quot;)]   
+   [string]$NoticeType=$global:PowerGrowlerNotices[0].Name
+,
+   [string]$Icon
+,
+   [Growl.Connector.Priority]$Priority = &quot;Normal&quot; 
+)
+
+   $notice = New-Object Growl.Connector.Notification $appName, $NoticeType, (Get-Date).Ticks.ToString(), $caption, $Message
+   
+   if($Icon) { $notice.Icon = Convert-Path (Resolve-Path $Icon) }
+   if($Priority) { $notice.Priority = $Priority }
+   
+   if($DebugPreference -gt &quot;SilentlyContinue&quot;) { Write-Output $notice }
+   if( $CallbackData -and $CallbackType ) {
+      $context = new-object Growl.Connector.CallbackContext
+      $context.Data = $CallbackData
+      $context.Type = $CallbackType
+      $script:PowerGrowler.Notify($notice, $context)
+   } else {
+      $script:PowerGrowler.Notify($notice)
+   }
+}
+
+Export-ModuleMember -Function Send-Growl
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

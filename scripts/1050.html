@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Peter">
+    <title>Work-in-progressSPdeploy - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Work-in-progressSPdeploy</h1>
+<h3><a href="//scripts/1050.ps1">download</a></h3>
+<p>Work-in-progress. This script is meant to be run from a &quot;scripts/&quot; subdirectory as part of a larger build structure. It won't run by itself, but maybe you'll find the SharePoint deployment bits useful.</p>
+<p>Some parts are still ugly.</p>
+<pre><code class="language-posh">
+
+[System.Reflection.Assembly]::Load('Microsoft.Build.Utilities.v3.5, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a') | out-null
+[System.Reflection.Assembly]::Load('Microsoft.SharePoint, Version=12.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c') | out-null
+$msbuild = [Microsoft.Build.Utilities.ToolLocationHelper]::GetPathToDotNetFrameworkFile(&quot;msbuild.exe&quot;, &quot;VersionLatest&quot;)
+
+$global:basepath = (resolve-path ..).path
+$stsadm = Join-Path ([Microsoft.SharePoint.Utilities.SPUtility]::GetGenericSetupPath(&quot;BIN&quot;)) &quot;stsadm.exe&quot;
+
+
+function Run-MSBuild($msBuildArgs)
+{
+	&amp; $msbuild $msBuildArgs
+}
+
+function Get-FirstDirectoryUnderneathSrc
+{
+	dir (Get-FullPath &quot;src&quot;) | where { $_.PSIsContainer -eq $true } | select -first 1
+}
+
+function Get-FullPath($subdirectory)
+{
+	return join-path -path $basepath -childPath $subdirectory
+}
+
+$wspbuilder = Get-FullPath(&quot;tools\WSPBuilder.exe&quot;)
+function Run-WspBuilder($rootDirectory)
+{
+	pushd
+	cd $rootDirectory
+	&amp; $WSPBuilder -BuildWSP true -OutputPath (Get-FullPath 'deployment')
+	popd
+}
+
+function Clean-Path($dir)
+{
+	#I don't like the SilentlyContinue option, but we need to ignore the case
+	#where there is no directory to delete (in this situation, an error is thrown)
+	del $dir -recurse -force -erroraction SilentlyContinue
+	mkdir $dir -erroraction SilentlyContinue | out-null
+}
+
+function Create-DeploymentBatchFile($filename, $featureName, $solutionName, $url)
+{
+	$contents = @&quot;
+
+ECHO OFF
+SET STSADM=&quot;%PROGRAMFILES%\Common Files\Microsoft Shared\web server extensions\12\BIN\stsadm.exe&quot;
+%STSADM% -o deactivatefeature -name $featureName -url $url
+%STSADM% -o retractsolution -allcontenturls -immediate -name $solutionName
+%STSADM% -o execadmsvcjobs
+%STSADM% -o deletesolution -name $solutionName -override
+%STSADM% -o addsolution -filename $solutionName
+%STSADM% -o deploysolution -allcontenturls -immediate -allowgacdeployment -name $solutionName
+%STSADM% -o execadmsvcjobs
+REM second call to execadmsvcjobs allows for a little more delay. Shouldn't be necessary, but is.
+%STSADM% -o execadmsvcjobs
+%STSADM% -o activatefeature -url $url -name $featureName
+&quot;@
+
+	Out-File -inputObject $contents -filePath $filename -encoding ASCII
+}
+
+#Do-Deployment - regardless of current status, will install the Solution
+function Do-Deployment($featureName, $solutionName, $rootDirectory)
+{
+	echo $featureName, $solutionName, $rootDirectory
+	if (-not (Is-Installed $solutionName)) {
+		Install-Solution -solutionName $solutionName -filename (join-path $rootDirectory $solutionName)	
+	}
+	
+	Exec-AdmSvcJobs
+	
+	if (-not (Is-Deployed $solutionName)) {
+		Deploy-Solution -solutionName $solutionName -featureName $featureName -filename (join-path $rootDirectory $solutionName)
+	} else {
+		Upgrade-Solution -solutionName $solutionName -featureName $featureName -filename (join-path $rootDirectory $solutionName)
+	}
+}
+
+function Is-Installed($solutionName)
+{
+	#is Solution in the Solution store at all?
+	return [Microsoft.SharePoint.Administration.SPFarm]::Local.Solutions[$solutionName] -ne $null
+}
+
+function Is-Deployed($solutionName)
+{
+	#Is Solution successfully deployed everywhere? Partial/failed deployments don't count as deployed
+	$solution = [Microsoft.SharePoint.Administration.SPFarm]::Local.Solutions[$solutionName]
+	if ($solution -eq $null) { return false; }
+	
+	return $solution.Deployed
+}
+
+function Install-Solution($solutionName, $filename)
+{
+	#Assumes solution is NOT already installed. For &quot;unsure installation&quot;, use Do-Deployment
+	[Microsoft.SharePoint.Administration.SPFarm]::Local.Solutions.psbase.Add($filename) | out-null
+}
+
+function Deploy-Solution($featureName, $solutionName, $filename)
+{
+	#Assumes solution is already installed. For &quot;unsure installation&quot;, use Do-Deployment
+	$dateToGuaranteeInstantDeployment = [datetime]::Now.AddDays(-2)
+	#method signature requires typed Collection, so we're unrolling 
+	#the IEnumerable&lt;SPWebApplication&gt; into an array.
+	$webApplications = [Microsoft.SharePoint.Administration.SPWebService]::ContentService.WebApplications | % { $_ }
+	$webApplicationsCollection = new-object Microsoft.SharePoint.Administration.SPWebApplication[] -arg ($webApplications.Count)
+	0..($webApplications.Count-1) | % { $webApplicationsCollection[$_] = $webApplications[$_] }
+	
+	[Microsoft.SharePoint.Administration.SPFarm]::Local.Solutions[$solutionName].Deploy($dateToGuaranteeInstantDeployment, $true, $webApplicationsCollection, $false)
+}
+
+function Upgrade-Solution($featureName, $solutionName, $filename)
+{
+	[Microsoft.SharePoint.Administration.SPFarm]::Local.Solutions[$solutionName].Upgrade($filename)
+}
+
+function Exec-AdmSvcJobs
+{
+	&amp; $stsadm -o execadmsvcjobs
+	#sleep for a few more seconds to account for concurrency bugs/timing issues
+	sleep -seconds 2
+}
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="halr9000">
+    <title>Trace-Route - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Trace-Route</h1>
+<h3><a href="//scripts/3015.ps1">download</a></h3>
+<p>Posting on behalf of James Brundage of http://blog.start-automating.com/. Here's his quote from email:
+&quot;I mentioned I wrote a Trace Route wrapper that shows an example of wrapping a command that returns over a period of time.&quot;</p>
+<p>Look to his blog for further detail on this technique soon.</p>
+<pre><code class="language-posh">function Trace-Route
+{
+   param(
+   # The URL to trace
+   [Parameter(Mandatory=$true)]
+   [Uri]$Url,
+   # The timeout for the request, in milliseconds
+   [Timespan]$Timeout = &quot;0:0:0.25&quot;,
+   # The maximum number of hops for the trace route
+   [Int]$MaximumHops = 32
+   )
+
+   process {
+       Invoke-Expression &quot;tracert -w $($timeOut.TotalMilliseconds) -h $MaximumHops $url&quot; |
+           Where-Object {
+               if ($_ -match &quot;[.+]&quot;) {
+                   $destination
+                   try {
+                       $destination = [IpAddress]$_.Split(&quot;[]&quot;,[StringSplitOptions]&quot;RemoveEmptyEntries&quot;)[-1]
+                   } catch {
+                       return $false
+                   }
+               }
+               $true
+           } |
+           Where-Object {
+               if ($_ -like &quot;*Request timed out.*&quot;) {
+                   throw &quot;Request timed Out&quot;
+               }
+               return $true
+           } |
+           Foreach-Object {
+               if ($_ -like &quot;*ms*&quot; ) {
+                   $chunks = $_ -split &quot;  &quot; | Where-Object { $_ }
+                   $destAndip = $chunks[-1]
+                   $dest, $ip = $destAndip.Replace(&quot;[&quot;, &quot;&quot;).Replace(&quot;]&quot;,&quot;&quot;) -split &quot; &quot;
+
+                   if (-not $ip) {
+                       $ip = $dest
+                       $dest = &quot;&quot;
+                   }
+
+                   $ip = @($ip)[0].Trim() -as [IPAddress]
+
+
+                   if ($chunks[1] -eq '*' -and $chunks[2] -eq '*' -and $chunks[3] -eq '*') {
+                       Write-Error &quot;Request Timed Out&quot;
+                       return
+                   }
+                   $trace = New-Object Object
+                   $time1 = try { [Timespan]::FromMilliseconds($chunks[1].Replace(&quot;&lt;&quot;,&quot;&quot;).Replace(&quot; ms&quot;, &quot;&quot;))} catch {}
+                   $time2 = try { [Timespan]::FromMilliseconds($chunks[1].Replace(&quot;&lt;&quot;,&quot;&quot;).Replace(&quot; ms&quot;, &quot;&quot;))} catch {}
+                   $time3 = try { [Timespan]::FromMilliseconds($chunks[1].Replace(&quot;&lt;&quot;,&quot;&quot;).Replace(&quot; ms&quot;, &quot;&quot;))} catch {}
+                   $trace |
+                       Add-Member NoteProperty HopNumber ($chunks[0].Trim() -as [uint32]) -PassThru |
+                       Add-Member NoteProperty Time1 $time1 -PassThru |
+                       Add-Member NoteProperty Time2 $time2 -PassThru |
+                       Add-Member NoteProperty Time3 $time3 -PassThru |
+                       Add-Member NoteProperty Ip $ip -PassThru |
+                       Add-Member NoteProperty Host $dest -PassThru |
+                       Add-Member NoteProperty DestinationUrl $url -PassThru |
+                       Add-Member NoteProperty DestinationIP $destination -PassThru
+
+               }
+           }
+   }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

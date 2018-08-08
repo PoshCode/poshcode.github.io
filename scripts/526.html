@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Dmitry Sotnikov">
+    <title>Out-Wiki - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Out-Wiki</h1>
+<h3><a href="//scripts/526.ps1">download</a></h3>
+<p>Out-Wiki - converts cmdlets help to media wiki (wikipedia) format
+http://dmitrysotnikov.wordpress.com/2008/08/18/out-wiki-convert-powershell-help-to-wiki-format/
+Modify the invocation line at the bottom of the script to point to your
+PowerShell snapin, and change the preface in the &quot;generate index&quot; section</p>
+<pre><code class="language-posh">################################################################################
+# Out-Wiki - converts cmdlets help to media wiki (wikipedia) format
+# http://dmitrysotnikov.wordpress.com/2008/08/18/out-wiki-convert-powershell-help-to-wiki-format/
+# Modify the invocation line at the bottom of the script to point to your
+# PowerShell snapin, and change the preface in the &quot;generate index&quot; section
+################################################################################
+# (c) Dmitry Sotnikov, http://dmitrysotnikov.wordpress.com
+################################################################################
+
+function Out-Wiki {
+   param($commands = $null, $outputDir = &quot;./help&quot;)
+
+   $commandsHelp = $commands | sort-object noun | get-help -full
+
+   #create an output directory
+   if ( -not (Test-Path $outputDir)) {
+   		md $outputDir | Out-Null
+   }
+   
+   #Generate frame page
+   $indexFileName = $outputDir + &quot;/index.txt&quot;
+
+
+   #Generate index
+@'
+The ActiveRoles Management Shell for Active Directory is an Active Directoryspecific
+automation and scripting shell that provides a command-line
+management interface for administering directory data either via Quest
+ActiveRoles Server or by directly accessing Active Directory domain
+controllers. The ActiveRoles Management Shell is built on Microsoft Windows
+PowerShell technology.
+
+The following cmdlets are currently in the package:
+
+'@  | out-file $indexFileName
+
+   foreach ($c in $commandsHelp) {
+      &quot;* [[$($c.Name)]]&quot;   | out-file $indexFileName -Append
+   }
+
+   '[[Category:QAD cmdlets reference]]'  | out-file $indexFileName -Append
+   
+   #Generate all single help files
+   $outputText = $null
+   foreach ($c in $commandsHelp) {
+      $fileName = ( $outputDir + &quot;/&quot; + $c.Name + &quot;.txt&quot; )
+
+	  &quot;$($c.synopsis)&quot;  | out-file $fileName
+      
+      # Syntax
+      &quot;== Syntax ==&quot;  | out-file $fileName -Append
+      &quot;&lt;code&gt;$(($c.syntax | out-string  -width 2000).Trim())&lt;/code&gt;&quot;  | out-file $fileName -Append
+
+      # Detailed Description
+      &quot;== Detailed Description ==&quot;  | out-file $fileName -Append
+	  &quot;$($c.Description  | out-string  -width 2000)&quot;  | out-file $fileName -Append
+   
+      # Related Commands
+      &quot;== Related Commands ==&quot;  | out-file $fileName -Append
+      foreach ($relatedLink in $c.relatedLinks.navigationLink) {
+         if($relatedLink.linkText -ne $null -and 
+            $relatedLink.linkText.StartsWith(&quot;about&quot;) -eq $false){
+            &quot;* [[$($relatedLink.linkText)]]&quot;  | out-file $fileName -Append         
+         }
+      }
+   
+      # Parameters
+      &quot;== Parameters ==&quot;  | out-file $fileName -Append
+@'
+{| class=&quot;wikitable&quot; border=1
+|-
+!Name
+!Description
+!Required?
+!Pipeline Input
+!Default Value
+'@   | out-file $fileName -Append
+
+      $paramNum = 0
+      foreach ($param in $c.parameters.parameter ) {
+         &quot;|-&quot;  | out-file $fileName -Append
+         &quot;!$($param.Name)&quot;  | out-file $fileName -Append
+         &quot;|$(($param.Description  | out-string  -width 2000).Trim())&quot;  | out-file $fileName -Append
+         &quot;|$($param.Required)&quot;  | out-file $fileName -Append
+         &quot;|$($param.PipelineInput)&quot;  | out-file $fileName -Append
+         &quot;|$($param.DefaultValue)&quot;  | out-file $fileName -Append
+      }
+      &quot;|}&quot;  | out-file $fileName -Append
+   
+      # Input Type
+	  if (($c.inputTypes | Out-String ).Trim().Length -gt 0) {
+		&quot;== Input Type ==&quot;  | out-file $fileName -Append
+		&quot;$(($c.inputTypes  | out-string  -width 2000).Trim())&quot;  | out-file $fileName -Append
+	  }
+   
+      # Return Type
+	  if (($c.returnValues | Out-String ).Trim().Length -gt 0) {
+		&quot;== Return Values ==&quot;  | out-file $fileName -Append
+		&quot;$(($c.returnValues  | out-string  -width 2000).Trim())&quot;  | out-file $fileName -Append
+	  }
+	  
+      # Notes
+	 if (($c.alertSet | Out-String).Trim().Length -gt 0) {
+      &quot;== Notes ==&quot;  | out-file $fileName -Append
+      &quot;$(($c.alertSet  | out-string -Width 2000).Trim() )&quot;  | out-file $fileName -Append
+	}
+   
+      # Examples
+	 if (($c.examples | Out-String).Trim().Length -gt 0) {
+      &quot;== Examples ==&quot;  | out-file $fileName -Append	  
+	  foreach ($example in $c.examples.example) {
+	      &quot;==== $($example.title.Trim(('-',' ')))====&quot;  | out-file $fileName -Append
+	      &quot;&lt;pre&gt;$(($example.code | out-string ).Trim())&lt;/pre&gt;&quot;  | out-file $fileName -Append
+	      &quot;$(($example.remarks | out-string -Width 2000).Trim())&quot;  | out-file $fileName -Append
+	  	
+	  }
+	  }
+	  
+      '[[Category:QAD cmdlets reference]]'   | out-file $fileName -Append
+   }
+}
+
+Out-Wiki (Get-Command -PSSnapin Quest.ActiveRoles.ADManagement) &quot;c:\Temp\QADHelp&quot; 
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

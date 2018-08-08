@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="skourlatov">
+    <title>Recycle Bin Object - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Recycle Bin Object</h1>
+<h3><a href="//scripts/5362.ps1">download</a></h3>
+<h2>Recycle Bin Object</h2>
+<p>This script creates object which correctly works with ntfs streams and reparse points</p>
+<pre><code class="language-posh">## ============================================================
+Add-Type -TypeDefinition @&quot;
+using System;
+using System.Runtime.InteropServices;
+
+public static class RecycleBin
+{
+	[DllImport(&quot;shell32.dll&quot;,CharSet=CharSet.Unicode)]
+	public static extern void SHUpdateRecycleBinIcon();
+}
+&quot;@
+## ============================================================
+Function ConvertTo-LitheralSize
+{
+	Param
+	(
+		[Parameter(ValueFromPipeline)]
+		[System.UInt64[]]$Size
+	)
+	Process
+	{
+		$Size | ForEach-Object -Process {
+			switch ($_)
+			{
+				{ $_ -lt 1KB }  { $litheral = &quot;$_ bytes&quot;; break }
+				{ $_ -lt 1MB }  { $litheral = ($_ / 1KB).ToString('.0 KiB'); break }
+				{ $_ -lt 1GB }  { $litheral = ($_ / 1MB).ToString('.00 MiB'); break }
+				{ $_ -lt 1TB }  { $litheral = ($_ / 1GB).ToString('.00 GiB'); break }
+				{ $_ -lt 1PB }  { $litheral = ($_ / 1TB).ToString('.00 TiB'); break }
+					 Default	{ $litheral = ($_ / 1TB).ToString('.000 PiB') }
+			}
+				$litheral | write
+		}
+	}
+}
+## ============================================================
+[void] [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic')
+Function Recycle-Item
+{
+	[CmdletBinding()]
+	Param(
+		[Parameter(Position=0,Mandatory,ValueFromPipeline)]
+			[System.Object[]]$Path,
+			[System.Management.Automation.SwitchParameter]$WipeOut
+	)
+	Begin
+	{
+		[Microsoft.VisualBasic.FileIO.UIOption]$dialog_mode = 0x02
+		[Microsoft.VisualBasic.FileIO.RecycleOption]$recycle_mode = 0x02 -bor -not $WipeOut
+	}
+	Process
+	{
+		$Path | gi -Force -ErrorAction 'SilentlyContinue' | ForEach-Object -Process {
+			if (($_.Attributes -band 0x10) -eq 0x10)
+			{
+				&quot;Removing directory: `&quot;$($_.FullName)`&quot;&quot; | Write-Verbose
+				[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($_.FullName,$dialog_mode,$recycle_mode)
+			}
+			else
+			{
+				&quot;Removing file: `&quot;$($_.FullName)`&quot;&quot; | Write-Verbose
+				[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($_.FullName,$dialog_mode,$recycle_mode)
+			}
+		}
+	}
+}
+
+# -- Recycle Bin Object --
+$method = @{}
+
+$method['Help'] = {
+	$help = @&quot;
+
+	`&quot;Recycle Bin Object`&quot;
+
+	Author   : Michael Skourlatov
+	Created  : 2014-Jun-27
+	Modified : 2014-Aug-12
+
+This script creates object which correctly works with ntfs streams and reparse points
+
+Usage samples:
+
+	`$RecycleBin.List()[`$id].Object -&gt; return the item as file or folder by it's ID
+
+	`$RecycleBin.ShowItems([&lt;mask&gt;]) -&gt; show items list
+	`$RecycleBin.Restore([&lt;mask&gt;]) -&gt; restore items (may need confirmation)
+	`$RecycleBin.Measure([&lt;mask&gt;]) -&gt; measure true size of all items in Recycle Bin
+	`$RecycleBin.Clear([&lt;mask&gt;]) -&gt; this is obvious
+	`$RecycleBin.List([&lt;mask&gt;]) -&gt; this is the core method
+	`$RecycleBin.Help() -&gt; show this help
+
+More examples:
+
+	`$RecycleBin.List([&lt;mask&gt;]).Measure()
+	`$RecycleBin.List([&lt;mask&gt;]).Restore()
+	`$RecycleBin.List([&lt;mask&gt;]).Delete()
+
+	`$too_old = [datetime]::Now.AddDays(-20)
+	`$selected = `$RecycleBin.List() | where { `$_.DecryptInfo().DeletionDate -le `$too_old }
+	`$selected.Delete()
+
+Notes:
+
+	&lt;mask&gt; is the standard file mask like '*.txt'
+	[] brackets mean parameter isn't mandatory
+
+&quot;@
+	$help | Write-Output
+}
+
+$method['List'] = {
+	.{ param ([Parameter(Mandatory=$false)][System.String]$Mask)} @args
+
+	$actual_list = $this._ComWrapper.Items() | select
+	if ($Mask) { $actual_list = $actual_list | where -Property 'Name' -like -Value $Mask }
+	$sked = @()
+
+	$actual_list | foreach {
+		$rec = $_ | select 'Name','Type','ModifyDate',
+			@{Name = 'Actions';		Expression = { $_.Verbs() | select }},
+			@{Name = 'Object';		Expression = { gi -LiteralPath $_.Path -Force }},
+			@{Name = 'InfoFile';	Expression = {
+				$seppos = $_.Path.LastIndexOf(92)
+				$parent = $_.Path.Substring(0, $seppos)
+				$child =  $_.Path.Substring($seppos + 1).Replace('$R','$I')
+				gi -LiteralPath &quot;$parent\$child&quot; -Force
+			}}
+
+		$rec | Add-Member -MemberType 'ScriptMethod' -Name 'DecryptInfo' -Value {
+			[byte[]]$bb = cat $this.InfoFile -Encoding 'Byte'
+
+		##	[uint64[]]$length_raw = [char[]][System.Text.Encoding]::Unicode.GetString($bb[8..15])
+		##	$length = 0
+		##	for ($i = 0; $i -le 3; $i++) { $length += $length_raw[$i] -shl $i*16 }
+
+			$timestamp_raw = [BitConverter]::ToInt64($bb[16..23], 0)
+			$ref_date	= [DateTime]::FromBinary(5116597250427387904).ToLocalTime() ## 1601-01-01 00:00:00.000 UTC
+			$timespamp	= $ref_date.AddTicks($timestamp_raw)
+
+			$full_name	= [System.Text.Encoding]::Unicode.GetString($bb[24..543])
+			$seppos		= $full_name.LastIndexOf(92)
+			$paret_path	= $full_name.Substring(0, $seppos + 1)
+
+			New-Object -TypeName 'PSObject' -Property @{
+													ParentPath = $paret_path;
+													DeletionDate = $timespamp;
+												##	SystemSize = $length;
+												}
+		}
+
+		$rec | Add-Member -MemberType 'ScriptMethod' -Name 'Delete' -Value {
+			$this.Object, $this.InfoFile | recycle -WipeOut
+		}
+
+		$rec | Add-Member -MemberType 'ScriptMethod' -Name 'Restore' -Value {
+			$this.Actions[0].DoIt()
+			if (!$this.Object.Exists)
+			{
+				$this.InfoFile.Delete()
+			}
+		}
+
+		$rec | Add-Member -MemberType 'ScriptMethod' -Name 'Measure' -Value {
+
+			Set-Variable -Name _sum -Value @{
+												Item = $this.Name;
+												Links = 0;
+												Files = 0;
+												Folders = 0;
+												Size = 0
+							} -Option AllScope
+
+			function calculate ([System.Object]$Obj, [System.IO.DirectoryInfo]$Fol)
+			{
+				if (-not $Obj)
+				{
+					$Obj = $Fol | ls -Force
+				}
+				if ($Obj)
+				{
+					$Obj | foreach {
+						if (($_.Attributes -band 0x0400) -eq 0x0400)
+						{
+							++$_sum.Links
+						}
+						elseif (($_.Attributes -band 0x0010) -ne 0x0010)
+						{
+							try
+							{
+								[UInt64]$_sum.Size += ($_ | gi -Force -Stream '*' | measure Length -Sum).Sum
+							}
+							catch
+							{
+								[UInt64]$_sum.Size += $_.Length
+							}
+							finally
+							{
+								++$_sum.Files
+							}
+						}
+						else
+						{
+							++$_sum.Folders
+							calculate -Fol $_
+						}
+					}
+				}
+			}
+			calculate -Obj $this.Object
+			return New-Object -TypeName 'PSObject' -Property $_sum
+		}
+		$sked += $rec
+	}
+	return $sked
+}
+
+$method['Clear'] = {
+	.{ param ([Parameter(Mandatory=$false)][System.String]$Mask)} @args
+
+	$wipe_list = $this.List($Mask)
+	if ($wipe_list)
+	{
+		$wipe_list.Delete()
+		$true
+	}
+	else
+	{
+		$false
+	}
+
+	[RecycleBin]::SHUpdateRecycleBinIcon()
+}
+
+$method['Measure'] = {
+	.{ param ([Parameter(Mandatory=$false)][System.String]$Mask)} @args
+
+	$res = @{
+		Links = 0;
+		Files = 0;
+		Folders = 0;
+		Size = 0
+	}
+
+	$this.List($Mask) | ForEach-Object -Process {
+		$item = $_.Measure()
+		$res.Links   += $item.Links
+		$res.Files   += $item.Files
+		$res.Folders += $item.Folders
+		[UInt64]$res.Size += $item.Size
+	}
+
+	return New-Object -TypeName 'PSObject' -Property $res
+}
+$method['Restore'] = {
+	.{ param ([Parameter(Mandatory=$false)][System.String]$Mask)} @args
+
+	$items_list = $this.List($Mask)
+
+	if (-not $items_list)
+	{
+		return $false
+	}
+
+	$confirmation = [bool]$Mask
+	if (-not $confirmation)
+	{
+						[console]::Write('Are you sure to restore ALL items? [Y/N]: ')
+		$confirmation = [console]::ReadKey().Key -eq 'Y' 
+						[console]::WriteLine()
+	}
+	if ($confirmation)
+	{
+		$items_list.Restore()
+		$true
+	}
+	else
+	{
+		$false
+	}
+}
+
+$method['ShowItems'] = {
+	.{ param ([Parameter(Mandatory=$false)][System.String]$Mask)} @args
+
+	$items_list = $this.List($Mask)
+	if (-not $items_list)
+	{
+		return $false
+	}
+
+	$output_list = @()
+	$id = 0
+
+	$items_list | ForEach-Object -Process {
+
+		$item_measure = $_.Measure()
+		$item_size = $item_measure.Size | ConvertTo-LitheralSize
+
+		$item_children = &quot;&quot;
+		if ($item_measure.Folders)
+		{
+			$files = $links = $folders = &quot;&quot;
+			if ($item_measure.Files) { $files = &quot;F/$($item_measure.Files); &quot; }
+			if ($item_measure.Links) { $links = &quot;L/$($item_measure.Links); &quot; }
+			if ($item_measure.Folders - 1) { $folders = &quot;D/$($item_measure.Folders - 1); &quot; }
+			$item_children = $folders + $files + $links
+		}
+		$desc = $_.DecryptInfo()
+		$item = New-Object -TypeName 'PSObject'
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'ID'			-Value $id
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'Size'			-Value $item_measure.Size
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'Literal'		-Value $item_size
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'Parent'		-Value $desc.ParentPath
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'Child'			-Value $_.Name
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'Type'			-Value $_.Type
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'Encapsulates'	-Value $item_children
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'ModifyDate'	-Value $_.ModifyDate
+		$item | Add-Member -MemberType 'NoteProperty' -Name 'Deleted'		-Value $desc.DeletionDate
+	##	$item | Add-Member -MemberType 'NoteProperty' -Name 'Object'		-Value $_.Object.FullName
+		$output_list += $item
+		$id++
+	}
+	$output_list | ogv -Title &quot;Recycle Bin Items ($Mask)&quot;
+	return $true
+}
+
+$bin = New-Object -TypeName 'PSObject'
+
+$bin | Add-Member -MemberType 'NoteProperty' -Name '_ComWrapper' -Value (
+	New-Object -ComObject 'Shell.Application'
+).Namespace(0xA)
+
+$method.Keys | ForEach-Object -Process {
+	$bin | Add-Member -MemberType 'ScriptMethod' -Name $_ -Value $method[$_]
+}
+
+New-Variable -Name 'RecycleBin' -Value $bin -Option 'Constant'
+Remove-Variable -Name 'method', 'bin'
+## -- Recycle Bin Object --
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

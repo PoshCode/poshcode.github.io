@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Trace-Message - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Trace-Message</h1>
+<h3><a href="//scripts/6457.ps1">download</a> - <a href="//scripts/6456.md">parent</a></h3>
+<p>A trace/logging system that wraps Write-Verbose, Write-Debug or Write-Warning to add timestamps and invocation source to the output, as well as allowing complicated messages to be calculated only when the output will actually be displayed.</p>
+<pre><code class="language-posh">function Trace-Message {
+    &lt;#
+        .Synopsis
+            Wrap Verbose, Debug, or Warning output with command profiling trace showing script line and time elapsed
+        .Description
+
+            Creates a stopwatch that tracks the time elapsed while a script runs, and adds caller position and time to the output
+        .Example
+            foreach($i in 1..20) { sleep -m 50; Trace-Message &quot;Progress $i&quot; }
+
+            Demonstrates the simplest use of Trace-Message to add a duration timestamp to the message.
+        .Example
+            function Test-Trace {
+                [CmdletBinding()]param()
+                foreach($i in 1..20) {
+                    $i
+                    Trace-Message {
+                        sleep -m 50; # just to be sure you can tell this is slow
+                        $ps = (Get-Process | sort PM -Desc | select -first 2) 
+                        &quot;Memory hog {1} using {0:N2}GB more than next process&quot; -f (($ps[0].WS -$ps[1].WS) / 1GB), $ps[0].Name
+                    } @PSBoundParameters
+                }
+            }
+
+            Demonstrates how using a scriptblock can avoid calculation of complicated output when -Verbose is not set.  In this example, &quot;Test-Trace&quot; by itself will output 1-20 in under 20 miliseconds, but with verbose output, it can take over 1.25 seconds
+    #&gt;  
+    [CmdletBinding(DefaultParameterSetName=&quot;Precalculated&quot;)]
+    param(
+        # The message to write 
+        [Parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName=&quot;Precalculated&quot;,Position=0)]
+        [Parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName=&quot;PrecalculatedWarningOutput&quot;,Position=0)]
+        [Parameter(Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName=&quot;PrecalculatedDebugOutput&quot;,Position=0)]
+        [PSObject]$Message,
+
+        # A scriptblock which, when evaluated, will output a message to write
+        [Parameter(Mandatory=$true,ParameterSetName=&quot;DeferredTemplate&quot;,Position=0)]
+        [Parameter(Mandatory=$true,ParameterSetName=&quot;DeferredTemplateWarningOutput&quot;,Position=0)]
+        [Parameter(Mandatory=$true,ParameterSetName=&quot;DeferredTemplateDebugOutput&quot;,Position=0)]
+        [ScriptBlock]$DeferredTemplate,
+
+        # When set, output to the warning stream instead of verbose
+        [Parameter(Mandatory=$true,ParameterSetName=&quot;PrecalculatedWarningOutput&quot;)]
+        [Parameter(Mandatory=$true,ParameterSetName=&quot;DeferredTemplateWarningOutput&quot;)]
+        [Alias(&quot;AsWarning&quot;)]
+        [switch]$WarningOutput,
+
+        # When set, output to the debug stream instead of verbose 
+        [Parameter(Mandatory=$true,ParameterSetName=&quot;PrecalculatedDebugOutput&quot;)]
+        [Parameter(Mandatory=$true,ParameterSetName=&quot;DeferredTemplateDebugOutput&quot;)]
+        [switch]$DebugOutput,
+
+        # Reset the timer to time the next block from zero
+        [switch]$ResetTimer,
+
+        # Clear out the timer completely after this output
+        # When you explicitly pass a Stopwatch, you can pass this flag (only once) to stop and remove it 
+        [switch]$KillTimer,
+
+        # A custom string overrides the automatic formatting which changes depending on how long the duration is
+        [string]$ElapsedFormat,
+
+        # Supports passing in an existing Stopwatch (running or not)
+        [Diagnostics.Stopwatch]$Stopwatch
+    )
+    begin {
+        if($Stopwatch) {
+            ${Script:Trace Message Timer} = $Stopwatch    
+            ${Script:Trace Message Timer}.Start()
+        }
+        if(-not ${Trace Message Timer}) {
+            ${global:Trace Message Timer} = New-Object System.Diagnostics.Stopwatch
+            ${global:Trace Message Timer}.Start()
+
+            # When no timer is provided...
+            # Assume the timer is for &quot;run&quot; and 
+            # Clean up automatically at the next prompt
+            $PreTraceTimerPrompt = $function:prompt
+
+            $function:prompt = { 
+                if(${global:Trace Message Timer}) {
+                    ${global:Trace Message Timer}.Stop()
+                    Remove-Variable &quot;Trace Message Timer&quot; -Scope global -ErrorAction SilentlyContinue
+                }
+                &amp; $PreTraceTimerPrompt
+                ${function:global:prompt} = $PreTraceTimerPrompt
+            }.GetNewClosure()
+        }
+
+        if($ResetTimer -or -not ${Trace Message Timer}.IsRunning)
+        {
+            ${Trace Message Timer}.Restart()
+        }
+
+        # Note this requires a host with RawUi
+        $w = $Host.UI.RawUi.BufferSize.Width
+    }
+
+    process {
+        if(($WarningOutput -and $WarningPreference -eq &quot;SilentlyContinue&quot;) -or
+           ($DebugOutput -and $DebugPreference -eq &quot;SilentlyContinue&quot;) -or
+           ($VerbosePreference -eq &quot;SilentlyContinue&quot;)) { return }
+
+        [string]$Message = if($DeferredTemplate) { 
+                             ($DeferredTemplate.InvokeReturnAsIs(@()) | Out-String -Stream) -join &quot;`n&quot;
+                           } else { &quot;$Message&quot; }
+       
+        $Message = $Message.Trim()
+        
+        $Location = if($MyInvocation.ScriptName) {
+                        $Name = Split-Path $MyInvocation.ScriptName -Leaf
+                        &quot;${Name}:&quot; + &quot;$($MyInvocation.ScriptLineNumber)&quot;.PadRight(4)
+                    } else { &quot;&quot; }
+        
+        $Tail = $(if($ElapsedFormat) {
+                      &quot;{0:$ElapsedFormat}&quot; -f ${Trace Message Timer}.Elapsed
+                  }
+                  elseif(${Trace Message Timer}.Elapsed.TotalHours -ge 1.0) {
+                      &quot;{0:h\:mm\:ss\.ffff}&quot; -f ${Trace Message Timer}.Elapsed
+                  }
+                  elseif(${Trace Message Timer}.Elapsed.TotaMinutes -ge 1.0) {
+                      &quot;{0:mm\m\ ss\.ffff\s}&quot; -f ${Trace Message Timer}.Elapsed
+                  }                    
+                  else {
+                      &quot;{0:ss\.ffff\s}&quot; -f ${Trace Message Timer}.Elapsed
+                  }).PadLeft(12)
+
+        $Tail = $Location + $Tail 
+
+        # &quot;WARNING:  &quot;.Length = 10
+        $Length = ($Message.Length + 10 + $Tail.Length)
+        # Twenty-five is a minimum 15 character message...
+        $PaddedLength = if($Length -gt $w -and $w -gt (25 + $Tail.Length)) {
+                            [string[]]$words = -split $message
+                            $short = 10 # &quot;VERBOSE:  &quot;.Length
+                            $count = 0  # Word count so far
+                            $lines = 0
+                            do {
+                                do {
+                                    $short += 1 + $words[$count++].Length
+                                } while (($words.Count -gt $count) -and ($short + $words[$count].Length) -lt $w)
+                                $Lines++
+                                if(($Message.Length + $Tail.Length) -gt ($w * $lines)) {
+                                    $short = 0
+                                }
+                            } while($short -eq 0)
+                            $Message.Length + ($w - $short) - $Tail.Length
+                        } else { 
+                            $w - 10 - $Tail.Length
+                        }
+
+        $Message = &quot;$Message &quot;.PadRight($PaddedLength, &quot;$([char]8331)&quot;) + $Tail
+
+        if($WarningOutput) {
+            Write-Warning $Message
+        } elseif($DebugOutput) {
+            Write-Debug $Message
+        } else {
+            Write-Verbose $Message
+        }
+    }
+
+    end {
+        if($KillTimer -and ${Trace Message Timer}) {
+            ${Trace Message Timer}.Stop()
+            Remove-Variable &quot;Trace Message Timer&quot; -Scope Script -ErrorAction Ignore
+            Remove-Variable &quot;Trace Message Timer&quot; -Scope Global -ErrorAction Ignore
+        }
+    }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

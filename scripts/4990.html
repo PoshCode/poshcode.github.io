@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="David Woods">
+    <title>User Termination Script - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>User Termination Script</h1>
+<h3><a href="//scripts/4990.ps1">download</a></h3>
+<p>The script below has 3 different components &amp; was designed for use by our Service Desk. When a user is terminated, the script will remove them from Lync, remove all mailbox information (forwarding rules etc) in Exchange 2010, disable Ad object, remove group membership &amp; move to &quot;Disabled Users&quot; OU.</p>
+<pre><code class="language-posh">$blnCheckSnappin = Get-PSSnapin | where {$_.Name -eq &quot;microsoft.exchange.management.powershell.e2010&quot;}
+
+if ($blnCheckSnappin -eq $null)
+{    
+    add-pssnapin &quot;microsoft.exchange.management.powershell.e2010&quot; -ErrorVariable errSnapin ;
+    . $env:ExchangeInstallPath\bin\RemoteExchange-mod.ps1
+    Connect-ExchangeServer -Server &lt;YourExchangeServer&gt; -allowclobber
+}
+    
+Import-Module &quot;$env:programfiles\Common Files\Microsoft Lync Server 2010\Modules\Lync\Lync.psd1&quot;
+Import-Module ActiveDirectory
+
+function terminateUser 
+{   
+
+    $strMsg1 = &quot;&quot;
+    $strMsg2 = &quot;&quot;
+    $strMsg3 = &quot;&quot;
+    $strMsg4 = &quot;&quot;
+    $strMsg5 = &quot;&quot;
+    $strUserID = $args[0]
+    
+    try
+    {
+        $blnUserExists = get-aduser $strUserID
+    }
+    catch
+    {
+
+    }    
+
+    if($blnUserExists)
+    {
+        $strMsg3 += &quot;`r`n` &quot;
+    	$strMsg3 += &quot;Are you sure you wish to continue? (Y/N) `r`n` &quot;        
+        $strMsg3 += &quot;`r`n` &quot;
+
+        $strContinue = read-host $strMsg3
+        
+        if($strContinue -eq &quot;Y&quot;)
+        {   			
+            $strRunLog = &quot;$strRunDir\Logs\$strUserID-log-$strDate.txt&quot;
+            $arrAttachments = @($strRunLog)
+            
+            start-transcript -path $strRunLog | Out-null
+
+   			# This section will remove the Lync account `r`n` &quot;
+                        
+            Disable-CSuser -identity $strUserID 
+             
+            # This section will disable the Exchange account `r`n` &quot;
+
+            Get-InboxRule -Mailbox $strUserID  | Remove-InboxRule -Confirm:$false -Force        
+            Set-CASMailbox -Identity $strUserID -ActiveSyncEnabled:$False -OWAEnabled:$False
+            Get-ActiveSyncDevice –Mailbox $strUserID | Remove-ActiveSyncDevice -Confirm:$False          
+            Set-mailbox -Identity $strUserID -HiddenFromAddressListsEnabled:$true -ForwardingAddress $Null
+            
+                    
+            # This section will move &amp; disable the AD object account `r`n` &quot;
+            
+            Get-ADPrincipalGroupMembership -Identity $strUserID | Select-object name | format-table
+                                     
+            Get-ADPrincipalGroupMembership -Identity $strUserID | Where {$_.Name -ne &quot;Domain Users&quot;} | ForEach-Object {Remove-ADPrincipalGroupMembership -Identity $strUserID -MemberOf $_.SamAccountName -Confirm:$False}
+            
+            Set-ADuser -identity $strUserID -Manager $Null
+            Disable-ADAccount -identity $strUserID 
+            Get-ADUser -identity $strUserID | Move-ADobject -TargetPath &quot;OU=Disabled,OU=Users,OU=Client,DC=YOURCOMPANY,DC=com,DC=au&quot;                                
+            
+            $strMsg4 += &quot;`r`n` &quot;    		
+            $strMsg4 += &quot;The Termination script for&quot;,$strUserID,&quot;has completed. `r`n` &quot;
+            $strMsg4 += &quot; `r`n` &quot;
+            $strMsg4 += &quot;A log of the session can be located at: $strRunLog. `r`n` &quot;
+            $strMsg4 += &quot;`r`n` &quot;    		
+            
+            Write-host $strMsg4                                                     
+            
+            $strSubject = &quot;Account Termination Log - $strUserID - Operation Successful&quot;                                             
+                        
+            stop-transcript | Out-null
+            
+            start-process notepad.exe $strRunLog
+                        
+            send-MailMessage -SmtpServer $strSMTPserver -To $arrRecipient -From $strFrom -Subject $strSubject -attachments $arrAttachments -Priority high 
+            
+            $strMsg5 += &quot;`r`n` &quot;
+        	$strMsg5 += &quot;User account terminated. Do you wish to terminate another account? (Y/N) `r`n` &quot;
+            $strMsg5 += &quot;`r`n` &quot;
+            $strMsg5 += &quot;`r`n` &quot;
+
+            $strContinue = read-host $strMsg5
+            
+            if($strContinue -eq &quot;Y&quot;)
+            {
+                enterUser
+            }
+            else
+            {
+                [System.Windows.Forms.MessageBox]::Show(&quot;Exiting Script. &quot;,&quot;Status&quot;)    
+            }                
+        }
+        else
+        {
+            [System.Windows.Forms.MessageBox]::Show(&quot;Exiting Script. &quot;,&quot;Status&quot;)  
+        }        
+
+    }
+    else
+    {
+        [System.Windows.Forms.MessageBox]::Show(&quot;ERROR. $strUserID does not exist in AD. Exiting script. &quot;,&quot;Status&quot;)  
+    }
+ }    
+ 
+ function enterUser
+ {
+ 
+     $strMsg2 += &quot;`r`n` &quot;
+     $strMsg2 += &quot;Please enter the user's AD Account Below: `r`n` &quot;
+     $strMsg2 += &quot;`r`n` &quot;
+     
+     $strUserID = read-host $strMsg2
+     $strUserID = $strUserID.Trim()
+
+     terminateUser $strUserID
+ }        
+
+[console]::ForegroundColor = &quot;yellow&quot;
+
+# User Termination Process Script for &lt;YourCompany&gt;
+# 
+# Created by EBS Platforms Team - 2014
+#
+# Script will read in userid &amp; output results to a text file
+# EXAMPLE: UserTermination.ps1
+#
+# This script will accomplish the following:
+#  A) Disable Lync Account (Lync 2010)
+#  B) Remove Inbox Rules (Exchange 2010)
+#  C) Remove all Mail Forwarding Rules (Exchange 2010)
+#  D) Hide email address from Exchange Address Lists (Exchange 2010)
+#  E) Remove Group Membership (including DL) from AD object (Active Directory)
+#  F) Remove Manager Field from AD object (Active Directory)
+#  G) Disable Account (Active Directory)
+#  H) Move disabled AD object to Disabled OU
+#
+# Ask for userid &amp; query if action is correct
+
+[System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;) | Out-null
+
+#
+# Declare variables
+#
+
+$StrInvocation = (Get-Variable MyInvocation).Value
+$strRunDir = Split-Path $StrInvocation.MyCommand.Path
+$strDate = get-date -format &quot;dd-MMM-yyyy-HHmm&quot;
+$blnUserExists = $false
+$strUserID = &quot;&quot;
+$strSMTPserver = &quot;&lt;YourMailServer&gt;&quot;  
+$strFrom = &quot;&lt;YourAddress&gt;&quot;    
+$arrRecipient = @(&quot;&lt;YourRecipients&gt;&quot;)
+$strSubject = &quot;&quot;
+$strDebug = &quot;&quot;
+$strOperator = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+
+$strMsg1 += &quot;`r`n` &quot;
+$strMsg1 += &quot;User Termination Process Script for &lt;YourCompany&gt; `r`n` &quot;
+$strMsg1 += &quot;`r`n` &quot;
+$strMsg1 += &quot;Created by EBS Platforms Team - 2014 `r`n` &quot;
+$strMsg1 += &quot;`r`n` &quot;
+$strMsg1 += &quot;This script will accomplish the following: `r`n` &quot;
+$strMsg1 += &quot;`r`n` &quot;
+$strMsg1 += &quot;1.) Disable Lync Account (Lync 2010) `r`n` &quot;
+$strMsg1 += &quot;2.) Remove Inbox Rules (Exchange 2010) `r`n` &quot;
+$strMsg1 += &quot;3.) Remove all Mail Forwarding Rules (Exchange 2010) `r`n` &quot;
+$strMsg1 += &quot;4.) Hide email address from Exchange Address Lists (Exchange 2010) `r`n` &quot;
+$strMsg1 += &quot;5.) Remove Group Membership (including DL) from AD object (Active Directory) `r`n` &quot;
+$strMsg1 += &quot;6.) Remove Manager Field from AD object (Active Directory) `r`n` &quot;
+$strMsg1 += &quot;7.) Disable Account (Active Directory) `r`n` &quot;
+$strMsg1 += &quot;8.) Move disabled AD object to Disabled OU `r`n` &quot;
+
+write-host $strMsg1
+
+enterUser
+
+
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

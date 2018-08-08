@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BSonPosh">
+    <title>Get-LocalGroupMember - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-LocalGroupMember</h1>
+<h3><a href="//scripts/2866.ps1">download</a> - <a href="//scripts/2865.md">parent</a></h3>
+<p>Gets local group memebers</p>
+<pre><code class="language-posh">function Get-LocalGroupMember
+{
+    &lt;#
+        .Synopsis
+            Get the local group membership.
+
+        .Description
+            Get the local group membership.
+
+        .Parameter ComputerName
+            Name of the Computer to get group members (Default localhost.)
+
+        .Parameter Group
+            Name of the group to get members from (Default Administrators.)
+
+        .Example
+            Get-LocalGroupMember
+            Description
+            -----------
+            Get Administrators group Members for the localhost
+
+        .Example
+            Get-LocalGroupMember -Computer MyPC -group User
+            Description
+            -----------
+            Get Members of Users Group from MyPC
+
+        .Example
+            $Servers | Get-LocalGroupMember -group &quot;Remote Desktop Users&quot;
+            Description
+            -----------
+            Get Members of Users Group from &quot;Remote Desktop Users&quot; on all $Servers
+
+        .OUTPUTS
+            PSCustomObject
+
+        .INPUTS
+            System.String
+
+        .Link
+            N/A
+
+        .Notes
+            NAME:      Get-LocalGroupMember
+            AUTHOR:    YetiCentral\bshell
+            Website:   www.bsonposh.com
+            LASTEDIT:  10/13/2009 18:25:15
+            #Requires -Version 2.0
+    #&gt;
+
+    [Cmdletbinding()]
+    Param(
+        [alias('dnsHostName')]
+        [Parameter(ValueFromPipelineByPropertyName=$true,ValueFromPipeline=$true)]
+        [string]$ComputerName = $Env:COMPUTERNAME,
+
+        [Parameter()]
+        [string]$Group= &quot;Administrators&quot;
+    )
+begin {
+
+
+        Write-Verbose &quot; [Get-LocalGroupMember] :: Start Begin&quot;
+        function GetGroupMembers($Server,$Group)
+        {
+            Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: `$Server = $Server&quot;
+            Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: `$Group = $Group&quot;
+
+            $GroupObject = Get-WMIObject win32_group -filter &quot;LocalAccount='$true' AND Name='$Group'&quot; -computername $Server -
+
+            $Query = &quot;SELECT * FROM Win32_GroupUser WHERE GroupComponent = `&quot;Win32_Group.Domain='$Server',Name='$Group'`&quot;&quot;
+            Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: `$Query = $Query&quot;
+            $GroupUsers = get-wmiobject -Query $Query -computername $Server  -ea STOP
+
+            Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: Processing Group Members &quot;
+
+            if($GroupUsers)
+            {
+                foreach($User in $GroupUsers)
+                {
+                    Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: `$User.PartComponent = $($User.PartComponent
+
+                    $RegEx = '\\\\{0}\\root\\cimv2\:Win32_.*\=&quot;(?&lt;Domain&gt;.*)&quot;,Name=&quot;(?&lt;User&gt;.*)&quot;' -f $Server
+                    Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: RegEx = $RegEx &quot;
+                    $User.PartComponent -match $Regex | out-null
+
+                    Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: Creating Custom Object &quot;
+                    $myobj = @{}
+                    Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: `$myobj.ComputerName = $Server&quot;
+                    $myobj.ComputerName = $Server
+                    Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: `$myobj.UserName = $($matches.User)&quot;
+                    $myobj.UserName = $matches.User
+                    Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: `$myobj.Domain = $($matches.Domain)&quot;
+                    $myobj.Domain = $matches.Domain
+                    Write-Verbose &quot; [Get-LocalGroupMember] :: GetGroupMembers :: `$myobj.Group = $Group&quot;
+                    $myobj.Group = $Group
+                    $obj = New-Object PSObject -Property $myobj
+                    $obj.PSTypeNames.Clear()
+                    $obj.PSTypeNames.Add('BSonPosh.LocalGroup')
+                    $obj
+                }
+            }
+        }
+
+        Write-Verbose &quot; [Get-LocalGroupMember] :: End Begin&quot;
+
+
+}
+process {
+
+
+        Write-Verbose &quot; [Get-LocalGroupMember] :: Start Process&quot;
+        if($ComputerName -match &quot;(.*)(\$)$&quot;)
+        {
+            $ComputerName = $ComputerName -replace &quot;(.*)(\$)$&quot;,'$1'
+        }
+        if(Test-Host $ComputerName -TCPPort 135)
+        {
+            Write-Verbose &quot; [Get-LocalGroupMember] :: Processing Computer: $ComputerName&quot;
+            try
+            {
+                GetGroupMembers $ComputerName $Group
+            }
+            catch
+            {
+                Write-Host &quot; Host [$ComputerName] Failed with Error: $($Error[0])&quot; -ForegroundColor Red
+            }
+        }
+        else
+        {
+            Write-Host &quot; Host [$ComputerName] Failed Connectivity Test &quot; -ForegroundColor Red
+        }
+        Write-Verbose &quot; [Get-LocalGroupMember] :: End Process&quot;
+
+
+}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Remove-DownloadFlag - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Remove-DownloadFlag</h1>
+<h3><a href="//scripts/1430.ps1">download</a></h3>
+<p>Allows setting <em>and removing</em> the Zone.Identifier alternate data stream (on NTFS file systems) which flags scripts as downloaded to heighten security. Part of the PoshCode Module.</p>
+<pre><code class="language-posh">function Set-DownloadFlag {
+&lt;#
+.Synopsis
+	Sets the ZoneTransfer flag which marks a file as being downloaded from the internet.
+.Description
+	Creates a Zone.Identifier alternate data stream (on NTFS file systems) and writes the ZoneTransfer marker
+.Parameter Path
+	The file you wish to block
+.Parameter Passthru
+	If set, outputs the FileInfo object
+#&gt;
+[CmdletBinding()]
+PARAM (
+   [Parameter(Position=0, Mandatory=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;FullName&quot;)]
+   [string]
+   $Path
+,
+   [Switch]$Passthru
+)
+   $FS = new-object NTFS.FileStreams($Path)
+   $null = $fs.add('Zone.Identifier')
+   $stream = $fs.Item('Zone.Identifier').open()
+
+   $sw = [System.IO.streamwriter]$stream
+   $Sw.writeline('[ZoneTransfer]')
+   $sw.writeline('ZoneID=4')
+   $sw.close()
+   $stream.close()
+   if($Passthru){ Get-ChildItem $Path }
+}
+
+function Remove-DownloadFlag {
+&lt;#
+.Synopsis
+	Removes the ZoneTransfer flag which marks a file as being downloaded from the internet.
+.Description
+	Deletes the Zone.Identifier alternate data stream (on NTFS file systems)
+.Parameter Path
+	The file you wish to block
+.Parameter Passthru
+	If set, outputs the FileInfo object
+#&gt;
+[CmdletBinding()]
+PARAM (
+   [Parameter(Position=0, Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;FullName&quot;)]
+   [string]
+   $Path
+,
+   [Switch]$Passthru
+)
+   $FS = new-object NTFS.FileStreams($Path)
+   $null = $fs['Zone.Identifier'].delete()
+   if($Passthru){ Get-ChildItem $Path }
+}
+
+Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Collections;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+
+///&lt;summary&gt;
+///Encapsulates access to alternative data streams of an NTFS file.
+///Adapted from a C++ sample by Dino Esposito,
+///http://msdn.microsoft.com/library/default.asp?url=/library/en-us/dnfiles/html/ntfs5.asp
+///&lt;/summary&gt;
+namespace NTFS {
+   /// &lt;summary&gt;
+   /// Wraps the API functions, structures and constants.
+   /// &lt;/summary&gt;
+   internal class Kernel32 
+   {
+      public const char STREAM_SEP = ':';
+      public const int INVALID_HANDLE_VALUE = -1;
+      public const int MAX_PATH = 256;
+      
+      [Flags()] public enum FileFlags : uint
+      {
+         WriteThrough = 0x80000000,
+         Overlapped = 0x40000000,
+         NoBuffering = 0x20000000,
+         RandomAccess = 0x10000000,
+         SequentialScan = 0x8000000,
+         DeleteOnClose = 0x4000000,
+         BackupSemantics = 0x2000000,
+         PosixSemantics = 0x1000000,
+         OpenReparsePoint = 0x200000,
+         OpenNoRecall = 0x100000
+      }
+
+      [Flags()] public enum FileAccessAPI : uint
+      {
+         GENERIC_READ = 0x80000000,
+         GENERIC_WRITE = 0x40000000
+      }
+      /// &lt;summary&gt;
+      /// Provides a mapping between a System.IO.FileAccess value and a FileAccessAPI value.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Access&quot;&gt;The &lt;see cref=&quot;System.IO.FileAccess&quot;/&gt; value to map.&lt;/param&gt;
+      /// &lt;returns&gt;The &lt;see cref=&quot;FileAccessAPI&quot;/&gt; value.&lt;/returns&gt;
+      public static FileAccessAPI Access2API(FileAccess Access) 
+      {
+         FileAccessAPI lRet = 0;
+         if ((Access &amp; FileAccess.Read)==FileAccess.Read) lRet |= FileAccessAPI.GENERIC_READ;
+         if ((Access &amp; FileAccess.Write)==FileAccess.Write) lRet |= FileAccessAPI.GENERIC_WRITE;
+         return lRet;
+      }
+
+      [StructLayout(LayoutKind.Sequential)] public struct LARGE_INTEGER 
+      {
+         public int Low;
+         public int High;
+
+         public long ToInt64() 
+         {
+            return (long)High * 4294967296 + (long)Low;
+         }
+      }
+
+      [StructLayout(LayoutKind.Sequential)] public struct WIN32_STREAM_ID 
+      {
+         public int dwStreamID;
+         public int dwStreamAttributes;
+         public LARGE_INTEGER Size;
+         public int dwStreamNameSize;
+      }
+      
+      [DllImport(&quot;kernel32&quot;)] public static extern SafeFileHandle CreateFile(string Name, FileAccessAPI Access, FileShare Share, int Security, FileMode Creation, FileFlags Flags, int Template);
+      [DllImport(&quot;kernel32&quot;)] public static extern bool DeleteFile(string Name);
+      [DllImport(&quot;kernel32&quot;)] public static extern bool CloseHandle(SafeFileHandle hObject);
+
+      [DllImport(&quot;kernel32&quot;)] public static extern bool BackupRead(SafeFileHandle hFile, IntPtr pBuffer, int lBytes, ref int lRead, bool bAbort, bool bSecurity, ref int Context);
+      [DllImport(&quot;kernel32&quot;)] public static extern bool BackupRead(SafeFileHandle hFile, ref WIN32_STREAM_ID pBuffer, int lBytes, ref int lRead, bool bAbort, bool bSecurity, ref int Context);
+      [DllImport(&quot;kernel32&quot;)] public static extern bool BackupSeek(SafeFileHandle hFile, int dwLowBytesToSeek, int dwHighBytesToSeek, ref int dwLow, ref int dwHigh, ref int Context);
+   }
+
+   /// &lt;summary&gt;
+   /// Encapsulates a single alternative data stream for a file.
+   /// &lt;/summary&gt;
+   public class StreamInfo 
+   {
+      private FileStreams _parent;
+      private string _name;
+      private long _size;
+
+      internal StreamInfo(FileStreams Parent, string Name, long Size) 
+      {
+         _parent = Parent;
+         _name = Name;
+         _size = Size;
+      }
+
+      /// &lt;summary&gt;
+      /// The name of the stream.
+      /// &lt;/summary&gt;
+      public string Name 
+      {
+         get { return _name; }
+      }
+      /// &lt;summary&gt;
+      /// The size (in bytes) of the stream.
+      /// &lt;/summary&gt;
+      public long Size 
+      {
+         get { return _size; }
+      }
+      
+      public override string ToString() 
+      {
+         return String.Format(&quot;{1}{0}{2}{0}$DATA&quot;, Kernel32.STREAM_SEP, _parent.FileName, _name);
+      }
+      public override bool Equals(Object o) 
+      {
+         if (o is StreamInfo) 
+         {
+            StreamInfo f = (StreamInfo)o;
+            return (f._name.Equals(_name) &amp;&amp; f._parent.Equals(_parent));
+         }
+         else if (o is string) 
+         {
+            return ((string)o).Equals(ToString());
+         }
+         else
+            return base.Equals(o);
+      }
+      public override int GetHashCode() 
+      {
+         return ToString().GetHashCode();
+      }
+
+#region Open
+      /// &lt;summary&gt;
+      /// Opens or creates the stream in read-write mode, with no sharing.
+      /// &lt;/summary&gt;
+      /// &lt;returns&gt;A &lt;see cref=&quot;System.IO.FileStream&quot;/&gt; wrapper for the stream.&lt;/returns&gt;
+      public FileStream Open() 
+      {
+         return Open(FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+      }
+      /// &lt;summary&gt;
+      /// Opens or creates the stream in read-write mode with no sharing.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Mode&quot;&gt;The &lt;see cref=&quot;System.IO.FileMode&quot;/&gt; action for the stream.&lt;/param&gt;
+      /// &lt;returns&gt;A &lt;see cref=&quot;System.IO.FileStream&quot;/&gt; wrapper for the stream.&lt;/returns&gt;
+      public FileStream Open(FileMode Mode) 
+      {
+         return Open(Mode, FileAccess.ReadWrite, FileShare.None);
+      }
+      /// &lt;summary&gt;
+      /// Opens or creates the stream with no sharing.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Mode&quot;&gt;The &lt;see cref=&quot;System.IO.FileMode&quot;/&gt; action for the stream.&lt;/param&gt;
+      /// &lt;param name=&quot;Access&quot;&gt;The &lt;see cref=&quot;System.IO.FileAccess&quot;/&gt; level for the stream.&lt;/param&gt;
+      /// &lt;returns&gt;A &lt;see cref=&quot;System.IO.FileStream&quot;/&gt; wrapper for the stream.&lt;/returns&gt;
+      public FileStream Open(FileMode Mode, FileAccess Access) 
+      {
+         return Open(Mode, Access, FileShare.None);
+      }
+      /// &lt;summary&gt;
+      /// Opens or creates the stream.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Mode&quot;&gt;The &lt;see cref=&quot;System.IO.FileMode&quot;/&gt; action for the stream.&lt;/param&gt;
+      /// &lt;param name=&quot;Access&quot;&gt;The &lt;see cref=&quot;System.IO.FileAccess&quot;/&gt; level for the stream.&lt;/param&gt;
+      /// &lt;param name=&quot;Share&quot;&gt;The &lt;see cref=&quot;System.IO.FileShare&quot;/&gt; level for the stream.&lt;/param&gt;
+      /// &lt;returns&gt;A &lt;see cref=&quot;System.IO.FileStream&quot;/&gt; wrapper for the stream.&lt;/returns&gt;
+      public FileStream Open(FileMode Mode, FileAccess Access, FileShare Share) 
+      {
+         try 
+         {
+            SafeFileHandle hFile = Kernel32.CreateFile(ToString(), Kernel32.Access2API(Access), Share, 0, Mode, 0, 0);
+            return new FileStream(hFile, Access);
+         }
+         catch 
+         {
+            return null;
+         }
+      }
+#endregion
+
+#region Delete
+      /// &lt;summary&gt;
+      /// Deletes the stream from the file.
+      /// &lt;/summary&gt;
+      /// &lt;returns&gt;A &lt;see cref=&quot;System.Boolean&quot;/&gt; value: true if the stream was deleted, false if there was an error.&lt;/returns&gt;
+      public bool Delete() 
+      {
+         return Kernel32.DeleteFile(ToString());
+      }
+#endregion
+   }
+
+
+   /// &lt;summary&gt;
+   /// Encapsulates the collection of alternative data streams for a file.
+   /// A collection of &lt;see cref=&quot;StreamInfo&quot;/&gt; objects.
+   /// &lt;/summary&gt;
+   public class FileStreams : CollectionBase 
+   {
+      private FileInfo _file;
+
+#region Constructors
+      public FileStreams(string File) 
+      {
+         _file = new FileInfo(File);
+         initStreams();
+      }
+      public FileStreams(FileInfo file) 
+      {
+         _file = file;
+         initStreams();
+      }
+
+      /// &lt;summary&gt;
+      /// Reads the streams from the file.
+      /// &lt;/summary&gt;
+      private void initStreams() 
+      {
+         //Open the file with backup semantics
+         SafeFileHandle hFile = Kernel32.CreateFile(_file.FullName, Kernel32.FileAccessAPI.GENERIC_READ, FileShare.Read, 0, FileMode.Open, Kernel32.FileFlags.BackupSemantics, 0);
+         if (hFile.IsInvalid) return;
+
+         try 
+         {
+            Kernel32.WIN32_STREAM_ID sid = new Kernel32.WIN32_STREAM_ID();
+            int dwStreamHeaderSize = Marshal.SizeOf(sid);
+            int Context = 0;
+            bool Continue = true;
+            while (Continue) 
+            {
+               //Read the next stream header
+               int lRead = 0;
+               Continue = Kernel32.BackupRead(hFile, ref sid, dwStreamHeaderSize, ref lRead, false, false, ref Context);
+               if (Continue &amp;&amp; lRead == dwStreamHeaderSize) 
+               {
+                  if (sid.dwStreamNameSize&gt;0) 
+                  {
+                     //Read the stream name
+                     lRead = 0;
+                     IntPtr pName = Marshal.AllocHGlobal(sid.dwStreamNameSize);
+                     try 
+                     {
+                        Continue = Kernel32.BackupRead(hFile, pName, sid.dwStreamNameSize, ref lRead, false, false, ref Context);
+                        char[] bName = new char[sid.dwStreamNameSize];
+                        Marshal.Copy(pName,bName,0,sid.dwStreamNameSize);
+
+                        //Name is of the format &quot;:NAME:$DATA\0&quot;
+                        string sName = new string(bName);
+                        int i = sName.IndexOf(Kernel32.STREAM_SEP, 1);
+                        if (i&gt;-1) sName = sName.Substring(1, i-1);
+                        else 
+                        {
+                           //This should never happen. 
+                           //Truncate the name at the first null char.
+                           i = sName.IndexOf('\0');
+                           if (i&gt;-1) sName = sName.Substring(1, i-1);
+                        }
+
+                        //Add the stream to the collection
+                        base.List.Add(new StreamInfo(this,sName,sid.Size.ToInt64()));
+                     }
+                     finally 
+                     {
+                        Marshal.FreeHGlobal(pName);
+                     }
+                  }
+
+                  //Skip the stream contents
+                  int l = 0; int h = 0;
+                  Continue = Kernel32.BackupSeek(hFile, sid.Size.Low, sid.Size.High, ref l, ref h, ref Context);
+               }
+               else break;
+            }
+         }
+         finally 
+         {
+            Kernel32.CloseHandle(hFile);
+         }
+      }
+#endregion
+
+#region File
+      /// &lt;summary&gt;
+      /// Returns the &lt;see cref=&quot;System.IO.FileInfo&quot;/&gt; object for the wrapped file. 
+      /// &lt;/summary&gt;
+      public FileInfo FileInfo 
+      {
+         get { return _file; }
+      }
+      /// &lt;summary&gt;
+      /// Returns the full path to the wrapped file.
+      /// &lt;/summary&gt;
+      public string FileName 
+      {
+         get { return _file.FullName; }
+      }
+
+      /// &lt;summary&gt;
+      /// Returns the size of the main data stream, in bytes.
+      /// &lt;/summary&gt;
+      public long FileSize {
+         get {return _file.Length;}
+      }
+
+      /// &lt;summary&gt;
+      /// Returns the size of all streams for the file, in bytes.
+      /// &lt;/summary&gt;
+      public long Size 
+      {
+         get 
+         {
+            long size = this.FileSize;
+            foreach (StreamInfo s in this) size += s.Size;
+            return size;
+         }
+      }
+#endregion
+
+#region Open
+      /// &lt;summary&gt;
+      /// Opens or creates the default file stream.
+      /// &lt;/summary&gt;
+      /// &lt;returns&gt;&lt;see cref=&quot;System.IO.FileStream&quot;/&gt;&lt;/returns&gt;
+      public FileStream Open() 
+      {
+         return new FileStream(_file.FullName, FileMode.OpenOrCreate);
+      }
+
+      /// &lt;summary&gt;
+      /// Opens or creates the default file stream.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Mode&quot;&gt;The &lt;see cref=&quot;System.IO.FileMode&quot;/&gt; for the stream.&lt;/param&gt;
+      /// &lt;returns&gt;&lt;see cref=&quot;System.IO.FileStream&quot;/&gt;&lt;/returns&gt;
+      public FileStream Open(FileMode Mode) 
+      {
+         return new FileStream(_file.FullName, Mode);
+      }
+
+      /// &lt;summary&gt;
+      /// Opens or creates the default file stream.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Mode&quot;&gt;The &lt;see cref=&quot;System.IO.FileMode&quot;/&gt; for the stream.&lt;/param&gt;
+      /// &lt;param name=&quot;Access&quot;&gt;The &lt;see cref=&quot;System.IO.FileAccess&quot;/&gt; for the stream.&lt;/param&gt;
+      /// &lt;returns&gt;&lt;see cref=&quot;System.IO.FileStream&quot;/&gt;&lt;/returns&gt;
+      public FileStream Open(FileMode Mode, FileAccess Access) 
+      {
+         return new FileStream(_file.FullName, Mode, Access);
+      }
+
+      /// &lt;summary&gt;
+      /// Opens or creates the default file stream.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Mode&quot;&gt;The &lt;see cref=&quot;System.IO.FileMode&quot;/&gt; for the stream.&lt;/param&gt;
+      /// &lt;param name=&quot;Access&quot;&gt;The &lt;see cref=&quot;System.IO.FileAccess&quot;/&gt; for the stream.&lt;/param&gt;
+      /// &lt;param name=&quot;Share&quot;&gt;The &lt;see cref=&quot;System.IO.FileShare&quot;/&gt; for the stream.&lt;/param&gt;
+      /// &lt;returns&gt;&lt;see cref=&quot;System.IO.FileStream&quot;/&gt;&lt;/returns&gt;
+      public FileStream Open(FileMode Mode, FileAccess Access, FileShare Share) 
+      {
+         return new FileStream(_file.FullName, Mode, Access, Share);
+      }
+#endregion
+
+#region Delete
+      /// &lt;summary&gt;
+      /// Deletes the file, and all alternative streams.
+      /// &lt;/summary&gt;
+      public void Delete() 
+      {
+         for (int i=base.List.Count;i&gt;0;i--) 
+         {
+            base.List.RemoveAt(i);
+         }
+         _file.Delete();
+      }
+#endregion
+
+#region Collection operations
+      /// &lt;summary&gt;
+      /// Add an alternative data stream to this file.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Name&quot;&gt;The name for the stream.&lt;/param&gt;
+      /// &lt;returns&gt;The index of the new item.&lt;/returns&gt;
+      public int Add(string Name) 
+      {
+         StreamInfo FSI = new StreamInfo(this, Name, 0);
+         int i = base.List.IndexOf(FSI);
+         if (i==-1) i = base.List.Add(FSI);
+         return i;
+      }
+      /// &lt;summary&gt;
+      /// Removes the alternative data stream with the specified name.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Name&quot;&gt;The name of the string to remove.&lt;/param&gt;
+      public void Remove(string Name) 
+      {
+         StreamInfo FSI = new StreamInfo(this, Name, 0);
+         int i = base.List.IndexOf(FSI);
+         if (i&gt;-1) base.List.RemoveAt(i);
+      }
+
+      /// &lt;summary&gt;
+      /// Returns the index of the specified &lt;see cref=&quot;StreamInfo&quot;/&gt; object in the collection.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;FSI&quot;&gt;The object to find.&lt;/param&gt;
+      /// &lt;returns&gt;The index of the object, or -1.&lt;/returns&gt;
+      public int IndexOf(StreamInfo FSI) 
+      {
+         return base.List.IndexOf(FSI);
+      }
+      /// &lt;summary&gt;
+      /// Returns the index of the &lt;see cref=&quot;StreamInfo&quot;/&gt; object with the specified name in the collection.
+      /// &lt;/summary&gt;
+      /// &lt;param name=&quot;Name&quot;&gt;The name of the stream to find.&lt;/param&gt;
+      /// &lt;returns&gt;The index of the stream, or -1.&lt;/returns&gt;
+      public int IndexOf(string Name) 
+      {
+         return base.List.IndexOf(new StreamInfo(this, Name, 0));
+      }
+
+      public StreamInfo this[int Index] 
+      {
+         get { return (StreamInfo)base.List[Index]; }
+      }
+      public StreamInfo this[string Name] 
+      {
+         get 
+         { 
+            int i = IndexOf(Name);
+            if (i==-1) return null;
+            else return (StreamInfo)base.List[i];
+         }
+      }
+#endregion
+
+#region Overrides
+      /// &lt;summary&gt;
+      /// Throws an exception if you try to add anything other than a StreamInfo object to the collection.
+      /// &lt;/summary&gt;
+      protected override void OnInsert(int index, object value) 
+      {
+         if (!(value is StreamInfo)) throw new InvalidCastException();
+      }
+      /// &lt;summary&gt;
+      /// Throws an exception if you try to add anything other than a StreamInfo object to the collection.
+      /// &lt;/summary&gt;
+      protected override void OnSet(int index, object oldValue, object newValue) 
+      {
+         if (!(newValue is StreamInfo)) throw new InvalidCastException();
+      }
+
+      /// &lt;summary&gt;
+      /// Deletes the stream from the file when you remove it from the list.
+      /// &lt;/summary&gt;
+      protected override void OnRemoveComplete(int index, object value) 
+      {
+         try 
+         {
+            StreamInfo FSI = (StreamInfo)value;
+            if (FSI != null) FSI.Delete();
+         }
+         catch {}
+      }
+
+      public new StreamEnumerator GetEnumerator() 
+      {
+         return new StreamEnumerator(this);
+      }
+#endregion
+
+#region StreamEnumerator
+      public class StreamEnumerator : object, IEnumerator 
+      {
+         private IEnumerator baseEnumerator;
+            
+         public StreamEnumerator(FileStreams mappings) 
+         {
+            this.baseEnumerator = ((IEnumerable)(mappings)).GetEnumerator();
+         }
+            
+         public StreamInfo Current 
+         {
+            get 
+            {
+               return ((StreamInfo)(baseEnumerator.Current));
+            }
+         }
+            
+         object IEnumerator.Current 
+         {
+            get 
+            {
+               return baseEnumerator.Current;
+            }
+         }
+            
+         public bool MoveNext() 
+         {
+            return baseEnumerator.MoveNext();
+         }
+            
+         bool IEnumerator.MoveNext() 
+         {
+            return baseEnumerator.MoveNext();
+         }
+            
+         public void Reset() 
+         {
+            baseEnumerator.Reset();
+         }
+            
+         void IEnumerator.Reset() 
+         {
+            baseEnumerator.Reset();
+         }
+      }
+#endregion
+   }
+}
+'@
+
+Set-Alias block Set-DownloadFlag
+Set-Alias unblock Remove-DownloadFlag
+
+#Export-ModuleMember -Function Remove-DownloadFlag, Set-DownloadFlag -alias block, unblock
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

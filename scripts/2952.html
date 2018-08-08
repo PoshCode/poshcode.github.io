@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Omarr">
+    <title>Get-VMware-Guest-Invento - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-VMware-Guest-Invento</h1>
+<h3><a href="//scripts/2952.ps1">download</a></h3>
+<p>This script will create an inventory of all guests in the target Virtual Center and then create a csv</p>
+<pre><code class="language-posh">#Requires -Version 2.0
+#Requires â€“PsSnapIn Quest.ActiveRoles.ADManagement
+#Requires â€“PsSnapIn VMware.VimAutomation.Core
+&lt;#&gt;
+==========================================================================
+
+This script was created and tested on the following:
+
+		Name                     Version
+		-----------------        -----------------
+		PowerShell               :2.0
+		VMWare PowerCLi          :4.1.1.0
+		Quest AcitveRoles for AD :1.4.0.2139
+
+==============================
+ NAME:   |Get-VMware-Guest-Inventory.ps1
+==============================
+ AUTHOR: |Omarr Miller
+ EMAIL:  |omarr.miller@delta.com
+==============================
+
+COMMENT: 
+		This script will create an inventory of all Guests within the 
+		requested Virtual Center and save it as a .csv file.
+		
+		If you need to inventory only a specific cluster, edit lines 54, 55 &amp; 58
+		
+
+ 	You have a royalty-free right to use, modify, reproduce, and
+ 	distribute this script file in any way you find useful, provided that
+ 	you agree that the creator, owner above has no warranty, obligations,
+ 	or liability for such use.
+
+REQUIREMENTS OF THIS SCRIPT:
+		Name                     Version
+		-----------------        -----------------
+		PowerShell               :2.0
+		VMWare PowerCLi          :4.1.1.0
+		Quest AcitveRoles for AD :1.4.0.2139
+
+
+VERSION HISTORY:
+		1.0 3/22/2011 - Initial release
+		1.5 7/21/2011 - Updated Get-View syntax
+
+==========================================================================
+&lt;/#&gt;
+$VirtualCenter = Read-Host &quot;Please enter the name of the Virtual Center Server&quot;
+#$ResourcePool = Read-Host &quot;Please enter the complete name of the target Resource Pool&quot;
+$FileLocation = Read-Host &quot;Please Enter Complete Path and file name to save the output.  Must end in .csv or .txt&quot;
+
+Connect-VIServer $VirtualCenter
+$stats = @()
+
+#Uncomment the next two lines if you would like to inventory just a cluster instead of all VMs in vCenter
+#$VMCluster = Read-Host &quot;Please enter the name of the HA Cluster&quot;
+#$ServerList = Get-VM -Location $VMCluster
+
+#If the two lines abover are uncommented, then comment the next line
+#$ServerList = Get-ResourcePool $ResourcePool | Get-VM
+#$ServerList = Get-VM | Where {$_.PowerState -match &quot;on&quot;} | Sort Name
+$ServerList = Get-VM | Sort Name
+Clear
+Foreach ($Guests in $ServerList) {
+	$Guest = $Guests.Name.ToUpper()
+	Write-Progress -Activity &quot;Creating VMware Guest Inventory&quot; -Status &quot;Processing VM Guest $Guest&quot;# Display progress bar
+	
+	$VM = Get-VM $Guest
+	#$VMGuest = Get-VMGuest $Guest
+	$ESXHost = $VM.Host.Name.ToUpper()
+	$VMHost = Get-VMHost $ESXHost
+	$row = New-Object System.Object
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest&quot; -Value $Guest
+	$row | Add-Member -Type NoteProperty -Name &quot;DNS Name&quot; -Value $VM.ExtensionData.Guest.HostName.ToUpper()
+	$row | Add-Member -Type NoteProperty -Name &quot;Power State&quot; -Value $VM.PowerState
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest OS Full Name&quot; -Value $VM.Guest.OSFullName
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest RAM (MB)&quot; -Value $VM.MemoryMB
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest vCPU Count&quot; -Value $VM.NumCPU
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest Hardware Ver&quot; -Value $VM.Version
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest VMTools Status&quot; -Value $VM.ExtensionData.Guest.ToolsStatus
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest VMTools Version&quot; -Value $VM.ExtensionData.Guest.ToolsVersion
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest VMTools Version Status&quot; -Value $VM.ExtensionData.Guest.ToolsVersionStatus
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest VMTools Running Status&quot; -Value $VM.ExtensionData.Guest.ToolsRunningStatus
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest IP&quot; -Value $VM.ExtensionData.Summary.Guest.IpAddress
+	$row | Add-Member -Type NoteProperty -Name &quot;Guest Provisioned Space (GB)&quot; -Value $VM.ProvisionedSpaceGB
+	$DiskCount = 0
+	$DT = @()
+	ForEach ($vDisk in $VM.Guest.Disks) {
+		$DriveLoc = &quot;Guest Drive &quot; + $DiskCount + &quot; Location&quot;
+		$DriveLetter = &quot;Guest Drive &quot; + $DiskCount + &quot;&quot;
+		$DriveSize = &quot;Guest Drive &quot; + $DiskCount + &quot; Size&quot;
+		$DriveFree = &quot;Guest Drive &quot; + $DiskCount + &quot; Free Space&quot;
+		$vDiskCap = [math]::Round(($vDisk.Capacity) / 1GB)
+		$vDiskFree = [math]::Round(($vDisk.FreeSpace) / 1GB)
+		$vDiskLoc = $VM.HardDisks[$DiskCount]
+		$row | Add-Member -Type NoteProperty -Name $DriveLetter -Value $vDisk.Path
+		$row | Add-Member -Type NoteProperty -Name $DriveSize -Value $vDiskCap
+		$row | Add-Member -Type NoteProperty -Name $DriveFree -Value $vDiskFree
+		$row | Add-Member -Type NoteProperty -Name $DriveLoc -Value $vDiskLoc.Filename
+		$DiskCount++
+		$DriveTotals = &quot;&quot; + $row.$DriveLetter + &quot; &quot; + $row.$DriveSize + &quot;;&quot;
+		$DT += $DriveTotals
+		}
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Name&quot; -Value $VMHost.ExtensionData.Summary.Config.Name.ToUpper()
+	$row | Add-Member -Type NoteProperty -Name &quot;# of Sessions on Host&quot; -Value $VMHost.ExtensionData.VM.Count
+	$ESXCluster = Get-Cluster -VMHost $ESXHost -ErrorAction SilentlyContinue
+	IF (!$ESXCluster)
+	{
+		$row | Add-Member -Type NoteProperty -Name &quot;Host is Member of Cluster&quot; -Value &quot;Stand Alone Host&quot;
+	} ELSE {
+		$row | Add-Member -Type NoteProperty -Name &quot;Host is Member of Cluster&quot; -Value $ESXCluster.Name.ToUpper()
+	}
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Vendor&quot; -Value $VMHost.ExtensionData.Hardware.SystemInfo.Vendor
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Model&quot; -Value $VMHost.ExtensionData.Hardware.SystemInfo.Model
+	$HostRam = [math]::Round(($VMHost.ExtensionData.Summary.Hardware.MemorySize) / 1GB)
+	$row | Add-Member -Type NoteProperty -Name &quot;Host RAM&quot; -Value $HostRam
+	$row | Add-Member -Type NoteProperty -Name &quot;Host CPU Model&quot; -Value $VMHost.ExtensionData.Summary.Hardware.CpuModel
+	$row | Add-Member -Type NoteProperty -Name &quot;Host CPU Count&quot; -Value $VMHost.ExtensionData.Summary.Hardware.NumCpuThreads
+	$row | Add-Member -Type NoteProperty -Name &quot;Host CPU Speed&quot; -Value $VMHost.ExtensionData.Summary.Hardware.CpuMhz
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Product Name&quot; -Value $VMHost.ExtensionData.Summary.Config.Product.Name
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Product Version&quot; -Value $VMHost.ExtensionData.Summary.Config.Product.Version
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Product Build&quot; -Value $VMHost.ExtensionData.Summary.Config.Product.Build
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Service Console&quot; -Value $VMHost.ExtensionData.Config.Network.vNic[0].Spec.IP.IPAddress
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Service Console Subnet Mask&quot; -Value $VMHost.ExtensionData.Config.Network.vNic[0].Spec.IP.SubnetMask
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Service Console 1&quot; -Value $VMHost.ExtensionData.Config.Network.vNic[1].Spec.IP.IPAddress
+	$row | Add-Member -Type NoteProperty -Name &quot;Host Service Console 1 Subnet Mask&quot; -Value $VMHost.ExtensionData.Config.Network.vNic[1].Spec.IP.SubnetMask
+	$row | Add-Member -Type NoteProperty -Name &quot;Host vMotion IP Address&quot; -Value $VMHost.ExtensionData.Config.vMotion.IPConfig.IpAddress
+	$row | Add-Member -Type NoteProperty -Name &quot;Host vMotion Subnet Mask&quot; -Value $VMHost.ExtensionData.Config.vMotion.IPConfig.SubnetMask
+	$row
+	$stats += $row	
+}
+$stats | Export-Csv -Force .\$FileLocation -NoTypeInformation
+Invoke-Item .\$FileLocation
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

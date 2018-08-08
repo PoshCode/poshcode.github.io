@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="VincentHNET">
+    <title>InvokeCSharp - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>InvokeCSharp</h1>
+<h3><a href="//scripts/1423.ps1">download</a></h3>
+<p>InvokeCSharp is based on Invoke-Inline by Lee Holmes, with significant enhancements. See http://vincenth.net/blog/archive/2009/10/27/call-inline-c-from-powershell-with-invokecsharp.aspx for details and usage.
+•The C# code you specify is completely self-contained; no more C# wrapper code where your code is pasted into. This improves readability and maintainability of inline C# code.
+•Simpler parameter passing; no more wrapper code needed for parameters and return values.
+•Automatically un-wraps parameters that PowerShell wraps in a PSObject. This eliminates the need to explicitly cast parameters to make them strongly typed on each call to InvokeCSharp, and to always wrap them in @().
+Figuring this one out was interesting; it required diving in the innards of the PowerShell Extended Type System (ETS) which gets in the way when you work with .NET reflection classes from PowerShell. PowerShell tries to make the ETS transparent to the PowerShell user, which in general is a good thing but in this case meant it was hard to see what was happening.
+•Adds support for calling static methods, including overloaded methods, without creating a class instance.
+•Adds support for creating a class instance and providing constructor parameters.
+•Caches compiled assemblies instead of class instances. This improves performance because it eliminates duplicate compilation when the same C# code is called more than once. In addition to assembly caching you can of course also cache the object instances using any of the standard PowerShell mechanisms; however this is better handled outside the InvokeCSharp function.
+•Support for inline C# and separate C# source files; the latter allows you to easily edit the C# in Visual Studio, e.g. to use IntelliSense and compile the source to catch compile time errors.</p>
+<pre><code class="language-posh">#&lt; #
+#.Synopsis
+@@#   Create a class instance and/or invoke a method on C# source code.
+@@#   For details, see:
+@@#   http://vincenth.net/blog/archive/2009/10/27/call-inline-c-from-powershell-with-invokecsharp.aspx 
+#.Description
+#   This function compiles the provided C# source code (only if necessary, compiled
+#   assemblies are cached). The code can be supplied either inline in a string or
+#   in a source file. Relative source filename paths are interpreted
+#   relative to the parent folder of the calling script.
+#   This enables simple organization and reference of related .ps1 and .cs files.
+#
+#   If a method name is specified, that method is invoked with any supplied
+#   parameters and the function then returns the result of the method.
+#   Both static and nonstatic methods are supported, including overloaded
+#   methods.
+#
+#   If no method name is specified, an instance of the specified class is
+#   created, passing any supplied parameters to the class constructor, and the
+#   function then returns the class instance. You can then program against the
+#   class instance in standard PowerShell fashion.
+#
+#   If necessary for compilation, you can specify names of any referenced
+#   assemblies.
+#.Parameter code
+#   The complete C# source code - effectively this is an inline C# source file.
+#   Note that it is possible but not necessary to declare classes within a
+#   namespace.
+#   Either the code parameter or the file parameter must be specified.
+#.Parameter file
+#   Absolute or relative path to a C# source file. Relative paths (beginning
+#   with '.\' or '..\') are interpreted relative to the folder that contains
+#   the calling script (i.e. the script that calls this function).
+#   Either the code parameter or the file parameter must be specified.
+#.Parameter class
+#   The name of the class to be instantiated / that contains the method to
+#   be invoked. Include the namespace in which the class is declared, if any.
+#   If you specify the -file parameter and the class name is identical to the
+#   file name, you can omit the -class parameter.
+#.Parameter method
+#   Either the name of the method to be invoked, '()' to invoke a 
+#   constructor to create and resturn a class instance, or '' to return
+#   the cached assembly. The last option allows you to precompile assemblies
+#   without calling a method or creating a class instance.
+#    
+#   If the specified method is not static, an instance of the class will
+#   be created on the fly.
+#.Parameter parameters
+#   To pass parameters to the constructor or method, specify them as an
+#   array of objects (e.g. with the comma operator or @() ).
+#.Parameter reference
+#   If necessary, specify an array of assembly filenames to be added as
+#   assembly references when the source code is compiled.
+#.Parameter forceCompile
+#   Specify this switch to force recompilation. This is useful if you specify
+#   the file parameter and the file contents has changed (when specifying a
+#   source file name, the cache key is the file name only - changes to the file
+#   do not automatically cause cache invalidation).
+#.Returns
+#   Either the cached assembly, a class instance or a method result (depending 
+#   on the value specified for the method parameter).
+#.Example
+#   # Create a class instance from a .cs file, passing a parameter to the class constructor:
+#   # Note that the class name can be omitted here, since it is implied from the .cs file name
+#   $myClassInstance = InvokeCSharp -file '.\MyClass.cs' -parameters 'A text'
+#    
+#   # Call some simple inline code. Note that you could also wrap the code in a namespace, 
+#   # add using statements and reference other assemblies.
+#   $code = @&quot;
+#       public class MyClass2
+#       {
+#           public static int MyStaticMethod(int a, int b)
+#           {
+#               return a * b;
+#           }
+#       }
+#   &quot;@
+#   $result = InvokeCSharp -code $code -class 'MyClass2' -method 'MyStaticMethod' -parameters 3, 7 # Will return 21
+##&gt;
+function global:InvokeCSharp
+{
+    param(
+        [string] $code = '',
+        [string] $file = '',
+        [string] $class = '',
+        [string] $method = '()',
+        [Object[]] $parameters = $null,
+        [string[]] $reference = @(),
+        [switch] $forceCompile
+    )
+ 
+    # Stores a cache of generated assemblies. If this library is dot-sourced 
+    # from a script, these objects go away when the script exits. 
+    if(-not (Test-Path Variable:\macaw.solutionsfactory.assemblycache))
+    {
+        ${GLOBAL:macaw.solutionsfactory.assemblycache} = @{}
+    }
+ 
+    if (($code -eq '') -and ($file -eq '')) { throw 'Neither code nor file are specified. Specify either one or the other.' }
+ 
+    # If a source file was specified, see if it was already loaded, compiled and cached:
+    if ($file -ne '')
+    {
+        if ($code -ne '') { throw 'Both code and file are specified. Specify either one or the other.' }
+ 
+        # We interpret the current directory as the directory containing the calling script, instead of the currect directory of the current process.
+        if ($file.StartsWith('.'))
+        {
+            $callingScriptFolder = Split-Path -path ((Get-Variable MyInvocation -Scope 1).Value).MyCommand.Path -Parent
+            $file = Join-Path -Path $callingScriptFolder -ChildPath $file
+        }
+ 
+        # If no class name is  specified, we assume by convention that the file name is equal to the class name.
+        if ($class -eq '') { $class = [System.IO.Path]::GetFileNameWithoutExtension($file) }
+ 
+        # Use the real full path as the cache key:
+        $file = [System.IO.Path]::GetFullPath((Convert-Path -path $file))
+        $cacheKey = $file
+    }
+    else
+    {
+        # See if the code has already been compiled and cached 
+        $cacheKey = $code
+    }
+    if ($class -eq '') { throw 'Required parameter missing: class' }
+ 
+    # See if the code must be (re)compiled:
+    $cachedAssembly = ${macaw.solutionsfactory.assemblycache}[$cacheKey]
+    if(($cachedAssembly -eq $null) -or $forceCompile)
+    {
+        if ($code -eq '') { $code = [System.IO.File]::ReadAllText($file) }
+        Write-Verbose &quot;Compiling C# code:`r`n$code`r`n&quot;
+ 
+        # Obtains an ICodeCompiler from a CodeDomProvider class. 
+        $provider = New-Object Microsoft.CSharp.CSharpCodeProvider 
+ 
+        # Get the location for System.Management.Automation DLL 
+        $dllName = [PsObject].Assembly.Location
+ 
+        # Configure the compiler parameters 
+        $compilerParameters = New-Object System.CodeDom.Compiler.CompilerParameters 
+ 
+        $assemblies = @(&quot;System.dll&quot;, $dllName) 
+        $compilerParameters.ReferencedAssemblies.AddRange($assemblies) 
+        $compilerParameters.ReferencedAssemblies.AddRange($reference)
+        $compilerParameters.IncludeDebugInformation = $true 
+        $compilerParameters.GenerateInMemory = $true 
+ 
+        # Invokes compilation.  
+        $compilerResults = $provider.CompileAssemblyFromSource($compilerParameters, $code)
+ 
+        # Write any errors if generated.         
+        if($compilerResults.Errors.Count -gt 0) 
+        { 
+            $errorLines = &quot;&quot; 
+            foreach($error in $compilerResults.Errors) 
+            { 
+                $errorLines += &quot;`n`t&quot; + $error.Line + &quot;:`t&quot; + $error.ErrorText 
+            } 
+            Write-Error $errorLines 
+        } 
+        # There were no errors.  Store the resulting assembly in the cache. 
+        else 
+        {
+            ${macaw.solutionsfactory.assemblycache}[$cacheKey] = $compilerResults.CompiledAssembly 
+        }
+ 
+        $cachedAssembly = ${macaw.solutionsfactory.assemblycache}[$cacheKey]
+    }
+ 
+    # Prevent type mismatch issues caused by PowerShell wrapping of managed objects in PSObject.
+    # We need to explicitly unwrap those objects because otherwise the .NET reflection classes will
+    # not find the constructor or method whose signature matches the specified parameters.
+    # This unwrapping eliminates the need to always wrap all your parameters in @() and to explicitly
+    # cast each parameter to the correct type in each call to InvokeCSharp.
+    if ($parameters -ne $null)
+    {
+        for($i = 0; $i -lt $parameters.Length; $i++) 
+        {
+            $parameters[$i] = [System.Management.Automation.LanguagePrimitives]::ConvertTo( `
+                $parameters[$i], `
+                [System.Type]::GetType($parameters[$i].GetType().FullName) `
+            )
+        }
+    }
+ 
+    if ($method -eq '') # We return the assembly
+    {
+        $result = $cachedAssembly
+    }
+    elseif ($method -eq '()') # We create and return a class instance
+    {
+        $result = $cachedAssembly.CreateInstance($class, $false, [System.Reflection.BindingFlags]::CreateInstance, $null, $parameters, $null, @())
+    }
+    else # We invoke the method and return the method result
+    {
+        $classType = $cachedAssembly.GetType($class)
+ 
+        $parameterTypes = @()
+        if ($parameters -ne $null) { foreach($p in $parameters) { $parameterTypes += $p.GetType() } }
+ 
+        $methodInfo = $classType.GetMethod($method, [System.Type[]]$parameterTypes)
+        if ($methodInfo.IsStatic)
+        { 
+            $instance = $null
+        }
+        else
+        {
+            $instance = $cachedAssembly.CreateInstance($class, $false, [System.Reflection.BindingFlags]::CreateInstance, $null, $null, $null, @())
+        }
+        $result = $methodInfo.Invoke($instance, $parameters);
+    }
+ 
+   return $result
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

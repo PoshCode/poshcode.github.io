@@ -1,0 +1,1358 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Elliot">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/6360.ps1">download</a> - <a href="//scripts/6334.md">parent</a></h3>
+<p>PS Module for creating new hires with functions for Exchange Online Mailbox, Skype voice provisioning, and UM Mailbox provisioning		
+Updated with corrections to bad markup from $defaultProperties = @(‘DisplayName’,’EmployeeID','SamAccountName','UPN','SkypeNumber','Password')</p>
+<pre><code class="language-posh">&lt;#
+ .SYNOPSIS
+    This module automates many of the tasks involved in processing a new starter on key Contoso systems.
+ .DESCRIPTION 
+    This module contains a number of helper and core functions for the purpose of provisioning a new starter on crucial Contoso systems like Active Directory, Office 365 and Lync/Skype.  Two main functions
+    allow the user to either process a single new starter or import a group of new starters from a CSV file.  Please note that this module checks for and will warn the user if a number of pre-requisite modules
+    are not present on the system.  The module will prompt for on-premise and Office 365 credentials if not found, and depends on an external script called Get-CSPhoneList.ps1 to provision a Skype phone number.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory Module, Service Manager SMLets module, MSOnline module, Get-CsPhoneList.ps1 script for phone numbers
+#&gt;
+
+#region Module level variables
+$GLOBAL:smdefaultcomputer = &quot;scsm.Contoso.com&quot;
+$GLOBAL:SAMAccountRefreshTimestamp = (Get-Date).AddDays(-1)
+$GLOBAL:UPNRefreshTimeStamp = (Get-Date).AddDays(-1)
+$GLOBAL:AllSAMAccountNames = @()
+$GLOBAL:AllUPNs = @()
+$CompanyDomains = @(&quot;Contoso.com&quot;,&quot;TailSpinToys.com&quot;)
+$RegionMappings = @{'US'='AMER';'AR'='AMER';'PE'='AMER';'PA'='AMER';'CL'='AMER';'CA'='AMER';'AU'='ASIA';'NZ'='ASIA';'CN'='ASIA';'IN'='ASIA';'BH'='EMEA';'BE'='EMEA'`
+                    ;'CY'='EMEA';'EG'='EMEA';'ET'='EMEA';'FJ'='ASIA';'IL'='EMEA';'IT'='EMEA';'JM'='AMER';'KW'='EMEA';'LS'='EMEA';'BN'='ASIA';'NP'='ASIA';'NL'='EMEA'`
+                    ;'PK'='ASIA';'QA'='EMEA';'WS'='ASIA';'SG'='ASIA';'LK'='ASIA';'TW'='ASIA';'TR'='EMEA';'AE'='EMEA';'UK'='EMEA'}
+#endregion
+
+#region Check for dependent modules
+##Check for MSOnline and ActiveDirectory modules when Contosostarter module loads
+Function Test-DependentModule {
+    If (Get-Module -ListAvailable -Name MSOnline) {
+        Write-Host &quot;MSOnline Module exists&quot;
+    } else {
+        Write-Host &quot;MSOnline Module does not exist.  Please install it from https://msdn.microsoft.com/en-us/library/jj151815.aspx#bkmk_installmodule before using this module.&quot; -ForegroundColor Red
+    }
+    If (Get-Module -ListAvailable -Name ActiveDirectory) {
+        Write-Host &quot;ActiveDirectory Module exists&quot;
+    } else {
+        Write-Host &quot;ActiveDirectory Module does not exist.  Please install it from https://www.microsoft.com/en-us/download/details.aspx?id=7887 before using this module.&quot; -ForegroundColor Red
+    }
+    If (Get-Module -ListAvailable -Name SMLets) {
+        Write-Host &quot;SMLets Module exists&quot;
+    } else {
+        Write-Host &quot;SMLets Module does not exist.  Please install System Center Service Manager Console before using this module.&quot; -ForegroundColor Red
+    }
+}
+Test-DependentModule
+#endregion
+
+#region Connect to Services
+Function Connect-Office365 {
+    $MSOLServiceCred = Get-MSOLCredential
+	$Session = New-PSSession -ConfigurationName microsoft.exchange -ConnectionUri https://outlook.office365.com/powershell-liveid/ -Credential $MSOLServiceCred -Authentication Basic -AllowRedirection
+	Import-PSSession $Session -AllowClobber -DisableNameChecking
+}
+
+Function Connect-Exchange2013 {
+Param(
+    [Parameter(Position=0,Mandatory=$False)]
+    [string]$ExchangeServer = &quot;ExchangeServer.Contoso.com&quot;
+)
+	$ExSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri &quot;http://$ExchangeServer/PowerShell/&quot; -Authentication Kerberos
+	Import-PSSession $ExSession -DisableNameChecking -AllowClobber
+}
+
+Function Connect-AzureAD {
+	$MSOLServiceCred = Get-MSOLCredential
+	Connect-MsolService -Credential $MSOLServiceCred
+}
+
+Function Connect-Skype {
+    $DownLevelCred = Get-DownLevelCredential
+    $SkypeSessionOption = New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck
+    $SkypeSession = New-PSSession -ConnectionUri https://lyncserver.Contoso.com/ocspowershell -SessionOption $SkypeSessionOption -Credential $DownLevelCred -Name &quot;SkypeServerSession&quot;
+    Import-PSSession $SkypeSession -DisableNameChecking -AllowClobber
+}
+
+Function Connect-DirSync {
+Param(
+    [Parameter(Position=0,Mandatory=$False)]
+    [string]$DirSyncServer = &quot;Dirsync.Contoso.com&quot;
+)
+	$DirSyncSession = New-PSSession -ComputerName $DirSyncServer -Authentication Kerberos
+	Import-PSSession $DirSyncSession -AllowClobber -DisableNameChecking
+}
+#endregion
+
+#region Supporting Functions
+Function Test-Credential {
+    &lt;#
+    .SYNOPSIS
+        Takes a PSCredential object and validates it against the domain.
+    .PARAMETER Credential
+        A PScredential object with the username/password you wish to test. Typically this is generated using the Get-Credential cmdlet. Accepts pipeline input.
+    .OUTPUTS
+        A boolean, indicating whether the credentials were successfully validated.
+    #&gt;
+    param(
+        [parameter(Mandatory=$true,ValueFromPipeline=$true)]
+        [System.Management.Automation.PSCredential]$credential
+    )
+    $Username = $credential.username
+    $Password = $credential.GetNetworkCredential().password
+ 
+    # Get current domain using logged-on user's credentials
+    $CurrentDomain = &quot;LDAP://&quot; + ([ADSI]&quot;&quot;).distinguishedName
+    $Domain = New-Object System.DirectoryServices.DirectoryEntry($CurrentDomain,$Username,$Password)
+    $DomainName = $Domain.name
+ 
+    If ($DomainName -eq $null) {
+    $false
+    } else {
+    $true
+    }
+    $Password = $null
+}
+
+Function Get-MSOLCredential {
+    &lt;# 
+ .SYNOPSIS 
+    Checks for and imports a local encrypted credential file.
+ .DESCRIPTION 
+    This function checks for an encrypted XML file in the local directory to use for Cloud credentials.  If the file isn't found, the credentials are prompted for and then stored in the
+    encrypted XML file.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory Module
+ .EXAMPLE
+    Get-MSOLCredential
+    #&gt;
+    If (Test-Path -Path &quot;.\MSOLServiceCredential.xml&quot;) {
+        $MSOLServiceCred = Import-Clixml .\MSOLServiceCredential.xml
+        If (!(Test-Credential $MSOLServiceCred)) {
+            Get-Credential -Message &quot;Please enter a valid Office 365 username and password&quot; | Export-Clixml .\MSOLServiceCredential.xml
+            $MSOLServiceCred = Import-Clixml .\MSOLServiceCredential.xml
+        }
+    }
+    Else {
+        Get-Credential -Message &quot;Please enter a valid Office 365 username and password&quot; | Export-Clixml .\MSOLServiceCredential.xml
+        $MSOLServiceCred = Import-Clixml .\MSOLServiceCredential.xml
+    }
+    Return $MSOLServiceCred
+}
+
+Function Get-DownLevelCredential {
+    &lt;# 
+ .SYNOPSIS 
+    Checks for and imports a local encrypted credential file.
+ .DESCRIPTION 
+    This function checks for an encrypted XML file in the local directory to use for Domain credentials.  If the file isn't found, the credentials are prompted for and then stored in the
+    encrypted XML file.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory Module
+ .EXAMPLE
+    Get-DownLevelCredential
+    #&gt;
+    If (Test-Path -Path &quot;.\DownlevelCredential.xml&quot;) {
+        $DownLevelCred = Import-Clixml .\DownlevelCredential.xml
+        If (!(Test-Credential $DownLevelCred)) {
+            Get-Credential -Message &quot;Please enter credentials using the DOMAIN\username format&quot; | Export-Clixml .\DownlevelCredential.xml
+            $DownLevelCred = Import-Clixml .\DownlevelCredential.xml
+        }
+    }
+    Else {
+        Get-Credential -Message &quot;Please enter credentials using the DOMAIN\username format&quot; | Export-Clixml .\DownlevelCredential.xml
+        $DownLevelCred = Import-Clixml .\DownlevelCredential.xml
+    }
+    Return $DownLevelCred
+}
+
+Function Get-RandomPassword {
+    &lt;# 
+ .SYNOPSIS 
+    Generates a random password based on approved characters and a given length.
+ .DESCRIPTION 
+    This function generates a random password string that meets company requirements for length and complexity based on an approved character set.  Longer or shorter passwords can be generated
+    based on an optional length however the function will throw an error if the requested password length is too short.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory Module
+ .EXAMPLE
+    Get-RandomPassword -length 14
+ .PARAMETER length
+    Optional parameter for the length of the password to return.  If not specified the function defaults to a 10 character password.
+    #&gt;
+Param(
+[Parameter(Position=0,Mandatory=$False)]
+[int]$length=10
+)
+if ($length -lt 8) {
+    throw &quot;Password length is too short&quot;
+}
+
+# Define list of numbers, this will be CharType 1
+$numbers=$null
+For ($a=48;$a –le 57;$a++) {$numbers+=,[char][byte]$a }
+
+# Define list of uppercase letters, this will be CharType 2
+$uppercase=$null
+For ($a=65;$a –le 90;$a++) {$uppercase+=,[char][byte]$a }
+
+# Define list of lowercase letters, this will be CharType 3
+$lowercase=$null
+For ($a=97;$a –le 122;$a++) {$lowercase+=,[char][byte]$a }
+
+# Define list of special characters, this will be CharType 4
+$specialchars='!#%$&amp;~?&lt;&gt;+-:;'.ToCharArray()
+
+# Need to ensure that result contains at least one of each CharType
+# Initialize buffer for each character in the password
+$Buffer = @()
+For ($a=1;$a –le $length;$a++) {$Buffer+=0 }
+
+# Randomly chose one character to be number
+while ($true) {
+$CharNum = (Get-Random -minimum 0 -maximum $length)
+if ($Buffer[$CharNum] -eq 0) {$Buffer[$CharNum] = 1; break}
+}
+
+# Randomly chose one character to be uppercase
+while ($true) {
+$CharNum = (Get-Random -minimum 0 -maximum $length)
+if ($Buffer[$CharNum] -eq 0) {$Buffer[$CharNum] = 2; break}
+}
+
+# Randomly chose one character to be lowercase
+while ($true) {
+$CharNum = (Get-Random -minimum 0 -maximum $length)
+if ($Buffer[$CharNum] -eq 0) {$Buffer[$CharNum] = 3; break}
+}
+
+# Randomly chose one character to be special
+while ($true) {
+$CharNum = (Get-Random -minimum 0 -maximum $length)
+if ($Buffer[$CharNum] -eq 0) {$Buffer[$CharNum] = 4; break}
+}
+
+# Cycle through buffer to get a random character from the available types
+# if the buffer already contains the CharType then use that type
+$Password = &quot;&quot;
+foreach ($CharType in $Buffer) {
+    if ($CharType -eq 0) {$CharType = ((1,2,3,4)|Get-Random)}
+        switch ($CharType) {
+        1 {$Password+=($numbers | Get-Random)}
+        2 {$Password+=($uppercase | Get-Random)}
+        3 {$Password+=($lowercase | Get-Random)}
+        4 {$Password+=($specialchars | Get-Random)}
+        }
+    }
+    return $Password
+}
+
+Function Get-AllSAMAccountNames {
+    &lt;# 
+ .SYNOPSIS 
+    Queries Active Directory for all SAMAccountNames.
+ .DESCRIPTION 
+    This function queries Active Directory for all SAMAccountNames and stores them in a variable for use by other functions.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory Module
+ .EXAMPLE
+    Get-AllUPNs
+    #&gt;
+    $GLOBAL:SAMAccountRefreshTimestamp = Get-Date
+    Write-Verbose &quot;Refreshing SAM Accounts...&quot;
+    $GLOBAL:AllSAMAccountNames = (Get-ADUser -Filter * | Select-Object SAMAccountName).SAMAccountName
+    Write-Verbose &quot;Refresh complete.&quot;    
+}
+
+Function Get-AllUPNs {
+    &lt;# 
+ .SYNOPSIS 
+    Queries Active Directory for all UserPrincipalNames.
+ .DESCRIPTION 
+    This function queries Active Directory for all UserPrincipalNames and stores them in a variable for use by other functions.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory Module
+ .EXAMPLE
+    Get-AllUPNs
+    #&gt;
+    $GLOBAL:UPNRefreshTimeStamp = Get-Date
+    Write-Verbose &quot;Refreshing UPNs...&quot;
+    $GLOBAL:AllUPNs = (Get-ADUser -Filter * | Select-Object UserPrincipalName).UserPrincipalName
+    Write-Verbose &quot;Refresh complete.&quot;    
+}
+
+Function Get-UniqueSAMAccountName {
+    &lt;# 
+ .SYNOPSIS 
+    Queries Active Directory for a unique SAMAccountName based on provided attributes.
+ .DESCRIPTION 
+    This function queries Active Directory for a unique SAMAccountName based on provided information.  The function checks to see if it's local cache of SAMAccountNames is older than 5 minutes and will
+    update if necessary.  Then based on a recent cache of SAMAccountNames, the function will calculate several possible SAMAccountName combinations and compare the results against the cache.  If a unique
+    value is found the function will return the value.  If a unique value could not be determined, the function will throw an error.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory Module
+ .EXAMPLE
+    Get-UniqueSAMAccountName -GivenName John -Surname Smith
+ .EXAMPLE
+    Get-UniqueSAMAccountName -GivenName John -Initial A -Surname Smith
+ .PARAMETER GivenName
+    Required parameter for the first name of the user. Apostrophes should be ommitted from the name to ensure compatibility with IT systems. 
+ .PARAMETER Surname
+    Required parameter for the last name of the user. Apostrophes should be ommitted from the name to ensure compatibility with IT systems.
+ .PARAMETER Initial
+    Optional parameter for the first letter of the user's middle initial.
+    #&gt;
+    Param(
+    [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+    [string]$GivenName,
+    [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+    [string]$Surname,
+    [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+    [string]$Initial
+    )
+
+    #Check if SAM Account cache is older than 5 minutes, update if needed
+    If ((Get-Date) -gt ($GLOBAL:SAMAccountRefreshTimestamp.AddMinutes(5))) {
+        Get-AllSAMAccountNames
+    }
+
+    #Validate that SAMAccountNames has at least 10 entries in it
+    If ($GLOBAL:AllSAMAccountNames.Length -lt 10) {
+        throw &quot;SAM Account List is blank, unable to refresh from Active Directory&quot;
+    }
+
+    #Remove Spaces from GivenName and Surname along with Apostrophes
+    $GivenName = $GivenName.Replace(&quot;'&quot;,&quot;&quot;)
+    $GivenName = $GivenName.Split(&quot; &quot;)[0]
+    $Surname = $Surname.Replace(&quot;'&quot;,&quot;&quot;)
+    $Surname = $Surname.Replace(&quot; &quot;,&quot;&quot;)
+    
+    #CombinationsToTry
+    $ComboArray = @()
+    $ComboArray += ,@(6,1,'')
+    $ComboArray += ,@(6,2,'')
+    $ComboArray += ,@(5,2,'')
+    $ComboArray += ,@(5,3,'')
+    $ComboArray += ,@(6,3,'')
+    $ComboArray += ,@(5,4,'')
+    $ComboArray += ,@(4,4,'')
+    $ComboArray += ,@(6,2,'x')
+    $ComboArray += ,@(5,3,'x')
+
+    #Attempt to create a unique SamAccountName less than 9 characters, required for E1 compatibility
+    $ValidSAMAccountName = $false
+    If ($Initial -match &quot;\w+&quot;) {
+        Foreach ($Combo in $ComboArray) {
+            #Use Regex to get correct number of characters without erroring out if there are fewer than the inital values
+            $PotentialSAMAccountName = ([regex]&quot;\w{1,$($combo[0])}&quot;).Match($Surname).Groups[0].Value + ([regex]&quot;\w{1,$($combo[1])}&quot;).Match($GivenName).Groups[0].Value + $Initial.Substring(0,1)
+            $result = $GLOBAL:AllSAMAccountNames | Where-Object {$_ -eq $PotentialSAMAccountName}
+            If ($result -eq $null) {
+                #Unique SAM accountname found, return the object and break the foreach loop
+                $ValidSAMAccountName = $true
+                $PotentialSAMAccountName = $PotentialSAMAccountName.ToLower()
+                break
+            }
+        }
+    }
+    Else {
+        Foreach ($Combo in $ComboArray) {
+            #Use Regex to get correct number of characters without erroring out if there are fewer than the inital values
+            $PotentialSAMAccountName = ([regex]&quot;\w{1,$($combo[0])}&quot;).Match($Surname).Groups[0].Value + ([regex]&quot;\w{1,$($combo[1])}&quot;).Match($GivenName).Groups[0].Value
+            $result = $GLOBAL:AllSAMAccountNames | Where-Object {$_ -eq $PotentialSAMAccountName}
+            If ($result -eq $null) {
+                #Unique SAM accountname found, return the object and break the foreach loop
+                $ValidSAMAccountName = $true
+                $PotentialSAMAccountName = $PotentialSAMAccountName.ToLower()
+                break
+            }
+        }
+    }
+
+    If (($ValidSAMAccountName -eq $true) -and ($PotentialSAMAccountName -match &quot;^\w{2,9}$&quot;)) {
+        return $PotentialSAMAccountName
+    }
+    Else {
+        throw &quot;No valid SAMAccountName was able to be generated&quot; 
+    }
+}
+
+Function Get-UniqueUPN {
+    &lt;# 
+ .SYNOPSIS 
+    Queries Active Directory for a unique UserPrincipalName based on provided attributes.
+ .DESCRIPTION 
+    This function queries Active Directory for a unique userprincipalname based on provided information.  The function checks to see if it's local cache of UPNs is older than 5 minutes and will
+    update if necessary.  Then based on a recent cache of UPNs, the function will calculate several possible UserPrincipalName combinations and compare the results against the cache.  If a unique
+    value is found the function will return the value.  If a unique value could not be determined, the function will throw an error.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory Module
+ .EXAMPLE
+    Get-UniqueUPN -GivenName John -Surname Smith -Company Contoso
+ .EXAMPLE
+    Get-UniqueUPN -GivenName John -Initial A -Surname Smith -Company TailSpinToys
+ .PARAMETER GivenName
+    Required parameter for the first name of the user. Apostrophes should be ommitted from the name to ensure compatibility with IT systems. 
+ .PARAMETER Surname
+    Required parameter for the last name of the user. Apostrophes should be ommitted from the name to ensure compatibility with IT systems.
+ .PARAMETER Initial
+    Optional parameter for the first letter of the user's middle initial.
+ .PARAMETER Company
+    Required parameter for the sub-company of the user. This will be used to populate the UPN suffix; valid entries are 'Contoso','TailSpinToys','Hawksley','Burton','Slayden','JV'.
+#&gt;
+    Param(
+    [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+    [string]$GivenName,
+    [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+    [string]$Surname,
+    [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+    [string]$Initial,
+    [Parameter(Position=3,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateSet('Contoso','TailSpinToys','JV')]
+    [string]$Company
+    )
+
+    #Check if SAM Account cache is older than 5 minutes, update if needed
+    If ((Get-Date) -gt ($GLOBAL:UPNRefreshTimeStamp.AddMinutes(5))) {
+        Get-AllUPNs
+    }
+
+    #Validate that SAMAccountNames has at least 10 entries in it
+    If ($GLOBAL:AllUPNs.Length -lt 10) {
+        throw &quot;UPN List is blank, unable to refresh from Active Directory&quot;
+    }
+
+    #Remove Spaces from GivenName and Surname along with Apostrophes
+    $GivenName = $GivenName.Replace(&quot;'&quot;,&quot;&quot;)
+    $GivenName = $GivenName.Split(&quot; &quot;)[0]
+    $Surname = $Surname.Replace(&quot;'&quot;,&quot;&quot;)
+    $Surname = $Surname.Replace(&quot; &quot;,&quot;&quot;)
+
+    #Get domain name from company list, if no match default to Contoso.com
+    If ($CompanyDomains -match $Company) {
+        $DomainName = ($CompanyDomains -match $Company)
+    }
+    Else {
+        $DomainName = &quot;Contoso.com&quot;
+    }
+
+    #First attempt to generate a unique UPN
+    If ($Initial -match &quot;\w+&quot;) {
+        $PotentialUPN = $GivenName + &quot;.&quot; + $Initial + &quot;.&quot; + $Surname + &quot;@&quot; + $DomainName
+    }
+    Else {
+        $PotentialUPN = $GivenName + &quot;.&quot; + $Surname + &quot;@&quot; + $DomainName
+    }
+    #Test the name for any matches
+    $result = $GLOBAL:AllUPNs | Where-Object {$_ -eq $PotentialUPN}
+    If ($result -eq $null) {
+        return $PotentialUPN
+    } 
+    Else {
+        #Generate another potential UPN and test
+        $PotentialUPN = $GivenName + &quot;.&quot; + $Surname + &quot;@&quot; + $DomainName
+        $result = $GLOBAL:AllUPNs | Where-Object {$_ -eq $PotentialUPN}
+        If ($result -eq $null) {
+            return $PotentialUPN
+        } 
+        Else {
+            #Generate one last potential UPN and test
+            $PotentialUPN = $GivenName + &quot;.&quot; + &quot;X&quot; + &quot;.&quot; + $Surname + &quot;@&quot; + $DomainName
+            $result = $GLOBAL:AllUPNs | Where-Object {$_ -eq $PotentialUPN}
+            If ($result -eq $null) {
+                return $PotentialUPN
+            }
+            Else {
+                throw &quot;No valid UPN was able to be generated&quot;
+            }
+        }
+    }
+}
+
+Function Invoke-DirSync {
+    &lt;# 
+ .SYNOPSIS 
+    Runs a manual sync for the Azure AD Connect server when called.
+ .DESCRIPTION 
+    This function uses PowerShell Remoting to start a manual delta sync on the Azure AD Connect server.  The server can be specified or the default accepted for the Contoso domain.  If
+    running the function against an Azure AD Connect Server in another domain, the user running the cmdlet should have rights to remote into and execute AAD Connect cmdlets on that server.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0
+ .EXAMPLE
+    Invoke-DirSync
+ .EXAMPLE
+    Invoke-DirSync -DirSyncServer &quot;12345-Dirsync01.contoso.com&quot;
+ .PARAMETER DirSyncServer
+    Optional parameter for when using an alternate Azure AD Connect server.  A full FQDN is recommended to ensure the correct server can be found.
+    #&gt;
+Param(
+[Parameter(Position=0,Mandatory=$False)]
+[string]$DirSyncServer = &quot;dirsync.Contoso.com&quot;,
+[Parameter(Position=1,Mandatory=$False)]
+[int]$TimetoWait = 60
+)
+    For ($TimetoWait=60; $TimetoWait -gt 1; $TimetoWait--) {
+      Write-Progress -Activity &quot;Waiting $TimetoWait seconds for Active Directory synchronization...&quot; `
+       -SecondsRemaining $TimetoWait -Status &quot;Please wait.&quot;
+      Start-Sleep 1
+    }
+
+    $DirSyncSession = New-PSSession -ComputerName $DirSyncServer -Authentication Kerberos
+    Invoke-Command -Session $DirSyncSession -ScriptBlock {Import-Module -Name adsync;$ErrorActionPreference = 'SilentlyContinue'}
+    Invoke-Command -Session $DirSyncSession -ScriptBlock {Start-ADSyncSyncCycle -PolicyType Delta;$ErrorActionPreference = 'Continue'}
+    
+    For ($TimetoWait=60; $TimetoWait -gt 1; $TimetoWait--) {
+      Write-Progress -Activity &quot;Waiting $TimetoWait seconds for DirSync to complete...&quot; `
+       -SecondsRemaining $TimetoWait -Status &quot;Please wait.&quot;
+      Start-Sleep 1
+    }
+}
+
+Function Confirm-ValidUser {
+    &lt;# 
+ .SYNOPSIS 
+    Checks user input for valid data.
+ .DESCRIPTION 
+    This function cleans up and checks incoming data for a new user for valid input so that it can be passed to other functions.  If any unrecoverable errors are found, the function will
+    throw an appropriate error.  The object returned should match all fields that were given to it.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0
+ .EXAMPLE
+    Confirm-ValidUser -GivenName John -Surname Smith -EmployeeID 12345 -EmployeeType F -OfficeCode &quot;US-DEN-1&quot;
+ .EXAMPLE
+    Confirm-ValidUser -GivenName John -Surname Smith -Initial A -EmployeeID 12345 -EmployeeType F -BU 11111 -OfficeCode &quot;US-DEN-1&quot;
+ .PARAMETER GivenName
+    Required parameter for the first name of the user. Apostrophes should be ommitted from the name to ensure compatibility with IT systems.
+ .PARAMETER Surname
+    Required parameter for the last name of the user. Apostrophes should be ommitted from the name to ensure compatibility with IT systems.
+ .PARAMETER Initial
+    Optional parameter for the first letter of the user's middle name.
+ .PARAMETER PreferredGivenName
+    Optional parameter for a preferred first name provided by the user upon hire.  This will only populate the Display Name, and does not change the logon attributes for the user.
+ .PARAMETER EmployeeID
+    Required parameter for the new user's employee number.  Valid entries should be either between 5-8 digits, a C for contractor or a dash if unknown.
+ .PARAMETER EmployeeType
+    Required parameter for the employee type.  Valid examples include F for Full-time, T for Temporary, C for Contractor, JV for a Joint Venture user, or - if unknown.
+ .PARAMETER Description
+    Optional parameter for the user description.  Often includes the title and office code for the user, but can be any additional information such as the requestor of a contractor account, etc.
+ .PARAMETER BU
+    Optional parameter for the Business Unit of the new user.  Valid entries are a 5 digit number only, and if not provided will usually be filled in by sync from EID.
+ .PARAMETER OfficeCode
+    Required parameter for the office code of the new user.  Valid entries should start with a two letter country code and then a dash.  For most new users, this is later replaced by
+    the sync from EID, but should be provided so that the Office 365 country code can be filled in appropriately.
+ .PARAMETER Company
+    Required parameter for the sub-company of the new user.  Valid Entries include Contoso, TailSpinToys, Hawksley, JV.  This is required to set the primary email address, Skype
+    address and UPN correctly.
+ .PARAMETER SRNumber
+    Optional parameter for the Service Request number of the new user.  If provided PowerShell will attempt to update the Service Request ticket with the information from the new starter script.
+ .PARAMETER EnableMailbox
+    Optional parameter indicating if the user should be enabled for a mailbox or not.  A value of 'N' or 'No' will cause the functions to not create the mailbox.  Anything else entered or nothing at all will
+    cause the script to assume an account is to be created.
+ .PARAMETER EnableSkype
+    Optional parameter indicating if the user should be enabled for a skype account or not.  A value of 'N' or 'No' will cause the functions to not create the skype account.  Anything else entered or nothing at all will
+    cause the script to assume an account is to be created.
+    #&gt;
+    [cmdletbinding()]
+Param(
+        [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$GivenName=&quot;&quot;,
+        [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Surname=&quot;&quot;,
+        [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Initial=&quot;&quot;,
+        [Parameter(Position=3,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$PreferredGivenName=&quot;&quot;,
+        [Parameter(Position=4,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$EmployeeID=&quot;&quot;,
+        [Parameter(Position=5,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateSet('F','T','C','JV','-')]
+        [string]$EmployeeType=&quot;&quot;,
+        [Parameter(Position=6,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Description=&quot;&quot;,
+        [Parameter(Position=7,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateRange(00000,99999)]
+        [int]$BU=&quot;&quot;,
+        [Parameter(Position=8,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$OfficeCode=&quot;&quot;,
+        [Parameter(Position=9,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateSet('Contoso','TailSpinToys','JV')]
+        [string]$Company=&quot;Contoso&quot;,
+        [Parameter(Position=10,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$SRNumber=&quot;&quot;,
+        [Parameter(Position=11,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$EnableMailbox=&quot;&quot;,
+        [Parameter(Position=12,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$EnableSkype=&quot;&quot;
+    )
+    #Trim any excess white spaces from the incoming data
+    $UserObject = New-Object -TypeName psobject -Property @{
+        EmployeeID = $EmployeeID.Trim()
+        OfficeCode = $OfficeCode.Trim()
+        BU = $BU
+        Surname = $Surname.Trim()
+        PreferredGivenName = $PreferredGivenName.Trim()
+        GivenName = $GivenName.Trim()
+        Initial = $Initial.Trim()
+        Company = $Company.Trim()
+        EmployeeType = $EmployeeType.Trim()
+        Description = $Description.Trim()
+        ValidInput = $False
+        FullName = &quot;&quot;
+        SRNumber = $SRNumber.Trim()
+        EnableSkype = $EnableSkype
+        EnableMailbox = $EnableMailbox
+    }
+
+    #Create FullName depending on if initial was provided or not
+    If ($Initial -match &quot;\w+&quot;) {
+        $FullName = $UserObject.GivenName + &quot; &quot; + $UserObject.Initial + &quot; &quot; + $UserObject.Surname
+    } 
+    Else {
+        $FullName = $UserObject.GivenName + &quot; &quot; + $UserObject.Surname
+    }
+
+    #Check for mandatory fields and throw an error if the tests fail
+    If (!(($UserObject.EmployeeID -match &quot;^\d{5,8}$&quot;) -or ($UserObject.EmployeeID -match &quot;c&quot;) -or ($UserObject.EmployeeID -eq &quot;-&quot;))) {
+        #Employee ID doesn't meet any of the valid conditions
+        throw &quot;$FullName with ID ($UserObject.EmployeeID) has invalid Employee ID, valid entries are 5-8 digits, 'c' or '-'&quot;    
+    } 
+    Elseif (!(($UserObject.OfficeCode -match &quot;^\w{2}\-\w{2}&quot;) -or ($UserObject.OfficeCode -eq &quot;-&quot;))) {
+        #Office Code doesn't meet any of the valid conditions
+        throw &quot;$FullName with ID ($UserObject.EmployeeID) has invalid Office Code&quot;
+    } 
+    Else {
+        $UserObject.FullName = $FullName
+        $UserObject.ValidInput = $True
+        return $UserObject
+    }
+}
+
+Function Update-SCSMStarterTicket {
+    &lt;# 
+ .SYNOPSIS 
+    Updates the SCSM Activities for a given new starter.
+ .DESCRIPTION 
+    This function updates the activities for a new starter if required.  The function requires the ticket number for the starter and key pieces of information in ordert to populate the
+    notes on the activities.  All fields are required except SkyperNumber in order to ensure the ticket is updated correctly, and the SR itself will not be closed out until manual review is 
+    performed.  Quotation marks are recommended around all fields to ensure that the data is read in correctly.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, SMLets module for Service Manager
+ .EXAMPLE
+    Update-SCSMStarterTicket -SRNumber SR12345 -UserPrincipalName &quot;John.Tester@Contoso.com&quot; -SAMAccountName testerj -SkypeNumber &quot;+1 720 887 8700&quot;
+ .EXAMPLE
+    Update-SCSMStarterTicket -SRNumber SR12345 -UserPrincipalName &quot;John.Tester@Contoso.com&quot; -SAMAccountName testerj
+ .PARAMETER SRNumber
+    Required parameter for the ticket in Service Manager to update.  If no ticket exists, one will need to be created before this can be run.
+ .PARAMETER UserPrincipalName
+    Required parameter for the UPN of the user.  This will be added to the AD/O365/Lync Activities linked in the ticket.  Should these differ, the ticket should be manually changed
+    to reflect the discrepancy.
+ .PARAMETER SAMAccountName
+    Required parameter for the SAMAccountName of the user.  This will be added to the AD and E1 activities in the ticket and is required before an E1 login can be provisioned.
+ .PARAMETER SkypeNumber
+    Optional parameter for the Skype/Lync number assigned to the user.  This only needs to be populated if the Office location is Lync Enterprise Voice enabled.  This can be in any format required but should
+    be enclosed in quotation marks to ensure that the data is input correctly.
+    #&gt;
+Param(
+[Parameter(Position=0,Mandatory=$True)]
+[string]$SRNumber,
+[Parameter(Position=1,Mandatory=$True)]
+[string]$UserPrincipalName,
+[Parameter(Position=2,Mandatory=$True)]
+[string]$SAMAccountName,
+[Parameter(Position=3,Mandatory=$False)]
+[string]$SkypeNumber
+)
+    Write-Host &quot;Updating Service Manager Activities in ticket $SRNumber for Employee: $UserPrincipalName&quot; -ForegroundColor Green
+    #Get the Service Request Class and values for the ticket
+    $serviceRequestClass = Get-SCSMClass -name System.WorkItem.ServiceRequest$
+    $manualActivityClass = Get-SCSMClass -Name System.WorkItem.Activity.ManualActivity$
+        
+    $ServiceRequest = Get-SCSMObject -Class $serviceRequestClass -Filter &quot;ID -eq $SRNumber&quot;
+    If ($ServiceRequest.DisplayName -match &quot;Starter&quot;) {
+        #Get the manual activities related to the SR
+        $ManualActivities = Get-SCSMRelationshipObject -BySource $serviceRequest | Select-Object sourceobject -unique | Where-Object {$_.SourceObject -like &quot;MA*&quot;}
+        $ManualActivityIDs = $ManualActivities | ForEach-Object {$string=$_.sourceobject.tostring();$string.split(':')[0]}
+
+        Foreach ($ActID in $ManualActivityIDs) {
+            $MAObject = Get-SCSMObject -Class $manualActivityClass -Filter &quot;ID -eq $ActID&quot;
+            Switch -Wildcard ($MAObject.Title) {
+                &quot;*AD Activities*&quot; {
+                    Get-SCSMObject -Class $manualActivityClass -Filter &quot;ID -eq $ActID&quot; | Set-SCSMObject -PropertyHashtable @{'Status'='Completed';'Notes'=&quot;Activity Completed. `nUserPrincipalName set to $UserPrincipalName `nSAMAccountName set to $SAMAccountName&quot;}
+                    }
+                &quot;*E1*&quot; {
+                    $MADescription = $MAObject.Description
+                    Get-SCSMObject -Class $manualActivityClass -Filter &quot;ID -eq $ActID&quot; | Set-SCSMObject -PropertyHashtable @{'Status'='Active';'Description'=&quot;$MADescription `nSAMAccountName generated as $SAMAccountName&quot;}
+                    }
+                &quot;*O365*&quot; {
+                    Get-SCSMObject -Class $manualActivityClass -Filter &quot;ID -eq $ActID&quot; | Set-SCSMObject -PropertyHashtable @{'Status'='Completed';'Notes'=&quot;Activity Completed. `nSIP address set to $UserPrincipalName&quot;}
+                    }
+                &quot;*Enterprise Voice*&quot; {
+                    If (!($SkypeNumber -eq $null)) {
+                        #If a Lync voice number was assigned, set &quot;Lync Unified Messaging and Enterprise Voice&quot; activity as complete and put LineURI in notes
+                        Get-SCSMObject -Class $manualActivityClass -Filter &quot;ID -eq $ActID&quot; | Set-SCSMObject -PropertyHashtable @{'Status'='Completed';'Notes'=&quot;Activity Completed. `nLineURI set to $SkypeNumber&quot;}
+                    }
+                    Else {
+                        Get-SCSMObject -Class $manualActivityClass -Filter &quot;ID -eq $ActID&quot; | Set-SCSMObject -Property Status -Value Active
+                    }
+                    }
+                &quot;*Communication*&quot; {
+                    Get-SCSMObject -Class $manualActivityClass -Filter &quot;ID -eq $ActID&quot; | Set-SCSMObject -Property Status -Value Active
+                    }
+                &quot;*IFS Access*&quot; {
+                    Get-SCSMObject -Class $manualActivityClass -Filter &quot;ID -eq $ActID&quot; | Set-SCSMObject -Property Status -Value Active
+                    }
+            }
+        }
+    }
+    Else {
+        throw &quot;Service Request $SRNumber could not be found&quot;
+    }
+}
+#endregion
+
+#region Core Functions
+Function New-ContosoStarter {
+&lt;# 
+ .SYNOPSIS 
+    Creates the necessary accounts for a new user in Active Directory, Exchange/Office 365, and Skype for Business.
+ .DESCRIPTION 
+    This function takes in user input and kicks off the processes required to create a new user on several key Contoso systems.  The script will create an AD account with the various required
+    parameters, enable a Hybrid mailbox for that person, provision the necessary Office 365 license, configure a Skype for Business account and enable a phone number/voicemail box if the office
+    that the user is located in is enabled for Enterprise Voice.  Due to sync processes, please note that the function can take up to 10-15 minutes to run.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory PowerShell module, Remote connections to Exchange/Lync, MSOnline Module for Office 365 provisioning, SMLets module for Service Manager
+ .EXAMPLE
+    New-ContosoStarter -GivenName John -Surname Smith -EmployeeID 12345 -EmployeeType F -OfficeCode &quot;US-DEN-1&quot;
+ .EXAMPLE
+    New-ContosoStarter -GivenName John -Surname Smith -Initial A -EmployeeID 12345 -EmployeeType F -BU 11111 -OfficeCode &quot;US-DEN-1&quot;
+ .PARAMETER GivenName
+    Required parameter for the first name of the user. Apostrophes should be ommitted from the name to ensure compatibility with IT systems.
+ .PARAMETER Surname
+    Required parameter for the last name of the user. Apostrophes should be ommitted from the name to ensure compatibility with IT systems.
+ .PARAMETER Initial
+    Optional parameter for the first letter of the user's middle name.
+ .PARAMETER PreferredGivenName
+    Optional parameter for a preferred first name provided by the user upon hire.  This will only populate the Display Name, and does not change the logon attributes for the user.
+ .PARAMETER EmployeeID
+    Required parameter for the new user's employee number.  Valid entries should be either between 5-8 digits, a C for contractor or a dash if unknown.
+ .PARAMETER EmployeeType
+    Required parameter for the employee type.  Valid examples include F for Full-time, T for Temporary, C for Contractor, JV for a Joint Venture user, or - if unknown.
+ .PARAMETER Description
+    Optional parameter for the user description.  Often includes the title and office code for the user, but can be any additional information such as the requestor of a contractor account, etc.
+ .PARAMETER BU
+    Optional parameter for the Business Unit of the new user.  Valid entries are a 5 digit number only, and if not provided will usually be filled in by sync from EID.
+ .PARAMETER OfficeCode
+    Required parameter for the office code of the new user.  Valid entries should start with a two letter country code and then a dash.  For most new users, this is later replaced by
+    the sync from EID, but should be provided so that the Office 365 country code can be filled in appropriately.
+ .PARAMETER Company
+    Required parameter for the sub-company of the new user.  Valid Entries include Contoso, TailSpinToys, Hawksley, JV, Slayden, or Burton.  This is required to set the primary email address, Skype
+    address and UPN correctly.
+ .PARAMETER SRNumber
+    Optional parameter for the Service Request number of the new user.  If provided PowerShell will attempt to update the Service Request ticket with the information from the new starter script.
+    #&gt;
+    [cmdletbinding()]
+    Param(
+        [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$GivenName=&quot;&quot;,
+        [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Surname=&quot;&quot;,
+        [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Initial=&quot;&quot;,
+        [Parameter(Position=3,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$PreferredGivenName=&quot;&quot;,
+        [Parameter(Position=4,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$EmployeeID=&quot;&quot;,
+        [Parameter(Position=5,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateSet('F','T','C','JV','-')]
+        [string]$EmployeeType=&quot;&quot;,
+        [Parameter(Position=6,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Description=&quot;&quot;,
+        [Parameter(Position=7,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateRange(00000,99999)]
+        [int]$BU=&quot;&quot;,
+        [Parameter(Position=8,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$OfficeCode=&quot;&quot;,
+        [Parameter(Position=9,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateSet('Contoso','TailSpinToys','JV')]
+        [string]$Company=&quot;Contoso&quot;,
+        [Parameter(Position=10,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$EnableMailbox=&quot;&quot;,
+        [Parameter(Position=11,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$EnableSkype=&quot;&quot;,
+        [Parameter(Position=12,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$SRNumber        
+    )
+    $ExecutionStart = Get-Date
+    Write-Output &quot;New account creation started at $ExecutionStart&quot;
+    $StarterObject = New-Object -TypeName psobject -Property @{
+        EmployeeID = &quot;$EmployeeID&quot;
+        OfficeCode = &quot;$OfficeCode&quot;
+        BU = $BU
+        Surname = &quot;$Surname&quot;
+        PreferredGivenName = &quot;$PreferredGivenName&quot;
+        GivenName = &quot;$GivenName&quot;
+        Initial = &quot;$Initial&quot;
+        Company = &quot;$Company&quot;
+        EmployeeType = &quot;$EmployeeType&quot;
+        EnableSkype = $EnableSkype
+        EnableMailbox = $EnableMailbox
+        Description = &quot;$Description&quot;
+        SRNumber = &quot;$SRNumber&quot;
+    }
+    Try {
+        $UserResult = $StarterObject | Confirm-ValidUser
+    }
+    Catch {
+        $ErrorMessage = $_.Exception.Message
+        $FailedItem = $_.Exception.ItemName
+        exit
+    }
+    
+    ##Create AD Account
+    Write-Output &quot;Attempting to create AD account for $($UserResult.FullName)&quot;
+    $ADresult = $UserResult | New-ContosoADUser
+    Write-Host &quot;$($ADresult.UserPrincipalName) created successfully&quot; -ForegroundColor Green
+    
+    ##Enable S4B (if necessary)
+    If (!(($StarterObject.EnableSkype -eq 'N') -or ($StarterObject.EnableSkype -eq 'No'))) {
+        Write-Output &quot;Attempting to create Skype account for $($UserResult.FullName)&quot;
+        $SkypeResult = Enable-ContosoSkypeUser -UserPrincipalName $ADresult.UserPrincipalName
+        If ($($SkypeResult.LineURI) -like &quot;tel*&quot;) {
+            $ADPhoneNumber = $SkypeResult.LineURI.Split(':')[1]
+            $ADPhoneNumber = $ADPhoneNumber.Split(';')[0]
+            Set-Aduser -Identity $SkypeResult.Identity -OfficePhone $ADPhoneNumber
+        }
+    }
+    ##Create mailbox and enable O365 license (if necessary)
+   If (!(($StarterObject.EnableMailbox -eq 'N') -or ($StarterObject.EnableMailbox -eq 'No'))) {
+        Write-Output &quot;Attempting to create mailbox for $($UserResult.FullName)&quot;
+        Enable-ContosoMailbox -UserPrincipalName $ADresult.UserPrincipalName
+        $Country = $ADresult.Office.SubString(0,2)
+        Invoke-DirSync
+        Enable-ContosoO365License -UserPrincipalName $ADresult.UserPrincipalName -Country $Country
+    }
+    
+    Write-Host &quot;Pausing for 30 seconds to allow Exchange Online to provision mailboxes&quot; -ForegroundColor Cyan
+    Start-Sleep -Seconds 30
+
+    ##Enable UM mailbox in O365 (if a Skype number was assigned)
+    If ($($SkypeResult.LineURI) -like &quot;tel*&quot;) {
+        Write-Output &quot;Attempting to create UM Mailbox for $($UserResult.FullName)&quot;
+        $MbxResult = Enable-ContosoUMMailbox -UserPrincipalName $ADresult.UserPrincipalName -Office $ADresult.Office
+    }
+
+    $FinishedAccount = New-Object -TypeName psobject -Property @{
+        Path = $ADresult.Path
+        DisplayName = $ADresult.DisplayName
+        EmployeeID = &quot;$EmployeeID&quot;
+        OfficeCode = &quot;$OfficeCode&quot;
+        BU = $BU
+        GivenName = $GivenName
+        Surname = $Surname
+        SamAccountName = $ADresult.SamAccountName
+        UserPrincipalName = $ADresult.UserPrincipalName
+        SkypeNumber = $ADPhoneNumber
+        Company = &quot;$Company&quot;
+        EmployeeType = &quot;$EmployeeType&quot;
+        Description = &quot;$Description&quot;
+        EnableSkype = $EnableSkype
+        EnableMailbox = $EnableMailbox
+        Password = $ADresult.AccountPassword
+        SRNumber = $UserResult.SRNumber
+    }
+
+    #If an SR or SR and phone number are found, update the SCSM ticket based on provided parameters
+    If ($SRNumber -match &quot;^SR*&quot;) {
+        Update-SCSMStarterTicket -SRNumber $SRNumber -UserPrincipalName $FinishedAccount.UserPrincipalName -SAMAccountName $FinishedAccount.SamAccountName
+    }
+    Elseif (($SRNumber -match &quot;^SR*&quot;) -and ($ADPhoneNumber -match &quot;\d{4,}&quot;)) {
+        Update-SCSMStarterTicket -SRNumber $SRNumber -UserPrincipalName $FinishedAccount.UserPrincipalName -SAMAccountName $FinishedAccount.SamAccountName -SkypeNumber $ADPhoneNumber
+    }
+
+    #Format the finished account object to only return a few properties by default
+    $defaultProperties = @('DisplayName','EmployeeID','SamAccountName','UPN','SkypeNumber','Password')
+    $defaultDisplayPropertySet = New-Object System.Management.Automation.PSPropertySet(‘DefaultDisplayPropertySet’,[string[]]$defaultProperties)
+    $PSStandardMembers = [System.Management.Automation.PSMemberInfo[]]@($defaultDisplayPropertySet)
+    $FinishedAccount | Add-Member MemberSet PSStandardMembers $PSStandardMembers
+    
+    #Generate time taken to complete the script
+    $ExecutionStop = Get-Date
+    $Timetaken = $ExecutionStop - $ExecutionStart
+    $TimetakenInMin = &quot;{0:N0}&quot; -f ($Timetaken.TotalMinutes)
+    Write-Output &quot;Script completed in $TimetakenInMin minutes`n&quot;
+    Get-PSSession | Remove-PSSession -Confirm:$False
+    return $FinishedAccount
+}
+
+Function Import-ContosoStarterFile {
+   &lt;# 
+ .SYNOPSIS 
+    Creates the necessary accounts for a new user in Active Directory, Exchange/Office 365, and Skype for Business based on a CSV import
+ .DESCRIPTION 
+    This function takes in user accounts from a CSV file and creates new AD, Office 365 and Skype for Business accounts based on the parameters for each user in the file.  .
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory PowerShell module, Remote connections to Exchange/Lync, MSOnline Module for Office 365 provisioning
+ .EXAMPLE
+    Import-ContosoStarterFile -CSVFilePath .\NewStarters.csv
+ .PARAMETER CSVFilePath
+    Required parameter for the path to the CSV file that contains the new user details.  The file should contain the following Column headers, the order is not important: EmployeeID, Officecode
+    BU, Surname, GivenName, PreferredGivenName, Initial, Company, EmployeeType, Description.  At a minimum GivenName, Surname and EmployeeType are required and all other fields can be different
+    depending on new starter information provided.
+    #&gt;
+    Param(
+        [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$CSVFilePath=&quot;&quot;
+    )
+    $ExecutionStart = Get-Date
+    Write-Output &quot;New account creation started at $ExecutionStart&quot;
+    $CSVImportArray = @()
+    $ValidUserArray = @()
+    $ADResultArray = @()
+    $SkypeResultArray = @()
+    try {
+        $CSVImportArray = Import-Csv $CSVFilePath
+    }
+    catch {
+        Write-Output &quot;$($_.Exception.Message)&quot;
+        exit
+    }
+
+    #Validate each user account and discard any that failed validation with output
+    Foreach ($UserObject in $CSVImportArray) {
+        Try {
+            $UserResult = $UserObject | Confirm-ValidUser 
+            $ValidUserArray = $ValidUserArray + $UserResult
+        }
+        Catch {
+            Write-Output &quot;$($_.Exception.Message)&quot;
+        }
+    }
+        
+    ##Create AD Account
+    Foreach ($Line in $ValidUserArray) {
+        Write-Output &quot;Attempting to create AD account for $($Line.FullName)&quot;
+        $ADresult = $Line | New-ContosoADUser
+        Write-Host &quot;$($ADresult.UserPrincipalName) created successfully&quot; -ForegroundColor Green
+        $FinishedAccount = New-Object -TypeName psobject -Property @{
+            Path = $ADresult.Path
+            DisplayName = $ADresult.DisplayName
+            GivenName = $line.GivenName
+            Surname = $line.Surname
+            EmployeeID = $line.EmployeeID
+            OfficeCode = $line.OfficeCode
+            BU = $line.BU
+            SamAccountName = $ADresult.SamAccountName
+            UserPrincipalName = $ADresult.UserPrincipalName
+            SkypeNumber = $null
+            Company = $line.Company
+            EnableSkype = $line.EnableSkype
+            EnableMailbox = $line.EnableMailbox
+            SRNumber = $line.SRNumber
+            EmployeeType = $line.EmployeeType
+            Description = $line.Description
+            Password = $ADresult.AccountPassword
+        }
+        $ADResultArray = $ADResultArray + $FinishedAccount
+    }
+    
+    ##Enable S4B (if necessary by looking up the user first name and last in the CSV array)
+    Foreach ($Line in $ADResultArray) {
+        If (!(($Line.EnableSkype -eq 'N') -or ($Line.EnableSkype -eq 'No'))) {
+            Write-Output &quot;Attempting to create Skype account for $($Line.DisplayName)&quot;
+            $SkypeResult = Enable-ContosoSkypeUser -UserPrincipalName $Line.UserPrincipalName
+            If ($($SkypeResult.LineURI) -like &quot;tel*&quot;) {
+                $ADPhoneNumber = $SkypeResult.LineURI.Split(':')[1]
+                $ADPhoneNumber = $ADPhoneNumber.Split(';')[0]
+                Set-Aduser -Identity $SkypeResult.Identity -OfficePhone $ADPhoneNumber
+            }
+            $SkypeResultArray = $SkypeResultArray + $SkypeResult
+        }
+    }
+
+    ##Create mailbox for each user if necessary
+    Foreach ($Line in $ADResultArray) {
+        If (!(($Line.EnableMailbox -eq 'N') -or ($Line.EnableMailbox -eq 'No'))) {
+            Write-Output &quot;Attempting to create mailbox for $($Line.DisplayName)&quot;
+            Enable-ContosoMailbox -UserPrincipalName $Line.UserPrincipalName
+        }
+    }
+
+    #Kick off a single dirsync for all the users (should take about 2 minutes)
+    Invoke-DirSync
+
+    ##Provision Office 365 license if a mailbox was required for the user
+    Foreach ($Line in $ADResultArray) {
+       If (!(($Line.EnableMailbox -eq 'N') -or ($Line.EnableMailbox -eq 'No'))) {
+            Write-Output &quot;Attempting to provision O365 License for $($Line.DisplayName)&quot;
+            $Country = $Line.OfficeCode.SubString(0,2)            
+            Enable-ContosoO365License -UserPrincipalName $Line.UserPrincipalName -Country $Country
+        }
+    }
+    
+    Write-Host &quot;Pausing for 30 seconds to allow Exchange Online to provision mailboxes&quot; -ForegroundColor Cyan
+    Start-Sleep -Seconds 30
+
+    ##Enable UM mailbox in O365 (if a Skype number was assigned)
+    Foreach ($Line in $SkypeResultArray) {
+        If ($($Line.LineURI) -like &quot;tel*&quot;) {
+            Write-Output &quot;Attempting to create UM Mailbox for $($Line.DisplayName)&quot;
+            $Upn = $Line.SipAddress.Split(':')[1]
+            $Office = $Line.DialPlan.Split('.')[0]
+            Enable-ContosoUMMailbox -UserPrincipalName $Upn -Office $Office
+        }
+    }
+
+    ##Loop through Skype Account array and update AD Result array with any skype numbers that were assigned
+    Foreach ($Line in $ADResultArray) {
+        $SIP = &quot;sip:&quot; + $($Line.UserPrincipalName)
+        $SkypeResultLookup = $SkypeResultArray | Where-Object {$_.SipAddress -eq $SIP}
+        If ($SkypeResultLookup.LineURI -like &quot;tel*&quot;) {
+            $PhoneNumber = $SkypeResultLookup.LineURI.Split(':')[1]
+            $PhoneNumber = $PhoneNumber.Split(';')[0]
+            $Line.SkypeNumber = $PhoneNumber
+        }
+    }
+
+    #If an SR or SR and phone number are found, update the SCSM ticket based on provided parameters
+    Foreach ($Line in $ADResultArray) {
+        If (($Line.SRNumber -match &quot;^SR*&quot;) -and ($Line.SkypeNumber -match &quot;\d{4,}&quot;)) {
+            Update-SCSMStarterTicket -SRNumber $Line.SRNumber -UserPrincipalName $Line.UserPrincipalName -SAMAccountName $Line.SamAccountName -SkypeNumber $Line.SkypeNumber
+        }
+        ElseIf ($Line.SRNumber -match &quot;^SR*&quot;) {
+            Update-SCSMStarterTicket -SRNumber $Line.SRNumber -UserPrincipalName $Line.UserPrincipalName -SAMAccountName $Line.SamAccountName
+        }
+
+    }
+
+    ##Format the finished account array to only return a few properties by default
+    $defaultProperties = @('DisplayName','EmployeeID','SamAccountName','UserPrincipalName','SkypeNumber','Password')
+    $defaultDisplayPropertySet = New-Object System.Management.Automation.PSPropertySet(‘DefaultDisplayPropertySet’,[string[]]$defaultProperties)
+    $PSStandardMembers = [System.Management.Automation.PSMemberInfo[]]@($defaultDisplayPropertySet)
+    $ADResultArray | Add-Member MemberSet PSStandardMembers $PSStandardMembers
+    
+    #Generate time taken to complete the script
+    $ExecutionStop = Get-Date
+    $Timetaken = $ExecutionStop - $ExecutionStart
+    $TimetakenInMin = &quot;{0:N0}&quot; -f ($Timetaken.TotalMinutes)
+    Write-Output &quot;Script completed in $TimetakenInMin minutes`n&quot;
+    Get-PSSession | Remove-PSSession -Confirm:$False
+    return $ADResultArray
+}
+
+Function New-ContosoADUser {
+    &lt;# 
+ .SYNOPSIS 
+    Creates a new AD account for a starter given the necessary parameters.
+ .DESCRIPTION 
+    This function creates a new AD user account for a starter based on the parameters defined below.  The function will automatically generate a
+    unique SAM Account and UPN and will copy an existing template if available.  Of note only specific values for EmployeeType and Company are accepted.
+ .NOTES 
+    Author  : TheDudeAbides
+    Requires: PowerShell Version 3.0, Active Directory PowerShell module
+ .EXAMPLE
+    .\New-ContosoAdUser -GivenName Robert -Surname Public -Initial Q -PreferredGivenName Bob -EmployeeID 123456 -EmployeeType F -Description &quot;Job Site Manager&quot; -BU 12345 -OfficeCode &quot;US-DEN-1&quot;
+ .PARAMETER GivenName
+    Required parameter for the first or given name of the user to be created
+ .PARAMETER Surname
+    Required parameter for the last name or names of the user to be created.  The function will automatically remove any spaces from the last name or apostrophes if found.
+ .PARAMETER Initial
+    Optional parameter for the middle initial of the user.  This should only be the first character of the middle name as applicable.
+ .PARAMETER PreferredGivenName
+    Optional parameter for the prefferred given name of the user if supplied.  This will be used in the Display name for the account.
+ .PARAMETER EmployeeID
+    Optional parameter for the employee ID of the user.  If not supplied, it will be filled in by FIM at a later time or automatically filled in if the user
+    is a temp, contractor, or JV user.
+ .PARAMETER EmployeeType
+    Required parameter for the employee type, should be specified as either (F)ull-time, (T)emporary, (C)ontractor, or (JV).
+ .PARAMETER Description
+    Optional parameter for the description on the user.  This field can include details of the account, requestor, or Helpdesk ticket to help document the user
+    to be created.
+ .PARAMETER BU
+    Optional parameter for the business unit of the account to be created.
+ .PARAMETER OfficeCode
+    Optional parameter for the Office code of the account to be created.
+ .PARAMETER Company
+    Required parameter for the company name of the account to be created.  Accepted values are Contoso, TailSpinToys, JV and the company name is used to generate
+    the correct UPN and email address.
+#&gt;
+[cmdletbinding()]
+    Param(
+        [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$GivenName=&quot;&quot;,
+        [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Surname=&quot;&quot;,
+        [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Initial=&quot;&quot;,
+        [Parameter(Position=3,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$PreferredGivenName=&quot;&quot;,
+        [Parameter(Position=4,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$EmployeeID=&quot;&quot;,
+        [Parameter(Position=5,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateSet('F','T','C','JV','-')]
+        [string]$EmployeeType=&quot;&quot;,
+        [Parameter(Position=6,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Description=&quot;&quot;,
+        [Parameter(Position=7,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateRange(00000,99999)]
+        [int]$BU=&quot;&quot;,
+        [Parameter(Position=8,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$OfficeCode=&quot;&quot;,
+        [Parameter(Position=9,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)][ValidateSet('Contoso','TailSpinToys','JV')]
+        [string]$Company=&quot;Contoso&quot;
+    )
+
+    $StarterObject = New-Object -TypeName psobject -Property @{
+        EmployeeID = &quot;$EmployeeID&quot;
+        OfficeCode = &quot;$OfficeCode&quot;
+        BU = $BU
+        Surname = &quot;$Surname&quot;
+        PreferredGivenName = &quot;$PreferredGivenName&quot;
+        GivenName = &quot;$GivenName&quot;
+        Initial = &quot;$Initial&quot;
+        Company = &quot;$Company&quot;
+        EmployeeType = &quot;$EmployeeType&quot;
+        Description = &quot;$Description&quot;
+    }
+    Try {
+        $UserResult = $StarterObject | Confirm-ValidUser
+        $UserResult.EnableMailbox = $null
+        $UserResult.EnableSkype = $null
+        $UserResult.SRNumber = $null
+    }
+    Catch {
+        $ErrorMessage = $_.Exception.Message
+        $FailedItem = $_.Exception.ItemName
+        exit
+    }
+
+    #Generate initial derived properties collapsing any spaces or apostrophes in the last name if necessary
+    $CleanedSurname = $UserResult.Surname.replace(&quot; &quot;,&quot;&quot;)
+    $CleanedSurname = $UserResult.Surname.replace(&quot;'&quot;,&quot;&quot;)
+    If ($line.PreferredGivenName -match &quot;\w+&quot;) {
+            $FullName = $UserResult.PreferredGivenName + &quot; &quot; + $UserResult.Surname
+    }
+    Else {
+            $FullName = $UserResult.GivenName + &quot; &quot; + $UserResult.Surname
+    }
+    $Country = $UserResult.OfficeCode.Substring(0,2)
+    $Region = $RegionMappings.$Country
+    
+    #Attempt to generate a unique SAMAccountName
+    Try {
+        $PotentialSAMAccountName = Get-UniqueSAMAccountName -GivenName $UserResult.GivenName -Surname $CleanedSurname -Initial $Initial
+    } 
+    Catch {
+        throw 'Could not generate a unique SAMAccountName'
+    }
+    
+    #Attempt to create a unique UserPrincipalName
+    Try {
+        $PotentialUPN = Get-UniqueUPN -GivenName $UserResult.GivenName -Surname $CleanedSurname -Initial $UserResult.Initial -Company $UserResult.Company
+    } 
+    Catch {
+        throw 'Could not generate a unique UserPrincipalName'
+    }
+
+    #Generate a random password for the user
+    $Password = Get-RandomPassword
+    $SecurePW = ConvertTo-SecureString $Password -AsPlainText -Force
+    $Searchbase = &quot;OU=Users &amp; Groups,dc=Contoso,dc=com&quot;
+    $NewADUserParams = @{
+        Name=$FullName
+        SamAccountName=$PotentialSAMAccountName
+        UserPrincipalName=$PotentialUPN
+        GivenName=$UserResult.GivenName
+        Surname=$UserResult.Surname
+        Instance=$null
+        EmployeeID=$UserResult.EmployeeID
+        Company=$UserResult.Company
+        Department=$UserResult.BU
+        Description=$UserResult.Description
+        DisplayName=$FullName
+        Initials=$UserResult.Initial
+        Office=$UserResult.OfficeCode
+        AccountPassword=$SecurePW
+        Enabled=$false
+        ChangePasswordAtLogon=$True
+        Path=$Null
+        EmailAddress=$Null
+        OtherAttributes = @{EmployeeType = ($UserResult.EmployeeType)};
+    }
+
+    #Find an appropriate template for the user if Full Time or temp
+    If ($UserResult.EmployeeType -match &quot;^(F|T)$&quot;) {
+        $OfficeCodeSplit = $OfficeCode.Split(&quot;-&quot;)
+        $OfficeCodeSearchterms = (($OfficeCode),($OfficeCode.Replace(&quot;-&quot;,&quot;&quot;)),($OfficeCodeSplit[0]+&quot;-&quot;+$OfficeCodeSplit[1]+$OfficeCodeSplit[2]),($OfficeCodeSplit[0]+$OfficeCodeSplit[1]+&quot;-&quot;+$OfficeCodeSplit[2]))
+        $AllActiveDirectoryTemplates = Get-ADUser -Filter {Name -like &quot;*Template*&quot;}
+        Foreach ($term in $OfficeCodeSearchterms) {
+            If ($AllActiveDirectoryTemplates -match $term) {
+                $Instance = $AllActiveDirectoryTemplates -match $term
+                #Strip off the first part of the DistinguishedName to derive the OU path
+                $DN = $Instance.DistinguishedName.Split(',')
+                $NewADUserParams.Path = ($DN[1..($DN.Length-1)]) -join ','
+                $NewADUserParams.Instance = $($Instance)
+            }
+        }
+        If ($NewADUserParams.Path -eq $null) {
+            #Create the account in the regional OU if no other options are available
+            $NewADUserParams.Path = (Get-ADOrganizationalUnit -SearchBase $Searchbase -SearchScope OneLevel -Filter * -Properties Description | Where-Object {$_.DistinguishedName -like &quot;*$Region*&quot;}).DistinguishedName
+        }
+    }
+    Elseif ($EmployeeType -eq &quot;C&quot;) {
+        #If user is a consultant, drop the account in the default consultant OU for the appropriate region
+        $NewADUserParams.Path = (Get-ADOrganizationalUnit -SearchBase $Searchbase -Filter {(Description -eq &quot;Default Consultants&quot;)} -Properties Description | Where-Object {$_.DistinguishedName -like &quot;*$Region*&quot;}).DistinguishedName | Out-String
+    }
+    Elseif ($EmployeeType -eq &quot;JV&quot;) {
+        #If user is for a JV, drop the account into the external contacts folder, can be moved later
+        $NewADUserParams.Path = &quot;OU=_External,OU=Microsoft Exchange Contacts,OU=Domain,OU=Users &amp; Groups,DC=Contoso,DC=com&quot;
+    }
+
+    #If no user template was found to copy from, drop that property from the parameters
+    If ($NewADUserParams.Instance -eq $null) {
+        $NewADUserParams.Remove('Instance')
+    }
+    
+    #Attempt to create the new account
+    Try {
+        $NewAccount = New-ADUser @NewADUserParams -PassThru -ErrorAction Stop
+        #Write-Output &quot;User account $PotentialUPN created successfully&quot;
+
+        #Update list of UPNs and SAM Accounts with newly created name
+        $GLOBAL:AllUPNs = $GLOBAL:AllUPNs + $PotentialUPN
+        $GLOBAL:AllSAMAccountNames = $GLOBAL:AllSAMAccountNames + $PotentialSAMAccountName
+    }
+    Catch {
+        $ErrorMessage = $_.Exception.Message
+        $FailedItem = $_.Exception.ItemName
+        throw &quot;Account creation failed, error message is $ErrorMessage&quot;
+    }
+
+    #Remove user from all groups except Domain users
+    $UserMembership = (Get-ADUser $NewAccount -Properties memberof).memberof
+    $UserMembership | Remove-ADGroupMember -Members $NewAccount.DistinguishedName -Confirm:$False
+
+    #Add to correct user groups based on region/office code
+    If ($Region -eq 'AMER') {
+        Add-ADGroupMember -Identity &quot;AMERICAS-Users&quot; -Members $NewAccount
+        Add-ADGroupMember -Identity &quot;Contoso-Users&quot; -Members $NewAccount
+        $OfficeGroup = &quot;AM-Office-&quot; + $UserResult.OfficeCode
+        Add-ADGroupMember -Identity $OfficeGroup -Members $NewAccount -ErrorAction SilentlyContinue
+    } 
+    Elseif ($Region -eq 'EMEA') {
+        If ($EmpType -eq &quot;P&quot;) {
+            Add-ADGroupMember -Identity &quot;EMEAI-CITRIX&quot; -Members $NewAccount
+            
+            Add-ADGroupMember -Identity &quot;EMEAI-SSL-General&quot; -Members $NewAccount
+            $OfficeGroup = &quot;EMEAI-Office-&quot; + $UserResult.OfficeCode
+            Add-ADGroupMember -Identity $OfficeGroup -Members $NewAccount -ErrorAction SilentlyContinue
+        }
+        Elseif ($EmpType -eq &quot;C&quot;) {
+            Add-ADGroupMember -Identity &quot;EMEAI-Office-External&quot; -Members $NewAccount
+        }
+        Add-ADGroupMember -Identity &quot;Contoso-Users&quot; -Members $NewAccount
+        Add-ADGroupMember -Identity &quot;EMEAI Users&quot; -Members $NewAccount
+    }
+    Elseif ($Region -eq 'ASIA') {
+        Add-ADGroupMember -Identity &quot;ASIA Users&quot; -Members $NewAccount
+        Add-ADGroupMember -Identity &quot;Contoso-Users&quot; -Members $NewAccount
+        If (($Country -eq 'CN') -or ($Country -eq 'TW')) {
+            $OfficeGroup = $UserResult.OfficeCode.Replace('-','') + &quot;Users&quot;
+            Add-ADGroupMember -Identity $OfficeGroup -Members $NewAccount -ErrorAction SilentlyContinue
+        }
+        Else {
+            $ShortOfficeCode = $OfficeCode.Replace(&quot;-&quot;,&quot;&quot;)
+            $OfficeGroup = &quot;ASIA-Office-&quot; + $ShortOfficeCode
+            Add-ADGroupMember -Identity $OfficeGroup -Members $NewAccount -ErrorAction SilentlyContinue
+        }
+    }
+
+    $FinishedAccount = New-Object -TypeName psobject -Property @{
+        Name=$FullName
+        SamAccountName=$PotentialSAMAccountName
+        UserPrincipalName=$PotentialUPN
+        GivenName=$UserResult.GivenName
+        Surname=$UserResult.Surname
+        TemplateUsed=$Instance.Name
+        EmployeeID=$UserResult.EmployeeID
+        Company=$UserResult.Com
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

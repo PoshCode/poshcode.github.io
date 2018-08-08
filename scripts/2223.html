@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Lee Holmes">
+    <title>Show-ColorizedContent.ps - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Show-ColorizedContent.ps</h1>
+<h3><a href="//scripts/2223.ps1">download</a></h3>
+<p>From Windows PowerShell Cookbook (O'Reilly) by Lee Holmes</p>
+<pre><code class="language-posh">##############################################################################
+##
+## Show-ColorizedContent
+##
+## From Windows PowerShell Cookbook (O'Reilly)
+## by Lee Holmes (http://www.leeholmes.com/guide)
+##
+##############################################################################
+
+&lt;#
+
+.SYNOPSIS
+
+Displays syntax highlighting, line numbering, and range highlighting for
+PowerShell scripts.
+
+.EXAMPLE
+
+PS &gt;Show-ColorizedContent Invoke-MyScript.ps1
+
+001 | function Write-Greeting
+002 | {
+003 |     param($greeting)
+004 |     Write-Host &quot;$greeting World&quot;
+005 | }
+006 |
+007 | Write-Greeting &quot;Hello&quot;
+
+.EXAMPLE
+
+PS &gt;Show-ColorizedContent Invoke-MyScript.ps1 -highlightRange (1..3+7)
+
+001 &gt; function Write-Greeting
+002 &gt; {
+003 &gt;     param($greeting)
+004 |     Write-Host &quot;$greeting World&quot;
+005 | }
+006 |
+007 &gt; Write-Greeting &quot;Hello&quot;
+
+#&gt;
+
+param(
+    ## The path to colorize
+    [Parameter(Mandatory = $true)]
+    $Path,
+
+    ## The range of lines to highlight
+    $HighlightRange = @(),
+
+    ## Switch to exclude line numbers
+    [Switch] $ExcludeLineNumbers
+)
+
+Set-StrictMode -Version Latest
+
+## Colors to use for the different script tokens.
+## To pick your own colors:
+## [Enum]::GetValues($host.UI.RawUI.ForegroundColor.GetType()) |
+##     Foreach-Object { Write-Host -Fore $_ &quot;$_&quot; }
+$replacementColours = @{
+    'Attribute' = 'DarkCyan'
+    'Command' = 'Blue'
+    'CommandArgument' = 'Magenta'
+    'CommandParameter' = 'DarkBlue'
+    'Comment' = 'DarkGreen'
+    'GroupEnd' = 'Black'
+    'GroupStart' = 'Black'
+    'Keyword' = 'DarkBlue'
+    'LineContinuation' = 'Black'
+    'LoopLabel' = 'DarkBlue'
+    'Member' = 'Black'
+    'NewLine' = 'Black'
+    'Number' = 'Magenta'
+    'Operator' = 'DarkGray'
+    'Position' = 'Black'
+    'StatementSeparator' = 'Black'
+    'String' = 'DarkRed'
+    'Type' = 'DarkCyan'
+    'Unknown' = 'Black'
+    'Variable' = 'Red'
+}
+
+$highlightColor = &quot;Red&quot;
+$highlightCharacter = &quot;&gt;&quot;
+$highlightWidth = 6
+if($excludeLineNumbers) { $highlightWidth = 0 }
+
+## Read the text of the file, and tokenize it
+$file = (Resolve-Path $Path).Path
+$content = [IO.File]::ReadAllText($file)
+$parsed = [System.Management.Automation.PsParser]::Tokenize(
+    $content, [ref] $null) | Sort StartLine,StartColumn
+
+## Write a formatted line -- in the format of:
+## &lt;Line Number&gt; &lt;Separator Character&gt; &lt;Text&gt;
+function WriteFormattedLine($formatString, [int] $line)
+{
+    if($excludeLineNumbers) { return }
+
+    ## By default, write the line number in gray, and use
+    ## a simple pipe as the separator
+    $hColor = &quot;DarkGray&quot;
+    $separator = &quot;|&quot;
+
+    ## If we need to highlight the line, use the highlight
+    ## color and highlight separator as the separator
+    if($highlightRange -contains $line)
+    {
+        $hColor = $highlightColor
+        $separator = $highlightCharacter
+    }
+
+    ## Write the formatted line
+    $text = $formatString -f $line,$separator
+    Write-Host -NoNewLine -Fore $hColor -Back White $text
+}
+
+## Complete the current line with filler cells
+function CompleteLine($column)
+{
+    ## Figure how much space is remaining
+    $lineRemaining = $host.UI.RawUI.WindowSize.Width -
+        $column - $highlightWidth + 1
+
+    ## If we have less than 0 remaining, we've wrapped onto the
+    ## next line. Add another buffer width worth of filler
+    if($lineRemaining -lt 0)
+    {
+        $lineRemaining += $host.UI.RawUI.WindowSize.Width
+    }
+
+    Write-Host -NoNewLine -Back White (&quot; &quot; * $lineRemaining)
+}
+
+
+## Write the first line of context information (line number,
+## highlight character.)
+Write-Host
+WriteFormattedLine &quot;{0:D3} {1} &quot; 1
+
+## Now, go through each of the tokens in the input
+## script
+$column = 1
+foreach($token in $parsed)
+{
+    $color = &quot;Gray&quot;
+
+    ## Determine the highlighting colour for that token by looking
+    ## in the hashtable that maps token types to their color
+    $color = $replacementColours[[string]$token.Type]
+    if(-not $color) { $color = &quot;Gray&quot; }
+
+    ## If it's a newline token, write the next line of context
+    ## information
+    if(($token.Type -eq &quot;NewLine&quot;) -or ($token.Type -eq &quot;LineContinuation&quot;))
+    {
+        CompleteLine $column
+        WriteFormattedLine &quot;{0:D3} {1} &quot; ($token.StartLine + 1)
+        $column = 1
+    }
+    else
+    {
+        ## Do any indenting
+        if($column -lt $token.StartColumn)
+        {
+            $text = &quot; &quot; * ($token.StartColumn - $column)
+            Write-Host -Back White -NoNewLine $text
+            $column = $token.StartColumn
+        }
+
+        ## See where the token ends
+        $tokenEnd = $token.Start + $token.Length - 1
+
+        ## Handle the line numbering for multi-line strings and comments
+        if(
+            (($token.Type -eq &quot;String&quot;) -or
+            ($token.Type -eq &quot;Comment&quot;)) -and
+            ($token.EndLine -gt $token.StartLine))
+        {
+            ## Store which line we've started at
+            $lineCounter = $token.StartLine
+
+            ## Split the content of this token into its lines
+            ## We use the start and end of the tokens to determine
+            ## the position of the content, but use the content
+            ## itself (rather than the token values) for manipulation.
+            $stringLines = $(
+                -join $content[$token.Start..$tokenEnd] -split &quot;`n&quot;)
+
+            ## Go through each of the lines in the content
+            foreach($stringLine in $stringLines)
+            {
+                $stringLine = $stringLine.Trim()
+
+                ## If we're on a new line, fill the right hand
+                ## side of the line with spaces, and write the header
+                ## for the new line.
+                if($lineCounter -gt $token.StartLine)
+                {
+                    CompleteLine $column
+                    WriteFormattedLine &quot;{0:D3} {1} &quot; $lineCounter
+                    $column = 1
+                }
+
+                ## Now write the text of the current line
+                Write-Host -NoNewLine -Fore $color -Back White $stringLine
+                $column += $stringLine.Length
+                $lineCounter++
+            }
+        }
+        ## Write out a regular token
+        else
+        {
+            ## We use the start and end of the tokens to determine
+            ## the position of the content, but use the content
+            ## itself (rather than the token values) for manipulation.
+            $text = (-join $content[$token.Start..$tokenEnd])
+            Write-Host -NoNewLine -Fore $color -Back White $text
+        }
+
+        ## Update our position in the column
+        $column = $token.EndColumn
+    }
+}
+
+CompleteLine $column
+Write-Host
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

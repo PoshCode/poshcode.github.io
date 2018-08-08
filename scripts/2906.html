@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jeff Patton">
+    <title>Get-ComputerUpdateRport - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-ComputerUpdateRport</h1>
+<h3><a href="//scripts/2906.ps1">download</a></h3>
+<p>This script uses two functions to get a list of computers from ActiveDirectory and then query each computer for a list of pending updates. It then returns selected fields from that function to create the report.</p>
+<pre><code class="language-posh">&lt;#
+    .SYNOPSIS
+        Get-ComputerUpdateRport
+    .DESCRIPTION
+        This script uses two functions to get a list of computers from ActiveDirectory and then query
+        each computer for a list of pending updates. It then returns selected fields from that function
+        to create the report.
+    .PARAMETER ADSPath
+        The LDAP URI where your computers are located.
+    .EXAMPLE
+        .\Get-ComputerUpdateReport -ADSPath &quot;LDAP://DC=company,DC=com&quot; |Export-Csv -Path .\Report.CSV
+        
+        Description
+        -----------
+        This example shows sending the output to a .CSV file.
+    .EXAMPLE
+        .\Get-ComputerUpdateReport -ADSPath &quot;LDAP://DC=company,DC=com&quot;
+        
+        ComputerName    : scm
+        KBArticleIDs    : 2512827
+        RebootRequired  : False
+        Title           : Security Update for Microsoft Silverlight (KB2512827)
+        IsDownloaded    : True
+        Description     : This security update to Silverlight includes fixes outlined in KBs 2514842 and 25
+                          12827.  This update is backward compatible with web applications built using prev
+                          ious versions of Silverlight.
+        MaxDownloadSize : 6284664
+        SupportURL      : http://go.microsoft.com/fwlink/?LinkID=105787
+
+        Description
+        -----------
+        This example shows sample output
+    .NOTES
+        ScriptName: Get-ComputerUpdateRport
+        Created By: Jeff Patton
+        Date Coded: August 9, 2011
+        ScriptName is used to register events for this script
+        LogName is used to determine which classic log to write to
+    .LINK
+        http://scripts.patton-tech.com/wiki/PowerShell/Production/Get-ComputerUpdateReport
+    .LINK
+        http://scripts.patton-tech.com/wiki/PowerShell/ActiveDirectoryManagement
+    .LINK
+        http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet
+#&gt;
+Param
+    (
+        [string]$ADSPath
+    )
+Begin
+    {
+        $ScriptName = $MyInvocation.MyCommand.ToString()
+        $LogName = &quot;Application&quot;
+        $ScriptPath = $MyInvocation.MyCommand.Path
+        $Username = $env:USERDOMAIN + &quot;\&quot; + $env:USERNAME
+
+        New-EventLog -Source $ScriptName -LogName $LogName -ErrorAction SilentlyContinue
+
+        $Message = &quot;Script: &quot; + $ScriptPath + &quot;`nScript User: &quot; + $Username + &quot;`nStarted: &quot; + (Get-Date).toString()
+        Write-EventLog -LogName $LogName -Source $ScriptName -EventID &quot;100&quot; -EntryType &quot;Information&quot; -Message $Message 
+
+        #	Dotsource in the functions you need.
+        . .\includes\ActiveDirectoryManagement.ps1
+        . .\includes\ComputerManagement.ps1
+        
+        $Servers = Get-ADObjects -ADSPath $ADSPath
+        $UpdateReport = @()
+    }
+Process
+    {
+        foreach ($Server in $Servers)
+        {
+            Try
+            {
+                $Updates = Get-PendingUpdates -ComputerName $Server.Properties.name
+
+                foreach ($Update in $Updates)
+                {
+                    If ($Update.SupportUrl -eq $null)
+                    {
+                        $SupportUrl = &quot;N/A&quot;
+                        }
+                    Else
+                    {
+                        If ($Update.SupportUrl -like &quot;*support.microsoft.com*&quot;)
+                        {
+                            If ($Update.SupportUrl.Substring($Update.SupportUrl.Length-9,9) -eq &quot;?LN=en-us&quot;)
+                            {
+                                $SupportUrl = &quot;$($Update.SupportUrl.Substring(0,$Update.SupportUrl.Length-9))kb/$($Update.KBArticleIDs)?LN=en-us&quot;
+                                }
+                            Else
+                            {
+                                If ($Update.SupportUrl.Substring($Update.SupportUrl.Length-1,1) -eq &quot;/&quot;)
+                                {
+                                    $SupportUrl = &quot;$($Update.SupportUrl)kb/$($Update.KBArticleIDs)&quot;
+                                    }
+                                Else
+                                {
+                                    $SupportUrl = &quot;$($Update.SupportUrl)/kb/$($Update.KBArticleIDs)&quot;
+                                    }
+                                }
+                            }
+
+                        Else
+                        {
+                            $SupportUrl = $Update.SupportUrl
+                            }
+                        }
+                    $TheseUpdates = New-Object -TypeName PSObject -Property @{
+                        ComputerName = &quot;$($Server.Properties.name)&quot;
+                        Title = $Update.Title
+                        Description = $Update.Description
+                        RebootRequired = $Update.RebootRequired
+                        IsDownloaded = $Update.IsDownloaded
+                        MaxDownloadSize = $Update.MaxDownloadSize
+                        SupportURL = $SupportUrl
+                        KBArticleIDs = &quot;$($Update.KBArticleIDs)&quot;
+                        }
+                    $UpdateReport += $TheseUpdates
+                    }
+                }
+            Catch
+            {
+                }    
+            }
+    }
+End
+    {
+        $Message = &quot;Script: &quot; + $ScriptPath + &quot;`nScript User: &quot; + $Username + &quot;`nFinished: &quot; + (Get-Date).toString()
+        Write-EventLog -LogName $LogName -Source $ScriptName -EventID &quot;100&quot; -EntryType &quot;Information&quot; -Message $Message
+
+        Return $UpdateReport
+    }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

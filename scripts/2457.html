@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Bartek Bielawski">
+    <title>Invoke-AppAsAdmin - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-AppAsAdmin</h1>
+<h3><a href="//scripts/2457.ps1">download</a></h3>
+<p>GUI script that helps to workaround problems with desktop sharing by non-admin person and running process as admin. In default scenario UAC kicks in and will show user/password prompt to non-admin user rather than remotely connected IT person. This script separates alternating credentials and elevating, so IT person can enter credentials first, and remote user gets only yes/no prompt. GUI code generated using PrimalForms community edition and re-written a bit. If you have any comments please ping me via twitter (@bielawb) or e-mail (bartb at aster.pl)</p>
+<pre><code class="language-posh">#requires -version 2.0
+
+&lt;#
+    .SYNOPSIS
+        Script to run executable with alternate credentials as admin.
+    .DESCRIPTION
+        This script will try to invoke itself with alternate credentials (using Get-Credential cmdlet) and once it's there it will try to run any executable as elevated.
+        Designed to work around problem with elevating process when working remotely via OFC and other remoting tools.
+        Using GUI to prompt SD person about executable that is needed.
+
+
+#&gt;
+
+param (
+    # Parameter that should be added to re-run the script once we pass credentials/ alternate user step
+    [switch]$Invoke,
+    # Name of the process that will be used in re-run scenario
+    [string]$ProcessName,
+    # User that was passing his credentials - just to double-check if that's the one we need.
+    [string]$RunAs
+)
+
+$MyPath = $MyInvocation.InvocationName
+
+Add-Type -AssemblyName System.Windows.Forms -PassThru | Foreach -Begin { $Form = @{} } -Process { try { $Form.Add($_.Name,$_) } catch {return} }
+Add-Type -AssemblyName System.Drawing
+
+if ($Invoke) {
+    $MyPrincipals = [security.principal.WindowsIdentity]::GetCurrent()
+    if ($Runas -eq $MyPrincipals.Name) {
+        try { 
+            Start-Process -FilePath $ProcessName -Verb RunAs
+        } catch {
+            $Form.MessageBox::Show(&quot;Error: $_&quot;,'Error!','OK','Error')
+        }
+    }
+    exit
+}
+
+# ScriptBlocks to be used by events
+
+$handler_buttonBrowse_Click = {
+    $Dialog = New-Object $Form.OpenFileDialog -Property @{
+        Filter = 'Application (*.exe)|*.exe|All files (*.*)|*.*'
+    }
+  
+    if ($Dialog.ShowDialog() -eq 'OK' -and $Dialog.FileName) {
+        $textboxCmd.Text = $Dialog.FileName
+    }
+}
+
+$handler_buttonOK_Click = {
+    if ($textboxCmd.Text) {
+        try {
+            $creds = Get-Credential
+            $RunAs = $creds.UserName
+            $ProcessName = $textboxCmd.Text
+            Start-Process -FilePath PowerShell.exe -Credential $creds -ArgumentList &quot;-noprofile -windowStyle Hidden -file $MyPath -Invoke -ProcessName $ProcessName -RunAs $RunAs&quot;
+            $MainWindow.Close()
+        } catch {
+            $Form.MessageBox::Show(&quot;Error: $_&quot;,'Error!','OK','Error')
+        }
+    } else {
+        $Form.MessageBox::Show('You have to give a path/ name of thing to run!','Path/ name is missing','OK','Error')
+    }
+}
+
+$handler_buttonCancel_Click =  {
+    $Form.MessageBox::Show('Bye!','You canceled me...','OK','Information')
+    $MainWindow.Close()
+}
+
+$OnLoadForm_StateCorrection = {
+	$MainWindow.WindowState = New-Object $Form.FormWindowState
+}
+
+# Create controls so it will be possible to add them to the form later
+$buttonsSize = New-Object Drawing.Size 75, 23
+
+$MainWindow = New-Object $Form.Form -Property @{
+    Text = &quot;Run As Admin&quot;
+    MaximizeBox = $False
+    MinimizeBox = $False
+    HelpButton = $True
+    Name = &quot;form1&quot;
+    ClientSize = New-Object Drawing.Size 368, 144
+    KeyPreview = $True
+}
+$MainWindow.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$buttonBrowse = New-Object $Form.Button -Property @{
+    TabIndex = 4
+    Name = &quot;buttonBrowse&quot;
+    Size = $buttonsSize
+    UseVisualStyleBackColor = $True
+    Text = &quot;Browse...&quot;
+    Location = New-Object Drawing.Point 260, 85
+}
+$buttonBrowse.add_Click($handler_buttonBrowse_Click)
+$buttonBrowse.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$buttonCancel = New-Object $Form.Button -Property @{
+    TabIndex = 3
+    Name = &quot;buttonCancel&quot;
+    Size = $buttonsSize
+    UseVisualStyleBackColor = $True
+    Text = &quot;Cancel&quot;
+    Location = New-Object Drawing.Point 179, 86
+}
+$buttonCancel.DataBindings.DefaultDataSourceUpdateMode = 0
+$buttonCancel.add_Click($handler_buttonCancel_Click)
+
+$buttonOK = New-Object $Form.Button -Property @{
+    TabIndex = 2
+    Name = &quot;buttonOK&quot;
+    Size = $buttonsSize
+    UseVisualStyleBackColor = $True
+    Text = &quot;OK&quot;
+    Location = New-Object Drawing.Point 98, 86
+}
+$buttonOK.DataBindings.DefaultDataSourceUpdateMode = 0
+$buttonOK.add_Click($handler_buttonOK_Click)
+
+$textboxCmd = New-Object $Form.TextBox -Property @{
+    Size = New-Object Drawing.Size 298, 20
+    Name = &quot;textboxCmd&quot;
+    Location = New-Object Drawing.Point 38, 60
+    TabIndex = 1
+}
+$textboxCmd.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$labelDesc = New-Object $Form.Label -Property @{
+    TabIndex = 0
+    Size = New-Object Drawing.Size 298,35
+    Text = &quot;Type the name of command that you want to run. You can also try to select 'Browse to...' instead.&quot;
+    Location = New-Object Drawing.Point 38, 24
+    Name = &quot;labelDesc&quot;
+}
+$labelDesc.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$MainWindow.Controls.AddRange(@($textboxCmd, $labelDesc, $buttonBrowse, $buttonCancel, $buttonOK))
+$MainWindow.add_Load($OnLoadForm_StateCorrection)
+
+$MainWindow.add_KeyDown({if ($_.KeyCode -eq 'Enter') {&amp; $handler_buttonOK_Click}})
+$MainWindow.add_KeyDown({if ($_.KeyCode -eq 'Escape') {&amp; $handler_buttonCancel_Click}})
+
+$helpDescription = @&quot;
+This script will try to invoke itself with alternate credentials (using Get-Credential cmdlet) and once it's there it will try to run any executable as elevated.
+Designed to work around problem with elevating process when working remotely via OFC and other remoting tools.
+Using GUI to prompt SD person about executable that is needed.
+&quot;@
+
+$MainWindow.add_HelpButtonClicked({$Form.MessageBox::Show($helpDescription,'Help','OK','Information')})
+
+$MainWindow.ShowDialog()| Out-Null
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

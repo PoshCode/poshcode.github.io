@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>Install-ISPackage - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Install-ISPackage</h1>
+<h3><a href="//scripts/3745.ps1">download</a></h3>
+<p>The Install-ISPackage script installs an Dtsx file to a SQL Server store using the command-line utility dtutil.
+Works for 2005 and higher</p>
+<pre><code class="language-posh">#######################
+&lt;#
+.SYNOPSIS
+Installs an SSIS package to a SQL Server store.
+.DESCRIPTION
+The Install-ISPackage script installs an Dtsx file to a SQL Server store using the command-line utility dtutil.
+Works for 2005 and higher
+.EXAMPLE
+./install-ispackage.ps1 -DtsxFullName &quot;C:\Users\Public\bin\SSIS\sqlpsx1.dtsx&quot; -ServerInstance &quot;Z001\SQL1&quot; -PackageFullName &quot;SQLPSX\sqlpsx1&quot;
+This command install the sqlpsx1.dtsx package to SQL Server instance Z001\SQL1 under the SQLPSX folder as sqlpsx1. If SQLPSX folder does not exist it will be created.
+.NOTES
+Version History
+v1.0   - Chad Miller - 6/26/2012 - Initial release
+v1.1   - Chad Miller - 7/05/2012 - Updated to output object. Fixed lastexitcode check in test functions
+v1.2   - Chad Miller - 7/09/2012 - Added SqlVersion and Dtutil Path logic
+v1.3   - Chad Miller - 7/10/2012 - Fixed 2005 path logic
+v1.4   - Chad Miller - 9/25/2012 - Fixed 2012 path logic
+#&gt;
+param(
+[Parameter(Position=0, Mandatory=$true)]
+[string]
+$DtsxFullName,
+[Parameter(Position=1, Mandatory=$true)]
+[string]
+$ServerInstance,
+[Parameter(Position=2, Mandatory=$true)]
+[string]
+$PackageFullName
+)
+
+
+$ErrorActionPreference = &quot;Stop&quot;
+$Script:dtutil = $null
+$exitCode = @{
+0=&quot;The utility executed successfully.&quot;
+1=&quot;The utility failed.&quot;
+4=&quot;The utility cannot locate the requested package.&quot;
+5=&quot;The utility cannot load the requested package.&quot;
+6=&quot;The utility cannot resolve the command line because it contains either syntactic or semantic errors&quot;}
+
+#######################
+function Get-SqlVersion
+{
+    param($ServerInstance)
+    
+    write-verbose &quot;sqlcmd -S `&quot;$ServerInstance`&quot; -d `&quot;master`&quot; -Q `&quot;SET NOCOUNT ON; SELECT SERVERPROPERTY('ProductVersion')`&quot; -h -1 -W&quot;
+    
+    $SqlVersion = sqlcmd -S &quot;$ServerInstance&quot; -d &quot;master&quot; -Q &quot;SET NOCOUNT ON; SELECT SERVERPROPERTY('ProductVersion')&quot; -h -1 -W
+
+    if ($lastexitcode -ne 0) {
+        throw $SqlVersion
+    }
+    else {
+        $SqlVersion
+    }
+    
+} #Get-SqlVersion
+
+#######################
+function Set-DtutilPath
+{
+    param($SqlVersion)
+
+    $paths = [Environment]::GetEnvironmentVariable(&quot;Path&quot;, &quot;Machine&quot;) -split &quot;;&quot;
+
+    if ($SqlVersion -like &quot;9*&quot;) {
+        $Script:dtutil = $paths | where { $_ -like &quot;*Program Files\Microsoft SQL Server\90\DTS\Binn\&quot; }
+        if ($Script:dtutil -eq $null) {
+            throw &quot;SQL Server 2005 Version of dtutil not found.&quot;
+        }
+    }
+    elseif ($SqlVersion -like &quot;10*&quot;) {
+        $Script:dtutil = $paths | where { $_ -like &quot;*Program Files\Microsoft SQL Server\100\DTS\Binn\&quot; }
+        if ($Script:dtutil -eq $null) {
+            throw &quot;SQL Server 2008 or 2008R2 Version of dtutil not found.&quot;
+        }
+    }
+    elseif ($SqlVersion -like &quot;11*&quot;) {
+        $Script:dtutil = $paths | where { $_ -like &quot;*Program Files\Microsoft SQL Server\110\DTS\Binn\&quot; }
+        if ($Script:dtutil -eq $null) {
+            throw &quot;SQL Server 2012 Version of dtutil not found.&quot;
+        }
+    }
+
+    if ($Script:dtutil -eq $null) {
+        throw &quot;Unable to find path to dtutil.exe. Verify dtutil installed.&quot;
+    }
+    else {
+        $Script:dtutil += 'dtutil.exe'
+    }
+    
+} #Set-DtutilPath
+ 
+#######################
+function install-package
+{
+    param($DtsxFullName, $ServerInstance, $PackageFullName)
+    
+    $result = &amp; $Script:dtutil /File &quot;$DtsxFullName&quot; /DestServer &quot;$ServerInstance&quot; /Copy SQL`;&quot;$PackageFullName&quot; /Quiet
+    $result = $result -join &quot;`n&quot;
+
+    new-object psobject -property @{
+        ExitCode = $lastexitcode
+        ExitDescription = &quot;$($exitcode[$lastexitcode])&quot;
+        Command = &quot;$Script:dtutil /File `&quot;$DtsxFullName`&quot; /DestServer `&quot;$ServerInstance`&quot; /Copy SQL;`&quot;$PackageFullName`&quot; /Quiet&quot;
+        Result = $result
+        Success = ($lastexitcode -eq 0)}
+
+    if ($lastexitcode -ne 0) {
+        throw $exitcode[$lastexitcode]
+    }
+
+} #install-package
+
+#######################
+function test-path
+{
+    param($ServerInstance, $FolderPath)
+
+    write-verbose &quot;$Script:dtutil /SourceServer `&quot;$ServerInstance`&quot; /FExists SQL`;`&quot;$FolderPath`&quot;&quot;
+
+    $result = &amp; $Script:dtutil /SourceServer &quot;$ServerInstance&quot; /FExists SQL`;&quot;$FolderPath&quot;
+
+    if ($lastexitcode -gt 1) {
+        $result = $result -join &quot;`n&quot;
+        throw &quot;$result `n $($exitcode[$lastexitcode])&quot;
+    }
+
+    if ($result -and $result[4] -eq &quot;The specified folder exists.&quot;) {
+        $true
+    }
+    else {
+        $false
+    }
+
+} #test-path
+
+#######################
+function test-packagepath
+{
+    param($ServerInstance, $PackageFullName)
+
+    write-verbose &quot;$Script:dtutil /SourceServer `&quot;$ServerInstance`&quot; /SQL `&quot;$PackageFullName`&quot; /EXISTS&quot;
+    
+    $result = &amp; $Script:dtutil /SourceServer &quot;$ServerInstance&quot; /SQL &quot;$PackageFullName&quot; /EXISTS
+
+    if ($lastexitcode -gt 1) {
+        $result = $result -join &quot;`n&quot;
+        throw &quot;$result `n $($exitcode[$lastexitcode])&quot;
+    }
+
+    new-object psobject -property @{
+        ExitCode = $lastexitcode
+        ExitDescription = &quot;$($exitcode[$lastexitcode])&quot;
+        Command = &quot;$Script:dtutil /SourceServer `&quot;$ServerInstance`&quot; /SQL `&quot;$PackageFullName`&quot; /EXISTS&quot;
+        Result = $result[4]
+        Success = ($lastexitcode -eq 0 -and $result -and $result[4] -eq &quot;The specified package exists.&quot;)}
+
+
+} #test-packagepath
+
+#######################
+function new-folder
+{
+    param($ServerInstance, $ParentFolderPath, $NewFolderName)
+
+    $result = &amp; $Script:dtutil /SourceServer &quot;$ServerInstance&quot; /FCreate SQL`;&quot;$ParentFolderPath&quot;`;&quot;$NewFolderName&quot;
+    $result = $result -join &quot;`n&quot;
+
+    new-object psobject -property @{
+        ExitCode = $lastexitcode
+        ExitDescription = &quot;$($exitcode[$lastexitcode])&quot;
+        Command = &quot;$Script:dtutil /SourceServer `&quot;$ServerInstance`&quot; /FCreate SQL;`&quot;$ParentFolderPath`&quot;;`&quot;$NewFolderName`&quot;&quot;
+        Result = $result
+        Success = ($lastexitcode -eq 0)}
+
+    if ($lastexitcode -ne 0) {
+        throw $exitcode[$lastexitcode]
+    }
+
+} #new-folder
+
+#######################
+function Get-FolderList
+{
+    param($PackageFullName)
+
+    if ($PackageFullName -match '\\') {
+        $folders = $PackageFullName  -split &quot;\\&quot;
+        0..$($folders.Length -2) | foreach { 
+        new-object psobject -property @{
+            Parent=$(if($_-gt 0) { $($folders[0..$($_ -1)] -join &quot;\&quot;) } else { &quot;\&quot; })
+            FullPath=$($folders[0..$_] -join &quot;\&quot;)
+            Child=$folders[$_]}}
+    }
+
+} #Get-FolderList
+ 
+#######################
+##     MAIN          ##
+#######################
+
+try {
+    #1. Get Sql Version
+    $SqlVersion = Get-SqlVersion -ServerInstance $ServerInstance
+    
+    #2. Set Dtutil Path based on Sql Version
+    Set-DtutilPath -SqlVersion $SqlVersion
+    
+    #3. Get SSIS Folder List, verify exists and create missing folders
+    Get-FolderList -PackageFullName $PackageFullName |
+    where { $(test-path -ServerInstance $ServerInstance -FolderPath $_.FullPath) -eq $false } |
+    foreach { new-folder -ServerInstance $ServerInstance -ParentFolderPath $_.Parent -NewFolderName $_.Child }
+
+    #4. Install SSIS Package
+    install-package -DtsxFullName $DtsxFullName -ServerInstance $ServerInstance -PackageFullName $PackageFullName
+    
+    #5. Verify Package
+    test-packagepath -ServerInstance $ServerInstance -PackageFullName $PackageFullName
+}
+catch {
+    write-error &quot;$_ `n $(&quot;Failed to install DtsxFullName {0} to ServerInstance {1} PackageFullName {2}&quot; -f $DtsxFullName,$ServerInstance,$PackageFullName)&quot;
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

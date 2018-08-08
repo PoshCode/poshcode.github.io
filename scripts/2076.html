@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jan Egil Ring">
+    <title>Invoke-BPAModeling - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-BPAModeling</h1>
+<h3><a href="//scripts/2076.ps1">download</a></h3>
+<p>Script to invoke Best Practices Analyzer on remote computers.
+Requires Windows Server 2008 R2 on target computers, and Windows PowerShell 2.0 on the computer running the script from.</p>
+<p>For more details, see the following blog-post:
+http://blog.powershell.no/2010/08/17/invoke-best-practices-analyzer-on-remote-servers-using-powershell</p>
+<pre><code class="language-posh">&lt;#
+
+ NAME: Invoke-BPAModeling.ps1
+
+ AUTHOR: Jan Egil Ring
+ EMAIL: jer@powershell.no
+
+ COMMENT: Script to invoke Best Practices Analyzer on remote computers.
+          Requires Windows Server 2008 R2 on target computers, and Windows PowerShell 2.0 on the computer running the script from.
+          
+          For more details, see the following blog-post:
+          http://blog.powershell.no/2010/08/17/invoke-best-practices-analyzer-on-remote-servers-using-powershell
+
+ You have a royalty-free right to use, modify, reproduce, and
+ distribute this script file in any way you find useful, provided that
+ you agree that the creator, owner above has no warranty, obligations,
+ or liability for such use.
+
+ VERSION HISTORY:
+ 1.0 16.08.2010 - Initial release
+ 
+#&gt;
+
+#requires -version 2
+
+#Import Active Directory module
+Import-Module ActiveDirectory
+
+#Initial variables, these must be customized
+$servers = Get-ADComputer -LDAPFilter &quot;(operatingsystem=*Windows Server 2008 R2*)&quot; | select name,dnshostname
+$SMTPServer = &quot;smtp.domain.local&quot;
+$CSVReport = $true
+$CSVReportPath = &quot;\\server\share\BPAReports\&quot;
+$HTMLReport = $true
+$HTMLReportPath = &quot;\\server\share\BPAReports\&quot;
+$EMailReport = $true
+$EMailReportTo = &quot;it-operations@domain.local&quot;
+$EMailReportFrom = &quot;bpa@domain.local&quot;
+$ReportAllSevereties = $false
+$TotalComputers = ($servers | Measure-Object).Count
+$CurrentComputer = 1
+
+
+foreach ($server in $servers) {
+
+$servername = $server.name
+
+#Display progress
+Write-Progress -Activity &quot;Invoking BPA-model $BestPracticesModelId...&quot; -Status &quot;Current server: $servername&quot; -Id 1 -PercentComplete (($CurrentComputer/$TotalComputers) * 100)
+
+try {
+Invoke-Command -Computer $server.dnshostname -ArgumentList $servername,$SMTPServer,$CSVReport,$CSVReportPath,$HTMLReport,$HTMLReportPath,$EMailReport,$EMailReportTo,$EMailReportFrom,$ReportAllSevereties -ScriptBlock {
+param (
+$servername,
+$SMTPServer,
+$CSVReport,
+$CSVReportPath,
+$HTMLReport,
+$HTMLReportPath,
+$EMailReport,
+$EMailReportTo,
+$EMailReportFrom,
+$ReportAllSevereties)
+
+#Import Server Manager module
+Import-Module ServerManager
+
+$ModelsToRun = @()
+
+if ((Get-WindowsFeature Application-Server).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/ApplicationServer&quot;
+}
+
+if ((Get-WindowsFeature AD-Certificate).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/CertificateServices&quot;
+}
+
+if ((Get-WindowsFeature DHCP).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/DHCP&quot;
+}
+
+if ((Get-WindowsFeature AD-Domain-Services).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/DirectoryServices&quot;
+}
+
+if ((Get-WindowsFeature DNS).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/DNSServer&quot;
+}
+
+if ((Get-WindowsFeature File-Services).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/FileServices&quot;
+}
+
+if ((Get-WindowsFeature Hyper-V).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/Hyper-V&quot;
+}
+
+if ((Get-WindowsFeature NPAS).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/NPAS&quot;
+}
+
+if ((Get-WindowsFeature Remote-Desktop-Services).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/TerminalServices&quot;
+}
+
+if ((Get-WindowsFeature Web-Server).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/WebServer&quot;
+}
+
+if ((Get-WindowsFeature OOB-WSUS).Installed) {
+$ModelsToRun += &quot;Microsoft/Windows/WSUS&quot;
+}
+
+foreach ($BestPracticesModelId in $ModelsToRun) {
+
+#Path-variables
+$date = Get-Date -Format &quot;dd-MM-yy_HH-mm&quot;
+$BPAName = $BestPracticesModelId.Replace(&quot;Microsoft/Windows/&quot;,&quot;&quot;)
+$CSVPath = $CSVReportPath+$servername+&quot;-&quot;+$BPAName+&quot;-&quot;+$date+&quot;.csv&quot;
+$HTMLPath = $HTMLReportPath+$servername+&quot;-&quot;+$BPAName+&quot;-&quot;+$date+&quot;.html&quot;
+
+#HTML-header
+$Head = &quot;
+&lt;title&gt;BPA Report for $BestPracticesModelId on $servername&lt;/title&gt;
+&lt;style type='text/css'&gt; 
+   table  { border-collapse: collapse; width: 700px } 
+   body   { font-family: Arial } 
+   td, th { border-width: 2px; border-style: solid; text-align: left; 
+padding: 2px 4px; border-color: black } 
+   th     { background-color: grey } 
+   td.Red { color: Red } 
+&lt;/style&gt;&quot; 
+
+#Import Best Practices module
+Import-Module BestPractices
+
+#Invoke BPA Model
+Invoke-BpaModel -BestPracticesModelId $BestPracticesModelId | Out-Null
+
+#Include all severeties in BPA Report if enabled. If not, only errors and warnings are reported.
+if ($ReportAllSevereties) {
+$BPAResults = Get-BpaResult -BestPracticesModelId $BestPracticesModelId
+}
+else
+{
+$BPAResults = Get-BpaResult -BestPracticesModelId $BestPracticesModelId | Where-Object {$_.Severity -eq &quot;Error&quot; -or $_.Severity -eq “Warning” }
+}
+
+#Send BPA Results to CSV-file if enabled
+if ($BPAResults -and $CSVReport) {
+$BPAResults | ConvertTo-Csv -NoTypeInformation | Out-File -FilePath $CSVPath
+}
+
+#Send BPA Results to HTML-file if enabled
+if ($BPAResults -and $HTMLReport) {
+$BPAResults | ConvertTo-Html -Property Severity,Category,Title,Problem,Impact,Resolution,Help -Title &quot;BPA Report for $BestPracticesModelId on $servername&quot; -Body &quot;BPA Report for $BestPracticesModelId on server $servername &lt;HR&gt;&quot; -Head $head | Out-File -FilePath $HTMLPath
+}
+
+#Send BPA Results to e-mail if enabled
+if ($BPAResults -and $EMailReport) {
+$CSVReportAttachment = $env:temp+&quot;\&quot;+$servername+&quot;-&quot;+$BPAName+&quot;-&quot;+$date+&quot;.csv&quot;
+$HTMLReportAttachment = $env:temp+&quot;\&quot;+$servername+&quot;-&quot;+$BPAName+&quot;-&quot;+$date+&quot;.html&quot;
+$BPAResults | ConvertTo-Csv -NoTypeInformation | Out-File -FilePath $CSVReportAttachment
+$BPAResults | ConvertTo-Html -Property Severity,Category,Title,Problem,Impact,Resolution,Help -Title &quot;BPA Report for $BestPracticesModelId on $servername&quot; -Body &quot;BPA Report for $BestPracticesModelId on server $servername &lt;HR&gt;&quot; -Head $head | Out-File -FilePath $HTMLReportAttachment
+Send-MailMessage -From $EMailReportFrom -SmtpServer $SMTPServer -To $EMailReportTo -Subject &quot;BPA Results for $servername&quot;  -Body &quot;The BPA Result for $BestPracticesModelId on $servername are attached to this message&quot; -Attachment $CSVReportAttachment,$HTMLReportAttachment
+Remove-Item $CSVReportAttachment
+Remove-Item $HTMLReportAttachment
+}
+}
+}
+}
+
+#Catch PS Remoting transport errors
+catch [PSRemotingTransportException]{
+Write-Host &quot;Unable to connect to $servername. The following error occured:&quot; -ForegroundColor red -BackgroundColor black
+Write-Host ($error[0]).errordetails.message -ForegroundColor red -BackgroundColor black
+}
+
+#Catch other errors (errors from remote scriptblock commands won`t be captured here, they will be returned like default)
+catch {
+Write-Host &quot;An error occured when connecting to $servername. The following error occured:&quot; -ForegroundColor red -BackgroundColor black
+Write-Host ($error[0]).errordetails.message -ForegroundColor red -BackgroundColor black
+}
+
+#Increase current computer variable for Write-Progress
+$CurrentComputer ++
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

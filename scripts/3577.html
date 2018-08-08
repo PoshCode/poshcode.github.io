@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="chriskenis">
+    <title>Move-Mailbox 2010 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Move-Mailbox 2010</h1>
+<h3><a href="//scripts/3577.ps1">download</a> - <a href="//scripts/3564.md">parent</a></h3>
+<p>This script is called from a scheduled task running under an account with the recipient role. Gets identities from a distribution group in AD, here named xc2010move but it can be anything you like. This way anyone with permissions to add users to this group can initialize a migration and with the right permissions users can even add themselves to this group (add\remove Self as member).
+(changed order of commands to remove users from DG and removed erroneous bracket slipped in while copying code, removed superfluous Identity parameter)</p>
+<pre><code class="language-posh">param(
+#distribution group holding usermailbox(es)
+[string] $DistGroup = &quot;XC2010Move&quot;,
+#move requests per batch/script run
+[int] $BatchCount = 5
+)
+
+#remove user(s) without mailbox
+Get-DistributionGroupMember $DistGroup  | get-user -Filter {Recipienttype -eq &quot;User&quot;} -EA SilentlyContinue | Remove-DistributionGroupMember -Identity $DistGroup -Confirm:$False
+#set quotas on moved mailbox(es) and then remove from group
+Get-DistributionGroupMember $DistGroup | Get-Mailbox -RecipientTypeDetails &quot;UserMailbox&quot; -EA SilentlyContinue | Where {($_.MailboxMoveStatus -eq ‘Completed’)} | Set-Mailbox -IssueWarningQuota &quot;1920MB&quot; -ProhibitSendQuota &quot;1984MB&quot; -ProhibitSendReceiveQuota &quot;2048MB&quot;
+Get-DistributionGroupMember $DistGroup | Get-Mailbox -EA SilentlyContinue -RecipientTypeDetails &quot;UserMailbox&quot; | Remove-DistributionGroupMember -Identity $DistGroup -Confirm:$False
+#remove move request(s) upon completion
+Get-MoveRequest -MoveStatus Completed | Remove-MoveRequest -Confirm:$False
+#get pre-2010 mailbox(es) not yet moved
+$MB2Move = Get-DistributionGroupMember $DistGroup | Get-Mailbox -EA SilentlyContinue | Where {($_.RecipientTypeDetails -eq &quot;LegacyMailbox&quot;) -and ($_.MailboxMoveStatus -eq ‘None’) -and ($_.ExchangeUserAccountControl -ne &quot;AccountDisabled&quot;)} | Get-Random -Count $BatchCount
+#create batch label as reference
+$batch = &quot;$($env:computername)_MoveMB_{0:ddMMM_yyyy}&quot; -f (Get-Date)
+#move pre-2010 mailbox(es)
+ForEach ($SingleMailbox in $MB2Move) {New-MoveRequest –Identity $SingleMailbox -BadItemLimit 100 -AcceptLargeDataLoss -Batchname $batch}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

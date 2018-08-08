@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="kittz">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/5266.ps1">download</a></h3>
+<pre><code class="language-posh">Function Get-LocalGroupMembers {
+	# Function to query a remote machine's WMI namespace and retrieve the membership of requested local groups
+	# Returns a hash table object with the group names as keys, and an array of members for that group as associated value
+	#
+	# SYNTAX:
+	# 	Get-LocalGroupMembers -Computer &lt;Target Computer Name&gt; -Groups &lt;Group/Array of groups to be queried&gt;
+	
+	param(
+		$computer,
+		$groupnames
+		)  
+	
+	# Create hashtable to specify exactly which properties we want Get-WMIObject below to return
+	$prophash = @{
+		Class = &quot;Win32_GroupUser&quot;;
+		Property = &quot;GroupComponent&quot;,&quot;PartComponent&quot;;
+		Computer = &quot;$computer&quot;
+		}
+	
+	# Populate $groups with details of all local group members on target machine
+	$groups = Get-WMIObject @prophash -ErrorAction Stop
+	
+	# Create blank $returnhash object to store results
+	$returnhash = @{}
+	
+	# For each requested group...
+	$groupnames | ForEach {
+		# Populate $group with item for processing
+		$group = $_
+		# Populate $match with entries that match the current group name
+		$match = $groups | Where {$_.GroupComponent –like &quot;*$group*&quot;}
+		# For each matching entry in the list...
+		$match = $match | ForEach {
+			# Look at the &quot;PartComponent&quot; property, and match the Domain and Name values with a Regular Expression
+			$_.partcomponent –match “.+Domain\=(.+)\,Name\=(.+)$” &gt; $nul
+			# Format these values into the standard Domain\Username format
+			$matches[1].trim('&quot;') + “\” + $matches[2].trim('&quot;')  
+			}
+		# Add the formatted list of user accounts to the $returnhash, with the group name as the key
+		$returnhash.Add($group,$match)
+		}
+	
+	# Once all requested groups are processed, return the $returnhash object
+	return $returnhash
+}
+
+Function Get-LocalUsers {
+	# Function to retrieve an array of all local user accounts on a specified machine
+	#
+	# Syntax:
+	# 	Get-LocalUsers -Computer &lt;Target Computer Name&gt;
+		
+	param (
+		$computer
+		)
+	
+	# Create hashtable to specify exactly which properties we want Get-WMIObject below to return
+	$prophash = @{
+		Class = &quot;Win32_UserAccount&quot;;
+		Property = &quot;LocalAccount&quot;,&quot;Caption&quot;,&quot;Disabled&quot;;
+		Computer = &quot;$computer&quot;
+		}
+	
+	# Populate $accounts with a list of all accounts on the target machine
+	$accounts = Get-WmiObject @prophash -ErrorAction Stop
+	# Populate $local with just the accounts where property &quot;LocalAccount&quot; equals True.
+	$local = $accounts | Where {$_.LocalAccount -eq $True}
+	
+	# Build a hash table of the groups and their Disabled status
+	$return = @{}
+	
+	$enabled = $local | Where {$_.Disabled -eq $False}
+	$enabled = $enabled.Caption
+	$disabled = $local | Where {$_.Disabled -eq $True}
+	$disabled = $disabled.Caption
+	
+	If ($enabled -ne $null) {
+		$return.Add(&quot;Enabled&quot;,$enabled)
+		}
+	If ($disabled -ne $null) {
+		$return.Add(&quot;Disabled&quot;,$disabled)
+		}
+	
+	# Return the $return hash
+	return $return
+}
+
+Function Get-Timestamp {
+	# Quick function to generate a properly formatted time-stamp string
+	$timestamp = Get-Date -DisplayHint DateTime
+	$timestampstring = [string]$timestamp
+	Return $timestampstring
+	}
+
+Function Get-LocalInfo {
+	
+	param(
+		$system
+		)
+
+	# Try to perform the following code-block on the specified system. If there are problems, drop to &quot;Catch&quot; block below.
+	Try {
+		$progressstr = (Get-Timestamp) + &quot; - Attempting to process system: &quot; + $system
+		$progressstr | Out-File $progresslog -Append
+		# Populate $adminmembers with results returned by Get-LocalGroupMembers function (detailed above) for specified system's Administrators group
+		$adminmembers = Get-LocalGroupMembers -computer $system -groupnames &quot;Administrators&quot;
+		# Populate $localusers with results returned by Get-LocalGroupMembers function (detailed above) for specified system
+		$localusers = Get-LocalUsers -computer $system
+		
+		# Create a hash table to store information about this specific computer
+		$systemhash = @{
+			# Save array of system's local administrator group members to property &quot;Administrators&quot;
+			&quot;Administrators&quot; = $adminmembers.Get_Item(&quot;Administrators&quot;);
+			# Save array of system's enabled local user accounts to property &quot;LocalUsersEnabled&quot;
+			&quot;LocalUsersEnabled&quot; = $localusers.Get_Item(&quot;Enabled&quot;);
+			# Save array of system's disabled local user accounts to property &quot;LocalUsersDisabled&quot;
+			&quot;LocalUsersDisabled&quot; = $localusers.Get_Item(&quot;Disabled&quot;);
+			# Use Get-Timestamp to record exactly when this information was exported, save as &quot;ExportTime&quot; property
+			&quot;ExportTime&quot; = Get-Timestamp
+			}
+		
+		# Add the information about the specified system to the $localhash with the system name as the key
+		$global:localhash.Add($system,$systemhash)
+		
+		# Add confirmation to progress log
+		$progressstr = (Get-Timestamp) + &quot; - Completed processing for system: &quot; + $system
+		$progressstr | Out-File $progresslog -Append
+		}
+		
+	# If there are any problems retrieving the group information...
+	Catch [Exception] {
+		# Build a log file entry with details of what went wrong
+		$errorstring = &quot;Unable to retrieve information about local groups/users for system &quot; + $system + &quot;. Error message: &quot; + $_
+		# And output it to the error log
+		$errorstring | Out-File $errorlog -Append
+		}
+	}
+	
+#######################################
+####   Environment Config Section  ####
+#######################################
+
+$basepath = &quot;D:\Scratch\GroupCompare\&quot;
+
+$logfolder = $basepath + &quot;Logs\&quot;
+#Create-Folder $logfolder
+
+$reportfolder = $basepath + &quot;Reports\&quot;
+#Create-Folder $reportfolder
+
+$currentdate = Get-Date -Format &quot;yyyy-MM-dd&quot;
+$outputfile = $reportfolder + $currentdate + &quot;-Report.txt&quot;
+$changefile = $reportfolder + $currentdate + &quot;-Changes.txt&quot;
+$errorlog = $logfolder + $currentdate + &quot;-Error.log&quot;
+$progresslog = $logfolder + $currentdate + &quot;-Progress.log&quot;
+
+$domainxml = $basepath + &quot;DomainHashXML.xml&quot;
+$systemxml = $basepath + &quot;SystemHashXML.xml&quot;
+$domainxmlarchive = $basepath + &quot;DomainHashXML-Archive.xml&quot;
+$systemxmlarchive = $basepath + &quot;SystemHashXML-Archive.xml&quot;
+
+# Read the list of domain groups and systems to query from text file, disregarding any empty lines
+$domainfile = $basepath + &quot;domaingroups.txt&quot;
+$sysfile = $basepath + &quot;systems.txt&quot;
+$domaingroups = Get-Content $domainfile | Where {$_ -ne &quot;&quot;}
+$systems = Get-Content $sysfile | Where {$_ -ne &quot;&quot;}
+
+#######################################
+#### Information Gathering Section ####
+#######################################
+
+# Create hash table to store information about domain and local groups
+$localhash = @{}
+
+#### The below works and populates $localhash with what I need ####
+$stuff = &quot;UKLDN00928&quot;,&quot;UKLDN051&quot;
+$stuff | ForEach {
+	Get-LocalInfo -System $_
+	}
+	
+#### But this doesn't ####
+Invoke-Async -Set $systems -SetParam System -Cmdlet Get-LocalInfo
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

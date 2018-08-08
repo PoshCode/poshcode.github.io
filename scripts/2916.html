@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jeff Patton">
+    <title>New-PrintJob - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-PrintJob</h1>
+<h3><a href="//scripts/2916.ps1">download</a></h3>
+<p>This script works in conjunction with an Event Trigger on the PrintService event on our print servers. This script queries the Microsoft-Windows-PrintService/Operational log for EventID 307, and returns the drive letter from the most recent event.</p>
+<p>This should be the same event that triggered this script to run in the first place.</p>
+<p>It appends to a CSV log file if it exists, or creates a new file if it doesn't.</p>
+<pre><code class="language-posh">&lt;#
+    .SYNOPSIS
+        Log a print job to a file.
+    .DESCRIPTION
+        This script works in conjunction with an Event Trigger on the PrintService
+        event on our print servers. This script queries the Microsoft-Windows-PrintService/Operational
+        log for EventID 307, and returns the drive letter from the most recent event. 
+        
+        This should be the same event that triggered this script to
+        run in the first place.
+        
+        It appends to a CSV log file if it exists, or creates a new file if it doesn't.
+    .PARAMETER FileName
+        The fully qualified path and filename for the report.
+    .EXAMPLE
+        .\New-PrintJob.ps1
+        
+        Description
+        -----------
+        This is the only syntax for this script.
+    .NOTES
+        ScriptName: New-PrintJob.ps1
+        Created By: Jeff Patton
+        Date Coded: August 17, 2011
+        ScriptName is used to register events for this script
+        LogName is used to determine which classic log to write to
+        Microsoft .NET Framework 3.5 or greater is required.
+    .LINK
+        http://scripts.patton-tech.com/wiki/PowerShell/Production/New-PrintJob
+#&gt;
+Param
+    (
+        $FileName = &quot;PrintLog-$((get-date -format &quot;yyyMMdd&quot;)).csv&quot;
+    )
+Begin
+    {
+        $ScriptName = $MyInvocation.MyCommand.ToString()
+        $LogName = &quot;Microsoft-Windows-PrintService/Operational&quot;
+        $ScriptPath = $MyInvocation.MyCommand.Path
+        $Username = $env:USERDOMAIN + &quot;\&quot; + $env:USERNAME
+        $ErrorActionPreference = &quot;Stop&quot;
+        
+        New-EventLog -Source $ScriptName -LogName $LogName -ErrorAction SilentlyContinue
+
+        $Message = &quot;Script: &quot; + $ScriptPath + &quot;`nScript User: &quot; + $Username + &quot;`nStarted: &quot; + (Get-Date).toString()
+        Write-EventLog -LogName $LogName -Source $ScriptName -EventID &quot;100&quot; -EntryType &quot;Information&quot; -Message $Message 
+
+        #	Dotsource in the functions you need.
+    }
+Process
+    {
+        Try
+        {
+            $Event307 = Get-WinEvent -LogName $LogName |Where-Object {$_.id -eq 307}
+            }
+        Catch
+        {
+            Write-Warning &quot;This script requires Microsoft .NET Framework version 3.5 or greater&quot;
+            Break
+            }
+            
+        if ($Event307.Count -eq $null)
+        {
+            $PrintJob = $Event307
+            }
+        else
+        {
+            $PrintJob = $Event307[0]
+            }
+
+        $Client = $PrintJob.Properties[3].Value
+        if($Client.IndexOf(&quot;\\&quot;) -gt -1)
+        {
+            $Lookup = &quot;nslookup $($Client.Substring(2,($Client.Length)-2)) |Select-String 'Name:'&quot;
+            }
+        else
+        {
+            $Lookup = &quot;nslookup $($Client) |Select-String 'Name:'&quot;
+            }
+        
+        Try
+        {
+            [string]$Return = Invoke-Expression $Lookup
+            $Client = $Return.Substring($Return.IndexOf(&quot; &quot;),(($Return.Length) - $Return.IndexOf(&quot; &quot;))).Trim()
+            }
+        Catch
+        {
+            $Client = $PrintJob.Properties[3].Value
+            }
+            
+        $PrintLog = New-Object -TypeName PSObject -Property @{
+            Time = $PrintJob.TimeCreated
+            Job = $PrintJob.Properties[0].Value
+            Document = $PrintJob.Properties[1].Value
+            User = $PrintJob.Properties[2].Value
+            Client = $Client
+            Printer = $PrintJob.Properties[4].Value
+            Port = $PrintJob.Properties[5].Value
+            Size = $PrintJob.Properties[6].Value
+            Pages = $PrintJob.Properties[7].Value
+            }        
+        $PrintLog = ConvertTo-Csv -InputObject $PrintLog -NoTypeInformation
+    }
+End
+    {
+        $Message = &quot;Script: &quot; + $ScriptPath + &quot;`nScript User: &quot; + $Username + &quot;`nFinished: &quot; + (Get-Date).toString()
+        Write-EventLog -LogName $LogName -Source $ScriptName -EventID &quot;100&quot; -EntryType &quot;Information&quot; -Message $Message
+        if ((Test-Path -Path &quot;P:\PrintLogs\$($FileName)&quot;) -eq $true)
+        {
+            $PrintLog |Select-Object -Skip 1 |Out-File -FilePath $FileName -Append
+            }
+        else
+        {
+            $PrintLog |Out-File -FilePath $FileName
+            }
+    }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

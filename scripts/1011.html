@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Steven Murawski">
+    <title>New-StoredProcFunction - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-StoredProcFunction</h1>
+<h3><a href="//scripts/1011.ps1">download</a> - <a href="//scripts/1009.md">parent</a></h3>
+<p>Create functions that wrap chosen stored procedures and surface their input parameters as function parameters. Output parameters are returned in a custom object with a property name for each output parameter.</p>
+<pre><code class="language-posh"># New-StoredProcFunction.ps1
+# Steven Murawski
+# http://blog.usepowershell.com
+# 04/08/2009
+# Replaced the parsing of the stored procedure text and use Information_Schema.Parameters to get the parameter information
+# Thanks to Chad Miller for the idea.
+ 
+# Example: ./New-StoredProcFunction.ps1 'Data Source=MySqlServer;Database=Northwind;User=AnythingButSa;Password=abc123' sp_createnewcustomer
+# Example 'sp_createnewcustomer | ./New-StoredProcFunction.ps1 'Data Source=MySqlServer;Database=Northwind;User=AnythingButSa;Password=abc123'
+ 
+param($ConnectionString, [String[]]$StoredProc= $null)
+BEGIN
+{
+	if ($StoredProc.count -gt 0)
+	{
+		$StoredProc | ./New-StoredProcFunction $ConnectionString
+	}
+	function Invoke-SQLQuery()
+	{
+		param ($ConnectionString, $Query)
+		$connection = New-Object System.Data.SqlClient.SqlConnection $connectionString
+		$command = New-Object System.Data.SqlClient.SqlCommand $query,$connection
+		$connection.Open()
+		$adapter = New-Object System.Data.SqlClient.SqlDataAdapter $command
+		$dataset = New-Object System.Data.DataSet
+		[void] $adapter.Fill($dataSet)
+		$connection.Close()
+		$dataSet.Tables | ForEach-Object {$_.Rows} 
+	}
+	
+	function Get-FunctionParameter()
+	{
+		param($FunctionName, $ConnectionString)
+		$query = @&quot;
+SELECT parameter_Name, data_type, character_maximum_length, parameter_mode
+FROM INFORMATION_SCHEMA.Parameters
+WHERE specific_NAME LIKE '$FunctionName'
+&quot;@
+		$Rows = Invoke-SQLQuery $ConnectionString $Query 
+
+		foreach ($Row in $Rows)
+		{
+			$Parameter = &quot;&quot; | Select-Object Name, DataType, Length, IsOutput
+			$Parameter.Name = $row.parameter_Name
+			$Parameter.DataType = $Row.data_type
+			$Parameter.Length = $Row.character_maximum_length
+			$Parameter.IsOutput = if ($Row.parameter_mode -eq 'INOUT'){$true} else {$false}
+			$Parameter
+		}
+	}
+}
+PROCESS
+{
+	if ($_ -ne $null)
+	{
+		$FunctionName = $_
+		$Parameters = Get-FunctionParameter $FunctionName $ConnectionString
+		
+		[String[]]$InputParamNames = $Parameters | where {-not $_.IsOutput} | ForEach-Object {$_.Name -replace '@' }
+		[String[]]$OutputParameterNames = $Parameters | Where-Object {$_.IsOutput} | ForEach-Object {$_.Name -replace '@'}
+		
+		$ScriptText = ' '
+		
+		if ($InputParamNames.count -gt 0)
+		{
+			$OFS = ', $'
+			$ScriptText += 'param (${0})' -f $InputParamNames
+			$ScriptText += &quot;`n&quot; 
+			$OFS = ', '
+		}
+		
+		$BodyTemplate = @'
+$connection = New-Object System.Data.SqlClient.SqlConnection('{0}')
+$command = New-Object System.Data.SqlClient.SqlCommand('{1}', $connection)
+$command.CommandType = [System.Data.CommandType]::StoredProcedure
+
+'@
+		$ScriptText += $BodyTemplate -f $ConnectionString, $FunctionName
+		if ( ($Parameters -ne $null) -or ($Parameters.count -gt 1) )
+		{
+			
+			if ($OutputParameterNames.count -gt 0)
+			{
+				$ReturnText = &quot;&quot; 
+				$CommandOutput = &quot;&quot; | select $OutputParameterNames
+			}
+			#Add the parameters	
+			foreach ($param in $Parameters)
+			{
+				if ($param.length -isnot [DBNull])
+				{
+					$ParamTemplate = '$command.Parameters.Add(&quot;{0}&quot;, &quot;{1}&quot;, {2})  | out-null ' 
+					$ScriptText += &quot;`n&quot; 
+					$ScriptText += $ParamTemplate -f $param.name, $param.datatype, $param.length
+				}
+				else
+				{
+					$ParamTemplate = '$command.Parameters.Add(&quot;{0}&quot;, &quot;{1}&quot;)  | out-null '
+					$ScriptText += &quot;`n&quot; 
+					$ScriptText += $ParamTemplate -f $param.name, $param.datatype
+				}
+				
+				if ($param.IsOutput)
+				{
+					$ScriptText += &quot;`n&quot; 
+					$ScriptText += '$command.Parameters[&quot;{0}&quot;].Direction = [System.Data.ParameterDirection]::Output ' -f $param.Name
+					$ReturnText += &quot;`n&quot;
+					$ReturnText += '$CommandOutput.{1} = $command.Parameters[&quot;{0}&quot;].Value' -f $param.name, ($param.name -replace '@')
+				}
+				else
+				{
+					$ScriptText += &quot;`n&quot; 
+					$ScriptText += '$command.Parameters[&quot;{0}&quot;].Value = ${1} ' -f $param.name, ($param.name -replace '@')
+				}
+			}				
+		}
+		
+		$ScriptText += &quot;`n&quot;
+		$ScriptText += @'
+$connection.Open()  | out-null
+$command.ExecuteNonQuery() | out-null
+
+'@	
+		if ($OutputParameterNames.count -gt 0)
+		{
+			$ScriptText += $ReturnText
+		}
+		
+		$ScriptText += @'
+		
+$connection.Close() | out-null
+return $CommandOutput 
+'@
+		
+		#$ScriptText
+		Set-Item -Path function:global:$FunctionName -Value $scripttext
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

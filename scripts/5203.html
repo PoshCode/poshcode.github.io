@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>Priority Service in C# - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Priority Service in C#</h1>
+<h3><a href="//scripts/5203.ps1">download</a></h3>
+<p>Manage Priorities of specified apps in a service written in C#. Need to add several references to compile (search web for C# service, it should list them) and needs unsafe code enabled. Early version so the app names are hardcoded, might fix that later. Needs this to install the service: sc create PriorityService binpath=c:[path of .exe]\Priority-Service.exe start=auto obj=LocalSystem</p>
+<pre><code class="language-posh">using System;
+using System.Diagnostics;
+using System.ServiceProcess;
+using System.ComponentModel;
+using System.Configuration.Install;
+using System.Management;
+using System.Threading;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Runtime.InteropServices;
+using System.Security.Permissions;
+using System.Security.Principal;
+
+
+namespace PriorityService
+{
+
+    
+    public class PriorityService : ServiceBase
+    {
+        /// &lt;summary&gt;
+        /// Public Constructor for WindowsService.
+        /// - Put all of your Initialization code here.
+        /// &lt;/summary&gt;
+        /// 
+        
+        public PriorityService()
+        {            
+            
+            this.ServiceName = &quot;PriorityService&quot;;
+            this.EventLog.Log = &quot;Application&quot;;
+
+            // These Flags set whether or not to handle that specific
+            //  type of event. Set to true if you need it, false otherwise.
+            
+            this.CanHandlePowerEvent = true;
+            this.CanHandleSessionChangeEvent = true;
+            this.CanPauseAndContinue = true;
+            this.CanShutdown = true;
+            this.CanStop = true;            
+        }
+
+        /// &lt;summary&gt;
+        /// The Main Thread: This is where your Service is Run.
+        /// &lt;/summary&gt;
+        static void Main()
+        {
+            ServiceBase.Run(new PriorityService());
+            
+        }
+
+        /// &lt;summary&gt;
+        /// Dispose of objects that need it here.
+        /// &lt;/summary&gt;
+        /// &lt;param name=&quot;disposing&quot;&gt;Whether
+        ///    or not disposing is going on.&lt;/param&gt;
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+        }
+
+
+        
+        /// &lt;summary&gt;
+        /// OnStart(): Put startup code here
+        ///  - Start threads, get inital data, etc.
+        /// &lt;/summary&gt;
+        /// &lt;param name=&quot;args&quot;&gt;&lt;/param&gt;
+        protected override void OnStart(string[] args)
+        {
+            EventWatcherAsync.EventWatcherAsyncStart();
+            base.OnStart(args);
+        }
+
+        /// &lt;summary&gt;
+        /// OnStop(): Put your stop code here
+        /// - Stop threads, set final data, etc.
+        /// &lt;/summary&gt;
+        protected override void OnStop()
+        {
+            EventWatcherAsync.Watcher.Stop();
+            base.OnStop();
+        }
+
+        /// &lt;summary&gt;
+        /// OnPause: Put your pause code here
+        /// - Pause working threads, etc.
+        /// &lt;/summary&gt;
+        protected override void OnPause()
+        {
+            EventWatcherAsync.Watcher.Stop();
+            base.OnPause();
+        }
+
+        /// &lt;summary&gt;
+        /// OnContinue(): Put your continue code here
+        /// - Un-pause working threads, etc.
+        /// &lt;/summary&gt;
+        protected override void OnContinue()
+        {
+            EventWatcherAsync.EventWatcherAsyncStart();
+            base.OnContinue();
+        }
+
+        /// &lt;summary&gt;
+        /// OnShutdown(): Called when the System is shutting down
+        /// - Put code here when you need special handling
+        ///   of code that deals with a system shutdown, such
+        ///   as saving special data before shutdown.
+        /// &lt;/summary&gt;
+        protected override void OnShutdown()
+        {
+            EventWatcherAsync.Watcher.Stop();
+            base.OnShutdown();
+        }
+
+        /// &lt;summary&gt;
+        /// OnCustomCommand(): If you need to send a command to your
+        ///   service without the need for Remoting or Sockets, use
+        ///   this method to do custom methods.
+        /// &lt;/summary&gt;
+        /// &lt;param name=&quot;command&quot;&gt;Arbitrary Integer between 128 &amp; 256&lt;/param&gt;
+        protected override void OnCustomCommand(int command)
+        {
+            //  A custom command can be sent to a service by using this method:
+            //#  int command = 128; //Some Arbitrary number between 128 &amp; 256
+            //#  ServiceController sc = new ServiceController(&quot;NameOfService&quot;);
+            //#  sc.ExecuteCommand(command);
+
+            base.OnCustomCommand(command);
+        }
+
+        /// &lt;summary&gt;
+        /// OnPowerEvent(): Useful for detecting power status changes,
+        ///   such as going into Suspend mode or Low Battery for laptops.
+        /// &lt;/summary&gt;
+        /// &lt;param name=&quot;powerStatus&quot;&gt;The Power Broadcast Status
+        /// (BatteryLow, Suspend, etc.)&lt;/param&gt;
+        protected override bool OnPowerEvent(PowerBroadcastStatus powerStatus)
+        {
+            return base.OnPowerEvent(powerStatus);
+        }
+
+        /// &lt;summary&gt;
+        /// OnSessionChange(): To handle a change event
+        ///   from a Terminal Server session.
+        ///   Useful if you need to determine
+        ///   when a user logs in remotely or logs off,
+        ///   or when someone logs into the console.
+        /// &lt;/summary&gt;
+        /// &lt;param name=&quot;changeDescription&quot;&gt;The Session Change
+        /// Event that occured.&lt;/param&gt;
+        protected override void OnSessionChange(
+                  SessionChangeDescription changeDescription)
+        {
+            base.OnSessionChange(changeDescription);            
+        }
+    }
+
+    [RunInstaller(true)]
+    public class WindowsServiceInstaller : Installer
+    {
+        /// &lt;summary&gt;
+        /// Public Constructor for WindowsServiceInstaller.
+        /// - Put all of your Initialization code here.
+        /// &lt;/summary&gt;
+        public WindowsServiceInstaller()
+        {
+            ServiceProcessInstaller serviceProcessInstaller =
+                               new ServiceProcessInstaller();
+            ServiceInstaller serviceInstaller = new ServiceInstaller();
+
+            //# Service Account Information
+                
+            serviceProcessInstaller.Account = ServiceAccount.LocalSystem;
+            serviceProcessInstaller.Username = null;
+            serviceProcessInstaller.Password = null;
+
+            //# Service Information
+            serviceInstaller.DisplayName = &quot;Service to manage priorities&quot;;
+            serviceInstaller.StartType = ServiceStartMode.Automatic;
+            
+
+            //# This must be identical to the WindowsService.ServiceBase name
+            //# set in the constructor of WindowsService.cs
+            serviceInstaller.ServiceName = &quot;PriorityService&quot;;
+            serviceInstaller.DelayedAutoStart = true;
+            serviceInstaller.ServicesDependedOn = new string[] {&quot;Windows Management Instrumentation&quot;};
+
+            serviceInstaller.Parent = this;
+            serviceProcessInstaller.Parent = this;
+            
+            this.Installers.Add(serviceProcessInstaller);
+            this.Installers.Add(serviceInstaller);
+            this.Committed+=new InstallEventHandler(ServiceInstaller_Committed);
+            
+
+
+        }
+
+
+        void ServiceInstaller_Committed(object sender, InstallEventArgs e)
+        {
+            using (var controller = new ServiceController(&quot;PriorityService&quot;))
+            {
+                controller.Start();
+                controller.WaitForStatus(ServiceControllerStatus.Running);
+            }
+        }
+    }
+
+    
+    public static class EventWatcherAsync
+    {
+        public static void WmiEventHandler(object sender, EventArrivedEventArgs e)
+        {
+            //in this point the new events arrives
+            //you can access to any property of the Win32_Process class
+            //Console.WriteLine(&quot;TargetInstance.Handle :    &quot; + ((ManagementBaseObject)e.NewEvent.Properties[&quot;TargetInstance&quot;].Value)[&quot;Handle&quot;]);
+            //Console.WriteLine(&quot;TargetInstance.Name :      &quot; + ((ManagementBaseObject)e.NewEvent.Properties[&quot;TargetInstance&quot;].Value)[&quot;Name&quot;]);
+            int pid;
+            string name = ((ManagementBaseObject)e.NewEvent.Properties[&quot;TargetInstance&quot;].Value)[&quot;Name&quot;].ToString().ToLower();
+
+            if (name.StartsWith(&quot;mpc-hc64&quot;))
+            {
+                pid = Convert.ToInt32(((ManagementBaseObject)e.NewEvent.Properties[&quot;TargetInstance&quot;].Value)[&quot;ProcessId&quot;].ToString());
+                change_priority.change_prio(pid, change_priority.realtime, 4);
+            }
+            if (name.StartsWith(&quot;foobar&quot;))
+            {
+                pid = Convert.ToInt32(((ManagementBaseObject)e.NewEvent.Properties[&quot;TargetInstance&quot;].Value)[&quot;ProcessId&quot;].ToString());
+                change_priority.change_prio(pid, change_priority.realtime, 4);
+            }
+            if (name.StartsWith(&quot;iexplore&quot;))
+            {
+                pid = Convert.ToInt32(((ManagementBaseObject)e.NewEvent.Properties[&quot;TargetInstance&quot;].Value)[&quot;ProcessId&quot;].ToString());
+                change_priority.change_prio(pid, change_priority.high, 4);
+            }
+            if (name.StartsWith(&quot;robocopy&quot;))
+            {
+                pid = Convert.ToInt32(((ManagementBaseObject)e.NewEvent.Properties[&quot;TargetInstance&quot;].Value)[&quot;ProcessId&quot;].ToString());
+                change_priority.change_prio(pid, change_priority.idle, 1);
+            }
+        }
+
+        public static ManagementEventWatcher Watcher;
+        public static void EventWatcherAsyncStart()
+        {
+            try
+            {
+                string ComputerName = &quot;localhost&quot;;
+                string WmiQuery;                
+                ManagementScope Scope;
+
+                Scope = new ManagementScope(String.Format(&quot;\\\\{0}\\root\\CIMV2&quot;, ComputerName), null);
+                Scope.Connect();
+
+                WmiQuery = &quot;Select * From __InstanceCreationEvent Within 1 &quot; +
+                &quot;Where TargetInstance ISA 'Win32_Process' &quot;;
+
+                Watcher = new ManagementEventWatcher(Scope, new EventQuery(WmiQuery));
+                Watcher.EventArrived += new EventArrivedEventHandler(WmiEventHandler);
+                Watcher.Start();
+                //Console.Read();
+                //Watcher.Stop();
+            }
+            catch (Exception e)
+            {
+                //Console.WriteLine(&quot;Exception {0} Trace {1}&quot;, e.Message, e.StackTrace);
+            }
+
+        }
+
+    }
+
+    class change_priority
+    {
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct STARTUPINFO
+        {
+            public Int32 cb;
+            public string lpReserved;
+            public string lpDesktop;
+            public string lpTitle;
+            public Int32 dwX;
+            public Int32 dwY;
+            public Int32 dwXSize;
+            public Int32 dwYSize;
+            public Int32 dwXCountChars;
+            public Int32 dwYCountChars;
+            public Int32 dwFillAttribute;
+            public Int32 dwFlags;
+            public Int16 wShowWindow;
+            public Int16 cbReserved2;
+            public IntPtr lpReserved2;
+            public IntPtr hStdInput;
+            public IntPtr hStdOutput;
+            public IntPtr hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct PROCESS_INFORMATION
+        {
+            public IntPtr hProcess;
+            public IntPtr hThread;
+            public int dwProcessId;
+            public int dwThreadId;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public class SECURITY_ATTRIBUTES
+        {
+            public int nLength;
+            public unsafe byte* lpSecurityDescriptor;
+            public int bInheritHandle;
+        }
+
+        public enum PROCESS_INFORMATION_CLASS : int
+        {
+            ProcessBasicInformation = 0,
+            ProcessQuotaLimits,
+            ProcessIoCounters,
+            ProcessVmCounters,
+            ProcessTimes,
+            ProcessBasePriority,
+            ProcessRaisePriority,
+            ProcessDebugPort,
+            ProcessExceptionPort,
+            ProcessAccessToken,
+            ProcessLdtInformation,
+            ProcessLdtSize,
+            ProcessDefaultHardErrorMode,
+            ProcessIoPortHandlers,
+            ProcessPooledUsageAndLimits,
+            ProcessWorkingSetWatch,
+            ProcessUserModeIOPL,
+            ProcessEnableAlignmentFaultFixup,
+            ProcessPriorityClass,
+            ProcessWx86Information,
+            ProcessHandleCount,
+            ProcessAffinityMask,
+            ProcessPriorityBoost,
+            ProcessDeviceMap,
+            ProcessSessionInformation,
+            ProcessForegroundInformation,
+            ProcessWow64Information,
+            ProcessImageFileName,
+            ProcessLUIDDeviceMapsEnabled,
+            ProcessBreakOnTermination,
+            ProcessDebugObjectHandle,
+            ProcessDebugFlags,
+            ProcessHandleTracing,
+            ProcessIoPriority,
+            ProcessExecuteFlags,
+            ProcessResourceManagement,
+            ProcessCookie,
+            ProcessImageInformation,
+            ProcessCycleTime,
+            ProcessPagePriority,
+            ProcessInstrumentationCallback,
+            ProcessThreadStackAllocation,
+            ProcessWorkingSetWatchEx,
+            ProcessImageFileNameWin32,
+            ProcessImageFileMapping,
+            ProcessAffinityUpdateMode,
+            ProcessMemoryAllocationMode,
+            MaxProcessInfoClass
+        }
+
+        public enum STANDARD_RIGHTS : uint
+        {
+            WRITE_OWNER = 524288,
+            WRITE_DAC = 262144,
+            READ_CONTROL = 131072,
+            DELETE = 65536,
+            SYNCHRONIZE = 1048576,
+            STANDARD_RIGHTS_REQUIRED = 983040,
+            STANDARD_RIGHTS_WRITE = READ_CONTROL,
+            STANDARD_RIGHTS_EXECUTE = READ_CONTROL,
+            STANDARD_RIGHTS_READ = READ_CONTROL,
+            STANDARD_RIGHTS_ALL = 2031616,
+            SPECIFIC_RIGHTS_ALL = 65535,
+            ACCESS_SYSTEM_SECURITY = 16777216,
+            MAXIMUM_ALLOWED = 33554432,
+            GENERIC_WRITE = 1073741824,
+            GENERIC_EXECUTE = 536870912,
+            GENERIC_READ = UInt16.MaxValue,
+            GENERIC_ALL = 268435456
+        }
+
+        public enum PROCESS_RIGHTS : uint
+        {
+            PROCESS_TERMINATE = 1,
+            PROCESS_CREATE_THREAD = 2,
+            PROCESS_SET_SESSIONID = 4,
+            PROCESS_VM_OPERATION = 8,
+            PROCESS_VM_READ = 16,
+            PROCESS_VM_WRITE = 32,
+            PROCESS_DUP_HANDLE = 64,
+            PROCESS_CREATE_PROCESS = 128,
+            PROCESS_SET_QUOTA = 256,
+            PROCESS_SET_INFORMATION = 512,
+            PROCESS_QUERY_INFORMATION = 1024,
+            PROCESS_SUSPEND_RESUME = 2048,
+            PROCESS_QUERY_LIMITED_INFORMATION = 4096,
+            PROCESS_ALL_ACCESS = STANDARD_RIGHTS.STANDARD_RIGHTS_REQUIRED | STANDARD_RIGHTS.SYNCHRONIZE | 65535
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PROCESS_BASIC_INFORMATION
+        {
+            public int ExitStatus;
+            public int PebBaseAddress;
+            public int AffinityMask;
+            public int BasePriority;
+            public int UniqueProcessId;
+            public int InheritedFromUniqueProcessId;
+            public int Size
+            {
+                get { return (6 * 4); }
+            }
+        };
+
+
+        [DllImport(&quot;kernel32.dll&quot;)]
+        public static extern bool CreateProcess(
+            string lpApplicationName,
+            string lpCommandLine,
+            ref SECURITY_ATTRIBUTES lpProcessAttributes,
+            ref SECURITY_ATTRIBUTES lpThreadAttributes,
+            bool bInheritHandles,
+            uint dwCreationFlags,
+            IntPtr lpEnvironment,
+            string lpCurrentDirectory,
+            [In] ref STARTUPINFO lpStartupInfo,
+            out PROCESS_INFORMATION lpProcessInformation);
+
+        [DllImport(&quot;kernel32.dll&quot;, CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern bool SetPriorityClass(IntPtr handle, uint priorityClass);
+
+        [DllImport(&quot;KERNEL32.DLL&quot;)]
+        public static extern int
+            OpenProcess(PROCESS_RIGHTS dwDesiredAccess, bool bInheritHandle, int
+            dwProcessId);       
+
+        [DllImport(&quot;ntdll.dll&quot;, SetLastError = true)]
+        public static extern int NtSetInformationProcess(int processHandle,
+           PROCESS_INFORMATION_CLASS processInformationClass, IntPtr processInformation, uint processInformationLength);
+
+        [DllImport(&quot;ntdll.dll&quot;, SetLastError = true)]
+        public static extern int NtQueryInformationProcess(int processHandle,
+           PROCESS_INFORMATION_CLASS processInformationClass, IntPtr processInformation, int processInformationLength,
+           ref int returnLength);
+
+        public const int idle = 0;
+        public const int high = 2;
+        public const int realtime = 3;
+        unsafe public static void change_prio(int pid, int prio, int ioPrio)
+        {
+            Process myproc = Process.GetProcessById(pid);
+            switch (prio)
+            {
+                case high:
+                    myproc.PriorityClass = System.Diagnostics.ProcessPriorityClass.High;
+                    break;
+                case realtime:
+                    myproc.PriorityClass = System.Diagnostics.ProcessPriorityClass.RealTime;
+                    break;
+                case idle:
+                    myproc.PriorityClass = System.Diagnostics.ProcessPriorityClass.Idle;
+                    break;
+            }
+
+            int hProcess = OpenProcess(PROCESS_RIGHTS.PROCESS_ALL_ACCESS, false, pid);
+            if (hProcess == 0)
+            {
+                throw new Exception(&quot;can't open the process.&quot;);
+            }
+            NtSetInformationProcess(hProcess, PROCESS_INFORMATION_CLASS.ProcessIoPriority,
+                 (IntPtr)(&amp;ioPrio), 4);
+            //foreach (ProcessThread thread in myproc.Threads)
+            //{
+            //    thread.Id;
+            //}
+        }
+    }
+
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

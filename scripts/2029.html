@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="jgrote">
+    <title>MoveMailboxBySize - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>MoveMailboxBySize</h1>
+<h3><a href="//scripts/2029.ps1">download</a></h3>
+<p>This script was developed to assist a customer with moving customizable batches of users, starting smallest mailboxes first in batches, and move them into datastores sorted by last name. This script is modular and can be extended to different filtering mechanisms, or a different datastore sorting criteria.</p>
+<pre><code class="language-posh">### VARIABLES ###
+
+#Stop the script if an error ever occurs
+$ErrorActionPreference = &quot;stop&quot;
+
+#Base Directory
+$BaseDir=&quot;C:\Scripts&quot;
+
+#Place for Migration Reports
+$ReportFileDir=&quot;C:\Scripts\Logs&quot;
+
+#Exclusion List of Mailboxes to Not Move. This should be a return-separated list of mailbox display names to avoid.
+$ExclusionListFile=&quot;$BaseDir\ExcludedMailboxes.txt&quot;
+
+#Special Mailboxes. These are mailboxes that should be completely exempt, including errorChecking to see if they exist, such as non-standard system mailboxes or others that may cause problems with migration.
+$SpecialMailboxes=&quot;$BaseDir\SpecialMailboxes.txt&quot;
+
+#Excluded 2003 Hosts not to Scan for Mailboxes
+$ExcludedHosts=&quot;$BaseDir\ExcludedHosts.txt&quot;
+
+#Number of Mailboxes to Move in this Batch 
+$MailboxCount = 10000
+
+#Output if a user is excluded by the Exclusion List
+$ShowExclusions=$true
+
+#Migrate for real. Only do a &quot;what-if&quot; evaluation if false.
+$MigrateMailboxes = $false
+
+### Functions ###
+
+#Select-MigrateMailboxDatabase
+#***READ ME*** REPLACE THE REGEX AND Mailbox Database Names as appropriate.
+function Select-TargetDatabase ($NameToMatch) {
+    $TargetMailboxDatabaseName = switch -regex ($NameToMatch) {
+            &quot;^[0-9].*&quot; {&quot;1 - Mailbox Store A - D&quot;}
+            &quot;^[a-d].*&quot; {&quot;1 - Mailbox Store A - D&quot;}
+            &quot;^[e-h].*&quot; {&quot;2 - Mailbox Store E - H&quot;}
+            &quot;^[i-l].*&quot; {&quot;3 - Mailbox Store I - L&quot;}
+            &quot;^[m-p].*&quot; {&quot;4 - Mailbox Store M - P&quot;}
+            &quot;^[q-t].*&quot; {&quot;5 - Mailbox Store Q - T&quot;}
+            &quot;^[u-z].*&quot; {&quot;6 - Mailbox Store U - Z&quot;}
+            default {throw &quot;No Datastore was matched by Select-MigrateMailboxDatabase for $MailboxDisplayName. Check that the user's name will be matched by the select-targetdatabase matching criteria&quot;}
+    }
+    return $TargetMailboxDatabaseName
+}
+
+### INITIALIZE ###
+
+#Load Exchange Snapins if not present
+if (!(get-pssnapin Microsoft.Exchange.Management.Powershell.Admin -erroraction SilentlyContinue)) {
+    write-host -fore cyan &quot;Loading Exchange Powershell Snapins...&quot;
+    get-pssnapin -registered | where {$_.name -match &quot;Microsoft.Exchange&quot;} | add-pssnapin
+}
+
+#Load 2003 Statistics Formatting Module
+if (!(get-module Format-2003MailboxStatistics)) {import-module &quot;$BaseDir\Format-2003MailboxStatistics.psm1&quot;}
+
+### END INITIALIZE ###
+
+### SCRIPT ###
+write-host -fore darkcyan &quot;===Mailbox Move Script START===&quot;
+
+
+#Trim any leading/trailing whitespace from the exclusion list
+$ExclusionList = (get-content $ExclusionListFile) | foreach {$_.trim()}
+
+#Validate Exclude List. Ensure every item in the exclusion list has a corresponding mailbox. This way we can be sure we don't accidentally miss someone because their name was misspelled.
+write-host -fore darkcyan &quot;= Validating Exclusion List...&quot; -nonewline
+$ExclusionList | where {(get-content $SpecialMailboxes) -notcontains $_} | foreach {
+    if (!(get-mailbox &quot;$_&quot; -errorAction SilentlyContinue)) {throw &quot;Validating the Exclusion List failed. There is no Exchange Mailbox with the display name $_. Verify that the name in the Exclusion List is correct and try again.&quot;}
+}
+write-host -fore green &quot;SUCCESS&quot;
+
+###Collect mailbox statistics on all legacy mailboxes (aka not migrated to 2007) in the organization.
+
+#First Get a list of all Exchange 2003 Servers in the organization
+write-host -fore darkcyan &quot;= Collecting Exchange 2003 Server Information...&quot; -nonewline
+$EX2003Servers = get-exchangeserver | where {$_.AdminDisplayVersion -match &quot;6.5&quot;}
+write-host -fore green &quot;SUCCESS&quot;
+
+#Collect Mailbox Statistics for Each Server
+$2003MailboxStats = @()
+$EX2003Servers | where {(get-content $ExcludedHosts) -notcontains $_.Name} | foreach {
+    $ServerName = $_.Name
+    write-host -fore darkcyan &quot;= Collecting Exchange 2003 Mailbox Statistics on $ServerName...&quot; -nonewline
+    $MailboxWMIInfo = Get-WMIObject -ComputerName $ServerName `
+        -Namespace &quot;root/MicrosoftExchangeV2&quot; -Class &quot;Exchange_Mailbox&quot;
+    $2003MailboxStats += $MailboxWMIInfo | Format-2003MailboxStatistics
+    write-host -fore green &quot;SUCCESS&quot;
+}
+
+#Check if each Mailbox is on the exclusion list, and filter it out if it is. We do this before mailbox selection in case the top X results are all excluded people, so we don't have to run the script a second time.
+write-host -fore darkcyan &quot;= Excluding Mailboxes on the Exclusion, System, and Keyword Lists...&quot;
+
+$MailboxMoveCandidates = $2003MailboxStats | `
+where {(get-content $SpecialMailboxes) -notcontains &quot;$($_.MailboxDisplayName)&quot;} | `
+where {
+        #@@BUGFIX - This logic is not 100% sound, several implications are made. Works fine but could be cleaner.
+        
+        #Set some variables for ease-of-use later
+        $candidate = $_
+        $candidateName = $candidate.MailboxDisplayName.Trim()
+        
+        
+        #Filter Out System Mailboxes
+        if ($candidateName -match 'SMTP ' ) {return $false}
+        elseif ($candidateName -match 'SystemMailbox'){return $false}
+        
+        #Filter Out Disabled Users
+        elseif ($candidate.DateDiscoveredAbsentInDS) {
+            if ($showExclusions) {write-host -fore yellow &quot;= * Skipping $candidateName because the mailbox has no corresponding Active Directory Object.&quot;}
+            return $false;
+        }
+        
+        #Verify user has a corresponding AD object
+        elseif (!(get-mailbox $candidate.Identity -erroraction silentlyContinue)) {
+            if ($showExclusions) {write-host -fore red &quot;= * Skipping $candidateName because could not get mailbox info. Verify that the user has an Active Directory Account.&quot;}
+            return $false;
+        }
+        
+        #Verify a user is not on the exclusion List.
+        elseif ($ExclusionList -notcontains &quot;$candidateName&quot;) {
+            return $true;
+        }
+        
+
+        
+        #Exclude everything else as a safety check if it doesn't meet the above rules.
+        else {
+            if ($showExclusions) {write-host -fore yellow &quot;= * $candidateName was excluded&quot;}
+            return $false;
+        }
+}
+
+write-host -fore green &quot;= Excluding Mailboxes SUCCESS&quot;
+
+#Select Top X Users
+$MailboxesToMove = $MailboxMoveCandidates | sort size | select -first $MailboxCount
+
+#Display Mailboxes that will be moved and where they will be moved to. We do this by creating new objects with Select that have a new targetDatastore parameter, and run the detection program to find the correct datastore and populate.
+$MBDisplay = $MailboxesToMove | select MailboxDisplayName,@{Name='Size (KB)';Expression={$_.size}},serverName,NameToMatch,targetDatabase | foreach {
+    $_.nameToMatch = $_.MailboxDisplayName.split() | select -last 1
+    $_.targetDatabase = Select-TargetDatabase &quot;$($_.nameToMatch)&quot;;$_
+}
+
+#Separated this out so that it will process all objects BEFORE showing the out-gridview in case of any errors.
+$MBDisplay | out-gridview -title &quot;List of Mailboxes to Migrate in This Batch&quot;
+
+if ((read-host &quot;Do you wish to move these $MailboxCount users? Type MIGRATE to perform the migration or anything else to exit.&quot;) -notlike &quot;MIGRATE&quot;) {throw &quot;Migration Cancelled at User Request&quot;;exit 10}
+
+#Perform the Migration.
+
+    $MailboxesToMove | foreach {
+        $mailboxToMove = get-mailbox $_.Identity
+        #@@BUGFIX - This is sloppy, would be better to query the AD last name. Is fine for 99% of users.
+        $NameToMatch = $_.MailboxDisplayName.split() | select -last 1
+        $targetDatabaseName = Select-TargetDatabase $NameToMatch
+        #@@BUGFIX - This is also sloppy, but we would need all kinds of logic to get the database server and storage group first and this works just as well for 99% of cases as long as target datastore names are unique (they have to be in EX2010).
+        $targetDatabase = get-mailboxdatabase | where {$_.name -like &quot;$targetDatabaseName&quot;}
+        $reportFileName = &quot;$ReportFileDir\$($mailboxToMove.Alias)-$(get-date -format &quot;yyyy-MMM-dd-HHmmss&quot;).xml&quot;
+        
+        #Just do a whatif unless MigrateMailboxes is set to true        
+        if ($MigrateMailboxes) {move-mailbox $mailboxToMove -targetdatabase $targetDatabase -reportfile $reportFileName -Confirm $false}
+        else {move-mailbox $mailboxToMove -targetdatabase $targetDatabase -reportfile $reportFileName -whatif}
+    }
+
+#Free Up Memory by deleting variable we don't need anymore.
+#remove-variable -name MailboxMoveCandidates
+
+###TODO: Rewrite 2003Stats as a pipeline function, get stats, sort by name and filter, exclude, and then kick off move mailbox with -whatif unless MigrateMailboxes is set.
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

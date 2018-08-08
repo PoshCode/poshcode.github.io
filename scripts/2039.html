@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-ODataServiceProxy - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-ODataServiceProxy</h1>
+<h3><a href="//scripts/2039.ps1">download</a></h3>
+<p>A wrapper for DataSvcUtil to generate web service proxies in-memory for OData services like NetFlix (which are not handled correctly by PowerShell's built-in New-WebServiceProxy).</p>
+<p>REQUIRES AT LEAST .Net 3.5 SP1 with the Data Services Update &quot;for Windows 7/2008 R2&quot;:http://support.microsoft.com/kb/982307 or &quot;Windows XP/Vista/Server 2003/2008&quot;:http://support.microsoft.com/kb/982306/</p>
+<p>Note that this ships in the box with .Net Framework 4, but unless you've modified PoweShell ISE's app.config, or are using &quot;PoshConsole&quot;:http://PoshConsole.CodePlex.com, you can't really use that, so you'll need the latest 3.5 SP1 <em>plus</em> the Data Services Update.</p>
+<pre><code class="language-posh">function New-ODataServiceProxy {
+#.Synopsis
+#  Creates a proxy class for an odata web service
+#  YOU NEED TO BE VERY CAREFUL NOT TO OUTPUT THE PROXY OBJECT TO THE POWERSHELL HOST!
+#.Description 
+#  Uses the data service client utility (DataSvcUtil.exe) to generate a proxy class (and types for all objects) for an OData web service. 
+#  WARNING: Outputting this object to the PowerShell host will result in queriying all the object collections on the service.
+#.Parameter URI
+#  The URI for the web service
+#.Parameter Passthru
+#  Causes the method to output all of the types defined by the service metadata as well as the actual service object.
+#.Example
+#  $proxy = New-ODataServiceProxy http://odata.netflix.com/Catalog/
+#  $AdventuresInOdyssey = $proxy.Titles.AddQueryOption('$filter',&quot;substringof('Adventures in Odyssey',Name)&quot;)
+#  $AdventuresInOdyssey | Format-List Name, ReleaseYear, Url, Synopsis
+#.Link http://msdn.microsoft.com/en-us/library/ee383989.aspx
+#.Notes
+#  I can't stress enough that you should not output the object or any property that returns a System.Data.Services.Client.DataServiceQuery[T] without a filter unless you're sure that's what you want.
+#
+#  ADO.NET Data Service Client Utility http://msdn.microsoft.com/en-us/library/ee383989.aspx
+#  AddQueryOption http://msdn.microsoft.com/en-us/library/cc646860.aspx
+#  NetFlix Catalog http://developer.netflix.com/docs/oData_Catalog
+#  Data Services Update for .Net 3.5 SP1 http://support.microsoft.com/kb/982307
+#  
+param( $URI = &quot;http://odata.netflix.com/Catalog/&quot;, [switch]$Passthru )
+## You can only use this on .Net 4 or .Net 3.5 SP1 
+## For .Net 3.5 SP1 you need to download http://support.microsoft.com/kb/982307
+## If you don't have it, this won't succeed
+[Reflection.Assembly]::Load(&quot;System.Data.Services.Client, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089&quot;) | Out-Null
+
+## Find the right DataSvcUtil for this version of .Net
+switch($PSVersionTable.ClrVersion.Major) {
+   4 { # PoshConsole and modded .Net4 PowerShell_ISE etc.
+      Set-Alias Get-ODataServiceDefinition (Get-ChildItem ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory())  DataSvcUtil.exe)
+      break
+   }
+   2 { # PowerShell.exe and everyone else
+      $FrameworkPath = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory() | Split-Path
+      Set-Alias Get-ODataServiceDefinition (Get-ChildItem $FrameworkPath\v3.5\DataSvcUtil.exe)
+      break
+   }
+}
+## Get the service definition into a string via a temp file
+$temp = [IO.Path]::GetTempFileName()
+Get-ODataServiceDefinition -out:$temp -uri:$URI -nologo | Out-Null
+$code = @(Get-Content $temp) -join &quot;`n&quot; # -Delim ([char]0)
+Remove-Item $temp
+
+$Types = Add-Type $code -Reference &quot;System.Data.Services.Client, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089&quot; -Language CSharpVersion3 -Passthru
+$ContextType = $Types | Where-Object { $_.BaseType -eq [System.Data.Services.Client.DataServiceContext] }
+
+$ctx = new-object $ContextType $URI
+
+Write-Output $ctx
+
+if($Passthru) { Write-Output $types }
+}
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

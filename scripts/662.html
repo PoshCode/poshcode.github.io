@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Markus Laumann">
+    <title>AD Exch Users to Groups - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>AD Exch Users to Groups</h1>
+<h3><a href="//scripts/662.ps1">download</a></h3>
+<p>Search Active Directory for all users,
+add them to specific groups based on homemta value,
+remove disabled users from same groups,
+and export all users to excel.</p>
+<pre><code class="language-posh">##Purpose: Search Active Directory for all users, add them to specific groups based on homemta value, remove disabled users from same groups, and export all users to excel. 
+
+##Requires Excel 2003 or 2007 be installed on the local machine for exporting.
+##Requires Quest ActiveRoles Management Shell for Active Directory
+##http://www.quest.com/powershell/activeroles-server.aspx
+
+##Helpful tool: ADSIEDIT.MSC
+##Use it to find the values for most of these Active Directory variables.
+##For the example values, I used the values presented in this link:
+##http://technet.microsoft.com/en-us/library/bb125087(EXCHG.65).aspx
+
+
+Add-PSSnapin Quest.ActiveRoles.ADManagement
+
+$strRootLDAP = 'contoso.com/Users'
+
+##$strServerx = the homeMTA value in AD for your users.
+$strServer1 = &quot;CN=Microsoft MTA,CN=Exchange1,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+$strServer2 = &quot;CN=Microsoft MTA,CN=Exchange2,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+
+##$strGroupNamex = the name of the group you want your users to be added to based on their mail server. 
+$strGroupName1 = &quot;Exchange1 Users&quot;
+$strGroupName2 = &quot;Exchange2 Users&quot;
+
+##$objGroupx = the distinguished name of the groups above.
+$strGroupDN1 = &quot;CN=Exchange1 Users,OU=Groups,DC=contoso,DC=com&quot;
+$strGroupDN2 = &quot;CN=Exchange2 Users,OU=Groups,DC=contoso,DC=com&quot;
+
+##$strServerx = the homeMDB value in AD for your users.
+$strServer1DB1SG1 = &quot;CN=DB1,CN=SG1,CN=InformationStore,CN=Exchange1,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+$strServer1DB1SG2 = &quot;CN=DB1,CN=SG2,CN=InformationStore,CN=Exchange1,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+$strServer1DB2SG1 = &quot;CN=DB2,CN=SG1,CN=InformationStore,CN=Exchange1,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+$strServer1DB2SG2 = &quot;CN=DB2,CN=SG2,CN=InformationStore,CN=Exchange1,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+
+$strServer2DB1SG1 = &quot;CN=DB1,CN=SG1,CN=InformationStore,CN=Exchange2,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+$strServer2DB1SG2 = &quot;CN=DB1,CN=SG2,CN=InformationStore,CN=Exchange2,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+$strServer2DB2SG1 = &quot;CN=DB2,CN=SG1,CN=InformationStore,CN=Exchange2,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+$strServer2DB2SG2 = &quot;CN=DB2,CN=SG2,CN=InformationStore,CN=Exchange2,CN=Servers,CN=AG1,CN=Administrative Groups,CN=Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=contoso,DC=com&quot;
+
+function ScanEnabledUsers ($colEnabledUserResults)
+	{
+	$rowcounter = 1
+	$intTotal = $colEnabledUserResults.Count
+	foreach ($colEnabledUserResult in $colEnabledUserResults)
+		{
+		$strName = $colEnabledUserResult.name
+		$strDN = $colEnabledUserResult.distinguishedname
+		$strMTA = $colEnabledUserResult.homemta
+		switch  ($strMTA)
+			{
+			$strServer1	
+				{
+				Write-Host &quot;$rowcounter of $intTotal : Exchange1 : $strName&quot;
+				add-QADGroupMember -Identity $strGroupDN1 -Member &quot;$strDN&quot; 
+				foreach ($strMemberof in $colEnabledUserResult.memberof) {
+					switch  ($strMemberOf)
+						{
+						$strGroupDN2 
+							{
+							Write-Host -ForegroundColor Red &quot;Removing from Exchange2: $strName&quot;
+							Remove-QADGroupMember -Identity $strGroupDN2 -Member $strDN
+							}
+						}
+					}
+				}
+			$strServer2 {
+				Write-Host &quot;$rowcounter of $intTotal : Exchange2 : $strName&quot;
+				add-QADGroupMember -Identity $strGroupDN2 -Member &quot;$strDN&quot; 
+				foreach ($strMemberof in $colEnabledUserResult.memberof) {
+					switch  ($strMemberOf){
+						$strGroupDN1 
+							{
+							Write-Host -ForegroundColor Red &quot;Removing from Exchange1: $strName&quot;
+							Remove-QADGroupMember -Identity $strGroupDN1 -Member $strDN
+							}
+						}
+					}
+				}
+			}
+		$rowcounter++
+		}
+	}
+
+function ScanDisabledUsers ($colDisabledUserResults)
+	{
+	## Now to remove any &quot;disabled&quot; users from these groups.
+	Write-Host &quot;Checking all disabled User accounts and removing them from distribution groups.&quot;
+	$rowcounter = 1
+	$intTotal = $colDisabledUserResults.Count
+	foreach ($colDisabledUserResult in $colDisabledUserResults)
+		{
+		#$objItem = $objResult.Properties; 
+		#$strDN = $objItem.distinguishedname
+		$strDN = $colDisabledUserResult.distinguishedname
+		$strName = $colDisabledUserResult.Name
+		Write-Host $rowcounter of $intTotal : $strName
+		foreach ($strMemberOf in $colDisabledUserResult.memberof)
+			{
+			switch  ($strMemberOf)
+				{
+				$strGroupDN1 
+					{
+					Write-Host -ForegroundColor Red &quot;Removing from Exchange1: $strName&quot;
+					Remove-QADGroupMember -Identity $strGroupDN1 -Member $strDN
+					}
+				$strGroupDN2 
+					{
+					Write-Host -ForegroundColor Red &quot;Removing from Exchange2: $strName&quot;
+					Remove-QADGroupMember -Identity $strGroupDN2 -Member $strDN
+					}
+				}
+			}
+		$rowcounter++
+    	}
+	}
+
+function ExportGroupToExcel ($strRootLDAP)
+{
+Write-Host Exporting Users to Excel...
+$colExcelUserResults = $colEnabledUserResults + $colDisabledUserResults
+$intEnabledCount = [int]$colEnabledUserResults.Count
+Write-Host Enabled Count:  $intEnabledCount
+$intDisabledCount = [int]$colDisabledUserResults.Count
+Write-Host Disabled Count: $intDisabledCount
+$intTotalCount = [int]$colExcelUserResults.Count
+Write-Host Total Count:    $intTotalCount
+##$rowcounter needs to be set to two in order to leave a line for the header row.
+$rowcounter = 2
+$ws.Cells.Item(1,1) = &quot;Name&quot;
+$ws.Cells.Item(1,2) = &quot;Logon Name&quot;
+$ws.Cells.Item(1,3) = &quot;CAC ID Number&quot;
+$ws.Cells.Item(1,4) = &quot;Exch Server&quot;
+$ws.Cells.Item(1,5) = &quot;Exch DB &amp; SG&quot;
+$ws.Cells.Item(1,6) = &quot;Logon Count&quot;
+$ws.Cells.Item(1,7) = &quot;Dis/Enabled&quot;
+$ws.Cells.Item(1,8) = &quot;Exchange Server DistinguishedName LONG&quot;
+$ws.Cells.Item(1,9) = &quot;Exchange Database and Storage Group LONG&quot;
+foreach ($colQADUserResult in $colExcelUserResults) 
+    {
+	##I'm using write-progress here just to learn how to use it.
+	$intComplete = ($rowcounter/$intTotalCount)*100
+	write-progress &quot;Export to Excel in Progress&quot; &quot;Complete % : &quot; -PercentComplete $intComplete
+    $ws.Cells.Item(&quot;$rowcounter&quot;,1) = $colQADUserResult.name
+    $ws.Cells.Item(&quot;$rowcounter&quot;,2) = $colQADUserResult.samaccountname
+	$ws.Cells.Item(&quot;$rowcounter&quot;,3) = $colQADUserResult.employeeid
+	$strMTA = $colQADUserResult.homemta
+    switch ($strMTA) {
+        $strServer1 {$ws.Cells.Item(&quot;$rowcounter&quot;,4) = &quot;Exchange1&quot;}
+        $strServer2 {$ws.Cells.Item(&quot;$rowcounter&quot;,4) = &quot;Exchange2&quot;}
+        }
+	$strMDB = $colQADUserResult.homemdb
+    switch ($strMDB) {
+        $strServer1DB1SG1 {$ws.Cells.Item(&quot;$rowcounter&quot;,5) = &quot;DB1 SG1&quot;}
+        $strServer1DB1SG2 {$ws.Cells.Item(&quot;$rowcounter&quot;,5) = &quot;DB1 SG2&quot;}
+        $strServer1DB2SG1 {$ws.Cells.Item(&quot;$rowcounter&quot;,5) = &quot;DB2 SG1&quot;}
+        $strServer1DB2SG2 {$ws.Cells.Item(&quot;$rowcounter&quot;,5) = &quot;DB2 SG2&quot;}
+        
+        $strServer2DB1SG1 {$ws.Cells.Item(&quot;$rowcounter&quot;,5) = &quot;DB1 SG1&quot;}
+        $strServer2DB1SG2 {$ws.Cells.Item(&quot;$rowcounter&quot;,5) = &quot;DB1 SG2&quot;}
+        $strServer2DB2SG1 {$ws.Cells.Item(&quot;$rowcounter&quot;,5) = &quot;DB2 SG1&quot;}
+        $strServer2DB2SG2 {$ws.Cells.Item(&quot;$rowcounter&quot;,5) = &quot;DB2 SG2&quot;}
+        }
+	$ws.Cells.Item(&quot;$rowcounter&quot;,6) = $colQADUserResult.logoncount
+	if (($rowcounter - 1) -le [int]$colEnabledUserResults.Count) 
+		{$ws.Cells.Item(&quot;$rowcounter&quot;,7) = &quot;Enabled&quot;}
+	else 
+		{$ws.Cells.Item(&quot;$rowcounter&quot;,7) = &quot;Disabled&quot;}
+	##I still record the raw $strMTA and $strMDB in Excel here because I found the exchange team 
+	##creating mailboxes on the bridgehead server. This helps spot the oddballs when sorting.
+	$ws.Cells.Item(&quot;$rowcounter&quot;,8) = $strMTA
+    $ws.Cells.Item(&quot;$rowcounter&quot;,9) = $strMDB
+    $rowcounter++
+    }
+}
+
+Write-Host 'Searching for all &quot;Enabled&quot; User accounts in $strRootLDAP'
+$colEnabledUserResults = Get-QADUser -Enabled -SearchRoot $strRootLDAP -SizeLimit 0 -DontUseDefaultIncludedProperties -IncludedProperties 'memberof','name','distinguishedname','employeeid','samaccountname','homemta','homemdb','logoncount'
+Write-Host 'Searching for all &quot;Disabled&quot; User accounts in $strRootLDAP'
+$colDisabledUserResults = Get-QADUser -Disabled -SearchRoot $strRootLDAP -SizeLimit 0 -DontUseDefaultIncludedProperties -IncludedProperties 'memberof','name','distinguishedname','employeeid','samaccountname','homemta','homemdb','logoncount'
+
+ScanEnabledUsers ($colEnabledUserResults)
+ScanDisabledUsers ($colDisabledUserResults)
+
+$a = New-Object -comobject Excel.Application
+$b = $a.Workbooks.Add()
+$ws = $b.Worksheets.Item(1)
+$ws.Name = &quot;Users&quot;
+$a.Visible = $True
+
+ExportGroupToExcel ($strRootLDAP)
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

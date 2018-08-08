@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Dmitry Sotnikov">
+    <title>Compare-AD - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Compare-AD</h1>
+<h3><a href="//scripts/638.ps1">download</a></h3>
+<p>A set of functions (and sample code using them) to create
+snapshots of user accounts in the current Active Directory domain
+save them in an xml file, and then compare live AD environment
+against that XML</p>
+<p>(C) Dmitry Sotnikov
+http://dmitrysotnikov.wordpress.com/2008/10/14/compare-ad-against-snapshotscompare-ad-against-snapshots</p>
+<pre><code class="language-posh">###############################################################################
+# Compare-AD - a set of functions (and sample code using them) to create 
+# snapshots of user accounts in the current Active Directory domain
+# save them in an xml file, and then compare live AD environment
+# against that XML
+#
+# (C) Dmitry Sotnikov
+# http://dmitrysotnikov.wordpress.com/2008/10/14/compare-ad-against-snapshotscompare-ad-against-snapshots
+# 
+###############################################################################
+
+# Requires QAD cmdlets
+if ((Get-PSSnapin &quot;Quest.ActiveRoles.ADManagement&quot; `
+			-ErrorAction SilentlyContinue) -eq $null) {
+	Add-PSSnapin &quot;Quest.ActiveRoles.ADManagement&quot;
+}
+
+
+###############################################################################
+# Functions
+###############################################################################
+
+# Retrives all AD users from the current domain and stores the selected 
+# set of properties (passed as an array of strings in the $properties parameter)
+# as an xml file by the path passed as $path
+# See sample use below
+function New-Snapshot {
+    param($path, $properties)
+    Get-QADUser -SizeLimit 0 -DontUseDefaultIncludedProperties `
+		-IncludedProperties $properties | 
+			Select $properties | Export-Clixml $path
+}
+
+# Load the snapshot and compare it against current AD domain
+function Compare-ActiveDirectory {
+    param($path, $properties)
+	
+	# $old is the snapshot, $new is the current environment data
+    $old = Import-Clixml $path
+    $new = Get-QADUser -SizeLimit 0 -DontUseDefaultIncludedProperties `
+		-IncludedProperties $properties | 
+        	Select $properties
+
+	# First lets report the ones which got created or deleted
+    $diff = Compare-Object $old $new -Property Name
+    $created = , ($diff | where { $_.SideIndicator -eq &quot;=&gt;&quot; })
+    $deleted = , ($diff | where { $_.SideIndicator -eq &quot;&lt;=&quot; })
+    
+    if ( $created.Count -gt 0 ) {
+        &quot;New accounts:&quot;
+        $created | Format-Table Name
+    }
+    
+    if ( $deleted.Count -gt 0 ) {
+        &quot;Deleted accounts:&quot;
+        $deleted | Format-Table Name
+    }
+    
+    # Now let's load the accounts in a hash-table so it is easier to locate them
+    $hash = @{}
+    $new | ForEach-Object { $hash[$_.DistinguishedName] = $_ }
+    
+	# Let's enumerate the accounts and their properties and report any changes
+    &quot;Modified objects:&quot;
+    foreach ( $snapshot in $old ) {
+        $current = $hash[$snapshot.DistinguishedName]
+        if ( $current -and 
+            ($current.ModificationDate -ne $snapshot.ModificationDate )) {
+@&quot;
+
+Object $($snapshot.distinguishedname)
+Modified at $($current.ModificationDate)
+                
+Property`tOld Value`tNew Value
+========`t=========`t=========
+&quot;@
+			foreach ($property in $properties) {
+				if ( ($property -ne &quot;ModificationDate&quot;) -and 
+					($snapshot.$property -ne $current.$property )) {
+				&quot;$property`t$($snapshot.$property)`t$($current.$property)&quot;
+				}
+			}
+		}
+    }
+}
+
+###############################################################################
+# Common parameters
+###############################################################################
+
+# These are the properties to be compared
+# Make sure they include Name, DistinguishedName, and ModificationDate
+# Remove the TS attributes if your system requirements for retrieving those
+# are not met: 
+# http://dmitrysotnikov.wordpress.com/2008/07/23/system-requirements-for-powershell-terminal-services-management/
+$Members_to_Compare = @( &quot;Name&quot;, &quot;DistinguishedName&quot;, &quot;ModificationDate&quot;, 
+    &quot;AccountIsDisabled&quot;, &quot;AccountIsLockedOut&quot;, &quot;AccountName&quot;, 
+    &quot;CanonicalName&quot;, &quot;City&quot;, &quot;Company&quot;, &quot;Department&quot;, &quot;Description&quot;, 
+    &quot;DisplayName&quot;, &quot;Email&quot;, &quot;Fax&quot;,
+    &quot;FirstName&quot;, &quot;HomeDirectory&quot;, &quot;HomeDrive&quot;, &quot;HomePhone&quot;, &quot;Initials&quot;, 
+    &quot;LastName&quot;, &quot;LdapDisplayName&quot;, &quot;LogonName&quot;, &quot;LogonScript&quot;, &quot;Manager&quot;, 
+    &quot;MobilePhone&quot;, &quot;Notes&quot;, &quot;Office&quot;, &quot;Pager&quot;, 
+    &quot;ParentContainerDN&quot;, &quot;PasswordNeverExpires&quot;, 
+    &quot;PhoneNumber&quot;, &quot;PostalCode&quot;, &quot;PostOfficeBox&quot;, &quot;ProfilePath&quot;, 
+    &quot;SamAccountName&quot;, &quot;StateOrProvince&quot;, &quot;StreetAddress&quot;, &quot;Title&quot;, 
+    &quot;TsAllowLogon&quot;, &quot;TsBrokenConnectionAction&quot;, &quot;TsConnectClientDrives&quot;, 
+    &quot;TsConnectPrinterDrives&quot;, &quot;TsDefaultToMainPrinter&quot;, &quot;TsHomeDirectory&quot;, 
+    &quot;TsHomeDrive&quot;, &quot;TsInitialProgram&quot;, &quot;TsMaxConnectionTime&quot;, 
+    &quot;TsMaxDisconnectionTime&quot;, &quot;TsMaxIdleTime&quot;, &quot;TsProfilePath&quot;, 
+    &quot;TsReconnectionAction&quot;, &quot;TsRemoteControl&quot;, &quot;TsWorkDirectory&quot;, 
+    &quot;UserPrincipalName&quot;, &quot;WebPage&quot; )
+
+# Path to the snapshot file
+$SnapshotPath = &quot;c:\snapshot.xml&quot;
+
+###############################################################################
+# Sample usage
+###############################################################################
+
+# Create a snapshot
+New-Snapshot -Path $SnapshotPath -Properties $Members_to_Compare
+
+# Make some changes
+New-QADUser -Name &quot;Lawrence Alford&quot;  -ParentContainer mydomain.local/test
+Set-QADUser &quot;Jennifer Clarke&quot; -PhoneNumber &quot;(249) 111-22-33&quot;
+Set-QADUser &quot;Ernest Cantrell&quot; -City &quot;San Francisco&quot;
+Remove-QADObject &quot;Andreas Bold&quot;  -Force
+
+# Let's see if we find them
+Compare-ActiveDirectory -Path $SnapshotPath -Properties $Members_to_Compare
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

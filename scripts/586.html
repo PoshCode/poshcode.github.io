@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jeremy Pavleck">
+    <title>SCOM-RunRemoteExecutable - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SCOM-RunRemoteExecutable</h1>
+<h3><a href="//scripts/586.ps1">download</a></h3>
+<p>Used as a notification command channel in SCOM, this script will (theoretically) spawn a process on a remote machine - used for creating a sound on an admin console, such as in a NOC.
+For the most part, you'll probably need to embed credentials in this, which I disagree with and won't add.</p>
+<pre><code class="language-posh"># ==============================================================================================
+#
+# Microsoft PowerShell Source File — Created with SAPIEN Technologies PrimalScript 2007
+#
+# NAME: SCOM-RunRemoteExecutable.ps1
+#
+# AUTHOR: Jeremy D. Pavleck , Pavleck.NET
+# DATE  : 9/13/2008
+#
+# COMMENT: This is a Proof Of Concept script written in response to a mailing list request to
+#               enable OpsMgr to sound an audible alert on a remote admin PC, such as a console in a
+#               NOC.
+#               This is to be run as a Notification Command Channel.
+#
+# NOTES/WARNING: This script uses a remote WMI call to spawn a process on a named server. As
+#               such, there are security issues to keep in mind. I haven’t added the code to allow you
+#               to use alternate credentials, but use http://poshcode.org/501 as a jumping off point.
+#               If you’re running the OpsMgr services under a domain account, add that user to the local
+#               administrators group on the machine you want to run this command. If you’re using local
+#               system, add RMS\Local System to the admin group.
+#               RUN AT YOUR OWN RISK!
+#
+# VERSIONS:
+#               v1.0 - 09/12/2008 - Initial version
+#               v1.1 - 09/13/2008 - On the advice of Pete Zerger, added a throttling routine to prevent
+#                                                       to many executions during an alert storm
+#               v1.2 - 09/13/2008 - Changed variable names to make it a more ‘run remote executable’ script
+#
+# ==============================================================================================
+
+# User Settings
+$remoteMachine = &quot;adminconsole.pavleck.net&quot;
+# The location to the executable. This is the path on the REMOTE machine.
+$myExe = &quot;C:\Program Files\Real Alternative\Media Player Classic\mplayerc.exe&quot;
+$myExeParams = &quot;C:\Windows\Media\tada.exe&quot; # Paramters to pass to the executable, such as the location of the sound file, etc.
+                                                                                   # Leave blank if none are needed
+# Registry &amp;amp; throttling settings
+$myKey = &quot;SCOM_PowerShell_Scripts&quot; # Reg key name to use
+$myValueName = &quot;LastRunTime&quot; # Data value
+$interval = 5 # Wait at least this long, in minutes
+# Initialize a couple things
+$firstRun = $False
+$throttle = $False
+
+# We use the OpsMgr API only because it’s a very quick and simple way to log to the eventviewer
+$momAPI = New-Object -comObject &quot;MOM.ScriptAPI&quot;
+# LogScriptEvent Severities
+$momErr = 1
+$momWarn = 2
+$momInfo = 4
+# Setup some event ids to use
+$errID = 11000
+$warnID = 11001
+$infoID = 11002
+
+$myName = $MyInvocation.MyCommand.Name # Grab script name
+
+### Registry throttling settings
+# First see if our key exists, if not, create it and populate it with the current date/time
+# and set $firstRun to $True
+If(!$(Test-Path HKLM:\SOFTWARE\$myKey)) {
+        New-Item -Path HKLM:\Software\$myKey
+        New-ItemProperty -Path HKLM:\SOFTWARE\$myKey -Name $myValueName -Value (Get-Date)
+        $firstRun = $True
+        }
+
+# If this isn’t the first run, compare previous time with current time - if last run is $interval
+# minutes ago or higher, carry on, otherwise exit
+If(!($firstRun)) {
+        $lastRun = (Get-ItemProperty -Path HKLM:\SOFTWARE\$myKey).$myValueName
+        Set-ItemProperty -Path HKLM:\SOFTWARE\$myKey -Name $myValueName -Value (Get-Date)
+                If(((Get-Date) - [DateTime]$lastRun).TotalMinutes -ge $interval) {
+                $throttle = $False
+                } else {
+                $throttle = $True
+                }
+        }
+
+# Function DecipherRetCode accepts an integer, and returns the failure assigned to that code.
+# This only returns the most common failures, such as permissioning and the like
+Function DecipherRetCode([int]$retCode) {
+        switch ($retCode) {
+                0 {return &quot;Success&quot;}
+                2 {return &quot;Access Denied&quot;}
+                3 {return &quot;Insufficient Privilege&quot;}
+                8 {return &quot;Unknown Failure&quot;}
+                21 {return &quot;Invalid Parameter&quot;}
+                default {return &quot;$($retCode) is uncommon, and will need to be researched manually. &quot;}
+        }
+}
+
+# This line is actually the entire script.
+If($throttle) {
+        # Throttling - cancel response
+        $momAPI.LogScriptEvent($myName, $warnID, $momWarn, &quot;Notification Workflow requested that $($myname) run, but last response ran less then $($interval) minutes ago. Exiting.&quot;)
+        $momAPI = $null
+        exit
+} else {
+$retCode = ([WMICLASS]&quot;\\$remoteMachine\root\cimv2:win32_process&quot;).Create(&quot;$myExe $myExeParams&quot;)
+        # If $retCode = 0 ($false) exit the If, anything else is $True, and will log it
+        If($retCode) {
+                $momAPI.LogScriptEvent($myName, $errID, $momErr, &quot;Error creating process. Error Code: $($retcode) Error Message: $(DecipherRetCode $retCode)&quot;)
+        }
+$momAPI = $null
+exit
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

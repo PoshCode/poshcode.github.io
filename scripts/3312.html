@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="steve_o">
+    <title>Backup Rotation (7zip) - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Backup Rotation (7zip)</h1>
+<h3><a href="//scripts/3312.ps1">download</a></h3>
+<p>This is a utility that uses 3 CSV(Text) files as drivers to name backups, associate them with files or folders, and to specify a number of versions to retain for each.  Backups are deleted on the next run of the utility.  7zip is required.</p>
+<pre><code class="language-posh">First file RotateBackups_MasterList.txt
+RowNbr,BackupName,VersionsRetained,BackupType
+1,TargetBackup,2,Folder
+2,LstDefBackup,5,File
+3,XMLBackup,3,File
+4,SourceBackup,2,Folder
+5,TXTBackup,8,File
+
+Second file RotateBackups_FolderList.txt
+RowNbr,BackupName,FolderName
+1,TargetBackup,c:\MyBooks\target
+2,SourceBackup,c:\MyBooks\source
+
+Third file RotateBackups_FileExtensions.txt
+RowNbr,BackupName,FileExtension,FolderLoc
+1,LstDefBackup,*.def,c:\MyBooks\target
+2,LstDefBackup,*.lst,c:\MyBooks\target
+3,XMLBackup,*.xml,c:\MyBooks\target
+4,TXTBackup,*.txt,c:\MyBooks\rfiles
+
+
+When executed, files are created in c:\Zipfiles that have a name associated with the BackupName, a batch date-time.  BackupName files are counted &amp; compared to VersionsRetained value, and excess ones (oldest first) are marked for deletion upon next run of script.  Can specify a delete to recycle bin (default) or a destructive delete of the backup.  
+
+Use at your own risk.
+
+
+Script:
+
+function create-7zip([String] $aDirectory, [String] $aZipfile){
+    [string]$pathToZipExe = &quot;C:\Program Files\7-zip\7z.exe&quot;;
+    [Array]$arguments = &quot;a&quot;, &quot;-tzip&quot;, &quot;$aZipfile&quot;, &quot;$aDirectory&quot;, &quot;-r&quot;;
+    &amp; $pathToZipExe $arguments;
+}
+#  Call it by using:
+#create-7zip &quot;c:\temp\myFolder&quot; &quot;c:\temp\myFolder.zip&quot;
+
+#************************************************************************************
+#************************************************************************************
+# Initialize variables
+$zipFolder = &quot;C:\ZipFiles&quot;
+$nameConv = &quot;{0:yyyyMMdd_HHmmss}&quot; -f (Get-Date) + &quot;.zip&quot;
+$fileList = @{}
+$FileCountArray = @()
+$bkupTypeArr = @()
+$myDocFolder = &quot;c:\Documents and Settings\MyPC\My Documents\&quot;
+
+# Import text files for master, folder and file backup information
+$bkupRotateMasterArr = Import-Csv $myDocFolder&quot;RotateBackups_MasterList.txt&quot;
+$fldrBkupArray = Import-Csv $myDocFolder&quot;RotateBackups_FolderList.txt&quot;
+$fileExtBkupArr = Import-Csv $myDocFolder&quot;RotateBackups_FileExtensions.txt&quot;
+
+# Switch to delete Item or to send to recycle bin
+#      delete is destructive and cannot recover file.  
+#      Recycle setting removes file from folder, but sends to recycle bin
+#      and can be restored if needed.
+#      Must be either &quot;Kill&quot; or &quot;Recycle&quot;
+$KillOrRecycle = &quot;Recycle&quot;
+#************************************************************************************
+#************************************************************************************
+
+# Load contents of master backup array
+$bkup_Counts = @{}
+$b = $null
+foreach($b in $bkupRotateMasterArr)  
+    {  
+	$bkup_Counts[$b.BackupName] = $b.VersionsRetained
+    }  
+
+
+#set Backup Types from the array we just defined
+$type = $null
+foreach ($type in $bkup_Counts.Keys) {
+	$bkupTypeArr += $type
+	}
+
+#create array of our filenames for this batch
+$type = $null
+$fArray = @{}
+foreach ($type in $bkupRotateMasterArr) {
+	$fArray[$type.BackupName] = ($type.BackupName + $nameConv)
+		}
+		
+# if extension array not null, get list of files to back up
+if ($fileExtBkupArr) { 		
+	#  Gather the list of files to be backed up
+	$f = $null 
+	foreach ($f in $fileExtBkupArr) {
+			$arr = @()
+			$arr = (Get-ChildItem $f.FolderLoc -Recurse -Include $f.FileExtension | Select-Object fullname)
+			foreach ($a in $arr) {
+				if ($a) {
+				$fileList[$a] = $f.BackupName
+				}	# if $a not null
+			}	# end inner foreach
+		}	# end outer foreach
+}	# if FileExtension Backup Array not null
+
+
+# if filelist count gt zero, then create zip file of them for appropriate backup
+if ($fileList.Count -gt 0) {	# must have entries in hashtable
+	$f = $null
+	#Loop thru file list &amp; associate file with the appropriate backup
+	foreach ($f in $fileList.Keys) {
+		$arcFile = $null
+		if ($fileList.ContainsKey($f)) {
+			if ($fArray.ContainsKey($fileList[$f])) {
+				$arcFile = $fArray[$fileList[$f]]
+				create-7zip $f.FullName $zipFolder\$arcFile
+			} #if key in fArray
+		}	# if key in Filelist
+	}	# end foreach
+}	# if hastable not empty
+
+# if folder backup not null then back up folders
+if ($fldrBkupArray) {   # check if array not null (no entries)
+	$f = $null
+	#Backup Folders now
+	foreach ($f in $fldrBkupArray) {
+		$arcFldr = $null
+		#if ($fArray.ContainsKey($f[1])) {
+		if ($fArray.ContainsKey($f.BackupName)) {
+			$arcFldr = $fArray[$f.BackupName]
+			create-7zip $f.FolderName $zipFolder\$arcFldr
+			}  #end if
+		}  # end foreach
+}  # end if $fldrBkupArray not null
+
+
+# if 7zip succeeded, we'll continue 
+if ($LASTEXITCODE -gt 0)
+	{Throw &quot;7Zip failed&quot; } 
+ELSE {  # if Exitcode = 0 then continue with job
+	# Remove any files with Archive bit = False 
+	#    we marked it for deletion in previous run
+	Add-Type -AssemblyName Microsoft.VisualBasic
+	$files=get-childitem -path $zipFolder
+	# we'll delete all files that don't have the archive bit set 
+	Foreach($file in $files) { 
+		If((Get-ItemProperty -Path $file.fullname).attributes -band [io.fileattributes]::archive)
+		{ Write-output &quot;$file is set to be retained&quot; }
+		ELSE {
+			if ($KillOrRecycle = &quot;Recycle&quot;) {
+				Write-output &quot;$file does not have the archive bit set. Deleting (Sent to recycle bin).&quot;
+				[Microsoft.VisualBasic.FileIO.Filesystem]::DeleteFile($file.fullname,'OnlyErrorDialogs','SendToRecycleBin')
+				$output = $_.ErrorDetails
+				}
+			ELSE {
+				Write-output &quot;$file does not have the archive bit set. Deleting.&quot;
+				remove-item -recurse $file.fullname
+				$output =$_.ErrorDetails 
+				}
+			} 
+		}  #end Foreach
+
+	# Export BackupCounts to XML 
+	$bkup_counts | Export-Clixml bkup_counts.xml
+
+	# Get Number of ZIP files in folder
+	$btype = $null
+	foreach ($btype in $bkupTypeArr) {
+		$FileCountArray += ,@(($btype),(dir $zipFolder\$btype&quot;*.zip&quot;).count)
+		}
+		
+	# Import BkupCounts from XML
+	$bkup_Counts= Import-Clixml bkup_counts.xml
+
+	# set Attribute byte on ALL files in zipfolder so we know we'll get the right ones
+	attrib $zipFolder&quot;\*&quot; +a 
+	
+	$row = $null
+	# Get LST &amp; DEF filenames in array &amp; display count
+	foreach ($row in $bkup_Counts.Keys) {
+		Get-ChildItem -Path $zipFolder -Include $row&quot;*&quot; -Recurse #|
+		(dir $zipFolder\$row&quot;*&quot;.zip).count - $bkup_Counts[$row]
+		$delfiles = 0
+		$delfiles = (dir $zipFolder\$row&quot;*&quot;.zip).count - $bkup_Counts[$row]
+		if ($delfiles -gt 0) { #sort folder by createdtime 
+			# if more than specified nbr of backups present, un-archive excess ones to delete next run.
+			dir $zipFolder\$row&quot;*&quot; | sort-object -property {$_.CreationTime} |
+			select-object -first $delfiles |
+			foreach-object { attrib $_.FULLNAME -A} 
+			} # end if delfiles gt 0
+		}	# End foreach in bkup_counts
+		
+}  #  End Else Last ExitCode = 0	
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

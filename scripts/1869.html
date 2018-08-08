@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Custom Accelerators - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Custom Accelerators</h1>
+<h3><a href="//scripts/1869.ps1">download</a> - <a href="//scripts/1398.md">parent</a></h3>
+<p>This module makes it easier to create <em>and remove</em> type accelerators in PowerShell 2.0</p>
+<p>In this version I made it possible to pipe @[Type]@ objects into the methods to create/remove/view accelerators as a first step toward including this functionality in my .net reflection module.</p>
+<p>P.S.: Thanks to &quot;Oisin Grehan for the discovery&quot;:http://www.nivot.org/2008/12/25/ListOfTypeAcceleratorsForPowerShellCTP3.aspx.</p>
+<pre><code class="language-posh">#requires -version 2.0
+## Custom Accelerators for PowerShell 2
+####################################################################################################
+## A script module for PowerShell 2 which allows the user to create their own custom type accelerators. 
+## Thanks to &quot;Oisin Grehan for the discovery&quot;:http://www.nivot.org/2008/12/25/ListOfTypeAcceleratorsForPowerShellCTP3.aspx. 
+####################################################################################################
+## Revision History
+## v1.0  - Modularization of Oisin's idea, by Joel 'Jaykul' Bennett
+## v2.0  - Update for RTM (nothing significant)
+## v2.1  - Minor tweaks to make it more pipelineable (I'm including this in my Reflection module)
+####################################################################################################
+
+# get a reference to the Type   
+$xlr8r = [type]::gettype(&quot;System.Management.Automation.TypeAccelerators&quot;)  
+
+function Add-Accelerator {
+&lt;#
+   .Synopsis
+      Add a type accelerator to the current session
+   .Description
+      The Add-Accelerator function allows you to add a simple type accelerator (like [regex]) for a longer type (like [System.Text.RegularExpressions.Regex]).
+   .Example
+      Add-Accelerator list System.Collections.Generic.List``1
+      $list = New-Object list[string]
+      
+      Creates an accelerator for the generic List[T] collection type, and then creates a list of strings.
+   .Example
+      Add-Accelerator &quot;List T&quot;, GList System.Collections.Generic.List``1
+      $list = New-Object &quot;list t[string]&quot;
+      
+      Creates two accelerators for the Generic List[T] collection type.
+   .Parameter Accelerator
+      The short form accelerator should be just the name you want to use (without square brackets).
+   .Parameter Type
+      The type you want the accelerator to accelerate (without square brackets)
+   .Notes
+      When specifying multiple values for a parameter, use commas to separate the values. 
+      For example, &quot;-Accelerator string, regex&quot;.
+      
+      PowerShell requires arguments that are &quot;types&quot; to NOT have the square bracket type notation, because of the way the parsing engine works.  You can either just type in the type as System.Int64, or you can put parentheses around it to help the parser out: ([System.Int64])
+
+      Also see the help for Get-Accelerator and Remove-Accelerator
+   .Link
+      http://huddledmasses.org/powershell-2-ctp3-custom-accelerators-finally/
+      
+#&gt;
+[CmdletBinding()]
+PARAM(
+   [Parameter(Position=0,ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Key&quot;,&quot;Name&quot;)]
+   [string[]]$Accelerator
+,
+   [Parameter(Position=1,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Value&quot;,&quot;FullName&quot;)]
+   [type]$Type
+)
+PROCESS {
+   # add a user-defined accelerator  
+   foreach($a in $Accelerator) { 
+      $xlr8r::Add( $a, $Type) 
+      trap [System.Management.Automation.MethodInvocationException] {
+         if($xlr8r::get.keys -contains $a) {
+            Write-Error &quot;Cannot add accelerator [$a] for [$($Type.FullName)]`n                  [$a] is already defined as [$($xlr8r::get[$a].FullName)]&quot;
+            Continue;
+         } 
+         throw
+      }
+   }
+}
+}
+
+function Get-Accelerator {
+&lt;#
+   .Synopsis
+      Get one or more type accelerator definitions
+   .Description
+      The Get-Accelerator function allows you to look up the type accelerators (like [regex]) defined on your system by their short form or by type
+   .Example
+      Get-Accelerator System.String
+      
+      Returns the KeyValue pair for the [System.String] accelerator(s)
+   .Example
+      Get-Accelerator ps*,wmi*
+      
+      Returns the KeyValue pairs for the matching accelerator definition(s)
+   .Parameter Accelerator
+      One or more short form accelerators to search for (Accept wildcard characters).
+   .Parameter Type
+      One or more types to search for.
+   .Notes
+      When specifying multiple values for a parameter, use commas to separate the values. 
+      For example, &quot;-Accelerator string, regex&quot;.
+      
+      Also see the help for Add-Accelerator and Remove-Accelerator
+   .Link
+      http://huddledmasses.org/powershell-2-ctp3-custom-accelerators-finally/
+#&gt;
+[CmdletBinding(DefaultParameterSetName=&quot;ByType&quot;)]
+PARAM(
+   [Parameter(Position=0, ParameterSetName=&quot;ByAccelerator&quot;, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Key&quot;,&quot;Name&quot;)]
+   [string[]]$Accelerator
+,
+   [Parameter(Position=0, ParameterSetName=&quot;ByType&quot;, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Value&quot;,&quot;FullName&quot;)]
+   [type[]]$Type
+)
+PROCESS {
+   # add a user-defined accelerator  
+   switch($PSCmdlet.ParameterSetName) {
+      &quot;ByAccelerator&quot; { 
+         $xlr8r::get.GetEnumerator() | % {
+            foreach($a in $Accelerator) {
+               if($_.Key -like $a) { $_ }
+            }
+         }
+         break
+      }
+      &quot;ByType&quot; { 
+         if($Type -and $Type.Count) {
+            $xlr8r::get.GetEnumerator() | ? { $Type -contains $_.Value }
+         }
+         else {
+            $xlr8r::get.GetEnumerator() | %{ $_ }
+         }
+         break
+      }
+   }
+}
+}
+
+function Remove-Accelerator {
+&lt;#
+   .Synopsis
+      Remove a type accelerator from the current session
+   .Description
+      The Remove-Accelerator function allows you to remove a simple type accelerator (like [regex]) from the current session. You can pass one or more accelerators, and even wildcards, but you should be aware that you can remove even the built-in accelerators.
+      
+   .Example
+      Remove-Accelerator int
+      Add-Accelerator int Int64
+      
+      Removes the &quot;int&quot; accelerator for Int32 and adds a new one for Int64. I can't recommend doing this, but it's pretty cool that it works:
+      
+      So now, &quot;$(([int]3.4).GetType().FullName)&quot; would return &quot;System.Int64&quot;
+   .Example
+      Get-Accelerator System.Single | Remove-Accelerator
+      
+      Removes both of the default accelerators for System.Single: [float] and [single]
+   .Example
+      Get-Accelerator System.Single | Remove-Accelerator -WhatIf
+      
+      Demonstrates that Remove-Accelerator supports -Confirm and -Whatif. Will Print:
+         What if: Removes the alias [float] for type [System.Single]
+         What if: Removes the alias [single] for type [System.Single]
+   .Parameter Accelerator
+      The short form accelerator that you want to remove (Accept wildcard characters).
+   .Notes
+      When specifying multiple values for a parameter, use commas to separate the values. 
+      For example, &quot;-Accel string, regex&quot;.
+      
+      Also see the help for Add-Accelerator and Get-Accelerator
+   .Link
+      http://huddledmasses.org/powershell-2-ctp3-custom-accelerators-finally/
+#&gt;
+[CmdletBinding(SupportsShouldProcess=$true)]
+PARAM(
+   [Parameter(Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Key&quot;,&quot;FullName&quot;)]
+   [string[]]$Accelerator
+)
+PROCESS {
+   foreach($a in $Accelerator) {
+      foreach($key in $xlr8r::Get.Keys -like $a) { 
+         if($PSCmdlet.ShouldProcess( &quot;Removes the alias [$($Key)] for type [$($xlr8r::Get[$key].FullName)]&quot;,
+                                     &quot;Remove the alias [$($Key)] for type [$($xlr8r::Get[$key].FullName)]?&quot;,
+                                     &quot;Removing Type Accelerator&quot; )) {
+            # remove a user-defined accelerator
+            $xlr8r::remove($key)   
+         }
+      }
+   }
+}
+}
+
+Add-Accelerator list System.Collections.Generic.List``1
+Add-Accelerator dictionary System.Collections.Generic.Dictionary``2
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

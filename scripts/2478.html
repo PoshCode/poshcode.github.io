@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Boe Prox">
+    <title>Remove-LocalProfile - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Remove-LocalProfile</h1>
+<h3><a href="//scripts/2478.ps1">download</a> - <a href="//scripts/2477.md">parent</a></h3>
+<p>This is script will first ask for a computername and then will scan the Win32_UserProfile WMI class and present the user with all of the possible user profiles to remove. After the profile has been deleted, the user has a choice to continue to remove another profile or quit. This script will only work against Vista and above client OS's and Window 2008 and above server OS's, but can be ran from any OS that has PowerShell installed.</p>
+<pre><code class="language-posh">&lt;#   
+.SYNOPSIS   
+    Interactive menu that allows a user to connect to a local or remote computer and remove a local profile. 
+.DESCRIPTION 
+    Presents an interactive menu for user to first make a connection to a remote or local machine.  After making connection to the machine,  
+    the user is presented with all of the local profiles and then is asked to make a selection of which profile to delete. This is only valid 
+    on Windows Vista OS and above for clients and Windows 2008 and above for server OS.    
+.NOTES   
+    Name: Remove-LocalProfile 
+    Author: Boe Prox 
+    DateCreated: 26JAN2011       
+.LINK   
+    http://boeprox.wordpress.com
+    http://msdn.microsoft.com/en-us/library/ee886409%28v=vs.85%29.aspx 
+.EXAMPLE  
+Remove-LocalProfile 
+ 
+Description 
+----------- 
+Presents a text based menu for the user to interactively remove a local profile on local or remote machine.    
+#&gt;  
+ 
+#Prompt for a computer to connect to 
+$computer = Read-Host &quot;Please enter a computer name&quot; 
+#Test network connection before making connection 
+If ($computer -ne $Env:Computername) { 
+    If (!(Test-Connection -comp $computer -count 1 -quiet)) { 
+        Write-Warning &quot;$computer is not accessible, please try a different computer or verify it is powered on.&quot; 
+        Break 
+        } 
+    } 
+Try {     
+    #Verify that the OS Version is 6.0 and above, otherwise the script will fail 
+    If ((Get-WmiObject -ComputerName $computer Win32_OperatingSystem -ea stop).Version -lt 6.0) { 
+        Write-Warning &quot;The Operating System of the computer is not supported.`nClient: Vista and above`nServer: Windows 2008 and above.&quot; 
+        Break 
+        } 
+    } 
+Catch { 
+    Write-Warning &quot;$($error[0])&quot; 
+    Break 
+    }     
+Do {     
+#Gather all of the user profiles on computer 
+Try { 
+    [array]$users = Get-WmiObject -ComputerName $computer Win32_UserProfile -filter &quot;LocalPath Like 'C:\\Users\\%'&quot; -ea stop 
+    } 
+Catch { 
+    Write-Warning &quot;$($error[0]) &quot; 
+    Break 
+    }     
+#Cache the number of users 
+$num_users = $users.count 
+ 
+Write-Host -ForegroundColor Green &quot;User profiles on $($computer):&quot; 
+ 
+    #Begin iterating through all of the accounts to display 
+    For ($i=0;$i -lt $num_users; $i++) { 
+        Write-Host -ForegroundColor Green &quot;$($i): $(($users[$i].localpath).replace('C:\Users\',''))&quot; 
+        } 
+    Write-Host -ForegroundColor Green &quot;q: Quit&quot; 
+    #Prompt for user to select a profile to remove from computer 
+    Do {     
+        $account = Read-Host &quot;Select a number to delete local profile or 'q' to quit&quot; 
+        #Find out if user selected to quit, otherwise answer is an integer 
+        If ($account -NotLike &quot;q*&quot;) { 
+            $account = $account -as [int] 
+            } 
+        }         
+    #Ensure that the selection is a number and within the valid range 
+    Until (($account -lt $num_users -AND $account -match &quot;\d&quot;) -OR $account -Like &quot;q*&quot;) 
+    If ($account -Like &quot;q*&quot;) { 
+        Break 
+        } 
+    Write-Host -ForegroundColor Yellow &quot;Deleting profile: $(($users[$account].localpath).replace('C:\Users\',''))&quot; 
+    #Remove the local profile 
+    ($users[$account]).Delete() 
+    Write-Host -ForegroundColor Green &quot;Profile:  $(($users[$account].localpath).replace('C:\Users\','')) has been deleted&quot; 
+ 
+    #Configure yes choice 
+    $yes = New-Object System.Management.Automation.Host.ChoiceDescription &quot;&amp;Yes&quot;,&quot;Remove another profile.&quot; 
+ 
+    #Configure no choice 
+    $no = New-Object System.Management.Automation.Host.ChoiceDescription &quot;&amp;No&quot;,&quot;Quit profile removal&quot; 
+ 
+    #Determine Values for Choice 
+    $choice = [System.Management.Automation.Host.ChoiceDescription[]] @($yes,$no) 
+ 
+    #Determine Default Selection 
+    [int]$default = 0 
+ 
+    #Present choice option to user 
+    $userchoice = $host.ui.PromptforChoice(&quot;&quot;,&quot;Remove Another Profile?&quot;,$choice,$default) 
+    } 
+#If user selects No, then quit the script     
+Until ($userchoice -eq 1)
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="jgrote">
+    <title>PlexMediaAutoRetire - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PlexMediaAutoRetire</h1>
+<h3><a href="//scripts/5206.ps1">download</a> - <a href="//scripts/5205.md">parent</a></h3>
+<p>Script to use the Plex API to detect watched shows and either archive them to a different folder or remove them.</p>
+<pre><code class="language-posh">#REQUIRES -version 4
+set-strictmode -version 2
+
+#Enable Verbosity
+$VerbosePreference = &quot;Continue&quot;
+
+
+
+### VARIABLES AND OPTIONS
+$plexHost = &quot;localhost&quot;
+$plexPort = &quot;32400&quot;
+$plexSection = $args[1]
+
+
+#Log File
+start-transcript &quot;$($env:APPDATA)\PlexMediaAutoRetire.log&quot; -append
+
+#Choose an action to take on flagged files:
+# &quot;Archive&quot; - Moves files to $optArchiveDir for later deletion if chosen
+# &quot;Delete&quot; - Deletes the files
+# &quot;Test&quot; - Only shows what files will be deleted. Default if nothing else specified
+$optFlaggedVideoAction = $args[0]
+
+#Show Usage if incorrect
+if (!$Plexsection) {write-host &quot;Usage: powershell.exe PlexMediaAutoRetire.ps1 [delete|archive|test] &lt;PlexSectionToProcess&gt;&quot;;exit 1}
+#Show Usage if incorrect
+if (!$optFlaggedVideoAction) {write-host &quot;Usage: powershell.exe PlexMediaAutoRetire.ps1 [delete|archive|test] &lt;PlexSectionToProcess&gt;&quot;;exit 1}
+
+
+#When Deleting/Archiving, move the entire folder instead of just individual files for cleanup. This assumes you are using Plex standard structure. BE CAREFUL. ONLY USE FOR MOVIES.
+$optMoveFlaggedVideoDir = $false
+
+#Failsafe
+#Set this to true when finished testing to actually execute the changes. All actions do -whatif until this is set
+#BE CAREFUL
+$optDoAction = $true
+
+#Set this to true to show verbose logging of all file actions
+$optActionVerbose = $true
+
+#Set to where you want files to be moved with the &quot;Archive&quot; Action. Places them in %TEMP% if not specified.
+$optArchiveDir = &quot;D:\Archive\&quot;
+
+#Set to $true to exclude files that are &quot;On Deck&quot;
+$optExcludeOnDeck = $true
+
+###STEP 0: Script Setup
+
+#Prepare the additional arguments for actions
+$FILEACTIONARGS = @{}
+$FILEACTIONARGS += @{Whatif=(!$optDoAction)}
+$FILEACTIONARGS += @{Verbose=$optActionVerbose}
+
+
+###
+###STEP 1:Get List of Candidate Videos for Deletion
+###
+
+#Build Request URL to REST API to retrieve videos
+$uriLibrary = &quot;http://&quot;+$plexHost+&quot;:&quot;+$plexPort+&quot;/library/&quot;
+$uriSection = $uriLibrary + &quot;sections/$plexSection/&quot;
+$uriRecentlyViewed = $uriSection + &quot;recentlyViewed&quot;
+$uriOnDeck = $urilibrary + &quot;onDeck&quot;
+
+
+#Get the list of watched videos and onDeck videos
+try {
+    write-verbose &quot;PLEXAPI: Fetching watched videos...&quot;
+    $watchedVideos = (invoke-restmethod $uriRecentlyViewed).mediacontainer.video
+    write-verbose &quot;PLEXAPI: Fetching OnDeck videos...&quot;
+    $ondeckVideos = (invoke-restmethod $uriOnDeck -erroraction silentlycontinue).mediacontainer.video
+
+}
+catch [Exception] {write-output &quot;No New Watched Videos or connectivity error, quitting.&quot;;exit 1}
+    
+
+###
+###STEP 2:Analyze videos and determine which videos will be deleted
+###
+
+$flaggedVideos = @()
+foreach ($watchedVideo in $watchedVideos) {
+    #TODO: Analyze the file
+
+    #Skip if the video is On Deck (partly watched)
+    if ( ($ondeckVideos).key -contains $watchedvideo.key ) {write-verbose &quot;$($watchedvideo.title) still on deck. Skipping...&quot;;continue}
+
+    #Get the parts of all related media files (including streaming optimizations). This works recursively
+    $watchedVideoFiles = $watchedVideo.media.part.file
+    
+    $flaggedVideos += $watchedVideoFiles
+
+}
+
+###
+###STEP 3:Take action on the video files
+###
+switch ($optFlaggedVideoAction) {
+    &quot;Delete&quot; {
+        $flaggedVideos | foreach {
+            if (test-path $_) {
+                remove-item -path &quot;$_&quot; @FILEACTIONARGS
+            }
+        }
+    }
+
+    &quot;Archive&quot; {
+        #Get the root of the library, used to determine relative paths for archiving. This is convoluted and probably could be done better.
+        $libraryPath = ((invoke-restmethod ($uriLibrary+&quot;sections&quot;)).mediacontainer.directory | where {$_.key -eq $plexSection}).location.path
+        
+        #Set the path location to the library. Required for Relative Resolve-Path to work
+        set-location $librarypath
+        
+        foreach ($flaggedVideo in $flaggedVideos) {
+            if (test-path $flaggedVideo) {
+                #Get the path relative to the document library to preserve structure
+                $videoRelativePath = resolve-path $flaggedVideo -relative
+
+                #Construct the new destination path
+                $archivePath = &quot;$optArchiveDir\$(split-path $libraryPath -leaf)\$videoRelativePath&quot;
+
+                #Create the directory if it doesn't exist
+                $archivePathParent = split-path $archivePath -parent
+                $archiveDestination = mkdir $archivePathParent -force @FILEACTIONARGS
+
+                
+                if ($optMoveFlaggedVideoDir) {
+                    $flaggedVideo = split-path $flaggedVideo -parent
+                    $archivePath = $archivepathparent
+                }
+                
+                #Move either the file or the whole directory
+                move-item -path &quot;$flaggedVideo&quot; -destination &quot;$archivePath&quot; -force @FILEACTIONARGS
+                
+                
+            }
+        }
+    }
+
+    default {
+        foreach ($flaggedvideo in $flaggedVideos) {
+            if (test-path $flaggedvideo) {write-host &quot;Would Delete $flaggedvideo&quot;}
+        }
+    }
+}
+
+#Refresh the media library after deleting files to remove them from the interface
+write-verbose &quot;PLEXAPI: Refreshing Section $plexsection Library&quot;
+$LibraryRefreshResult = invoke-restmethod &quot;$($uriSection)refresh&quot;
+
+#Stop Logging
+
+stop-transcript
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Write-MiniDump - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Write-MiniDump</h1>
+<h3><a href="//scripts/4740.ps1">download</a></h3>
+<p>Actually, this is only an idea and I'm not sure that it'll be useful because I usually use Sysinternals ProcDump tool (hello, Mark!)</p>
+<pre><code class="language-posh">Set-Alias wmd Write-MiniDump
+
+function Write-MiniDump {
+  &lt;#
+    .SYNOPSIS
+        Creates mini dump of trouble process.
+    .EXAMPLE
+        PS C:\&gt;Write-MiniDump (ps notepad)
+        Creates full memory dump of notepad process(es).
+    .EXAMPLE
+        PS C:\&gt;ps notepad | wmd -dp E:\dbg -dt 0
+        Creates normal dump of notepad process(es) into E:\dbg folder.
+    .NOTES
+        C++
+        typedef enum _MINIDUMP_TYPE { 
+          MiniDumpNormal                          = 0x00000000,
+          MiniDumpWithDataSegs                    = 0x00000001,
+          MiniDumpWithFullMemory                  = 0x00000002,
+          MiniDumpWithHandleData                  = 0x00000004,
+          MiniDumpFilterMemory                    = 0x00000008,
+          MiniDumpScanMemory                      = 0x00000010,
+          MiniDumpWithUnloadedModules             = 0x00000020,
+          MiniDumpWithIndirectlyReferencedMemory  = 0x00000040,
+          MiniDumpFilterModulePaths               = 0x00000080,
+          MiniDumpWithProcessThreadData           = 0x00000100,
+          MiniDumpWithPrivateReadWriteMemory      = 0x00000200,
+          MiniDumpWithoutOptionalData             = 0x00000400,
+          MiniDumpWithFullMemoryInfo              = 0x00000800,
+          MiniDumpWithThreadInfo                  = 0x00001000,
+          MiniDumpWithCodeSegs                    = 0x00002000,
+          MiniDumpWithoutAuxiliaryState           = 0x00004000,
+          MiniDumpWithFullAuxiliaryState          = 0x00008000,
+          MiniDumpWithPrivateWriteCopyMemory      = 0x00010000,
+          MiniDumpIgnoreInaccessibleMemory        = 0x00020000,
+          MiniDumpWithTokenInformation            = 0x00040000,
+          MiniDumpWithModuleHeaders               = 0x00080000,
+          MiniDumpFilterTriage                    = 0x00100000,
+          MiniDumpValidTypeFlags                  = 0x001fffff
+        } MINIDUMP_TYPE;
+  #&gt;
+  [CmdletBinding(DefaultParameterSetName=&quot;Process&quot;, SupportsShouldProcess=$true)]
+  param(
+    [Parameter(Mandatory=$true,
+               Position=0,
+               ValueFromPipeline=$true)]
+    [Diagnostics.Process[]]$Processes,
+    
+    [Parameter(Position=1)]
+    [Alias(&quot;dp&quot;)]
+    [ValidateScript({Test-Path $_})]
+    [String]$DumpPath = $pwd.Path,
+    
+    [Parameter(Position=2)]
+    [Alias(&quot;dt&quot;)]
+    [ValidateSet(0, 0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80, 0x100, 0x200, 0x400, 0x800, 0x1000,
+                  0x2000, 0x4000, 0x8000, 0x10000, 0x200000, 0x40000, 0x80000, 0x100000, 0x1fffff)]
+    [UInt32]$DumpType = 0x2
+  )
+  
+  begin {
+    $wer = [PSObject].Assembly.GetType('System.Management.Automation.WindowsErrorReporting')
+    $get = $wer.GetNestedType('NativeMethods', 'NonPublic')
+    $api = $get.GetMethod('MiniDumpWriteDump', ([Reflection.BindingFlags]'NonPublic, Static'))
+  }
+  process {
+    foreach ($p in $Processes) {
+      if ($PSCmdlet.ShouldProcess($p.Name, &quot;Create mini dump&quot;)) {
+        $dmp = Join-Path $DumpPath &quot;$($p.Name)_$($p.Id)_$(date -u %d%m%Y).dmp&quot;
+        
+        try {
+          $str = New-Object IO.FileStream($dmp, [IO.FileMode]::Create)
+          [void]$api.Invoke($null, @($p.Handle, $p.Id, $str.SafeFileHandle, $DumpType,
+                                      [IntPtr]::Zero, [IntPtr]::Zero, [IntPtr]::Zero))
+        }
+        finally {
+          if ($str -ne $null) {$str.Close()}
+        }
+      }
+    }
+  }
+  end {
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

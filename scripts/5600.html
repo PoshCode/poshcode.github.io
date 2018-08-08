@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Andrei Moraru">
+    <title>System Consultant - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>System Consultant</h1>
+<h3><a href="//scripts/5600.ps1">download</a></h3>
+<p>Get CSV report for messages received in mailbox during a month</p>
+<pre><code class="language-posh">function Get-MessagesToMailboxforSpecificMonth {
+
+&lt;#
+.SYNOPSIS
+    Determine the messages sent to mailbox since first day of month till the last day of month. Export the list with specific columns to .csv file 
+ 
+.DESCRIPTION
+    Get-MessagesToITSforSpecificMonth is a function that returns the list with details of message sent to a mailbox during a month
+ 
+.PARAMETER Month
+    The month to extract details of messages. The default is the previous month.
+
+.PARAMETER Mailbox
+    The mailbox to extract details of messages. There is no default, it is mandatory parameter.
+
+.EXAMPLE
+    Get-MessagesToITSforSpecificMonth -Mailbox am@contoso.com -Server nice-server.corp.contoso.com
+ 
+.EXAMPLE
+     Get-MessagesToITSforSpecificMonth -Month October -Mailbox am@contoso.com
+ 
+.INPUTS
+    Month, Mailbox
+ 
+.OUTPUTS
+    File in the path where script is called
+ 
+.NOTES
+    Author:  Andrei Moraru
+    Website: http://develam.com
+    Twitter: andrei.moraru.n@gmail.com
+#&gt;
+
+param (
+[string]$Month,
+[ValidateNotNullorEmpty()][string]$Mailbox
+)
+
+Add-PSSnapin -Name Microsoft.Exchange.Management.Powershell.SnapIn
+
+# Variable definition
+# =========
+# get the current year
+$year = Get-Date -Format &quot;yyyy&quot;
+
+# define array with months of the year with 31 days
+$arrMonths31days = &quot;January&quot;,&quot;March&quot;,&quot;May&quot;,&quot;July&quot;,&quot;August&quot;,&quot;October&quot;,&quot;December&quot;
+
+# define array with months of year with 30 days
+$arrMonths30days = &quot;April&quot;,&quot;June&quot;,&quot;September&quot;,&quot;November&quot;
+
+# define error message for incorrect specified month
+$outOfMonth = &quot;Incorrect name of month, please specify English month name, i.e. January, February, March, etc.&quot;
+
+# define error message for inexistent mailbox
+$noMailbox = &quot;Mailbox $Mailbox doesn't exist in Exchange organization&quot;
+
+# =========
+# =========
+
+# Validation
+# =========
+# validate if the mailbox exists
+if(-not ($Mailbox))
+    {
+    Write-Host -ForegroundColor Red &quot;You must supply a value for -Mailbox&quot;
+    return
+    } elseif(Get-Mailbox $Mailbox -ErrorAction SilentlyContinue)
+        {}
+    else {
+    Write-Host -ForegroundColor Red $noMailbox
+    return
+    }
+    
+
+# in case no month is specified, then default to previous month (i.e., if now is November then the value for month is defaulted to October)
+if (-Not $Month) {$Month = (Get-Date).AddMonths(-1).ToString('MMMM')}
+
+
+## Logic section
+# = 
+# Set the value of $endMonth variable, dependent on $Month value. There are three cases:
+# Months with 31 days - listed in $arrMonth31Days
+# Months with 30 days - listed in $arrMonth30Days
+# February with 28 days
+# incorrect value specified
+
+# check if $Month value is a month with 31 days and if true, set the value of $endMonth to 31
+if($arrMonths31days -contains $Month) 
+    {$endMonth = 31}
+
+# check if $Month value is a month with 30 days and if true, set the value of $endMonth to 30
+    elseif($arrMonths30days -contains $Month) 
+    {$endMonth = 30}
+
+# check if $Month value is February
+    elseif ($Month -eq &quot;February&quot;)
+    {$endMonth = 28}
+
+# $Month value is not actually a English month name
+    else {
+    Write-Host -ForegroundColor Red $outOfMonth
+    return
+    }
+
+$fileName = &quot;_&quot;+$Month+&quot;_&quot;+$Mailbox+&quot;_&quot;+(Get-Date -Format &quot;MMMdd_HHmmss&quot;)+&quot;.csv&quot;
+
+# find the database name where mailbox is hosted
+$dbName = ((Get-Mailbox $Mailbox).Database).Name
+
+# find the servers in the DAG that hosts the mailbox
+$arrServers = ((Get-MailboxDatabase -Identity $dbName).Servers).Name
+
+foreach($server in $arrServers){
+    Get-MessageTrackingLog -Server $server -Start &quot;1 $Month $year 00:00:00&quot; -End &quot;$endMonth $Month $year 23:59:59&quot; -Recipients $Mailbox -ResultSize Unlimited | Select-Object Timestamp,RecipientCount,MessageSubject,Sender | Export-Csv ($server+$fileName) -Encoding ASCII -NoTypeInformation
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

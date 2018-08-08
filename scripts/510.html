@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Karl Mitschke">
+    <title>ASPX Mailbox  (6 of 6) - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ASPX Mailbox  (6 of 6)</h1>
+<h3><a href="//scripts/510.cs">download</a></h3>
+<p>This is part 6 of a 6 part mailbox creation web site.
+This site allows local administrators to create and delete mailboxes, and change email addresses.  Save this as MailboxTaskResults.aspx.cs</p>
+<pre><code class="language-csharp">using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+using System.Net.Mail;
+
+public partial class MailboxTaskResults : System.Web.UI.Page
+{
+    protected void Page_Load(object sender, EventArgs e)
+    {
+        Response.Write(&quot;Here are the results of the  Domain mailbox task request...&lt;br /&gt;&lt;br /&gt;&quot;);
+        runposh(&quot;Add-PSSnapin Microsoft.Exchange.Management.PowerShell.Admin&quot;);
+
+// Variable Definition
+        string strAdminID = Session[&quot;AdminID&quot;].ToString();
+        string strUserDN = Session[&quot;DirPath&quot;].ToString();
+        string strOldAddress = Session[&quot;OldAddress&quot;].ToString();
+        string strNewAddress = Session[&quot;NewAddress&quot;].ToString();
+        string strAction = Session[&quot;Action&quot;].ToString();
+        string strAdminName = Session[&quot;AdminUser&quot;].ToString();
+        string strLastName = Session[&quot;LastName&quot;].ToString();
+        string strCompany = Session[&quot;Agency&quot;].ToString();
+        string strDivisionOU = Session[&quot;DivisionOU&quot;].ToString();
+        bool blKeepAddress = (bool)Session[&quot;blKeepAddress&quot;];
+
+// remove leading and trailing spaces from input strings
+        strAdminID = strAdminID.Trim();
+        strUserDN = strUserDN.Trim();
+        strLastName = strLastName.Trim();
+        strCompany = strCompany.Trim();
+        strOldAddress = strOldAddress.Trim();
+        strAction = strAction.Trim();
+        strAdminName = strAdminName.Trim();
+        strDivisionOU = strDivisionOU.Trim();
+
+//Find out what we are doing
+        switch (strAction.ToLower())
+        {
+            case &quot;create mailbox&quot;:
+                fnCreateMailbox(strUserDN, strLastName, strCompany, strAdminName, strDivisionOU);
+                break;
+            case &quot;delete mailbox&quot;:
+                fnDeleteMailbox(strAdminID, strUserDN, strAdminName);
+                break;
+            case &quot;change address&quot;:
+                fnChangeAddress(strAdminID, strUserDN, strOldAddress, strNewAddress, strAdminName, strCompany, blKeepAddress);
+                break;
+        }
+    }
+    protected void fnCreateMailbox(string strUserDN, string strLastName, string strCompany, string strAdminName, string strDivisionOU)
+    {
+/*
+* Function to create the mailbox
+* Requires the user's ADsPath, Last Name, and Company (Agency)
+*/
+        string strAgency = &quot;&quot;;
+        string strKey = &quot;&quot;;
+        string strExchangeParam = &quot;&quot;;
+
+        int iLastNameNum = 0;
+
+        Array arrExchParam;
+
+        string strSubject = &quot;&quot;;
+        string strBody = &quot;&quot;;
+        string strAction = &quot;&quot;;
+    
+        Collection&lt;PSObject&gt; colCreateResults;
+        #region Scripting Dictionary
+//Build the scripting dictionary for determining the server/storage group/database
+        Dictionary&lt;string, string&gt; objDict = new Dictionary&lt;string, string&gt;();
+        objDict.Add(&quot;ABC&quot;, &quot;Server1:SG7:MBX7&quot;);
+        objDict.Add(&quot;DEF&quot;, &quot;Server2:SG7:MBX7&quot;);
+        objDict.Add(&quot;AAS&quot;, &quot;Server1:SG1:MBX1&quot;);
+        objDict.Add(&quot;AAD&quot;, &quot;Server1:SG2:MBX2&quot;);
+        objDict.Add(&quot;DEP&quot;, &quot;Server2:SG7:MBX7&quot;);
+        objDict.Add(&quot;DSS&quot;, &quot;Server3:SG5:MBX5&quot;);
+        objDict.Add(&quot;DAD&quot;, &quot;Server2:SG1:MBX1&quot;);
+        objDict.Add(&quot;DSQ&quot;, &quot;Server2:SG2:MBX2&quot;);
+        objDict.Add(&quot;LOL&quot;, &quot;Server3:SG4:MBX4&quot;);
+        objDict.Add(&quot;BRB&quot;, &quot;Server2:SG5:MBX5&quot;);
+        objDict.Add(&quot;DNA&quot;, &quot;Server2:SG6:MBX6&quot;);
+        objDict.Add(&quot;MOD&quot;, &quot;Server3:SG3:MBX3&quot;);
+        objDict.Add(&quot;SOM&quot;, &quot;Server3:SG4:MBX4&quot;);
+        objDict.Add(&quot;MOM&quot;, &quot;Server2:SG1:MBX1&quot;);
+        objDict.Add(&quot;PAL&quot;, &quot;Server3:SG6:MBX6&quot;);
+        objDict.Add(&quot;HIT&quot;, &quot;Server3:SG1:MBX1&quot;);
+        objDict.Add(&quot;DOG&quot;, &quot;Server3:SG2:MBX2&quot;);
+        objDict.Add(&quot;CAE&quot;, &quot;Server1:SG3:MBX3&quot;);
+        objDict.Add(&quot;CAT&quot;, &quot;Server1:SG4:MBX4&quot;);
+        objDict.Add(&quot;ENA&quot;, &quot;Server3:SG4:MBX4&quot;);
+        objDict.Add(&quot;KAM&quot;, &quot;Server2:SG3:MBX3&quot;);
+        objDict.Add(&quot;MAK&quot;, &quot;Server2:SG4:MBX4&quot;);
+        objDict.Add(&quot;SJM&quot;, &quot;Server2:SG7:MBX7&quot;);
+        objDict.Add(&quot;TIK&quot;, &quot;Server4:SG1:MBX1&quot;);
+        objDict.Add(&quot;ILI&quot;, &quot;Server4:SG2:MBX2&quot;);
+        objDict.Add(&quot;OOP&quot;, &quot;Server4:SG3:MBX3&quot;);
+        objDict.Add(&quot;POW&quot;, &quot;Server4:SG4:MBX4&quot;);
+        objDict.Add(&quot;WQA&quot;, &quot;Server4:SG5:MBX5&quot;);
+        #endregion
+        #region Agency Selector
+        strAgency = strCompany.Trim().ToUpper();
+        strKey = strAgency;
+        #region HHS
+        if (strAgency == &quot;HHS&quot;)
+        {
+            iLastNameNum = Convert.ToInt16(Convert.ToChar(strLastName.Substring(0, 1).ToUpper()));
+            if (iLastNameNum &lt; 69)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put A through D in 1st Storage Group
+            }
+            else if (iLastNameNum &lt; 73)
+            {
+                strKey = strAgency + &quot;2&quot;; //Put E through H in 2nd Storage Group
+            }
+            else if (iLastNameNum &lt; 77)
+            {
+                strKey = strAgency + &quot;3&quot;; //Put I through L in 3rd Storage Group
+            }
+            else if (iLastNameNum &lt; 81)
+            {
+                strKey = strAgency + &quot;4&quot;; //Put M through P in 4th Storage Group
+            }
+            else if (iLastNameNum &lt; 85)
+            {
+                strKey = strAgency + &quot;5&quot;; //Put Q through T in 5th Storage Group
+            }
+            else
+            {
+                strKey = strAgency + &quot;6&quot;; //Put U through Z in 6th Storage Group
+            }
+        }
+        #endregion
+        #region MDT
+        if (strAgency == &quot;MDT&quot;)
+        {
+            iLastNameNum = Convert.ToInt16(Convert.ToChar(strLastName.Substring(0, 1).ToUpper()));
+            if (iLastNameNum &lt; 70)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put A through E in 1st Storage Group
+            }
+            else if (iLastNameNum &lt; 75)
+            {
+                strKey = strAgency + &quot;2&quot;; //Put F through J in 2nd Storage Group
+            }
+            else if (iLastNameNum &lt; 79)
+            {
+                strKey = strAgency + &quot;3&quot;; //Put K through N in 3rd Storage Group
+            }
+            else if (iLastNameNum &lt; 84)
+            {
+                strKey = strAgency + &quot;4&quot;; //Put O through S in 4th Storage Group
+            }
+            else
+            {
+                strKey = strAgency + &quot;5&quot;; //Put T through Z in 5th Storage Group
+            }
+        }
+        #endregion
+        #region DLI
+        if (strAgency == &quot;DLI&quot;)
+        {
+            if (strDivisionOU == &quot;BSD&quot;)
+            {
+                strKey = strAgency + &quot;2&quot;; //Put BSD in the 2nd Storage Group
+            }
+            else if (strDivisionOU == &quot;CSD&quot;)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put CSD in the 1st Storage Group
+            }
+            else if (strDivisionOU == &quot;ERD&quot;)
+            {
+                strKey = strAgency + &quot;2&quot;; //Put ERD in 2nd Storage Group
+            }
+            else if (strDivisionOU == &quot;JSD&quot;)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put JSD in 1st Storage Group
+            }
+            else if (strDivisionOU == &quot;RAD&quot;)
+            {
+                strKey = strAgency + &quot;2&quot;; //Put RAD in 2nd Storage Group
+            }
+            else if (strDivisionOU == &quot;UID&quot;)
+            {
+                strKey = strAgency + &quot;2&quot;; //Put UID in 2nd Storage Group
+            }
+            else if (strDivisionOU == &quot;WCC&quot;)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put RAD in 1st Storage Group
+            }
+        }
+        #endregion
+        #region DOA
+        if (strAgency == &quot;DOA&quot;)
+        {
+            if (strDivisionOU == &quot;ADM&quot;)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put ADM in the 1st Storage Group
+            }
+            else if (strDivisionOU == &quot;ITSD&quot;)
+            {
+                strKey = strAgency + &quot;2&quot;; //Put ITSD in 2nd Storage Group
+            }
+            else if (strDivisionOU == &quot;MLOT&quot;)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put MLOT in the 1st Storage Group
+            }
+            else if (strDivisionOU == &quot;MPERA&quot;)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put MPERA in 1st Storage Group
+            }
+            else if (strDivisionOU == &quot;OPD&quot;)
+            {
+                strKey = strAgency + &quot;2&quot;; //Put OPD in 2nd Storage Group
+            }
+            else if (strDivisionOU == &quot;TRS&quot;)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put TRS in 1st Storage Group
+            }
+            else
+            {
+                strKey = strAgency + &quot;4&quot;; //Put others in 4th Storage Group
+            }
+        }
+        #endregion
+        #region COR DNR DOJ DOR FWP
+        if ((strAgency == &quot;COR&quot;) || (strAgency == &quot;DNR&quot;) || (strAgency == &quot;DOJ&quot;) || (strAgency == &quot;DOR&quot;) || (strAgency == &quot;FWP&quot;))
+        {
+            iLastNameNum = Convert.ToInt16(Convert.ToChar(strLastName.Substring(0, 1).ToUpper()));
+            if (iLastNameNum &lt; 78)
+            {
+                strKey = strAgency + &quot;1&quot;; //Put A through M in 1st Storage Group
+            }
+            else
+            {
+                strKey = strAgency + &quot;2&quot;; //Put N through Z in 2nd Storage Group
+            }
+        }
+        #endregion
+        #endregion
+        objDict.TryGetValue(strKey, out strExchangeParam);
+        arrExchParam = strExchangeParam.Split(':');
+
+        Response.Write(&quot;Mailbox Creation attempt for &quot; + strUserDN + &quot; on Exchange server &quot; + arrExchParam.GetValue(0));
+        {
+// Verify that exchange specific AD properties exist, and set them if they don't
+            strAction = &quot;$user = [ADSI]^LDAP://&quot; + strUserDN.Substring(1).Substring(0,strUserDN.Length -2) +&quot;^&quot;;
+            strAction = strAction.Replace(&quot;^&quot;, &quot;\&quot;&quot;);
+            colCreateResults = runposh(strAction);
+            strAction = &quot;$attribute = $user.msExchVersion; if (!$attribute){$user.put('msExchVersion', '4535486012416')};$user.setinfo()&quot;;
+            colCreateResults = runposh(strAction);
+            strAction = &quot;$attribute  = $user.msExchRecipientDisplayType; if (!$attribute){$user.put('msExchRecipientDisplayType', '1073741824')};$user.setinfo()&quot;;
+            colCreateResults = runposh(strAction);
+            strAction = &quot;$attribute  = $user.msExchRecipientTypeDetails; if (!$attribute){$user.put('msExchRecipientTypeDetails', '1')};$user.setinfo()&quot;;
+            colCreateResults = runposh(strAction);
+//Now, create the mailbox            
+            strAction = &quot;Enable-Mailbox -identity &quot; + strUserDN + &quot; -Database &quot; + arrExchParam.GetValue(0) + &quot;\\&quot; + arrExchParam.GetValue(1) + &quot;\\&quot; + arrExchParam.GetValue(2);
+            colCreateResults = runposh(strAction);
+            if (colCreateResults.Count &gt; 0)
+            {
+//Disable Active Sync
+                strAction = &quot;Set-CASMailbox -identity &quot; + strUserDN + &quot; –ActiveSyncEnabled $false&quot;;
+                colCreateResults = runposh(strAction);
+                Response.Write(&quot;Mailbox creation was successful.&lt;br /&gt;&lt;br /&gt;&quot;);
+                Response.Write(&quot;You will need to wait approximately 10 minutes for the mailbox to be available, due to Exchange and Active Directory replication latencies.&lt;br /&gt;&lt;br /&gt;&quot;);
+                strSubject = strAdminName + &quot; Created a mailbox&quot;;
+                strBody = strAdminName + &quot; created a mailbox associated with &quot; + strUserDN + &quot;\r\n\r\n&quot;;
+                strBody = strBody + &quot;This mailbox was created on &quot; + arrExchParam.GetValue(0) + &quot;\r\n\r\n&quot;;
+                fnSendMail(strSubject, strBody);
+            }
+            else if (colCreateResults.Count == 0)
+            {
+                Response.Write(&quot;&lt;br /&gt;&lt;br /&gt;There was an error creating the mailbox. Please contact the Service Desk at x2000 to report this error. Include the logon ID of the user you were attempting to create the mailbox for, and any error shown below.&lt;br /&gt;&lt;br /&gt;&quot;);
+                strAction = &quot;$error[0]&quot;;
+                colCreateResults = runposh(strAction);
+                if (colCreateResults.Count &gt; 0)
+                {
+                    string strErrorText = colCreateResults[0].ToString();
+                    Response.Write(&quot;The error is: &lt;b&gt;&lt;span style='color:Red'&gt;&quot; + strErrorText + &quot;&lt;/b&gt;&lt;/span&gt;&lt;br /&gt;&quot;);
+                }
+                else if (colCreateResults.Count == 0)
+                {
+                    Response.Write(&quot;An unknown error occured.&quot;);
+                }
+
+            }
+        }
+    }
+    protected void fnDeleteMailbox(string strAdminID, string strUserDN, string strAdminName)
+    {
+/*
+* Function to Delete user's mailbox
+* Requires the Admin ID and user's ADsPath
+*/
+// remove leading and trailing spaces from input strings
+        strAdminID = strAdminID.Trim();
+        strUserDN = strUserDN.Trim();
+        strAdminName = strAdminName.Trim();
+
+        Collection&lt;PSObject&gt; colDeleteResults;
+        string strDeleteAction;
+        Response.Write(&quot;Mailbox Deletion attempt for &quot; + strUserDN);
+        strDeleteAction = &quot;$ConfirmPreference = 'none';set-Mailbox -Identity &quot; + strUserDN + &quot; -EmailAddresses $null -EmailAddressPolicyEnabled $false&quot;;
+        colDeleteResults = runposh(strDeleteAction);
+        strDeleteAction = &quot;Disable-Mailbox -identity &quot; + strUserDN + &quot;;$ConfirmPreference = 'high'&quot;;
+        colDeleteResults = runposh(strDeleteAction);
+        if (colDeleteResults.Count == 0)
+        {
+            Response.Write(&quot;Mailbox deletion was successful.&lt;br /&gt;&lt;br /&gt; You will need to wait approximately 10 minutes for the mailbox to disappear, due to Exchange and Active Directory replication latencies.&quot;);
+            string strSubject = strAdminName + &quot; Deleted a mailbox&quot;;
+            string strBody = strAdminName + &quot; deleted the mailbox associated with &quot; + strUserDN;
+            fnSendMail(strSubject, strBody);
+        }
+        else if (colDeleteResults.Count != 0)
+        {
+            Response.Write(&quot;There was an error disabling the mailbox. Please contact the ITSD Customer Support Center at x2000 to report this error. Include the logon ID of the user whose mailbox you were attemting to disable&quot;);
+        }
+    }
+    protected void fnChangeAddress(string strAdminID, string strUserDN, string strOldAddress, string strNewAddress, string strAdminName, string strCompany, bool blKeepAddress)
+    {
+/*
+* Function to change User's Primary SMTP Address
+* Requires the user's ADsPath and desired address
+*/
+
+// remove leading and trailing spaces from input strings
+        strAdminID = strAdminID.Trim();
+        strUserDN = strUserDN.Trim();
+        strOldAddress = strOldAddress.Trim();
+        strNewAddress = strNewAddress.Trim();
+        strAdminName = strAdminName.Trim();
+
+        Collection&lt;PSObject&gt; colChangeResults;
+
+        string strChangeAction = &quot;&quot;;
+        string strBody = &quot;&quot;;
+        string strSubject = &quot;&quot;;
+
+// First, findout if requested address is already in use
+        strChangeAction = &quot;Get-Recipient -Filter{EmailAddresses -eq '&quot; + strNewAddress + &quot;@domain.com'} |select Name&quot;;
+        colChangeResults = runposh(strChangeAction);
+        if (colChangeResults.Count == 0)
+        {
+// Requested address is available
+            Response.Write(&quot;Your requested address, &quot; + strNewAddress + &quot;@domain.com, is available&lt;br /&gt;&quot;);
+// if blKeepAddress = false, delete old addresses in SMTP only
+            if (blKeepAddress == false)
+            {
+                strChangeAction = &quot;set-mailbox -identity &quot; + strUserDN + &quot; -PrimarySmtpAddress &quot; + strNewAddress + &quot;@domain.com -EmailAddressPolicyEnabled $false&quot;;
+                colChangeResults = runposh(strChangeAction);
+                do
+                {
+                    strChangeAction = &quot;get-mailbox -identity &quot; + strUserDN + &quot; |select PrimarySmtpAddress&quot;;
+                    colChangeResults = runposh(strChangeAction);
+                } while (colChangeResults[0].ToString().Split('=')[1].Remove(colChangeResults[0].ToString().Split('=')[1].Length - 1).ToLower() != strNewAddress.ToLower() + &quot;@domain.com&quot;);
+                strChangeAction = &quot;$mailbox = Get-Mailbox -identity &quot; + strUserDN;
+                colChangeResults = runposh(strChangeAction);
+                strChangeAction = &quot;$mailbox.EmailAddresses | foreach { if (!$_.IsPrimaryAddress -and ($_.PrefixString -eq 'SMTP')) {$mailbox.EmailAddresses -= $_}}&quot;;
+                colChangeResults = runposh(strChangeAction); 
+                strChangeAction = &quot;start-sleep 5&quot;;
+                colChangeResults = runposh(strChangeAction);
+                strChangeAction = &quot;set-mailbox -identity &quot; + strUserDN + &quot; -EmailAddresses $mailbox.EmailAddresses&quot;;
+                colChangeResults = runposh(strChangeAction);    
+            }
+            else
+            {
+                strChangeAction = &quot;set-mailbox -identity &quot; + strUserDN + &quot; -PrimarySmtpAddress &quot; + strNewAddress + &quot;@domain.com -EmailAddressPolicyEnabled $false&quot;;
+                colChangeResults = runposh(strChangeAction);
+            }
+
+            Response.Write(&quot;We have changed the primary SMTP address on &quot; + strUserDN + &quot;&lt;br /&gt;&quot;);
+            Response.Write(&quot;From: &quot; + strOldAddress + &quot;&lt;br /&gt;To: &quot; + strNewAddress + &quot;@domain.com&lt;br /&gt;&quot;);
+            Response.Write(&quot;Please allow approximately 10 minutes for this change to replicate.&quot;);
+            strSubject = strOldAddress + &quot; Address Change&quot;;
+            strBody = &quot;SMTP Address change from &quot; + strOldAddress + &quot; to &quot; + strNewAddress + &quot;@domain.com on &quot; + strUserDN + &quot; by &quot; + strAdminName + &quot;\r\n\r\n&quot;;
+            fnSendMail(strSubject, strBody);
+        }
+        else if (colChangeResults.Count != 0)
+        {
+// Requested address is NOT available
+            Response.Write(&quot;A duplicate address exists&quot;);
+            Response.Write(&quot;Your requested address is: &quot; + strNewAddress + &quot;@domain.com&lt;br /&gt;&quot;);
+            string strFoundName = colChangeResults[0].ToString().Substring(7).Substring(0, colChangeResults[0].ToString().Length - 8);
+            Response.Write(&quot;Duplicate address found at: &quot; + strFoundName + &quot;&lt;br /&gt;&quot;);
+        }
+    }
+    protected void fnSendMail(string strSubject, string strBody)
+    {
+// Send mail to postmaster
+        MailMessage mail = new MailMessage();
+        mail.From = new MailAddress(&quot;postmaster@domain.com&quot;);
+        mail.To.Add(new MailAddress(&quot;postmaster@domain.com&quot;));
+        mail.Subject = strSubject;
+        mail.Body = strBody;
+        SmtpClient client = new SmtpClient();
+        client.Host = &quot;mail.domain.com&quot;;
+        client.Send(mail);
+    }
+    protected Collection&lt;PSObject&gt; runposh(string strCommand)
+    {
+        Runspace rs = GetRunspace();
+        Pipeline currentPipeline = GetPipeline(rs, strCommand);
+        if (currentPipeline.PipelineStateInfo.State == PipelineState.NotStarted)
+        {
+            Collection&lt;PSObject&gt; results = currentPipeline.Invoke();
+            currentPipeline.Dispose();
+            Cache.Remove(&quot;currentPipe&quot;);
+            return (results);
+        }
+        else
+        {
+            return null;
+        }
+    }
+    protected Runspace GetRunspace()
+    {
+        if (Cache[&quot;rs&quot;] == null)
+        {
+            Runspace rs = RunspaceFactory.CreateRunspace();
+            rs.Open();
+            Cache[&quot;rs&quot;] = rs;
+        }
+        return (Runspace)Cache[&quot;rs&quot;];
+    }
+    protected Pipeline GetPipeline(Runspace rs, string strCommand)
+    {
+        if (Cache[&quot;currentPipe&quot;] == null)
+        {
+            Pipeline currentPipeline = rs.CreatePipeline(strCommand);
+            Cache[&quot;currentPipe&quot;] = currentPipeline;
+        }
+        return (Pipeline)Cache[&quot;currentPipe&quot;];
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

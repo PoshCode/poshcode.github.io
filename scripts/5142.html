@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jason M">
+    <title>Export Exchange mailboar - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Export Exchange mailboar</h1>
+<h3><a href="//scripts/5142.ps1">download</a></h3>
+<p>This script will take members of an AD group and export their Exchange mailbox to a PST as well as export all Lync archives for the specified time period. The script can be ran manually or bet set to run as a scheduled task. Requires the Quest AD Powershell module as well as Lync, Exchange, and AD modules to run.</p>
+<pre><code class="language-posh">###################################################################################################
+#    Script Name                 -    CommArchive.ps1
+#    Script Description            -    Exports Lync and mailbox data for members of security group
+#    Last Modified                -    04/31/2014
+#    Created By                    -    phreakin@gmail.com
+#   Powershell Modules Required    -    Quest ActiveRoles AD Management, Exchange, ActiveDirectory Lync
+###################################################################################################
+ 
+###################################################################################################
+# Load all required powershell modules.
+###################################################################################################
+ 
+if ((get-pssnapin | % { $_.name }) -notcontains &quot;Quest.ActiveRoles.ADManagement&quot;)
+{ Add-PSSnapin Quest.ActiveRoles.ADManagement }
+ 
+if ((get-pssnapin | % { $_.name }) -notcontains &quot;Microsoft.Exchange.Management.PowerShell.E2010&quot;)
+{ Add-PSSnapin Microsoft.Exchange.Management.PowerShell.E2010 }
+ 
+if ((get-module | % { $_.name }) -notcontains &quot;ActiveDirectory&quot;)
+{ Import-Module activedirectory }
+# Lync 2013 module doesn't REQUIRE full path but I have seen issues where it could require the full path
+if ((get-module | % { $_.name }) -notcontains &quot;Lync&quot;)
+{ Import-Module 'C:\Program Files\Common Files\Microsoft Lync Server 2013\Modules\Lync\Lync.psd1' }
+###################################################################################################
+#Script Variables
+###################################################################################################
+ 
+#Universal security group in Active Directory that contains users to be exported
+$holdgroup = &quot;ExportGroup&quot;
+ 
+# Worfile of detailed user information
+$workfile = &quot;workfile.csv&quot;
+ 
+# Name of log file to create
+$logfile = &quot;exportlog.txt&quot;
+ 
+# User to give mailbox permissions to for export to PST. Needs to have full access to Exchange mailbox
+$MBUserPerm = &quot;Domain\User&quot;
+ 
+# Amount of allowed bad items to ignore in a mailbox to PST export. Can be anywhere from 0 to 2147483647.
+$BadItems = &quot;10&quot;
+ 
+# Destination path to put the exported data. Can be network share or local directory
+$destpath = &quot;\\server.domain.com\Exports&quot;
+ 
+# Path to temporarily store PST's. Keep local to script for speed
+$locpst = &quot;D:\PST&quot;
+ 
+# Get's current date in 1-1-14-6-30 format
+$dt = get-date -uformat &quot;%m-%d-%Y-%H-%M&quot;
+ 
+# Get's current date in APR-31-2014 format
+$date = Get-Date -format MMM-dd-yyyy
+ 
+# Pulls Lync archive data 90 days back from current date
+$LyncDateStart = (get-date).addDays(-90).ToString(&quot;MM/dd/yyy&quot;)
+ 
+# End date is current date when script is ran
+$LyncDateEnd = (get-date).ToString(&quot;MM/dd/yyy&quot;)
+ 
+# SQL server hostname for Lync archive database. Does not need instance name
+$LyncSQL = &quot;ArchivingDatabase:sqlserver.domain.com&quot;
+ 
+#Collect user information using Quest PowerShell module from Active Directory
+get-qadgroupmember $holdgroup | get-qaduser | Select-Object FirstName, LastName, SamAccountName, HomeDirectory, PrimarySMTPAddress | Export-Csv -NoTypeInformation $workfile
+ 
+ 
+######################################################################################################
+#Do not make changes below this line
+######################################################################################################
+#Create folder path if needed and copy directories
+$copypath = Import-Csv $workfile
+ForEach ($User in $copypath)
+{
+    $strA = $destpath
+    $strB = $user.Firstname
+    $strC = $user.LastName
+    $strD = $strA + &quot;\&quot; + $strB + &quot;_&quot; + $strC
+    $strE = $locpst
+    $strF = $strE + &quot;\&quot; + $strB + &quot;_&quot; + $strC
+    $pathcheck0 = Test-Path $strD
+    $pathcheck1 = Test-Path $strF\mailbox\*
+    $pathcheck2 = Test-Path $strF
+    
+    #######################################################################################################
+    # Export Lync archived data for users
+    #######################################################################################################
+    
+    Export-CsArchivingData -Identity &quot;$LyncSQL&quot; -StartDate &quot;$lyncdateStart&quot; -EndDate $LyncDateEnd -UserUri $User.PrimarySMTPAddress -OutputFolder &quot;$strD\Lync_Archive\$date&quot;
+    
+    
+    #######################################################################################################
+    # Export mailbox to PST and copt to specified shared directory. Also removes users from group once done
+    #######################################################################################################
+    if ($pathcheck1 -eq $True)
+    {
+        robocopy $strF\mailbox\ $strD\mailbox /Copy:DAT /E /XO /ZB /MT /R:2 /W:2 /V /TS /FP /LOG+:$logfile
+        remove-QADGroupMember $holdgroup $User.SamAccountName
+        Remove-Item -Recurse -Force $strF
+    }
+    else
+    {
+        if ($pathcheck2 -eq $true)
+        {
+            Write-Host &quot;PST export pending.&quot;
+        }
+        else
+        {
+            mkdir $strF\Mailbox
+            Add-MailboxPermission $User.SamAccountName -accessrights fullaccess -user $MBUserPerm -confirm:$False
+            New-MailboxExportRequest -Mailbox $User.SamAccountName -Name &quot;ExportToPST-$dt&quot; -FilePath &quot;$strF\mailbox\Mailbox--$Date.pst&quot; -badItemLimit $BadItems -confirm:$False
+            Remove-MailboxPermission $User.SamAccountName -accessrights fullaccess -user $MBUserPerm -confirm:$False
+        }
+    }
+    
+    Start-Sleep 120
+    
+    #######################################################################################################
+    # Remove temporary files used by script
+    #######################################################################################################
+    
+    del $workfile
+    del $logfile
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Read-DllExportFunctions - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Read-DllExportFunctions</h1>
+<h3><a href="//scripts/5262.ps1">download</a></h3>
+<p>Prints DLL exported functions list.</p>
+<pre><code class="language-posh">#requires -version 2.0
+if (!(Test-Path alias:dllexp)) { Set-Alias dllexp Read-DllExportFunctions }
+
+function Read-DllExportFunctions {
+  &lt;#
+    .NOTES
+        Author: greg zakharov
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+    [ValidateScript({Test-Path $_})]
+    [String]$FileName
+  )
+  
+  begin {
+    $cd = [AppDomain]::CurrentDomain
+    $attr = 'AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    
+    if (!($cd.GetAssemblies() | ? {
+      $_.FullName.Contains('ExpBrowse')
+    })) {
+      $type = (($cd.DefineDynamicAssembly(
+        (New-Object Reflection.AssemblyName('ExpBrowse')), [Reflection.Emit.AssemblyBuilderAccess]::Run
+      )).DefineDynamicModule('ExpBrowse', $false)).DefineType('IMAGE_EXPORT_DIRECTORY', $attr)
+      [void]$type.DefineField('Characteristics',    [UInt32], 'Public')
+      [void]$type.DefineField('TimeDateStamp',      [UInt32], 'Public')
+      [void]$type.DefineField('MajorVersion',       [UInt16], 'Public')
+      [void]$type.DefineField('MinorVersion',       [UInt16], 'Public')
+      [void]$type.DefineField('Name',               [UInt32], 'Public')
+      [void]$type.DefineField('Base',               [UInt32], 'Public')
+      [void]$type.DefineField('NumberOfFunctions',  [UInt32], 'Public')
+      [void]$type.DefineField('NumberOfNames',      [UInt32], 'Public')
+      [void]$type.DefineField('AddressOfFunctions', [UInt32], 'Public')
+      [void]$type.DefineField('AddressOfNames',     [UInt32], 'Public')
+      [void]$type.DefineField('AddressOfOrdinals',  [UInt32], 'Public')
+      $global:IMAGE_EXPORT_DIRECTORY = $type.CreateType()
+    }
+  }
+  process {
+    try {
+      #read file
+      $fs = [IO.File]::OpenRead($FileName)
+      $buf = New-Object &quot;Byte[]&quot; $fs.Length
+      [void]$fs.Read($buf, 0, $buf.Length)
+      #validate that file is a PE
+      $e_magic = -join [Char[]]$buf[0..1]
+      $e_lfanew = 256 * $buf[0x3D] + $buf[0x3C]
+      $pe_sign = -join [Char[]]$buf[$e_lfanew..($e_lfanew + 3)]
+      
+      if ($e_magic -ne 'MZ' -or $pe_sign -ne &quot;PE`0`0&quot;) {
+        throw (New-Object FormatException('Invalid file format.'))
+      }
+      #get PE bit and check what it is a DLL
+      function Sync-Bytes([Int32]$offset) {
+        return [BitConverter]::ToInt32($buf, ($e_lfanew + $offset))
+      }
+      
+      $is32bit = ((Sync-Bytes 0x16) -band 0x0100) -eq 0x0100
+      
+      if (((Sync-Bytes 0x16) -band 0x2000) -eq 0x2000) {
+        $ImageBase = if ($is32bit) {
+          Sync-Bytes 0x34
+        } else {
+          [BitConverter]::ToInt64($buf, ($e_lfanew + 0x30))
+        }
+      }
+      #fill structure
+      $ied = [Activator]::CreateInstance($IMAGE_EXPORT_DIRECTORY)
+      [Runtime.InteropServices.Marshal]::PtrToStructure(
+        [IntPtr]($ImageBase + (Sync-Bytes 0x78)), $ied
+      )
+      0..($ied.NumberOfNames - 1) | % {
+        [Runtime.InteropServices.Marshal]::PtrToStringAnsi(
+          [IntPtr]($ImageBase + [Runtime.InteropServices.Marshal]::ReadInt32(
+            ($ImageBase + $ied.AddressOfNames) + $_ * 4
+          ))
+        )
+      }
+    }
+    catch { $e = [Boolean]$_ }
+    finally {
+      if ($fs -ne $null) { $fs.Close() }
+      if ($e) { return }
+    }
+  }
+  end {''}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

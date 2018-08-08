@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="P Sczepanski">
+    <title>Convert-SchemaGUID - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Convert-SchemaGUID</h1>
+<h3><a href="//scripts/3789.ps1">download</a></h3>
+<p>Convert-SchemaGUID allows to convert the Active Directory Schema GUID or AD Extended Rights GUID to convert to readable name.
+You need to use . sourcing to load the script.
+Ie. store the file as Convert-SchemaGUID.ps1 and load it using &quot;. .\Convert-SchemaGUID.ps1&quot;. Then use &quot;Get-Help Convert-SchemaGUID&quot; to read the inline help.
+The script depends on &quot;Search-AD&quot; function which you can also find here:</p>
+<h1><script type="text/javascript" src="http://PoshCode.org/embed/3788"></script></h1>
+<pre><code class="language-posh"># List of  Guids not properly defined in AD but used
+# Used to initialize GuidCache. 
+New-Variable -Name GuidCache -Force -Option AllScope -Scope Script -Description &quot;Cached GUIDs from AD. :: [redtoo]&quot; 
+$Script:GuidCache = @{
+    &quot;a05b8cc2-17bc-4802-a710-e7c15ab866a2&quot; = &quot;Autoenroll&quot;
+    &quot;00000000-0000-0000-0000-000000000000&quot; = &quot;All&quot;
+}
+$Script:GuidObjects = @{}
+function Convert-SchemaGUIDtoLDAPDisplayName {
+    &lt;#
+        .Synopsis
+            Convert-SchemaGUIDtoLDAPDisplayName converts a schema GUId to the LDAP Display Name
+    
+        .DESCRIPTION
+            Convert-SchemaGUIDtoLDAPDisplayName converts a schema GUId to the LDAP Display Name
+    
+        .PARAMETER  guid
+            The schema guid to lookup
+
+        .EXAMPLE
+            PS C:\&gt;  Convert-SchemaGUIDtoLDAPDisplayName &quot;bf96793f-0de6-11d0-a285-00aa003049e2&quot;
+
+        .INPUTS
+            System.String
+    
+        .OUTPUTS
+            System.String
+    
+        .NOTES
+            NAME:      Convert-SchemaGUIDtoLDAPDisplayName
+            AUTHOR:    Patrick Sczepanski
+            VERSION    20120105
+            #Requires -Version 2.0
+    
+        .LINK
+            http://PoshCode.org/embed/3788
+    #&gt;
+    [Cmdletbinding()]
+    Param(
+        [Parameter(Mandatory=$true,Position=0)]
+        [GUID]$guid 
+    )
+
+        $ThisFunctionName = $MyInvocation.MyCommand.Name
+
+        if ( $GuidCache.Contains($guid.Tostring()) ) {
+            Write-Verbose &quot;[$ThisFunctionName] :: Found in script cache.&quot;
+            return $GuidCache.($guid.Tostring())
+        } 
+        $RootDSE = [DirectoryServices.DirectoryEntry]&quot;LDAP://RootDSE&quot;
+        $escapedGuid =  &quot;\&quot; + ((([GUID]$guid).ToByteArray() |% {&quot;{0:x}&quot; -f $_}) -join '\')
+        $Filter = &quot;(&amp;(|(objectcategory=classschema)(objectcategory=attributeschema)(objectcategory=controlAccessRight))&quot; +
+                  &quot;(|(schemaIdGuid=$escapedGuid)(rightsGuid=$guid)))&quot;
+        Write-Verbose &quot;[$ThisFunctionName] :: Query Schema and configuration&quot;
+        Write-Verbose &quot;[$ThisFunctionName] :: Base $($RootDSE.configurationNamingContext)&quot;
+        Write-Verbose &quot;[$ThisFunctionName] :: Filter $Filter&quot;
+        Write-Verbose &quot;[$ThisFunctionName] :: Attr ldapdisplayname&quot;
+        $SearchResult = Search-AD -Searchbase $RootDSE.configurationNamingContext `
+                      -Filter $Filter `
+                      -Attributes (&quot;distinguishedname&quot;,&quot;name&quot;,&quot;ldapdisplayname&quot;,&quot;displayname&quot;) `
+                      -Scope Subtree `
+                      -FindOne  `
+                      -ReferralChasing Subordinate `
+                      -PageSize 0 
+                      
+
+        if ( $SearchResult.properties.distinguishedname[0] -like &quot;*Schema*&quot; ) {
+            $GuidCache.($guid.Tostring()) = $SearchResult.properties.ldapdisplayname[0]
+            Write-Verbose &quot;[$ThisFunctionName] :: Found in schema, added to cache.&quot;
+            Write-Output $SearchResult.properties.ldapdisplayname[0]
+        } elseif ( $SearchResult.properties.distinguishedname[0] -like &quot;*Configuration*&quot; )  {
+            $GuidCache.($guid.Tostring()) = $SearchResult.properties.displayname[0]
+            Write-Verbose &quot;[$ThisFunctionName] :: Found in configuration context, added to cache.&quot;
+            Write-Output $SearchResult.properties.displayname[0]
+        } else {
+            Write-Verbose &quot;[$ThisFunctionName] :: Not found return GUID, added 'unknown'.&quot;
+            Write-Output $guid.ToString()
+        }    
+}
+#endregion Convert-Schema
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

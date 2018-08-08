@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Don Schaffrick">
+    <title>Drive Space Report - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Drive Space Report</h1>
+<h3><a href="//scripts/6067.ps1">download</a></h3>
+<p>Script for checking servers current free disk space and highlighting drives with low free space</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+    Drive Space Report
+
+.DESCRIPTION
+
+Drive Space Report
+Get-DriveSpace.ps1 [[-computername] &lt;String[]&gt;] [-file &lt;String&gt;] [-Gridview] [-OSOnly] [&lt;CommonParameters&gt;]
+
+Produces a simple drive space report for the computer(s) requested 
+
+.PARAMETER Computername
+The computer or list of computers that you want the report generated for. 
+if generating the report for multiple computers
+separate each computer with a comma.
+
+.PARAMETER File
+When used will attempt to read the filename to import list of servers to be tested. 
+
+.PARAMETER OSOnly
+Used to provide a report of the OS (C:) drive of the server(s). 
+If not specified the report will include all drives on the servers being tested. 
+
+.PARAMETER Gridview
+Used to generate the report using powershell's out-gridview option. This will be used for the 
+disk space report only. Errors will be displayed on console only. 
+
+.EXAMPLE
+Get-Drivespace -Computername computer1
+
+Generates a report for all drives on server computer1
+
+.EXAMPLE
+Get-Drivespace -Computername computer1, Computer2 -OSOnly   
+    
+Generates a drive of the OS drive of Computer 1 and Computer 2
+    
+.Example
+Get-Drivespace 
+    
+Generates report of local computer
+
+.Example
+Get-Drivespace -file c:\somefolder\servers.txt
+
+Will read the contents of c:\somefolder\servers.txt into the command for processing. 
+    
+.Example
+Get-Drivespace (Get-Content servers.txt)
+    
+This will read the contents of the servers.txt file processing each line as a server name. 
+It will pass the list of servers to the command to process each server as if they were 
+entered server1, server2, server3... 
+
+#&gt;
+#requires -Version 3
+
+#Function Get-Drivespace {
+    [cmdletbinding()]
+    param (
+        [Parameter(
+            Position=0, 
+            ValueFromPipeline=$true,
+            ValueFromPipelineByPropertyName=$true ) ]
+            [String[]]$computername = $env:computername,
+
+            [String]$file,
+
+            [switch]$OSOnly,
+
+            [Switch]$Gridview
+
+        ) #param
+
+begin{ 
+    Write-Verbose 'Begin'
+    [Int]   $i = 0               #Counter for routine
+    [Array] $mia  =@()           # Servers failing connectivity test
+    [Array] $NIX  =@()           # *NIX servers
+    [Array] $svrs =@()           # Servers with disk information
+    [Array] $errsvrs =@()        # servers that experience errors in gathering
+    [Int]   $computerstested = 0 # Count of computers tested
+    [float] $levelWarn  = 10.0;  # Warning-level in percent. 
+    [float] $levelAlarm = 5.0;   # Alarm-level in percent. 
+
+    if ($file) {
+        Write-Verbose &quot;`t Input from file selected&quot;
+        if (Test-Path $file){
+            Write-Progress -Activity 'Reading in list of servers' -status 'Yawning'
+            $computername = Get-Content $file
+
+            }#if test-path
+            else{
+                Write-Error &quot;$file is not found in path. Please check and rerun&quot;
+                break
+                }#else if test-path
+        }#if $file
+    }#Begin
+
+process {
+    Write-Verbose &quot;Process&quot;
+    $numbercomp = $computername.count
+    
+    Write-Verbose &quot;`t number of computers $numbercomp&quot;
+     $i=1
+
+    foreach ($computer in $computername){
+        #Write-Verbose &quot;`t `t $computer&quot;
+        Write-Progress -Activity &quot;Getting drive information&quot; -Status $computer -PercentComplete (($i/$computername.count)*100)
+        $computerstested ++
+        $i++
+
+        If ($computer -Like &quot;U*&quot;){
+            Write-Verbose &quot;`t `t *NIX computer&quot;
+            $NIX +=$computer
+            }#*NIX test
+          Else {
+
+            if (Test-Connection $computer -Count 1 -ErrorAction 0 -Quiet){
+              &lt;#
+              Yes? Gather Drive information about the server
+              #&gt;
+              Try {
+                  $Drive= Get-WmiObject Win32_LogicalDisk -computer $computer -ErrorAction Stop  |Where-Object {($_.Drivetype -ne 2) -and ($_.Drivetype -ne 5) }|`
+                      select SystemName,DeviceID, VolumeName, DriveType, FileSystem,`
+                      @{Name=&quot;Size(GB)&quot;;Expression={&quot;{0:N1}&quot; -f($_.size/1gb)}},`
+                      @{Name=&quot;FreeSpace(GB)&quot;;Expression={&quot;{0:N1}&quot; -f($_.freespace/1gb)}}, `
+                      @{name=&quot;% Free&quot;;Expression={ &quot;{0:N1}&quot; -f (($_.FreeSpace / $_.Size)*100)}},`
+            
+                      @{Name=&quot;Alarm&quot;;Expression={if (($_.FreeSpace / $_.Size)*100 -le $levelAlarm)
+                                                        {&quot;Alarm !!!&quot;}  
+                                                 elseif (($_.FreeSpace / $_.Size)*100 -le $levelWarn) 
+                                                        {&quot;Warning !&quot;} 
+                                                   else
+                                                        {$null}
+                                                    }#Alarm IF
+                                                }#Alarm
+            
+            
+                  $svrs += $Drive
+                }#try 
+                Catch {
+                    Write-Verbose &quot;`t `t Error Computer $computer&quot;
+                    $errsvrs += $computer
+                    }#Catch
+                finally{} #Finally
+            }#if test-connection
+            else {
+                    $MIA += $computer   
+                 }#Else if test-connection
+             }#Else if Nix test 
+    }#Foreach
+ 
+
+    }#Process
+
+
+end {
+    Write-Verbose &quot;End&quot;
+    
+    if ($OSOnly) {
+        Write-Verbose &quot;`t OSOnly Switch set&quot;
+        [Array]$OSDrive=@()
+        foreach ($s in $svrs){
+            if ($s.deviceid -eq 'C:'){
+                $osdrive +=$s }#if
+         }#foreach
+         if ($Gridview){
+	        Write-Verbose &quot;`t Gridview Output Selected&quot;
+            $osdrive | out-gridview
+            }#IF 
+         Else {
+            $osdrive | Sort  alarm, &quot;% Free&quot; |ft -AutoSize
+            }#IF-Else
+        }#if $osonly
+        else{
+            if ($Gridview){
+				Write-Verbose &quot;`t Gridview Output Selected&quot;
+                $svrs | out-gridview
+                }#IF
+             Else{
+                $svrs | ft -auto
+                }#if-Else
+            }#else if $osonly
+
+    &lt;#Error Reports#&gt;
+    Write-host &quot;$computerstested Computers tested&quot;
+    if ($mia -ne $null){
+        #write-host &quot;The following servers are offline&quot; -ForegroundColor Red
+        $n = $mia.count
+        $m = &quot;{0:N1}&quot; -f (($mia.count / $computerstested)*100)
+        Write-Host &quot;$n servers are offline $m %&quot;  -ForegroundColor Yellow
+        foreach ($m in $MIA) {
+		    Write-Host &quot;`t $m is not on network &quot; -ForegroundColor Yellow
+            }#foreach
+            
+        }#if $MIA
+    if ($errsvrs -ne $null){
+        $n=$errsvrs.count
+        $m=&quot;{0:N1}&quot; -f (($errsvrs.count / $computerstested)*100)
+        Write-Host &quot;$n servers have errors $M %&quot; -ForegroundColor Red
+        foreach ($E in $errsvrs) {		
+		    Write-Host &quot;`t $E Has errors Please investigate&quot; -ForegroundColor Red
+            }#ForEach
+        }#if $errsvrs
+
+    if ($nix -ne $null){ 
+        $n=$nix.count
+        $m=&quot;{0:N1}&quot; -f (($nix.count / $computerstested)*100)
+        Write-Host &quot;$n Nix Computers $M %&quot; -ForegroundColor Magenta
+        Write-host &quot;`t $nix&quot; -ForegroundColor Magenta
+        }#$IF *NIX
+}#end
+
+
+#}#Function Get-Drivespace
+
+
+&lt;#Test code section#&gt;
+#Get-DriveSpace -file C:\powershell\elhr\elkr45.txt -verbose -OSOnly
+#Get-DriveSpace -file C:\powershell\elhr\elkr45.txt -OSOnly
+#Get-DriveSpace -file ..\servers.txt -OSOnly -Gridview
+#Get-DriveSpace ut00004p, uv000137p, abtapt0902, abtapp1900 -verbose
+
+&lt;#
+Versioning
+        0.0	  mm/dd/yy		Wouldn't it be a good idea to take a simple WMI command and complicate things. You can do things like 
+                            calculate the percentage of free space. 
+                            show the space in Gb and not a bunch of numbers
+                            start writing error routines (get the red out)
+                            Make a nice report that can be added to server checkout
+		0.1	  04/2014		Added the calculation for percent free
+		0.2	  04/03/2014	Added test of input paramater for assigning sernames &amp; list
+							Created loop for input 
+		0.3	  04/05/2014	Added test for computer up (need to create report)
+        0.31  05/30/2014  	Created end report for servers not online.
+        0.4   06/09/2014  	Add Alarm settings for low disk space
+        0.41  07/09/2014  	Created disk report
+        0.5   08/04/2014  	New check online test
+        1.0   03/2015     	Rewrite to include enhanced parameter usage and structured code.  
+              03/01/2015  	Switch for OS Only 
+                            - Sort the alarms in the OSOnly view
+        1.01  04/08/2015  	Procedure for handling input from file better. 
+		1.02  04/10/2015  	Created gridview output
+        1.03  05/29/2015    Check for *NIX computers
+		
+NEEDS 
+	Better reporting of errors. display what the error is when the system fails. 
+	look for better way to do gridview
+	Better output options. HTML / File / gridview / csv
+	Piping output ??
+   
+#&gt;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

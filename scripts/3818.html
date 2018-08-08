@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joshua Poehls">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/3818.ps1">download</a></h3>
+<p>Killing processes in disconnected terminal service sessions</p>
+<pre><code class="language-posh"># This script supports being run with -WhatIf and -Confirm parameters.
+[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')]
+param (
+    # Regex of the states that should be included in the process killing field.
+    [string]$IncludeStates = '^(Disc)$', # Only DISCONNECTED sessions by default.
+    # Regex of the processes to kill
+    [string]$KillProcesses = '^(OUTLOOK)$' # Only OUTLOOK by default.
+)
+
+function Get-Sessions
+{
+    # `qwinsta` is the same as `query session`
+
+    # `query session`: http://technet.microsoft.com/en-us/library/cc785434(v=ws.10).aspx
+
+    # Possible session states:
+    &lt;#
+    http://support.microsoft.com/kb/186592
+    Active. The session is connected and active.
+    Conn.   The session is connected. No user is logged on.
+    ConnQ.  The session is in the process of connecting. If this state
+            continues, it indicates a problem with the connection.
+    Shadow. The session is shadowing another session.
+    Listen. The session is ready to accept a client connection.
+    Disc.   The session is disconnected.
+    Idle.   The session is initialized.
+    Down.   The session is down, indicating the session failed to initialize correctly.
+    Init.   The session is initializing.
+    #&gt;
+
+    # Snippet from http://poshcode.org/3062
+    # Parses the output of `qwinsta` into PowerShell objects.
+    $c = query session 2&gt;&amp;1 | where {$_.gettype().equals([string]) }
+
+    $starters = New-Object psobject -Property @{&quot;SessionName&quot; = 0; &quot;Username&quot; = 0; &quot;ID&quot; = 0; &quot;State&quot; = 0; &quot;Type&quot; = 0; &quot;Device&quot; = 0;};
+    
+    foreach($line in $c) {
+         try {
+             if($line.trim().substring(0, $line.trim().indexof(&quot; &quot;)) -eq &quot;SESSIONNAME&quot;) {
+                $starters.Username = $line.indexof(&quot;USERNAME&quot;);
+                $starters.ID = $line.indexof(&quot;ID&quot;);
+                $starters.State = $line.indexof(&quot;STATE&quot;);
+                $starters.Type = $line.indexof(&quot;TYPE&quot;);
+                $starters.Device = $line.indexof(&quot;DEVICE&quot;);
+                continue;
+            }
+          
+            New-Object psobject -Property @{
+                &quot;SessionName&quot; = $line.trim().substring(0, $line.trim().indexof(&quot; &quot;)).trim(&quot;&gt;&quot;)
+                ;&quot;Username&quot; = $line.Substring($starters.Username, $line.IndexOf(&quot; &quot;, $starters.Username) - $starters.Username)
+                ;&quot;ID&quot; = $line.Substring($line.IndexOf(&quot; &quot;, $starters.Username), $starters.ID - $line.IndexOf(&quot; &quot;, $starters.Username) + 2).trim()
+                ;&quot;State&quot; = $line.Substring($starters.State, $line.IndexOf(&quot; &quot;, $starters.State)-$starters.State).trim()
+                ;&quot;Type&quot; = $line.Substring($starters.Type, $starters.Device - $starters.Type).trim()
+                ;&quot;Device&quot; = $line.Substring($starters.Device).trim()
+            }
+        } catch {
+            throw $_;
+            #$e = $_;
+            #Write-Error -Exception $e.Exception -Message $e.PSMessageDetails;
+        }
+    }
+}
+
+# Get a list of all terminal sessions that are in the state we care about.
+$IncludedSessions = Get-Sessions `
+                        | Where { $_.State -match $IncludeStates } `
+                        | Select -ExpandProperty ID
+
+# Get a list of all processes in one of those terminal sessions
+# that match a process we want to kill.
+$SessionProcesses = $IncludedSessions `
+    | % { $id = $_;
+          Get-Process `
+            | Where { $_.SessionID -eq $id -and $_.Name -match $KillProcesses } }
+
+if ($SessionProcesses -ne $null) {
+    $SessionProcesses | Stop-Process
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

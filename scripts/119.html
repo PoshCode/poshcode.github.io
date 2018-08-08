@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>BridgeBot 1.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>BridgeBot 1.0</h1>
+<h3><a href="//scripts/119.ps1">download</a></h3>
+<p>The source to PoshBot - who bridges IRC and Jabber</p>
+<pre><code class="language-posh">## Depends on the PoshXmpp.dll from http://CodePlex.com/PowerXmpp
+#requires -pssnapin PoshXmpp
+## Requires System.Web for the RSS-feed option
+[Reflection.Assembly]::LoadWithPartialName(&quot;System.Web&quot;) | Out-Null
+##########################################################################################
+# @Author: Joel Bennnett
+# @Usage:
+# Start-JabberMirror.ps1 User@JabberServer.com Password &quot;groupchat@oneserver.com&quot; &quot;groupchat@anotherserver.com&quot; &quot;BridgeBot&quot; &quot;http://rssfeed&quot;
+##########################################################################################
+
+param (
+   $JabberId    = #$(Read-Host &quot;Jabber Login&quot;)
+   ,$Password   = #$(Read-Host &quot;Password&quot;)
+   ,$IRC        = # $(Read-Host &quot;First Jabber conference address&quot;)
+   ,$JabberConf = # $(Read-Host &quot;Second Jabber conference address&quot;)
+   ,$ChatNick   = # $(Read-Host &quot;The nickname you want to use&quot;)
+   [string[]]$AtomFeeds = @()
+)
+
+function Start-PowerBot {
+   $global:LastNewsCheck = $([DateTime]::Now.AddHours(-5))
+   $global:feedReader = new-object Xml.XmlDocument
+   $global:PoshXmppClient = PoshXmpp\New-Client $JabberId $Password # http://im.flosoft.biz:5280/http-poll/
+   PoshXmpp\Connect-Chat $IRC $ChatNick
+   PoshXmpp\Connect-Chat $JabberConf $ChatNick
+
+   PoshXmpp\Send-Message $IRC &quot;Starting Mirror to $('{0}@{1}' -f $JabberConf.Split(@('%','@'),3))&quot;
+   PoshXmpp\Send-Message $JabberConf &quot;Starting Mirror to $('{0}@{1}' -f $IRC.Split(@('%','@'),3))&quot;
+
+   PoshXmpp\Send-Message $IRC &quot;/msg nickserv id Sup3rB0t&quot;
+  
+}
+
+function Process-Command($Chat, $Message) {
+   $split = $message.Body.Split(&quot; &quot;)
+   switch( $split[0] ) {
+      &quot;!list&quot; {
+         Write-Host &quot;!LIST COMMAND. Send users of [$Chat] to [$($Message.From.Bare)]&quot; -fore Magenta
+         PoshXmpp\Send-Message $Message.From.Bare.ToLower() (@($PoshXmppClient.ChatManager.GetUsers( $Chat ).Values) -join &quot;, &quot;)
+      }
+   }
+}
+
+
+# Max IRC Message Length http://www.faqs.org/rfcs/rfc1459.html
+# PRIVMSG CHANNEL MSG
+$IrcMaxLen = 510 - (&quot;PRIVMSG :&quot;.Length + $IRC.Length + $JabberId.split('@')[0].Length)
+
+function Get-Feeds([string[]]$JIDs,[string[]]$AtomFeeds) {
+   Write-Verbose &quot;Checking feeds...&quot;
+   foreach($feed in $AtomFeeds) {
+      $feedReader.Load($feed)
+      for($i = $feedReader.feed.entry.count - 1; $i -ge 0; $i--) {
+         $e = $feedReader.feed.entry[$i]
+         if([datetime]$e.updated -gt $global:LastNewsCheck) {
+            foreach($jid in $JIDs) {
+               $msg = ([System.Web.HttpUtility]::HtmlDecode($e.summary.&quot;#text&quot;) -replace &quot;&lt;br&gt;&quot;, &quot;&quot;).Trim()
+               $template = &quot;{0} (Posted at {1:hh:mm} by {2}) {{0}} :: {3}&quot; -f
+                        $e.title.&quot;#text&quot;, [datetime]$e.updated, $e.author.name, $e.link.href
+
+               $len = [math]::Min($IrcMaxLen,($template.Length + $msg.Length)) - ($template.Length +3)
+               PoshXmpp\Send-Message $jid $($template -f $msg.SubString(0,$len))
+            }
+            [Threading.Thread]::Sleep( 500 )
+         }
+      }
+   }
+   $global:LastNewsCheck = [DateTime]::Now
+}
+
+
+function Bridge {
+   PoshXmpp\Receive-Message -All | foreach-object {
+      Write-Verbose (&quot;MESSAGE: {0} {1} {2}&quot;  -f $_.From.Bare, $_.From.Resource, $_.Body)
+      if( $_.Type -eq &quot;Error&quot; ) {
+         Write-Error $_.Error
+      }
+      if( $_.From.Resource -ne $ChatNick ) {
+         $Chat = $null;
+         if( $_.From.Bare -eq $IRC ) 
+         {
+            $Chat = $JabberConf;
+         }
+         elseif( $_.From.Bare -eq $JabberConf ) 
+         {
+            $Chat = $IRC;
+         }
+         else
+         {
+            $_
+         }
+
+         if($Chat){
+            if(![String]::IsNullOrEmpty($_.Body) -and ($_.Body[0] -eq '!')) { 
+               Process-Command $Chat $_ 
+            } 
+            elseif( ![String]::IsNullOrEmpty($_.Subject) ) 
+            {
+               $_.To = $Chat
+               # Send it directly using a method on the PoshXmppClient
+               $PoshXmppClient.Send($_)
+            }
+            else 
+            {
+               PoshXmpp\Send-Message $Chat (&quot;&lt;{0}&gt; {1}&quot; -f $_.From.Resource, $_.Body)
+            }
+         }
+      }
+   }
+}
+
+
+function Start-Bridge {
+   &quot;PRESS ANY KEY TO STOP&quot;
+   while(!$Host.UI.RawUI.KeyAvailable) {
+      Bridge
+      Get-Feeds @($IRC,$JabberConf) $AtomFeeds
+      $counter = 0
+      Write-Verbose &quot;PRESS ANY KEY TO STOP&quot; # we're going to wait 3 * 60 seconds
+      while(!$Host.UI.RawUI.KeyAvailable -and ($counter++ -lt 1800)) {
+         Bridge
+         [Threading.Thread]::Sleep( 100 )
+      }
+   }
+}
+
+function Stop-PowerBot {
+   PoshXmpp\Disconnect-Chat $IRC $ChatNick
+   PoshXmpp\Disconnect-Chat $JabberConf $ChatNick
+   $global:PoshXmppClient.Close();
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

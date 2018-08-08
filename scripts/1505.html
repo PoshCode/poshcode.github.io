@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Oisin Grehan">
+    <title>VMWare VMNET Adapters - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>VMWare VMNET Adapters</h1>
+<h3><a href="//scripts/1505.ps1">download</a></h3>
+<p>Are you sick and tired of switching the VMWare virtual network adapters from the “public” network profile to a “private” network profile each time you reboot or do something else that causes Vista/Win2008 to forget what you told it to do ten minutes ago?</p>
+<p>original post: http://www.nivot.org/2008/09/05/VMWareVMNETAdaptersTriggeringPublicProfileForWindowsFirewall.aspx</p>
+<pre><code class="language-posh"># see http://msdn2.microsoft.com/en-us/library/bb201634.aspx
+#
+# *NdisDeviceType 
+#
+# The type of the device. The default value is zero, which indicates a standard
+# networking device that connects to a network.
+#
+# Set *NdisDeviceType to NDIS_DEVICE_TYPE_ENDPOINT (1) if this device is an
+# endpoint device and is not a true network interface that connects to a network.
+# For example, you must specify NDIS_DEVICE_TYPE_ENDPOINT for devices such as
+# smart phones that use a networking infrastructure to communicate to the local
+# computer system but do not provide connectivity to an external network. 
+#
+# Usage: run in an elevated shell (vista/longhorn) or as adminstrator (xp/2003).
+#
+# PS&gt; .\fix-vmnet-adapters.ps1
+
+# boilerplate elevation check
+
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = new-object Security.Principal.WindowsPrincipal $identity
+$elevated = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $elevated) {
+    $error = &quot;Sorry, you need to run this script&quot;
+    if ([System.Environment]::OSVersion.Version.Major -gt 5) {
+        $error += &quot; in an elevated shell.&quot;
+    } else {
+        $error += &quot; as Administrator.&quot;
+    }
+    throw $error
+}
+
+function confirm {
+    $host.ui.PromptForChoice(&quot;Continue&quot;, &quot;Process adapter?&quot;,
+        [Management.Automation.Host.ChoiceDescription[]]@(&quot;&amp;No&quot;, &quot;&amp;Yes&quot;), 0) -eq $true
+}
+
+# adapters key
+pushd 'hklm:\SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}'
+
+# ignore and continue on error
+dir -ea 0  | % {
+    $node = $_.pspath
+    $desc = gp $node -name driverdesc
+    if ($desc -like &quot;*vmware*&quot;) {
+        write-host (&quot;Found adapter: {0} &quot; -f $desc.driverdesc)
+        if (confirm) {
+            new-itemproperty $node -name '*NdisDeviceType' -propertytype dword -value 1
+        }
+    }
+}
+popd
+
+# disable/enable network adapters
+gwmi win32_networkadapter | ? {$_.name -like &quot;*vmware*&quot; } | % {
+    
+    # disable
+    write-host -nonew &quot;Disabling $($_.name) ... &quot;
+    $result = $_.Disable()
+    if ($result.ReturnValue -eq -0) { write-host &quot; success.&quot; } else { write-host &quot; failed.&quot; }
+    
+    # enable
+    write-host -nonew &quot;Enabling $($_.name) ... &quot;
+    $result = $_.Enable()
+    if ($result.ReturnValue -eq -0) { write-host &quot; success.&quot; } else { write-host &quot; failed.&quot; }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

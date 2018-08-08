@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Scott Copus">
+    <title>Install Firefox add-on - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Install Firefox add-on</h1>
+<h3><a href="//scripts/4919.ps1">download</a></h3>
+<p>PowerShell script to installs Firefox add-ons (extensions)</p>
+<pre><code class="language-posh"># Firefox_install_extensions.ps1
+# Purpose: install Firefox extensions
+# Details: This PowerShell script installs Firefox extensions into the main C:\Program Files (x86)\Mozilla Firefox\extensions folder
+# so that they are available to all users. This has been tested for extensions (including dictionaries). It's not designed for plugins.
+# Compatibility: Works on at least Firefox 21, 25. Tested on Win7x64.
+#
+# Prep work:
+#   Open Firefox and install the extension(s) you want and close Firefox.
+#   Find the installed extension(s): Look in %AppData%\Mozilla\Firefox\Profiles\9grbtiio.default\extensions or C:\Program Files (x86)\Mozilla Firefox\extensions
+#   The extension might be a folder or XPI file named something recognizable like &quot;de-DE@dictionaries.addons.mozilla.org&quot; or it might be a GUID.
+#   If it's an XPI file, you will need to extract its contents using any UNZIP tool and just name the folder the same as the XPI file.
+#   Finally copy this extension folder to this script's folder.
+#
+# Note 1:
+#   This script only copies the extension itself--it does not copy any extension settings. It's up to you to figure out how and where each
+#   extension's settings are stored and be able to duplicate them to each user. See below for related info.
+#
+# Note 2:
+#   By default Firefox will not automatically &quot;enable&quot; new extensions that it finds on it's next startup for a specific user. Users typically
+#   have to acknowlege and approve its installation. To auto-approve new extensions that get copied to Firefox's own extension folder, you must ensure
+#   that the setting &quot;extensions.autoDisableScopes&quot; (in about:config) does not include the bit-value for &quot;all users of this computer&quot;. More details about this
+#   setting can be found at:
+#        https://developer.mozilla.org/en-US/docs/Installing_extensions#Disabling_install_locations
+#   Look under the section &quot;Preventing automatic install from specific locations&quot;. These &quot;scopes&quot; are defined in the previous section &quot;Disabling install locations&quot;.
+#   You need to ensure that the value of this setting is NEITHER 8 or 15. A setting of 0-7 will allow the newly-installed extension to run (be enabled)
+#   without approval. FYI: By default Firefox ships with a setting of 15 which requires approval of all extensions no matter install location.
+#   Finally if you want all users to have this setting, your default Windows profile must already include this setting in Firefox's profile -OR-
+#   you can follow these instructions and have locked/shared settings for all users:
+#        http://kb.mozillazine.org/Locking_preferences
+#        http://mike.kaply.com/2012/03/16/customizing-firefox-autoconfig-files/
+#
+# 2013-11-05: Scott.Copus@wku.edu: script born
+# 2013-11-13: Scott.Copus@wku.edu: fixed issue that would wipe out the existing &quot;extensions&quot; registry key &amp; subvalues (PowerShell bug?)
+
+
+# find Firefox install directory -- try 64-bit path first
+$FFinstallDir = &quot;${Env:ProgramFiles(x86)}\Mozilla Firefox&quot;
+$FFextensionsRegKey = &quot;HKLM:\SOFTWARE\Wow6432Node\Mozilla\Firefox\Extensions&quot;
+if (!(Test-Path -Path $FFinstalldir)) {
+	# if 64-bit path fails, fall back to 32-bit path
+	$FFinstallDir    = &quot;${Env:ProgramFiles}\Mozilla Firefox&quot;
+	$FFextensionsRegKey = &quot;HKLM:\SOFTWARE\Mozilla\Firefox\Extensions&quot;
+}
+if (!(Test-Path -Path $FFinstallDir)) {
+	Write-Host &quot;Problem: Could not find Firefox installation folder.&quot;
+	Exit 16003  # 3 = &quot;path not found&quot;
+}
+
+# create extensions folder if necessary
+$FFextensionsDir = &quot;$FFinstallDir\extensions&quot;
+if (!(Test-Path -Path $FFextensionsDir)) {
+    New-Item $FFextensionsDir -ItemType Directory -ErrorAction SilentlyContinue -Force | Out-Null
+}
+# create extensions registry key if necessary
+if (!(Test-Path -Path $FFextensionsRegKey)) {
+    New-Item $FFextensionsRegKey -ErrorAction SilentlyContinue -Force | Out-Null
+}
+
+# install extensions (asssumes extensions are all sub-folders in this script's path)
+Get-ChildItem . -Directory | ForEach-Object {
+	write-host Installing Firefox extension: $_.Name
+	# copy each extension folder to the system
+	Copy-Item $_.FullName $FFextensionsDir -Recurse -Force | Out-Null
+	# create registry key for each extension
+	New-ItemProperty -Path $FFextensionsRegKey -Name $_.Name -Value &quot;$FFextensionsDir\$($_.Name)&quot; -PropertyType String -Force | Out-Null
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

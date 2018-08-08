@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Rich Kusak">
+    <title>VHDFunctions.psm1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>VHDFunctions.psm1</h1>
+<h3><a href="//scripts/1451.ps1">download</a> - <a href="//scripts/1449.md">parent</a></h3>
+<p>Here's several functions for working with VHD's in Windows 7 and Windows Server 2008 R2. I've been working with PowerShell for about a year and this is my first go at a module. I'm a sysadmin and not a developer so some of my solutions are in that mode of thinking. There's probably .NET ways to accomplish what I did and I'm certainly open to learning if there's a better way. I've found these functions useful and hopefully someone else out there will too. Enjoy.</p>
+<pre><code class="language-posh">&lt;#
+
+Name: VHDFunctions.psm1
+Author: Rich Kusak (rkusak@cbcag.edu)
+Created: 2009-10-23
+LastEdit: 2009-11-03 08:57
+
+Included Functions:
+	Dismount-VHD
+	Initialize-VHD
+	Mount-VHD
+	New-VHD
+	Set-VHDBootConfiguration
+	Test-VHD
+	
+#&gt;
+
+&lt;#
+.SYNOPSIS
+	Dismount a VHD file from the system.
+
+.DESCRIPTION
+	This function wraps the consistancy of PowerShell around the Diskpart utility.
+	A Diskpart script is created to automate the dismount (detach) of a VHD file from the system.
+	Optionally, the VHD file can be deleted following detachment.
+	
+.PARAMETER Path
+	Specifies the full path to the VHD file.
+
+.PARAMETER Remove
+	Removes (deletes) the VHD file after dismounting it.
+
+.PARAMETER NoConfirm
+	Supresses the delete confirmation prompt.
+
+.PARAMETER DiskpartScript
+	Specifies the path location of the Diskpart script file.
+	Default location is $env:SystemDrive
+	This file is deleted at the conclusion of the script.
+
+.PARAMETER Rescan
+	Instructs Diskpart to rescan the system for available storage resources.
+	
+.EXAMPLE
+	Dismount-VHD -Path C:\test.vhd
+	Dismounts the specified VHD file.
+	
+.EXAMPLE
+	Dismount-VHD -Path C:\test.vhd -Remove
+	Dismounts the specified VHD file and then deletes it.
+
+.NOTES
+	Name: Dismount-VHD.ps1
+	Author: Rich Kusak
+	Created: 2009-10-22
+	LastEdit: 2009-10-26 11:35
+	
+	#Requires -Version 2.0
+#&gt;
+function Dismount-VHD {
+	[CmdletBinding()]
+	param (
+		[Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false)]
+			[string]$Path,
+		[switch]$Remove,
+		[switch]$NoConfirm,
+		[string]$DiskpartScript = &quot;$env:SystemDrive\DiskpartScript.txt&quot;,
+		[switch]$Rescan
+	)
+	
+	begin {
+		function InvokeDiskpart {
+			Diskpart.exe /s $DiskpartScript
+		}
+		
+		function RemoveVHD {
+			switch ($NoConfirm) {
+				$false {
+					## Prompt for confirmation to delete the VHD file ##
+					&quot;&quot; ; Write-Warning &quot;Are you sure you want to delete the file &quot;&quot;$Path&quot;&quot;?&quot;
+					$Prompt = Read-Host &quot;Type &quot;&quot;YES&quot;&quot; to continue or anything else to break&quot;
+					if ($Prompt -ceq 'YES') {
+						Remove-Item -Path $Path -Force
+						&quot;&quot; ; Write-Host &quot;VHD &quot;&quot;$Path&quot;&quot; deleted!&quot; ; &quot;&quot;
+					} else {
+						&quot;&quot; ; Write-Host &quot;Script terminated without deleting the VHD file.&quot; ; &quot;&quot;
+					}
+				}
+				$true {
+					## Confirmation prompt suppressed ##
+					Remove-Item -Path $Path -Force
+					&quot;&quot; ; Write-Host &quot;VHD &quot;&quot;$Path&quot;&quot; deleted!&quot; ; &quot;&quot;
+				}
+			}
+		}
+		## Validate Operating System Version ##
+		if (Get-WmiObject win32_OperatingSystem -Filter &quot;Version &lt; '6.1'&quot;) {throw &quot;The script operation requires at least Windows 7 or Windows Server 2008 R2.&quot;}
+	}
+	process{
+	## DiskPart Script Content ## Here-String statement purposefully not indented ##
+@&quot;
+$(if ($Rescan) {'Rescan'})
+Select VDisk File=&quot;$Path&quot;`nDetach VDisk
+Exit 
+&quot;@ | Out-File -FilePath $DiskpartScript -Encoding ASCII -Force
+		InvokeDiskpart
+	}
+	end {
+		if ($Remove) {RemoveVHD}
+		Remove-Item -Path $DiskpartScript -Force ; &quot;&quot;
+	}
+}
+Export-ModuleMember -Function Dismount-VHD
+
+
+&lt;#
+.SYNOPSIS
+	Initialize a VHD by preparing it for use.
+
+.DESCRIPTION
+	This function wraps the consistancy of PowerShell around the Diskpart utility.
+	A Diskpart script is created to automate initializing a VHD.
+	The script creates a partition, assigns a drive letter, and formats a mounted VHD.
+	
+.PARAMETER Path
+	Specifies the full path to the VHD file.
+
+.PARAMETER Drive
+	A drive letter to assign to the mounted VHD.
+	If not specified the system will auto assign the next available drive letter.
+
+.PARAMETER Label
+	A volume label to assign to the mounted VHD.
+
+.PARAMETER DiskpartScript
+	Specifies the path location of the Diskpart script file.
+	Default location is $env:SystemDrive
+	This file is deleted at the conclusion of the script.
+
+.PARAMETER Rescan
+	Instructs Diskpart to rescan the system for available storage resources.
+
+.EXAMPLE
+	Initialize-VHD C:\test.vhd X: TestVHD
+	Initializes the VHD at path C:\test.vhd assign it to drive letter X: and give it the volume label &quot;TestVHD&quot;.
+
+.NOTES
+	Name: Initialize-VHD
+	Author:	Rich Kusak
+	Created: 2009-10-22
+	LastEdit: 2009-10-26 15:11
+	
+	#Requires -Version 2.0
+#&gt;
+function Initialize-VHD {
+	[CmdletBinding()]
+	param (
+		[Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false)]
+			[string]$Path,
+		[Parameter(Position=1,Mandatory=$false,ValueFromPipeline=$false)]
+			[string]$Drive,
+		[Parameter(Position=2,Mandatory=$false,ValueFromPipeline=$false)]
+			[string]$Label,
+		[Parameter(Position=3,Mandatory=$false,ValueFromPipeline=$false)]
+			[string]$DiskpartScript = &quot;$env:SystemDrive\DiskpartScript.txt&quot;,
+		[switch]$NoConfirm,
+		[switch]$Rescan
+	)
+	
+	begin {
+		function InvokeDiskpart {
+			Diskpart.exe /s $DiskpartScript
+		}
+	
+		## Validate Operating System Version ##
+		if (Get-WmiObject win32_OperatingSystem -Filter &quot;Version &lt; '6.1'&quot;) {throw &quot;The script operation requires at least Windows 7 or Windows Server 2008 R2.&quot;}
+		## Validate -Drive parameter ##
+		if ($Drive) {
+			$Reserved = @('A:','B:','C:')
+			$Reserved += (Get-WmiObject win32_LogicalDisk -Property DeviceID | ForEach-Object {$_.DeviceID})
+			switch ($Drive) {
+				{($_ -notmatch &quot;^[a-z]$&quot;) -and ($_ -notmatch &quot;^[a-z]:$&quot;)} {throw &quot;The drive letter &quot;&quot;$_&quot;&quot; is invalid.&quot;}
+				{$_ -notmatch &quot;:&quot;} {$Drive += &quot;:&quot;}
+				{$Reserved -contains $Drive} {throw &quot;The drive letter &quot;&quot;$_&quot;&quot; is reserved.&quot;}
+			}
+		}
+		if (!$NoConfirm) {
+			&quot;&quot; ; Write-Warning &quot;The VHD &quot;&quot;$Path&quot;&quot; is about to initialized. Any existing data will be destroyed!`nAre you sure you want to continue?&quot; ; &quot;&quot;
+			$Prompt = Read-Host &quot;Type &quot;&quot;YES&quot;&quot; to continue or anything else to break&quot;
+			if ($Prompt -cne 'YES') {Write-Host &quot;Function terminated by user.&quot;; &quot;&quot; ; break}
+		}
+	}
+	process {
+		## Diskpart Script Content ## Here-String statement purposefully not indented ##
+@&quot;
+$(if ($Rescan) {'Rescan'})
+Select VDisk File=&quot;$Path&quot;
+Clean
+Create Partition Primary
+Format Quick FS=NTFS $(if ($Label) {&quot;Label=&quot;&quot;$Label&quot;&quot;&quot;})
+$(if ($Drive) {&quot;Assign Letter=$Drive&quot;} else {'Assign'})
+Detail VDisk
+Exit
+&quot;@ | Out-File -FilePath $DiskpartScript -Encoding ASCII -Force
+	}
+	end {
+		InvokeDiskpart
+		Remove-Item -Path $DiskpartScript -Force ; &quot;&quot;
+		Write-Host &quot;The VHD &quot;&quot;$Path&quot;&quot; has been successfully initialized.&quot; ; &quot;&quot;
+	}
+}
+Export-ModuleMember -Function Initialize-VHD
+
+
+&lt;#
+.SYNOPSIS
+	Mount a VHD to the system.
+
+.DESCRIPTION
+	This function wraps the consistancy of PowerShell around the Diskpart utility.
+	A Diskpart script is created to automate mounting (attach) a VHD file to the system.
+	
+.PARAMETER Path
+	Specifies the full path to the VHD file.
+	
+.PARAMETER DiskpartScript
+	Specifies the path location of the Diskpart script file.
+	Default location is $env:SystemDrive
+	This file is deleted at the conclusion of the script.
+
+.PARAMETER Rescan
+	Instructs Diskpart to rescan the system for available storage resources.
+
+.NOTES
+	Name: Mount-VHD.ps1
+	Author: Rich Kusak
+	Created: 2009-10-22
+	LastEdit: 2009-10-26 09:25
+	
+	#Requires -Version 2.0
+#&gt;
+function Mount-VHD {
+	[CmdletBinding()]
+	param (
+		[Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false)]
+			[string]$Path,
+		[string]$DiskpartScript = &quot;$env:SystemDrive\DiskpartScript.txt&quot;,
+		[switch]$Rescan
+	)
+	
+	begin {
+		function InvokeDiskpart {
+			Diskpart.exe /s $DiskpartScript
+		}
+		## Validate Operating System Version ##
+		if (Get-WmiObject win32_OperatingSystem -Filter &quot;Version &lt; '6.1'&quot;) {throw &quot;The script operation requires at least Windows 7 or Windows Server 2008 R2.&quot;}
+	}
+	process{
+		## Diskpart Script Content ## Here-String statement purposefully not indented ##
+@&quot;
+$(if ($Rescan) {'Rescan'})
+Select VDisk File=&quot;$Path&quot;`nAttach VDisk
+Exit 
+&quot;@ | Out-File -FilePath $DiskpartScript -Encoding ASCII -Force
+		InvokeDiskpart
+	}
+	end {
+		Remove-Item -Path $DiskpartScript -Force ; &quot;&quot;
+		Write-Host &quot;The VHD &quot;&quot;$Path&quot;&quot; has been successfully mounted.&quot; ; &quot;&quot;
+	}
+}
+Export-ModuleMember -Function Mount-VHD
+
+
+&lt;#
+.SYNOPSIS
+	Create a new VHD file.
+
+.DESCRIPTION
+	This function wraps the consistancy of PowerShell around the Diskpart utility.
+	A Diskpart script is created to automate the creation of the VHD.
+	Optionally, the VHD can be mounted immediately following the creation process.
+	
+.PARAMETER Path
+	Specifies the full path to the VHD file.
+	
+.PARAMETER Maximum
+	The maximum space allocated for the VHD to use.
+
+.PARAMETER Fixed
+	Creates a fixed disk VHD file. By default a dynamically expanding VHD file is created.
+	
+.PARAMETER Mount
+	Mount (attach) the VHD to the system making it available to Windows.
+
+.PARAMETER Prepare
+	Prepares the VHD for use by partitioning and mounting (attach) the VHD to the system making it available to Windows.
+
+.PARAMETER NoConfirm
+	Supresses the maximum validation warning confirmation prompt.
+	
+.PARAMETER DiskpartScript
+	Specifies the path location of the Diskpart script file.
+	Default location is $env:SystemDrive
+	This file is deleted at the conclusion of the script.
+
+.PARAMETER Rescan
+	Instructs Diskpart to rescan the system for available storage resources.
+
+.NOTES
+	Name: New-VHD
+	Author: Rich Kusak
+	Created: 2009-05-27
+	LastEdit: 2009-10-26 10:06
+	
+	#Requires -Version 2.0
+#&gt;
+function New-VHD {
+	[CmdletBinding()]
+	param (
+		[Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false)]
+			[string]$Path,
+		[Parameter(Position=1,Mandatory=$true,ValueFromPipeline=$false)]
+			[int]$Maximum,
+		[switch]$Fixed,
+		[switch]$Mount,
+		[switch]$NoConfirm,
+		[string]$DiskpartScript = &quot;$env:SystemDrive\DiskpartScript.txt&quot;,
+		[switch]$Rescan
+	)
+	
+	begin {
+		function InvokeDiskpart {
+			Diskpart.exe /s $DiskpartScript
+		}
+		function TestMaximum {
+			## Validates the -Maximum parameter against the specified disk's available space ##
+			$Drive = Split-Path $Path -Qualifier
+			$LogicalDisk = Get-WmiObject win32_LogicalDisk -Filter &quot;DeviceID = '$Drive'&quot;
+			$FreeSpace = [math]::Truncate(($LogicalDisk.FreeSpace)/1MB)
+			$Percent = [math]::Round(($Maximum/$FreeSpace)*100,0)
+			switch ($Maximum) {
+				{$_ -gt 2088960} {throw &quot;The -Maximum parameter value &quot;&quot;$Maximum&quot;&quot; exceeds the allowable VHD size.&quot;}
+				{$_ -ge $FreeSpace -and $Fixed} {throw &quot;The -Maximum parameter value &quot;&quot;$Maximum&quot;&quot; exceeds available disk space.&quot;}
+				{$_ -ge $FreeSpace} {
+					&quot;&quot; ; Write-Warning &quot;The VHD maximum size exceeds available disk space.&quot;
+					if (!$NoConfirm) {
+						Write-Host &quot;Are you sure you want to continue?&quot;
+						$Prompt = Read-Host &quot;Type &quot;&quot;YES&quot;&quot; to continue or anything else to break&quot;
+						if ($Prompt -cne 'YES') {
+							&quot;&quot; ; Write-Host &quot;Script terminiated by user.&quot; ; &quot;&quot;
+							return
+						}
+					}
+				}
+				{$Percent -ge 80} {
+					&quot;&quot; ; Write-Warning &quot;The VHD maximum size is $Percent% of the available disk space.&quot;
+					if (!$NoConfirm) {
+						Write-Host &quot;Are you sure you want to continue?&quot;
+						$Prompt = Read-Host &quot;Type &quot;&quot;YES&quot;&quot; to continue or anything else to break&quot;
+						if ($Prompt -cne 'YES') {
+							&quot;&quot; ; Write-Host &quot;Script terminiated by user.&quot; ; &quot;&quot;
+							return
+						}
+					}
+				}
+			}
+			## Validate Operating System Version ##
+			if (Get-WmiObject win32_OperatingSystem -Filter &quot;Version &lt; '6.1'&quot;) {throw &quot;The script operation requires at least Windows 7 or Windows Server 2008 R2.&quot;}
+		}
+	}
+	process {
+		TestMaximum
+		## Diskpart Script Content ## Here-String statement purposefully not indented ##
+@&quot;
+$(if ($Rescan) {'Rescan'})
+Create VDisk File=&quot;$Path&quot; Maximum=$Maximum $(if ($Fixed) {'Type=Fixed'} else {'Type=Expandable'})
+$(if ($Mount) {&quot;Select VDisk File=&quot;&quot;$Path&quot;&quot;`nAttach VDisk&quot;})
+Exit 
+&quot;@ | Out-File -FilePath $DiskpartScript -Encoding ASCII -Force
+		InvokeDiskpart
+	}
+	end {
+		Remove-Item -Path $DiskpartScript -Force ; &quot;&quot;
+		Write-Host &quot;A new VHD has been created at &quot;&quot;$Path&quot;&quot;.&quot; ; &quot;&quot;
+		if ($Mount) {Write-Host &quot;The VHD has been successfully mounted.&quot; ; &quot;&quot;}
+	}
+}
+Export-ModuleMember -Function New-VHD
+
+
+&lt;#
+.SYNOPSIS
+	Set the system boot configuration to boot from a VHD.
+
+.DESCRIPTION
+	This function wraps the consistancy of PowerShell around the BCDEdit tool.
+	The Boot Configuration DataStore Editor (BCDEdit) is used to set the necessary
+	boot configuration entry to optionally boot to a VHD during startup.
+	
+.PARAMETER Path
+	Specifies the full path to the VHD file.
+
+.PARAMETER Description
+	Description for the boot configuration entry.
+	
+.EXAMPLE
+	Set-VHDBootConfiguration	
+
+.NOTES
+	Name: Set-VHDBootConfiguration
+	Author: Rich Kusak
+	Created: 2009-10-22
+	LastEdit: 2009-10-26 10:14
+	
+	#Requires -Version 2.0
+#&gt;
+function Set-VHDBootConfiguration {
+	[CmdletBinding()]
+	param (
+		[Parameter(Position=0,Mandatory=$true)]
+			[string]$Path,
+		[Parameter(Position=1,Mandatory=$true)]
+			[string]$Description
+	)
+	
+	begin {
+		if (!(Test-Path -Path $Path -Include &quot;*.vhd&quot;)) {throw &quot;The path &quot;&quot;$Path&quot;&quot; is invalid or does not contain a VHD file.&quot;}
+		$Drive = Split-Path -Path $Path -Qualifier
+		$UnQualifiedPath = Split-Path -Path $Path -NoQualifier
+	}
+	process {
+		## Use BCDEdit to set the VHD boot configuration entry ##
+		$Copy = bcdedit /copy '{current}' /d $Description
+		$CLSID = $Copy | ForEach-Object {$_.Remove(0,37).Replace(&quot;.&quot;,&quot;&quot;)} 
+		bcdedit /set $CLSID device vhd=[$Drive]&quot;&quot;$UnQualifiedPath&quot;&quot;
+		bcdedit /set $CLSID osdevice vhd=[$Drive]&quot;&quot;$UnQualifiedPath&quot;&quot;
+		bcdedit /set $CLSID detecthal on
+		New-Object PSObject | Add-Member -MemberType NoteProperty -Name 'Identifier' -Value $CLSID -PassThru |
+	}
+	end {
+		Write-Host &quot;The VHD &quot;&quot;$Path&quot;&quot; has been prepared for boot operation.&quot; ; &quot;&quot;
+	}
+}
+Export-ModuleMember -Function Set-VHDBootConfiguration
+
+
+&lt;#
+.SYNOPSIS
+	Test a VHD.
+
+.DESCRIPTION
+	This script wraps the consistancy of PowerShell around the Diskpart utility.
+	A Diskpart script is created to return the details of the VHD (VDisk).
+	
+.PARAMETER Path
+	Specifies the full path to the VHD file.
+
+.PARAMETER DiskpartScript
+	Specifies the path location of the Diskpart script file.
+	Default location is $env:SystemDrive
+	This file is deleted at the conclusion of the script.
+
+.PARAMETER Rescan
+	Instructs Diskpart to rescan the system for available storage resources.
+
+.NOTES
+	Name: Test-VHD.ps1
+	Author: Rich Kusak
+	Created: 2009-10-23
+	LastEdit: 2009-11-03 08:55
+	
+	#Requires -Version 2.0
+#&gt;
+function Test-VHD {
+	[CmdletBinding()]
+	param (
+		[Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false)]
+			[string]$Path,
+		[Parameter(Position=1,Mandatory=$false,ValueFromPipeline=$false)]
+			[string]$DiskpartScript = &quot;$env:SystemDrive\DiskpartScript.txt&quot;,
+		[switch]$Rescan
+	)
+
+	begin {
+		function InvokeDiskpart {
+			Diskpart.exe /s $DiskpartScript
+		}
+		## Validate Operating System Version ##
+		if (Get-WmiObject win32_OperatingSystem -Filter &quot;Version &lt; '6.1'&quot;) {throw &quot;The script operation requires at least Windows 7 or Windows Server 2008 R2.&quot;}
+		## Validate the -Path parameter ##
+		if (!(Test-Path -Path $Path -Include &quot;*.vhd&quot;)) {throw &quot;The path &quot;&quot;$Path&quot;&quot; is not valid or does not contain a VHD file.&quot;}
+	}
+	process {
+@&quot;
+Select VDisk File=&quot;$Path&quot;
+Detail VDisk
+&quot;@ | Out-File -FilePath $DiskpartScript -Encoding ASCII -Force
+		InvokeDiskpart
+	}
+	end {
+		Remove-Item -Path $DiskpartScript -Force ; &quot;&quot;
+	}
+}
+Export-ModuleMember -Function Test-VHD
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

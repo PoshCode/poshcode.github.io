@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="MatthewASchmitt">
+    <title>Unlock &amp; Password Reset - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Unlock &amp; Password Reset</h1>
+<h3><a href="//scripts/3814.ps1">download</a> - <a href="//scripts/3800.md">parent</a></h3>
+<p>If this helps you, please tweet it!</p>
+<p>Never fails a user calls in or enters a helpdesk ticket with, “I can’t log in”.  This is a script provides everything I need to determine why: Password Expired? Account Locked? If Locked, which DCs? Are there other users that are locked, that haven’t noticed yet?</p>
+<p>This replaces using AD and the Account Lockout Status Tool.  It not only saves a little time, but has everything in one place.</p>
+<p>Twitter: @MatthewASchmitt
+LinkedIn: www.linkedin.com/in/matthewaschmitt</p>
+<pre><code class="language-posh">&lt;#
+  Author:   Matt Schmitt
+  Date:     12/4/12 
+  Version:  2.0 
+  From:     USA 
+  Email:    ithink2020@gmail.com 
+  Website:  http://about.me/schmittmatt
+  Twitter:  @MatthewASchmitt
+  
+  Description
+  A script checking for Locked Account, checking where a user is locked out, unlocking the user's account and for resetting a user's password.  
+  
+  UPDATED 12/4/12
+    Cleaned up Checking LockedOut Status code - replaced with foreach statement that looks at $Servers array
+    Cleaned up Unlock code - replaced with foreach statement that looks at $Servers array
+    Cleaned up Get pwdlastset date - rewrote to use the method I was using for other lookups for AD properties.
+
+#&gt;
+
+
+Import-Module ActiveDirectory
+
+Write-Host &quot;&quot;
+Write-Host &quot;PowerShell AD Password Tool&quot;
+Write-Host &quot;&quot;
+Write-Host &quot;This tool displays the Exparation Date of a user's Password and thier Lockedout&quot;
+Write-Host &quot;Status.  It will then allow you to unlock and/or reset the password.&quot;
+Write-Host &quot;&quot;
+
+Write-Host &quot;&quot;
+
+
+#Assing Domain Controllers to $servers Array
+#IMPORTANT ---&gt; Need to Update with DCs chagnes
+$servers = &quot;AUSDC01.intranet.theknot.com&quot;, &quot;AUSDC02.intranet.theknot.com&quot;, &quot;AUSDC03.intranet.theknot.com&quot;, &quot;CORPDC01.intranet.theknot.com&quot;, &quot;LADC03.intranet.theknot.com&quot;, &quot;NYCDC04.intranet.theknot.com&quot;, &quot;NYCDC05.intranet.theknot.com&quot;, &quot;omadc01.intranet.theknot.com&quot;, &quot;omadc02.intranet.theknot.com&quot;, &quot;REDDC02.intranet.theknot.com&quot;
+
+# Not includeing BJDC03.intranet.theknot.com, BJDC02.intranet.theknot.com
+
+
+#Counts how many locked account there are on the local DC and sets it to $count
+$count = Search-ADAccount –LockedOut | where { $_.Name -ne &quot;Administrator&quot; -and $_.Name -ne &quot;Guest&quot; } | Measure-Object | Select-Object -expand Count
+
+
+#If there are locked accounts (other than Administrator and Guest), then this will display who is locked out.
+If ( $count -gt 0 ) {
+
+    Write-Host &quot;Current Locked Out Accounts on your LOCAL Domain Controller:&quot;
+    Search-ADAccount –LockedOut | where { $_.Name -ne &quot;Administrator&quot; -and $_.Name -ne &quot;Guest&quot; } | Select-Object Name, @{Expression={$_.SamAccountName};Label=&quot;Username&quot;},@{Expression={$_.physicalDeliveryOfficeName};Label=&quot;Office Location&quot;},@{Expression={$_.TelephoneNumber};Label=&quot;Phone Number&quot;},@{Expression={$_.LastLogonDate};Label=&quot;Last Logon Date&quot;}  | Format-Table -AutoSize
+    
+}else{
+    
+#   Write-Host &quot;There are no locked out accounts on your local Domain Controller.&quot;
+
+}
+
+
+Write-Host &quot;&quot;
+
+
+#Asks for the username
+$user = Read-Host &quot;Enter username of the employee you would like to check or [ Ctrl+c ] to exit&quot;
+
+cls 
+
+Write-Host &quot;&quot;
+Write-Host &quot;&quot;
+
+$Name = (Get-ADUser -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand DisplayName)
+$phone = (Get-ADUser -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand telephoneNumber)
+
+Write-Host &quot;$Name's phone number is:  $phone&quot;
+
+Write-Host &quot;&quot;
+Write-Host &quot;&quot;
+
+
+[datetime]$today = (get-date)
+
+#Get pwdlastset date from AD and set it to $passdate
+
+$passdate2 = [datetime]::fromfiletime((Get-ADUser -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand pwdlastset))
+
+#Write-Host &quot;passdate2: $passdate2&quot;
+
+
+
+&lt;# ----&gt; REMOVE - Replaced with above line
+
+$searcher=New-Object DirectoryServices.DirectorySearcher
+$searcher.Filter=&quot;(&amp;(samaccountname=$user))&quot;
+$results=$searcher.findone()
+$passdate = [datetime]::fromfiletime($results.properties.pwdlastset[0])
+
+
+Write-Host &quot;passdate: $passdate&quot;
+
+
+#&gt;
+
+
+$PwdAge = ($today - $passdate2).Days
+
+If ($PwdAge -gt 90){
+
+    Write-Host &quot;Password for $user is EXPIRED!&quot;
+    Write-Host &quot;Password for $user is  $PwdAge days old.&quot;
+
+}else{
+
+    Write-Host &quot;Password for $user is $PwdAge days old.&quot;
+
+}
+
+
+
+
+Write-Host &quot;&quot;
+Write-Host &quot;&quot;
+Write-Host &quot;Checking LockedOut Status on U.S. Domain Controllers:&quot;
+
+#Get Lockedout status and set it to $Lock
+foreach ($object in $servers) {
+
+    switch (Get-ADUser -server $object -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand lockedout) { 
+    
+        &quot;False&quot; {&quot;$object `t `t Not Locked&quot;} 
+        
+        &quot;True&quot; {&quot;$object `t `t LOCKED&quot;}
+   
+    }
+}
+
+
+Write-Host &quot;&quot;
+Write-Host &quot;&quot;
+
+
+[int]$y = 0
+
+
+$option = Read-Host  &quot;Would you like to (1) Unlock user, (2) Reset user's password, (3) Unlock and reset user's password or (4) Exit?&quot;
+
+cls
+
+While ($y -eq 0) {
+    
+    switch ($option)
+    {
+        &quot;1&quot; { 
+
+
+                foreach ($object in $servers) {
+                    
+                    Write-Host &quot;Unlocking account on $object&quot;
+                    Unlock-ADAccount -Identity $user -server $object
+
+                }         
+                                
+                
+                
+                #Get Lockedout status and set it to $Lock
+                $Lock = (Get-ADUser -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand lockedout)
+
+                Write-Host &quot;&quot;
+
+                #Depending on Status, tell user if the account is locked or not.
+                switch ($Lock)
+                {
+                    &quot;False&quot; { Write-Host &quot;$user is unlocked.&quot; }
+                    &quot;True&quot; { Write-Host &quot;$user is LOCKED Out.&quot; }
+                }                
+                
+            
+                Write-Host &quot;&quot;
+                Write-Host &quot;Press any key to Exit.&quot;
+                
+                $y += 5
+                
+                $x = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+                
+            
+            }
+        &quot;2&quot; { 
+                
+                $newpass = (Read-Host -AsSecureString &quot;Enter user's New Password&quot;)
+                
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Resetting Password on Local DC&quot;
+                Write-Host &quot;&quot;
+                Set-ADAccountPassword -Identity $user -NewPassword $newpass
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Resetting Password on CORPDC01&quot;
+                Write-Host &quot;&quot;
+                Set-ADAccountPassword -Server CORPDC01.intranet.theknot.com -Identity $user -NewPassword $newpass
+                             
+                           
+                Write-Host &quot;&quot;
+                Write-Host &quot;Press any key to Exit.&quot;
+                $x = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+                
+                $y += 5
+    
+            }
+        &quot;3&quot; {
+    
+                $newpass = (Read-Host -AsSecureString &quot;Enter user's New Password&quot;)
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Resetting Password on Local DC...&quot;
+                Write-Host &quot;&quot;
+                Set-ADAccountPassword -Identity $user -NewPassword $newpass
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Resetting Password on CORPDC01 - for faster replication...&quot;
+                Write-Host &quot;&quot;
+                Set-ADAccountPassword -Server CORPDC01.intranet.theknot.com -Identity $user -NewPassword $newpass
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Password for $user has been reset.&quot;
+                Write-Host &quot;&quot;
+                
+                
+                
+                foreach ($object in $servers) {
+                    
+                    Write-Host &quot;Unlocking account on $object&quot;
+                    Unlock-ADAccount -Identity $user -server $object
+
+                }                
+
+                
+                #Get Lockedout status and set it to $Lock
+                $Lock = (Get-ADUser -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand lockedout)
+
+                Write-Host &quot;&quot;
+
+                #Depending on Status, tell user if the account is locked or not.
+                switch ($Lock)
+                {
+                    &quot;False&quot; { Write-Host &quot;$user is unlocked.&quot; }
+                    &quot;True&quot; { Write-Host &quot;$user is LOCKED Out.&quot; }
+                }                
+                
+            
+                Write-Host &quot;&quot;
+                Write-Host &quot;Press any key to Exit.&quot;
+
+                
+                $y += 5
+                
+                $x = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+    
+            }
+        
+        &quot;4&quot; {
+    
+                #exit code
+                $y += 5
+    
+            }
+            
+        default {
+                
+                Write-Host &quot;You have entered and incorrect number.&quot;
+                Write-Host &quot;&quot;
+                $option = Read-Host  &quot;Would you like to (1) Unlock user, (2) Reset user's password, (3) Unlock and reset user's password or (4) Exit?&quot;
+        
+            }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

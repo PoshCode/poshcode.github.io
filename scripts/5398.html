@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="skourlatov">
+    <title>Get-FileAllocation - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-FileAllocation</h1>
+<h3><a href="//scripts/5398.ps1">download</a></h3>
+<p>How to obtain file fragmentation data via PowerShell? That's answer.</p>
+<pre><code class="language-posh">Function Get-FileAllocation
+{
+    param
+    (
+        [parameter(Position=0,ValueFromPipeline=$true,Mandatory=$true)]
+        [string]$FilePath
+    )
+
+    try
+    {
+        $file = $FilePath | Get-Item -Force -ea 'Stop'
+    }
+    catch
+    {
+        throw &quot;Invalid path&quot;
+    }
+
+    if (($file.Attributes -band 0x0400) -eq 0x0400) ## is reparse point
+    {
+        throw &quot;The file is a reparse point&quot;
+    }
+    return [PoshCode.FileSystem]::GetFileAllocation($file.FullName)
+}
+
+Add-Type -TypeDefinition @&quot;
+using System;
+using System.ComponentModel;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+namespace PoshCode
+{
+    public class FileSystem
+    {
+        [DllImport(&quot;kernel32.dll&quot;, SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern SafeFileHandle CreateFile(
+                                          string lpFileName,
+            [MarshalAs(UnmanagedType.U4)] uint dwDesiredAccess,
+            [MarshalAs(UnmanagedType.U4)] uint dwShareMode,
+                                          IntPtr lpSecurityAttributes,
+            [MarshalAs(UnmanagedType.U4)] uint dwCreationDisposition,
+            [MarshalAs(UnmanagedType.U4)] uint dwFlagsAndAttributes,
+                                          IntPtr hTemplateFile);
+
+        private const int FSCTL_GET_RETRIEVAL_POINTERS = 0x00090073;
+        private const uint FileAccess_GenericRead  = 0x80000000;
+        private const uint FileAccess_GenericWrite = 0x40000000;
+        private const uint FileShare_Read          = 0x00000001;
+        private const uint FileShare_Write         = 0x00000002;
+        private const uint FileShare_ReadWrite     = FileShare_Read | FileShare_Write;
+        private const uint FileMode_OpenExisting   = 0x00000003;
+        private const uint FileAttributes_Normal   = 0x00000080;
+
+        private static SafeFileHandle GetSafeHandle(string path, bool allowrite)
+        {
+            var PreferredAccessMode = FileAccess_GenericRead;
+            if (allowrite)
+                PreferredAccessMode |= FileAccess_GenericWrite;
+            return CreateFile(path, PreferredAccessMode, FileShare_ReadWrite, IntPtr.Zero,
+                FileMode_OpenExisting, FileAttributes_Normal, IntPtr.Zero);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct StartingVcnInputBuffer
+        {
+            public static readonly int Size;
+            static StartingVcnInputBuffer() { Size = Marshal.SizeOf(typeof(StartingVcnInputBuffer)); }
+            public long StartingVcn;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RetrievalPointersBuffer
+        {
+            public static readonly int Size;
+            static RetrievalPointersBuffer() { Size = Marshal.SizeOf(typeof(RetrievalPointersBuffer)); }
+            public int ExtentCount;
+            public long StartingVcn;
+            // Extents
+            public long NextVcn;
+            public long Lcn;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PhysicalFileFragment
+        {
+            public long Fragment;
+            public long StartCluster;
+            public long Length;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct Win32FileAllocationData
+        {
+            public uint TotalClusters;
+            public uint TotalFragments;
+            public List&lt;PhysicalFileFragment&gt; PhysicalAllocation;
+        }
+
+        [DllImport(&quot;kernel32.dll&quot;, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DeviceIoControl(
+            SafeFileHandle hFile,
+            uint ioctl,
+            ref StartingVcnInputBuffer invalue,
+            int InSize,
+            out RetrievalPointersBuffer outvalue,
+            int OutSize,
+            int BytesReturned,
+            IntPtr zerovalue
+        );
+
+        private const int ERROR_HANDLE_EOF = 0x00000026;
+        private const int ERROR_MORE_DATA  = 0x000000EA;
+        private const int NO_ERROR         = 0x00000000;
+        private static int lpBytesReturned = 0x00000000;
+
+        public static Win32FileAllocationData GetFileAllocation(string path)
+        {
+            var vcnIn    = new StartingVcnInputBuffer();
+            var rpbOut    = new RetrievalPointersBuffer();
+            var alloc    = new Win32FileAllocationData();
+            var frag    = new PhysicalFileFragment();
+            long fragLength;
+            bool doInc        = false;
+            bool newFrag    = false;
+            int extentNumber = 0;
+            int ERR;
+
+             vcnIn.StartingVcn    = 0L;
+            alloc.TotalClusters    = 0;
+            alloc.PhysicalAllocation = new List&lt;PhysicalFileFragment&gt;();
+ 
+            // file open
+            using (SafeFileHandle handle = GetSafeHandle(path, false))
+            {    do
+                {
+                    DeviceIoControl(
+                        handle, FSCTL_GET_RETRIEVAL_POINTERS,
+                        ref vcnIn, StartingVcnInputBuffer.Size, 
+                        out rpbOut, RetrievalPointersBuffer.Size,
+                        lpBytesReturned, IntPtr.Zero
+                    );
+ 
+                    ERR = Marshal.GetLastWin32Error();
+                     switch (ERR)
+                    {
+                        case ERROR_HANDLE_EOF:
+                            break;
+                        case NO_ERROR:
+                            doInc = true;
+                            break;
+                        case ERROR_MORE_DATA:
+                            doInc = true;
+                            vcnIn.StartingVcn = rpbOut.NextVcn;
+                            break;
+                        default:
+                            throw new Win32Exception(ERR);
+                    }
+
+                    if (doInc &amp;&amp; rpbOut.Lcn &gt;= 0) // Some files may have dummy &quot;pieces&quot; - reject them
+                    {
+                        fragLength = rpbOut.NextVcn - rpbOut.StartingVcn;
+                        alloc.TotalClusters += (uint)fragLength;
+
+                        if (extentNumber == 0) // Process started - getting a new fragment
+                        {
+                            newFrag = true;
+                        }
+                        else
+                        {
+                            if (frag.StartCluster + frag.Length == rpbOut.Lcn) // No new fragment - &quot;lengthen&quot; existing
+                            {
+                                frag.Length += fragLength;
+                            }
+                            else // There is a new fragment - adding existing to the list and getting new one
+                            {
+                                alloc.PhysicalAllocation.Add(frag);
+                                newFrag = true;
+                            }
+                        }
+
+                        if (newFrag) // Getting new fragment
+                        {
+                            frag.Fragment = extentNumber++;
+                            frag.StartCluster = rpbOut.Lcn;
+                            frag.Length = fragLength;
+                            newFrag = false;
+                        }
+
+                        doInc = false;
+                    }
+
+                } while (ERR == ERROR_MORE_DATA);
+
+                if (frag.Length &gt; 0)
+                    alloc.PhysicalAllocation.Add(frag); // Process ended - adding the last fragment to the list
+                alloc.TotalFragments = (uint)alloc.PhysicalAllocation.Count;
+            }
+            // file close
+
+            return alloc;
+        }
+    }
+}
+&quot;@
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

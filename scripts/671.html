@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>DekiWiki Module 1.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>DekiWiki Module 1.0</h1>
+<h3><a href="//scripts/671.ps1">download</a></h3>
+<p>DekiWiki module, a package of a few script cmdlets (more to come, I promise) for working with DekiWiki. Included so far: Set-DekiCredential, Get-DekiContent, Set-DekiContent, New-DekiContent, Get-DekiFile ... conspicuously absent: Add-DekiFile, Remove-DekiFile, Remove-DekiContent ...</p>
+<p>See Also: &quot;ConvertTo-DekiContent&quot;:http://poshcode.org/670</p>
+<pre><code class="language-posh">## DekiWiki Module -note this is a v2 module, but I think you can dot-source in v1 if you remove the last line ;)
+####################################################################################################
+## The first of many script cmdlets for working with DekiWiki, based on their REST api sdk &quot;Dream&quot;
+## You need log4net.dll mindtouch.core.dll mindtouch.dream.dll and SgmlReaderDll.dll from the SDK
+## Download DREAM from http://sourceforge.net/project/showfiles.php?group_id=173074 
+## Unpack it, and you can find these dlls in the &quot;dist&quot; folder.
+####################################################################################################
+## More details to come with the next version. Sorry, it's time for bed ;)
+## History:
+## v 1.0 Set-DekiCredential, Get-DekiContent, Set-DekiContent, New-DekiContent, Get-DekiFile
+## 
+
+[Reflection.Assembly]::LoadFile( &quot;$PSScriptRoot\mindtouch.dream.dll&quot; )
+
+$url = &quot;http://powershell.wik.is&quot; # 
+$api = &quot;$url/@api/deki&quot;
+$plug = [MindTouch.Dream.Plug]::New($api);  
+$cred = $null
+
+function Set-DekiCredential {
+   param($Credential=$(Get-Credential))
+   $global:cred = $Credential
+}
+
+function Get-DekiCredential {
+   if(!$global:cred) { Set-DekiCredential $(Get-Credential) }
+   return $global:cred.GetNetworkCredential();
+}
+
+
+$DreamText = [MindTouch.Dream.MimeType]::TEXT
+$DreamXml  = [MindTouch.Dream.MimeType]::XML
+$DreamHtml  = [MindTouch.Dream.MimeType]::HTML
+function Get-DekiContent {
+   param( $pageName = &quot;Test_Page&quot; )
+   $pageName = [System.Web.HttpUtility]::UrlEncode( [System.Web.HttpUtility]::UrlEncode( $pageName ) )
+   
+   $plug.At(&quot;pages&quot;, &quot;=$pageName&quot;, &quot;contents&quot;).With(&quot;mode&quot;, &quot;view&quot;).Get().AsDocument().AsXmlNode
+}
+
+# Get-DekiFile will LIST all files if called with just a PageName
+# Otherwise, fileName can be a single fileName, or wildcards
+function Get-DekiFile {
+   param( $pageName = &quot;Test_Page&quot;, [string[]]$fileNames, $destinationFolder )
+   $encodedPageName = Encode-Twice $pageName
+   
+   $files = $plug.At(&quot;pages&quot;, &quot;=$encodedPageName&quot;, &quot;files&quot;).Get().AsDocument().AsXmlNode.file
+
+   if(!$fileNames) {
+      return $files
+   } else {   
+      foreach($fileName in $fileNames) {
+         foreach($file in $($files | where { $_.filename -like $fileName } )) {
+            $encodedFileName = [System.Web.HttpUtility]::UrlEncode( [System.Web.HttpUtility]::UrlEncode( $($file.filename) ) )
+            Write-Verbose &quot;Fetching $($file.filename) from $pageName&quot;
+            # Note that you can resize, if it's a picture: .With(&quot;size&quot;, &quot;bestfit&quot;).With(&quot;width&quot;, 100).With(&quot;height&quot;, 100).Get();  
+            $message = $plug.At(&quot;pages&quot;, &quot;=$encodedPageName&quot;, &quot;files&quot;, &quot;=$encodedFileName&quot;).Get()
+            $fullName = $(Get-FileName $file.filename destinationFolder)
+            &amp;{
+               $writer = new-object System.IO.FileStream $fullName, &quot;Create&quot;
+               $bytes = $message.AsBytes()
+               $writer.Write($bytes,0,$bytes.Length)
+               trap { 
+                  $writer.Flush()
+                  $writer.Close() 
+               }
+               $writer.Flush()
+               $writer.Close()
+               
+            }
+            write-output (get-item $fullName)
+         }
+      }
+   }
+}
+
+function Set-DekiContent {
+   param( $pageName = &quot;Test_Page&quot;, $content = (throw &quot;You must specify page contents&quot;), $section )
+   $encodedPageName = Encode-Twice $pageName 
+   # you have to pre-authenticate ...
+   $null = $plug.At(&quot;users&quot;, &quot;authenticate&quot;).WithCredentials( $(Get-DekiCredential) ).Get()
+
+   if( $content -is [System.Xml.XmlDocument]) {
+      $msg = [MindTouch.Dream.DreamMessage]::Ok( $content )
+   } else { 
+      $msg = [MindTouch.Dream.DreamMessage]::Ok( $DreamText, $content )
+   }
+   Write-Verbose &quot;Updating $pageName at $(UtcNow &quot;yyyyMMddhhmmss&quot;): $($msg.ContentLength) bytes&quot;
+   Write-Verbose &quot;$($msg.AsText())&quot;
+   $partway = $plug.At(&quot;pages&quot;, &quot;=$encodedPageName&quot;, &quot;contents&quot;).With(&quot;edittime&quot;,$(UtcNow &quot;yyyyMMddhhmmss&quot;))
+   if($section) {
+      $result = $partway.With(&quot;Section&quot;,0).Post( $msg )
+   } else {
+      $result = $partway.Post( $msg )
+   }
+   if($result.IsSuccessful) {
+      return &quot;$url/$pageName&quot;
+   } else {
+      return $result.Response
+   }
+
+
+   trap [MindTouch.Dream.DreamResponseException] {
+      Write-Error &quot;TRAPPED DreamResponseException`n`n$($_.Exception.Response | Out-String)`n`n`n$($_.Exception.Response.Headers | Out-String)&quot;
+      break;
+   }
+   
+}
+
+
+function New-DekiContent {
+   param( $pageName = &quot;Test_Page&quot;, $content = (throw &quot;You must specify page contents&quot;) )
+   $encodedPageName = Encode-Twice $pageName
+   # you have to pre-authenticate ...
+   $null = $plug.At(&quot;users&quot;, &quot;authenticate&quot;).WithCredentials( $(Get-DekiCredential) ).Get()
+   
+   if( $content -is [System.Xml.XmlDocument]) {
+      $msg = [MindTouch.Dream.DreamMessage]::Ok( $content )
+   } else { 
+      $msg = [MindTouch.Dream.DreamMessage]::Ok( $DreamText, $content )
+   }
+   Write-Verbose &quot;Updating $pageName at $(UtcNow &quot;yyyyMMddhhmmss&quot;): $($msg.ContentLength) bytes&quot;
+   Write-Verbose &quot;$($msg.AsText())&quot;
+   
+   $result = $plug.At(&quot;pages&quot;, &quot;=$encodedPageName&quot;, &quot;contents&quot;).With(&quot;abort&quot;, &quot;exists&quot;).With(&quot;edittime&quot;,$(UtcNow &quot;yyyyMMddhhmmss&quot;)).Post( $msg )  
+   trap [MindTouch.Dream.DreamResponseException] {
+      Write-Error &quot;TRAPPED DreamResponseException`n`n$($_.Exception.Response | Out-String)`n`n`n$($_.Exception.Response.Headers | Out-String)&quot;
+   }
+   if($result.IsSuccessful) {
+      return &quot;$url/$pageName&quot;
+   } else {
+      return $result.Response
+   }
+}
+
+## Utility Functions 
+function UtcNow {
+   Param($Format=&quot;&quot;)
+   [DateTime]::Now.ToUniversalTime().ToString($Format)
+}
+function Encode-Twice {
+   param([string]$text)
+   return [System.Web.HttpUtility]::UrlEncode( [System.Web.HttpUtility]::UrlEncode( $text ) )
+}
+
+function Get-FileName {
+   param($fileName=$([IO.Path]::GetRandomFileName()), $path)
+   
+   $fileName = $fileName.trim(&quot;\/&quot;&quot;'&quot;)
+   if($path -and (Test-Path $path)){
+      $fileName = Split-Path $fileName -leaf
+      Join-Path $path $fileName
+   } elseif((Split-Path $fileName) -and (Test-Path (Split-Path $fileName))) {
+      return $fileName
+   } else {
+      Join-Path (Convert-Path (Get-Location -PSProvider &quot;FileSystem&quot;)) (Split-Path $fileName -Leaf)
+   }
+}
+
+Export-ModuleMember Set-DekiCredential, Get-DekiContent, Set-DekiContent, New-DekiContent, Get-DekiFile
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

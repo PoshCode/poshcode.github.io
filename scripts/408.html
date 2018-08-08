@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Wayne Martin">
+    <title>PS FindFirstFileW - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PS FindFirstFileW</h1>
+<h3><a href="//scripts/408.ps1">download</a> - <a href="//scripts/401.md">parent</a></h3>
+<p>Use the wide unicode versions (FindFirstFileW and FindNextFileW) to report a directory listing of all files, including those that exceed the MAX_PATH ANSI limitations</p>
+<pre><code class="language-posh">param(
+   [string] $dirRoot = $pwd,
+   [string] $Spec = &quot;*.*&quot;,
+   [bool] $longOnly = $false
+   )
+
+# Changes:
+#  23/05/2008, Wayne Martin, Added the option to only report +max_path entries, and report the short path of those directories (which makes it easier to access them)
+#
+#
+# Description:
+#  Use the wide unicode versions to report a directory listing of all files, including those that exceed the MAX_PATH ANSI limitations
+#
+# Assumptions, this script works on the assumption that:
+#  There's a console to write the output from the compiled VB.Net
+#
+# Author: 
+#  Wayne Martin, 15/05/2008
+#
+# Usage
+#  PowerShell . .\FindFiles.ps1 -d c:\temp -s *.*
+#
+#  PowerShell . .\FindFiles.ps1 -d c:\temp
+#
+#  PowerShell . .\FindFiles.ps1 -d c: -l $true
+#
+# References:
+#  http://msdn.microsoft.com/en-us/library/aa364418(VS.85).aspx
+#  http://blogs.msdn.com/jaredpar/archive/2008/03/14/making-pinvoke-easy.aspx	
+
+$provider = new-object Microsoft.VisualBasic.VBCodeProvider
+$params = new-object System.CodeDom.Compiler.CompilerParameters
+$params.GenerateInMemory = $True
+$refs = &quot;System.dll&quot;,&quot;Microsoft.VisualBasic.dll&quot;
+$params.ReferencedAssemblies.AddRange($refs)
+
+$txtCode = @'
+Imports System
+Imports System.Runtime.InteropServices
+Class FindFiles
+
+Const ERROR_SUCCESS As Long = 0
+Private Const MAX_PREFERRED_LENGTH As Long = -1
+
+&lt;System.Runtime.InteropServices.StructLayoutAttribute(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet:=System.Runtime.InteropServices.CharSet.[Unicode])&gt;  _
+Public Structure WIN32_FIND_DATAW
+    '''DWORD-&gt;unsigned int
+    Public dwFileAttributes As UInteger
+    '''FILETIME-&gt;_FILETIME
+    Public ftCreationTime As FILETIME
+    '''FILETIME-&gt;_FILETIME
+    Public ftLastAccessTime As FILETIME
+    '''FILETIME-&gt;_FILETIME
+    Public ftLastWriteTime As FILETIME
+    '''DWORD-&gt;unsigned int
+    Public nFileSizeHigh As UInteger
+    '''DWORD-&gt;unsigned int
+    Public nFileSizeLow As UInteger
+    '''DWORD-&gt;unsigned int
+    Public dwReserved0 As UInteger
+    '''DWORD-&gt;unsigned int
+    Public dwReserved1 As UInteger
+    '''WCHAR[260]
+    &lt;System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst:=260)&gt;  _
+    Public cFileName As String
+    '''WCHAR[14]
+    &lt;System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst:=14)&gt;  _
+    Public cAlternateFileName As String
+End Structure
+
+&lt;System.Runtime.InteropServices.StructLayoutAttribute(System.Runtime.InteropServices.LayoutKind.Sequential)&gt;  _
+Public Structure FILETIME
+    '''DWORD-&gt;unsigned int
+    Public dwLowDateTime As UInteger
+    '''DWORD-&gt;unsigned int
+    Public dwHighDateTime As UInteger
+End Structure
+
+Partial Public Class NativeMethods
+    
+    '''Return Type: HANDLE-&gt;void*
+    '''lpFileName: LPCWSTR-&gt;WCHAR*
+    '''lpFindFileData: LPWIN32_FIND_DATAW-&gt;_WIN32_FIND_DATAW*
+    &lt;System.Runtime.InteropServices.DllImportAttribute(&quot;kernel32.dll&quot;, EntryPoint:=&quot;FindFirstFileW&quot;)&gt;  _
+    Public Shared Function FindFirstFileW(&lt;System.Runtime.InteropServices.InAttribute(), System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.LPWStr)&gt; ByVal lpFileName As String, &lt;System.Runtime.InteropServices.OutAttribute()&gt; ByRef lpFindFileData As WIN32_FIND_DATAW) As System.IntPtr
+    End Function
+   
+    '''Return Type: BOOL-&gt;int
+    '''hFindFile: HANDLE-&gt;void*
+    '''lpFindFileData: LPWIN32_FIND_DATAW-&gt;_WIN32_FIND_DATAW*
+    &lt;System.Runtime.InteropServices.DllImportAttribute(&quot;kernel32.dll&quot;, EntryPoint:=&quot;FindNextFileW&quot;)&gt;  _
+    Public Shared Function FindNextFileW(&lt;System.Runtime.InteropServices.InAttribute()&gt; ByVal hFindFile As System.IntPtr, &lt;System.Runtime.InteropServices.OutAttribute()&gt; ByRef lpFindFileData As WIN32_FIND_DATAW) As &lt;System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.Bool)&gt; Boolean
+    End Function
+
+    '''Return Type: BOOL-&gt;int
+    '''hFindFile: HANDLE-&gt;void*
+    &lt;System.Runtime.InteropServices.DllImportAttribute(&quot;kernel32.dll&quot;, EntryPoint:=&quot;FindClose&quot;)&gt;  _
+    Public Shared Function FindClose(ByVal hFindFile As System.IntPtr) As &lt;System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.Bool)&gt; Boolean
+    End Function
+
+    '''Return Type: DWORD-&gt;unsigned int
+    '''lpszLongPath: LPCWSTR-&gt;WCHAR*
+    '''lpszShortPath: LPWSTR-&gt;WCHAR*
+    '''cchBuffer: DWORD-&gt;unsigned int
+    &lt;System.Runtime.InteropServices.DllImportAttribute(&quot;kernel32.dll&quot;, EntryPoint:=&quot;GetShortPathNameW&quot;)&gt;  _
+    Public Shared Function GetShortPathNameW(&lt;System.Runtime.InteropServices.InAttribute(), System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.LPWStr)&gt; ByVal lpszLongPath As String, &lt;System.Runtime.InteropServices.OutAttribute(), System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.LPWStr)&gt; ByVal lpszShortPath As System.Text.StringBuilder, ByVal cchBuffer As UInteger) As UInteger
+    End Function
+
+End Class
+
+
+Private Const FILE_ATTRIBUTE_DIRECTORY As Long = &amp;H10
+    Dim FFW as New NativeMethods
+
+Function Main(ByVal dirRoot As String, ByVal sFileSpec As String, Byval longOnly As Boolean) As Long
+    Dim result As Long
+
+    result = FindFiles(dirRoot, sFileSpec, longOnly) 
+
+    main = result												' Return the result
+End Function
+
+Function FindFiles(ByRef sDir As String, ByVal sFileSpec as String, Byval longOnly As Boolean) As Long
+    Const MAX_PATH As Integer = 260
+    Dim FindFileData as WIN32_FIND_DATAW
+    Dim hFile As Long
+    Dim sFullPath As String
+    Dim sFullFile As String
+    Dim length as UInteger
+    Dim sShortPath As New System.Text.StringBuilder()
+
+
+    sFullPath = &quot;\\?\&quot; &amp; sDir
+
+    'console.writeline(sFullPath &amp; &quot;\&quot; &amp; sFileSpec)
+
+    hFile = FFW.FindFirstFileW(sFullPath &amp; &quot;\&quot; &amp; sFileSpec, FindFileData)						' Find the first object
+    if hFile &gt; 0 Then											' Has something been found?
+      If (FindFileData.dwFileAttributes AND FILE_ATTRIBUTE_DIRECTORY)  &lt;&gt; FILE_ATTRIBUTE_DIRECTORY Then		' Is this a file?
+        sFullFile = sFullPath &amp; &quot;\&quot; &amp; FindFileData.cFileName
+        If (longOnly AND sFullFile.Length &gt;= MAX_PATH) Then
+          length = FFW.GetShortPathNameW(sFullPath, sShortPath, sFullPath.Length)	' GEt the 8.3 path
+          console.writeline(sFullFile &amp; &quot;	&quot; &amp; sshortpath.ToString())						' Yes, report the full path and filename
+        ElseIf (NOT longOnly)
+          console.writeline(sFullFile)
+        End If
+      End If
+
+      While FFW.FindNextFileW(hFile, FindFileData)								' For all the items in this directory
+        If (FindFileData.dwFileAttributes AND FILE_ATTRIBUTE_DIRECTORY) &lt;&gt; FILE_ATTRIBUTE_DIRECTORY Then		' Is this a file?
+          sFullFile = sFullPath &amp; &quot;\&quot; &amp; FindFileData.cFileName
+          If (longOnly AND sFullFile.Length &gt;= MAX_PATH) Then
+            length = FFW.GetShortPathNameW(sFullPath, sShortPath, sFullPath.Length)	' GEt the 8.3 path
+            console.writeline(sFullFile &amp; &quot;	&quot; &amp; sshortpath.ToString())		' Yes, report the full path and filename
+          ElseIf (NOT longOnly)
+            console.writeline(sFullFile)
+          End If
+        End If
+      End While
+      FFW.FindClose(hFile)											' Close the handle
+      FindFileData = Nothing
+    End If
+
+    hFile = FFW.FindFirstFileW(sFullPath &amp; &quot;\&quot; &amp; &quot;*.*&quot;, FindFileData)						' Repeat the process looking for sub-directories using *.*
+    if hFile &gt; 0 Then
+      If (FindFileData.dwFileAttributes AND FILE_ATTRIBUTE_DIRECTORY) AND _
+          (FindFileData.cFileName &lt;&gt; &quot;.&quot;) AND (FindFileData.cFileName &lt;&gt; &quot;..&quot;) Then
+        Call FindFiles(sDir &amp; &quot;\&quot; &amp; FindFileData.cFileName, sFileSpec, longOnly)					' Recurse
+      End If
+
+      While FFW.FindNextFileW(hFile, FindFileData)
+        If (FindFileData.dwFileAttributes AND FILE_ATTRIBUTE_DIRECTORY) AND _
+            (FindFileData.cFileName &lt;&gt; &quot;.&quot;) AND (FindFileData.cFileName &lt;&gt; &quot;..&quot;) Then
+          Call FindFiles(sDir &amp; &quot;\&quot; &amp; FindFileData.cFileName, sFileSpec, longOnly)					' Recurse
+        End If
+      End While
+      FFW.FindClose(hFile)											' Close the handle
+      FindFileData = Nothing
+    End If
+
+End Function
+
+end class
+
+'@
+
+
+$cr = $provider.CompileAssemblyFromSource($params, $txtCode)
+if ($cr.Errors.Count) {
+    $codeLines = $txtCode.Split(&quot;`n&quot;);
+    foreach ($ce in $cr.Errors)
+    {
+        write-host &quot;Error: $($codeLines[$($ce.Line - 1)])&quot;
+        write-host $ce
+        #$ce out-default
+    }
+    Throw &quot;INVALID DATA: Errors encountered while compiling code&quot;
+ }
+$mAssembly = $cr.CompiledAssembly
+$instance = $mAssembly.CreateInstance(&quot;FindFiles&quot;)
+
+$result = $instance.main($dirRoot, $Spec, $longOnly)
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="brianclark44">
+    <title>Invoke-WindowsUpdate - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-WindowsUpdate</h1>
+<h3><a href="//scripts/5658.ps1">download</a> - <a href="//scripts/1932.md">parent</a></h3>
+<p>My revised version of Jan Egil Ring's script, with the corrections noted by the commenters in his blog article.</p>
+<pre><code class="language-posh">###########################################################################&quot;
+#
+# NAME: Invoke-WindowsUpdate.ps1
+#
+# AUTHOR: Jan Egil Ring
+# EMAIL: jan.egil.ring@powershell.no
+#
+# COMMENT: Script to download and install updates from Windows Update/WSUS. Reporting and rebooting may be customized.
+#          For more details, see the following blog-post: 
+#          http://blog.powershell.no/2010/06/25/manage-windows-update-installations-using-windows-powershell
+#
+# You have a royalty-free right to use, modify, reproduce, and
+# distribute this script file in any way you find useful, provided that
+# you agree that the creator, owner above has no warranty, obligations,
+# or liability for such use.
+#
+# VERSION HISTORY:
+# 1.0 25.06.2010 - Initial release
+# 1.1 06.12.2013 - Modifications by Brian Clark
+#
+###########################################################################&quot;
+
+#Requires -Version 2.0
+
+#Variables to customize
+$EmailReport = $true
+$FileReport = $false
+$To = &quot;itops@domain.com&quot;
+$From = &quot;WindowsUpdateScript@domain.com&quot;
+$SMTPServer = &quot;smtp.domain.com&quot;
+$FileReportPath = &quot;C:\WindowsUpdate\&quot;
+$AutoRestart = $true
+$AutoRestartIfPending = $true
+
+$Path = $FileReportPath + &quot;$env:ComputerName&quot; + &quot;_&quot; + (Get-Date -Format dd-MM-yyyy_HH-mm).ToString() + &quot;.html&quot;
+
+#Testing if there are any pending reboots from earlier Windows Update sessions
+if (Test-Path &quot;HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired&quot;){
+
+#Report to e-mail if enabled
+if ($EmailReport -eq $true) {
+$pendingboot = @{$false=&quot;was pending for a restart from an earlier Windows Update session. Due to the reboot preferences in the script, a reboot was not initiated.&quot;; $true=&quot;was restarted due to a pending restart from an earlier Windows Update session.&quot;}
+$status = $pendingboot[$AutoRestartIfPending]
+ $messageParameters = @{                        
+                Subject = &quot;Windows Update report for $env:ComputerName.$env:USERDNSDOMAIN - $((Get-Date).ToShortDateString())&quot;                        
+                Body = &quot;Invoke-WindowsUpdate was run on $env:ComputerName, and the server $status `nPlease run Invoke-WindowsUpdate again when the server is rebooted.&quot;               
+                from = $From                        
+                To = $To                      
+                SmtpServer = $SMTPServer                         
+            }                        
+            Send-MailMessage @messageParameters -BodyAsHtml
+
+#Report to file if enabled
+if ($FileReport -eq $true) {
+&quot;Invoke-WindowsUpdate was run on $env:ComputerName, and the server $status `nPlease run Invoke-WindowsUpdate again when the server is rebooted.&quot; | Out-File -FilePath $path
+}
+
+#Reboot if autorestart for pending updates is enabled
+if ($AutoRestartIfPending) {shutdown.exe /t 0 /r }  }
+exit
+			
+}
+
+#Checking for available updates
+$updateSession = new-object -com &quot;Microsoft.Update.Session&quot;
+write-progress -Activity &quot;Updating&quot; -Status &quot;Checking available updates&quot;   
+$updates=$updateSession.CreateupdateSearcher().Search($criteria).Updates
+$downloader = $updateSession.CreateUpdateDownloader()          
+$downloader.Updates = $Updates
+
+#If no updates available, do nothing
+if ($downloader.Updates.Count -eq &quot;0&quot;) {
+
+#Report to e-mail if enabled
+if ($EmailReport -eq $true) {
+ $messageParameters = @{                        
+                Subject = &quot;Windows Update report for $env:ComputerName.$env:USERDNSDOMAIN - $((Get-Date).ToShortDateString())&quot;                        
+                Body = &quot;Invoke-WindowsUpdate was run on $env:ComputerName, but no new updates were found. Please try again later.&quot;               
+                from = $From                        
+                To = $To                      
+                SmtpServer = $SMTPServer                         
+            }                        
+            Send-MailMessage @messageParameters -BodyAsHtml
+			}
+			
+#Report to file if enabled
+if ($FileReport -eq $true) {
+&quot;Invoke-WindowsUpdate was run on $env:ComputerName, but no new updates were found. Please try again later.&quot; | Out-File -FilePath $Path
+}
+
+}
+else
+{
+#If updates are available, download and install
+write-progress -Activity 'Updating' -Status &quot;Downloading $($downloader.Updates.count) updates&quot;  
+
+$Criteria=&quot;IsInstalled=0 and Type='Software'&quot; 
+$resultcode= @{0=&quot;Not Started&quot;; 1=&quot;In Progress&quot;; 2=&quot;Succeeded&quot;; 3=&quot;Succeeded With Errors&quot;; 4=&quot;Failed&quot; ; 5=&quot;Aborted&quot; }
+$Result= $downloader.Download()
+
+if (($Result.Hresult -eq 0) ñand (($result.resultCode ñeq 2) -or ($result.resultCode ñeq 3)) ) {
+       $updatesToInstall = New-object -com &quot;Microsoft.Update.UpdateColl&quot;
+       $Updates | where {$_.isdownloaded} | foreach-Object {$updatesToInstall.Add($_) | out-null 
+}
+
+$installer = $updateSession.CreateUpdateInstaller()       
+$installer.Updates = $updatesToInstall
+
+write-progress -Activity 'Updating' -Status &quot;Installing $($Installer.Updates.count) updates&quot;        
+
+$installationResult = $installer.Install()        
+$Global:counter=0       
+
+#$Report = $installer.updates | 
+#				Select-Object -property Title,EulaAccepted,@{Name='Result';expression={$ResultCode[$installationResult.GetUpdateResult($Global:Counter++).resultCode ] }},@{Name='Reboot required';expression={$installationResult.GetUpdateResult($Global:Counter++).RebootRequired }} |
+#				ConvertTo-Html
+
+$Report = $installer.updates |
+        Select-Object -property Title,EulaAccepted,@{Name=íResultí;expression={$ResultCode[$installationResult.GetUpdateResult($Global:Counter).resultCode ] }},@{Name=íReboot requiredí;expression={$installationResult.GetUpdateResult($Global:Counter++).RebootRequired }} |
+        ConvertTo-Html # (increase the counter only in the second expression, not in both expressions)
+
+
+#Report to e-mail if enabled
+if ($EmailReport -eq $true) {
+ $messageParameters = @{                        
+                Subject = &quot;Windows Update report for $env:ComputerName.$env:USERDNSDOMAIN - $((Get-Date).ToShortDateString())&quot;                        
+                Body =  $Report | Out-String                 
+                from = $From                        
+                To = $To                      
+                SmtpServer = $SMTPServer                         
+            }                        
+            Send-MailMessage @messageParameters -BodyAsHtml
+			}
+
+#Report to file if enabled
+if ($FileReport -eq $true) {
+$Report | Out-File -FilePath $path
+}
+
+#Reboot if autorestart is enabled and one or more updates are requiring a reboot
+if ($autoRestart -and $installationResult.rebootRequired) { shutdown.exe /t 0 /r }       
+}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

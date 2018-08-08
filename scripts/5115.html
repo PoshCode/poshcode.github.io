@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="KevinKirkpatrick">
+    <title>Get Processor Inventory - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get Processor Inventory</h1>
+<h3><a href="//scripts/5115.ps1">download</a> - <a href="//scripts/5114.md">parent</a></h3>
+<p>Script originally developed for internal DBAs to get information on processor core counts, which is important for licensing. This script includes some basic error handling and full comment based help. Output properties are Computer, Socket (Designation), Core Count, Logical Processors, Hyperthreading Enabled, Description and Type (Physical/Virtual). Update 4/23/14: I added a warning message when running against OS' older than Win 7/Server 2008; it appears older versions of WMI do not support some of the properties from the win32_processor class found in newer OS'.</p>
+<pre><code class="language-posh">&lt;#
+	.SYNOPSIS
+		Returns information about the Processor via WMI. 
+
+	.DESCRIPTION
+		Information about the processor is returned using the Win32_Processor WMI class. 
+
+		You can provide a single computer/server name or supply an array/list.
+
+		Operating systems prior to Windows 7 &amp; Server 2008 may not return accurate results due to the difference in WMI versions.
+
+	.PARAMETER  Computers
+		Single computer name, list of computers or .txt file containing a list of computers.
+
+	.EXAMPLE
+		.\Get-ProcessorInventory.ps1 -Computers (Get-Content C:\ComputerList.txt)
+
+	.EXAMPLE
+		.\Get-ProcessorInventory.ps1 -Computers Test-Server.company.com
+
+	.EXAMPLE
+		.\Get-ProcessorInventory.ps1 -Computers SERVER1.company.com,SERVER2.company.com | Format-Table -AutoSize
+
+	.EXAMPLE
+		.\Get-ProcessorInventory.ps1 -Computers SERVER1.company.com,SERVER2.company.com | Export-Csv C:\ProcInv.csv -NoTypeInformation
+
+	.INPUTS
+		System.String
+
+	.OUTPUTS
+		Selected.System.Management.ManagementObject
+
+	.NOTES
+		#=======================================================
+		Author: Kevin Kirkpatrick
+		Created: 4/16/14
+
+		Disclaimer: This script comes with no implied warranty or guarantee and is to be used at your own risk. It's recommended that you TEST
+		execution of the script against Dev/Test before running against any Production system. 
+
+		#========================================================
+
+	.LINK 
+		https://github.com/vN3rd/PowerShell-Scripts
+
+	.LINK
+		about_WMi
+
+	.LINK
+		about_Wmi_Cmdlets
+#&gt;
+
+#Requires -Version 3
+
+[cmdletbinding()]
+Param (
+	[parameter(Mandatory = $true,
+			   ValueFromPipeline = $true,
+			   HelpMessage = &quot;Enter the name of a computer or an array of computer names&quot;)]
+	[system.string[]]$Computers
+)
+
+# Set the EA preference to 'Stop' so that Non-Terminating errors will be caught and displayed in the catch block
+$ErrorActionPreference = &quot;Stop&quot;
+
+# Cycle through each computer and attempt to query WMI
+foreach ($C in $Computers)
+{
+	# Test the connection to the computer, if it pings, continue on with the query
+	if (Test-Connection -ComputerName $C -Count 1 -Quiet)
+	{
+		try
+		{
+			# Check the current OS and write a warning if a legacy OS is being scanned
+			[string]$OSCheck = (Get-WmiObject -Query &quot;SELECT Caption FROM win32_operatingsystem&quot; -ComputerName $C).caption
+			
+			if ( ($OSCheck -like &quot;*7*&quot;) -or ($os -like &quot;*8*&quot;) -or ($OS -like &quot;*12*&quot;) ) { }
+			else { Write-Warning -Message &quot;$C is running '$OSCheck', which may return inaccurate results&quot; }
+
+			#region FormattingHashTables
+			#================================
+			
+			# Attempt to differentiate if the destination is a VM, or not. In VMware, vProcessors typically return a value of 0 for the L2 Processor Cache.
+			# This was not testing with Hyper-V
+			$Type = @{
+				label = 'Type'
+				expression = {
+					if ($_.L2CacheSize -eq '0') { &quot;Virtual&quot; }
+					else { &quot;Physical&quot; }
+				}
+			}# end $Type
+			
+			# Check to see if HyperThreading is enabled by comparing the number of logical processors with the number of cores
+			$HyperThreading = @{
+				label = 'HyperthreadingEnabled'
+				expression = {
+					if ($_.NumberOfLogicalProcessors -gt $_.NumberOfCores) { &quot;Yes&quot; }
+					else { &quot;No&quot; }
+				}
+			}# end $HyperThreading
+			
+			# Use hash tables to modify the paramter output names
+			$ComputerName = @{ label = 'Computer'; Expression = { $_.PSComputerName } }
+			$CoreCount = @{ label = 'CoreCount'; Expression = { $_.NumberOfCores } }
+			$LogicalCores = @{ label = 'LogicalProcessors'; expression = { $_.NumberOfLogicalProcessors } }
+			$Description = @{ label = 'Description'; Expression = { $_.Name } }
+			$Socket = @{ label = 'Socket'; expression = { $_.SocketDesignation } }
+			#================================
+			#endregion
+			
+			# Run the query
+			Get-WmiObject -Query &quot;SELECT * FROM win32_processor&quot; -ComputerName $C |
+			Select-Object $ComputerName, $Socket, $CoreCount, $LogicalCores, $HyperThreading, $Description, $Type
+			
+		}# end try
+		
+		catch
+		{
+			# Catch any errors and write a warning that includes the computer name as well as the error message, which is stored in $_
+			Write-Warning &quot;$C - $_&quot;
+		}# end catch
+		
+	}# end if
+	
+	else
+	{
+		# If the computer was not reachable on the network, display such detail
+		Write-Warning &quot;$C is unreachable&quot;
+		
+	}# end else
+	
+}# end foreach
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

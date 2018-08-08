@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Dan Jones">
+    <title>Invoke-InjectLibrary - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-InjectLibrary</h1>
+<h3><a href="//scripts/6370.ps1">download</a></h3>
+<p>Original post of <strong>gregzakh</strong> can be found at https://github.com/gregzakh/alt-ps/blob/master/Invoke-InjectLibrary.ps1</p>
+<pre><code class="language-posh">#requires -version 5
+function Invoke-InjectLibrary {
+  &lt;#
+    .SYNOPSIS
+        Injects specified dll into the target process.
+    .NOTES
+        This script has been written and tested on Win7 x86.
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true, Position=0)]
+    [ValidateScript({(Get-Process -Id $_ -ea 0) -ne $null})]
+    [Int32]$Id,
+    
+    [Parameter(Mandatory=$true, Position=1)]
+    [ValidateScript({Test-Path $_})]
+    [String]$DllPath
+  )
+  
+  begin {
+    @(
+      [Runtime.InteropServices.CallingConvention],
+      [Reflection.Emit.OpCodes]
+    ) | ForEach-Object {
+      $keys = ($ta = [PSObject].Assembly.GetType(
+        'System.Management.Automation.TypeAccelerators'
+      ))::Get.Keys
+    }{
+      if ($keys -notcontains $_.Name) {
+        $ta::Add($_.name, $_)
+      }
+    }
+    
+    function private:Get-ProcAddress {
+      param(
+        [Parameter(Mandatory=$true)]
+        [String]$Function
+      )
+      
+      [Object].Assembly.GetType(
+        'Microsoft.Win32.Win32Native'
+      ).GetMethods(
+        [Reflection.BindingFlags]40
+      ).Where{
+        $_.Name -cmatch '\AGet(ProcA|ModuleH)'
+      }.ForEach{
+        Set-Variable $_.Name $_
+      }
+      
+      $GetProcAddress.Invoke($null, @(
+        $GetModuleHandle.Invoke(
+          $null, @('kernel32.dll')
+        ), $Function
+      ))
+    }
+    
+    function private:Set-Delegate {
+      param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [ValidateScript({$_ -ne [IntPtr]::Zero})]
+        [IntPtr]$ProcAddress,
+        
+        [Parameter(Mandatory=$true, Position=1)]
+        [ValidateNotNullOrEmpty()]
+        [String]$Delegate
+      )
+      
+      $proto = Invoke-Expression $Delegate
+      
+      $method = $proto.GetMethod('Invoke')
+      
+      $returntype = $method.ReturnType
+      $paramtypes = $method.GetParameters() |
+          Select-Object -ExpandProperty ParameterType
+      
+      $holder = New-Object Reflection.Emit.DynamicMethod(
+        'Invoke', $returntype, $paramtypes, $proto
+      )
+      $il = $holder.GetILGenerator()
+      (0..($paramtypes.Length - 1)).ForEach{
+        $il.Emit([OpCodes]::Ldarg, $_)
+      }
+      
+      switch ([IntPtr]::Size) {
+        4 { $il.Emit([OpCodes]::Ldc_I4, $ProcAddress.ToInt32()) }
+        8 { $il.Emit([OpCodes]::Ldc_I8, $ProcAddress.ToInt64()) }
+      }
+      $il.EmitCalli(
+        [OpCodes]::Calli, [CallingConvention]::StdCall,
+        $returntype, $paramtypes
+      )
+      $il.Emit([OpCodes]::Ret)
+      
+      $holder.CreateDelegate($proto)
+    }
+    
+    ('CloseHandle', 'CreateRemoteThread', 'LoadLibraryW', 'VirtualFreeEx',
+    'OpenProcess', 'VirtualAllocEx', 'WaitForSingleObject', 'WriteProcessMemory'
+    ).ForEach{
+      Set-Variable $_ (Get-ProcAddress $_)
+    }
+    
+    $CloseHandle = Set-Delegate $CloseHandle '[Func[IntPtr, Boolean]]'
+    $OpenProcess = Set-Delegate $OpenProcess '[Func[UInt32, Boolean, Int32, IntPtr]]'
+    $VirtualAllocEx = Set-Delegate $VirtualAllocEx `
+                              '[Func[IntPtr, IntPtr, Int32, UInt32, Uint32, IntPtr]]'
+    $VirtualFreeEx = Set-Delegate $VirtualFreeEx `
+                                     '[Func[IntPtr, IntPtr, Int32, UInt32, Boolean]]'
+    $CreateRemoteThread = Set-Delegate $CreateRemoteThread `
+           '[Func[IntPtr, IntPtr, UInt32, IntPtr, IntPtr, UInt32, [Byte[]], IntPtr]]'
+    $WaitForSingleObject = Set-Delegate $WaitForSingleObject `
+                                                     '[Func[IntPtr, UInt32, UInt32]]'
+    $WriteProcessMemory = Set-Delegate $WriteProcessMemory `
+                           '[Func[IntPtr, IntPtr, [Byte[]], Int32, IntPtr, Boolean]]'
+    $DllPath = Resolve-Path $DllPath
+    $INFINITE = [BitConverter]::ToUInt32([BitConverter]::GetBytes(0xFFFFFFFF), 0)
+  }
+  process {
+    if (($proc = $OpenProcess.Invoke(0x42A, $false, $Id)) -ne [IntPtr]::Zero) {
+      $sz = ((Get-Item $DllPath).Length + 1) * 2 #the size of the region of memory allocate
+      if (($lrem = $VirtualAllocEx.Invoke($proc, [IntPtr]::Zero, $sz, 0x1000, 0x4)
+      ) -ne [IntPtr]::Zero) {
+        $bytes = [Text.Encoding]::Unicode.GetBytes($DllPath)
+        if ($WriteProcessMemory.Invoke($proc, $lrem, $bytes, $sz, [IntPtr]::Zero)) {
+          $bytes = [Byte[]]@(0, 0, 0, 0)
+          if (($thrd = $CreateRemoteThread.Invoke(
+            $proc, [IntPtr]::Zero, 0, $LoadLibraryW, $lrem, 0, $bytes
+          )) -ne [IntPtr]::Zero) {
+            [void]$WaitForSingleObject.Invoke($thrd, $INFINITE)
+            [void]$CloseHandle.Invoke($thrd)
+          }
+        }
+        [void]$VirtualFreeEx.Invoke($proc, $lrem, 0, 0x8000)
+      }
+      [void]$CloseHandle.Invoke($proc)
+    }
+  }
+  end {
+    ('OpCodes', 'CallingConvention').ForEach{
+      [void]$ta::Remove($_)
+    }
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

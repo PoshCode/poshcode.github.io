@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Pam Cage">
+    <title>Reading RAR - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Reading RAR</h1>
+<h3><a href="//scripts/6711.ps1">download</a></h3>
+<p>The main goal of this function to not use additional libraries.</p>
+<pre><code class="language-posh">function Get-RarContent {
+  &lt;#
+    .SYNOPSIS
+        Gets content of a compressed (RAR) file.
+    .DESCRIPTION
+        The main goal of this function to not use additional binary
+        files such as WinRAR.exe and etc.
+    .NOTES
+        Author: greg zakharov
+    .LINKS
+        https://github.com/gregzakh/alt-ps/blob/master/tools/Get-RarContent.ps1
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true)]
+    [ValidateNotNullOrEmpty()]
+    [ValidateScript({Test-Path $_})]
+    [String]$Path
+  )
+
+  begin {
+    # rar signature
+    [Byte[]]$rar = 0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00
+  }
+  process {
+    try {
+      $fs = [IO.File]::OpenRead((Convert-Path $Path))
+      $br = New-Object IO.BinaryReader($fs)
+
+      if (($cmp = Compare-Object ($br.ReadBytes(7)) $rar -PassThru)) {
+        throw New-Object IO.IOException(
+          'Specified file is nat a RAR archive, try another.'
+        )
+      }
+      # MAIN_HEAD
+      if (($mhd = $br.ReadBytes(7))[2] -ne 0x73) {
+        throw New-Object IO.IOException(
+          'Required structure MAIN_HEAD has not been found.'
+        )
+      }
+      # move to the first entry
+      [void]$fs.Seek((
+        [BitConverter]::ToUInt16($mhd[5..6], 0) - 7
+      ), [IO.SeekOrigin]::Current)
+      # walk through all available items
+      $content = while ($true) {
+        $seg = $br.ReadBytes(7) # beginning of a block
+        if (($bsz = [BitConverter]::ToUInt16($seg[5..6], 0)) -le 7) {
+          break # nothing to read
+        }
+
+        $seg += $br.ReadBytes($bsz - 7) # whole block
+        # check that current entry is a file system object
+        if ($seg[2] -eq 0x74) {
+          [void]$fs.Seek((
+            $cmp = [BitConverter]::ToUInt32($seg[7..10], 0) # compressed
+          ), [IO.SeekOrigin]::Current)
+
+          if ((
+            $atr = [BitConverter]::ToUInt32($seg[28..31], 0)
+          ) -band 0x10 -or $atr -band 0x4000) {
+            continue # do you really need to see paths of folders?
+          }
+
+          New-Object PSObject -Property @{
+            Name = -join [Char[]]$seg[32..(
+              32 + [BitConverter]::ToUInt16($seg[26..27], 0
+            ) - 1)]
+            Cmpd = $cmp
+            Size = [BitConverter]::ToUInt32($seg[11..14], 0)
+            Attr = -join (([IO.FileAttributes]$atr).ToString().Split(
+              ', ', [StringSplitOptions]::RemoveEmptyEntries
+            ) | ForEach-Object { $_[0] })
+            #Crc32 = '0x{0:X}' -f ([BitConverter]::ToUInt32($seg[16..19], 0))
+          }
+        }
+        else {
+          if ([BitConverter]::ToUInt16($seg[3..4], 0) -band 0x8000) {
+            [void]$fs.Seek([BitConverter]::ToUInt32(
+              $seg[7..10], 0), [IO.SeekOrigin]::Current
+            )
+          }
+        }
+      } # while
+    }
+    catch { Write-Warning $_ }
+    finally {
+      if ($br) { $br.Close() }
+      if ($fs) { $fs.Dispose() }
+    }
+  }
+  end {
+    if ($content) {
+      $content | Select-Object Attr, Size, Cmpd, Name |
+      Format-Table -AutoSize
+    }
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

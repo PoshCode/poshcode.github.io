@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-CodeSigningCert - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-CodeSigningCert</h1>
+<h3><a href="//scripts/1049.ps1">download</a></h3>
+<p>Generates a self-signed certificate authority and a code-signing certificate using OpenSSL
+Shows how to import certificates to the current user and local machine stores using System.Security.Cryptography.X509Certificates.X509Store</p>
+<p>Please READ the intro comments, and <em>consider deleting your <em>Certificate Authority</em> Private key</em> if you can't be <em>100% sure</em> you can secure it.</p>
+<pre><code class="language-posh">## New-CodeSigningCert.ps1
+########################################################################################################################
+## Does the setup needed to self-sign PowerShell scripts ...
+## Generates a &quot;test&quot; self-signed root Certificate Authority 
+## And then generates a code-signing certificate (and signs it with the CA certificate)
+## OPTIONALLY (specify -import or -importall) imports the certificates to the store(s)
+########################################################################################################################
+## NOTE: Uses OpenSSL (because it's xcopy redistributable -- wake up Microsoft)
+##       In order for this to work you should KEEP the script in the folder with OpenSsl.exe
+## Also, it is VERY important that you properly provide passwords and the locale data...
+## You can obviously reorder the parameters however you like, and hard-code some of the values in the parameters, but 
+## you need to make sure that if you use this to generate multiple certificates, that you preserve all of the certs
+## and keep track of all your passwords so you don't lock yourself out of any of them.
+########################################################################################################################
+## Usage:
+## \\Server\PoshCerts\New-CodeSigningCert.ps1 $pwd\Certs &quot;Joel Bennett&quot; Jaykul@HuddledMasses.org HuddledMasses.org Mystery Rochester &quot;New York&quot; US -importall -OpenSSLLocation C:\Users\Joel\Documents\WindowsPowershell\PoshCerts\bin -CAPassword MyCleverRootPassword -CodeSignPassword EvenMoreCleverPasswords
+##
+## If I hard-coded the company/dept/etc ... I could use this to generate certs for all my devs:
+## 
+## \\Server\PoshCerts\New-CodeSigningCert.ps1 $pwd\Certs &quot;Mark Andreyovich&quot; FakeEmail@Xerox.net -CAPassword MyCleverRootPassword -CodeSignPassword MarksPassword
+## \\Server\PoshCerts\New-CodeSigningCert.ps1 $pwd\Certs &quot;Jesse Voller&quot; FakeEmail2@Xerox.net -CAPassword MyCleverRootPassword -CodeSignPassword JessesPassword
+##
+## For the signed scripts to work, I just  have to -import on the devices where the scripts need to run:
+##
+## \\Server\PoshCerts\New-CodeSigningCert.ps1 $pwd\Certs &quot;Jesse Voller&quot; -import
+## \\Server\PoshCerts\New-CodeSigningCert.ps1 $pwd\Certs &quot;Mark Andreyovich&quot; -import
+## \\Server\PoshCerts\New-CodeSigningCert.ps1 $pwd\Certs &quot;Joel Bennett&quot; -import
+##
+## On the developers' workstations, I need to use Get-PfxCertificate to sign, or else run -importall 
+## That will load the codesigning cert in their &quot;my&quot; store, and will only require the password for the initial import
+##
+## \\Server\PoshCerts\New-CodeSigningCert.ps1 $pwd\Certs &quot;Joel Bennett&quot; -importall -CodeSignPassword MyCodeSignPassword
+########################################################################################################################
+## History
+##  1.0 - Initial public release
+##  1.1 - Bug fix release to make it easier to use...
+##  1.2 - Bug fix to get the ORG and COMMON NAME set correctly -- Major whoops!
+##
+Param(
+$CertStorageLocation = (join-path (split-path $Profile) &quot;Certs&quot;),
+$UserName       = (Read-Host &quot;User name&quot;)
+
+, $email        
+, $company      
+, $department   
+, $city         
+, $state        
+, $country      
+
+, $RootCAName   = &quot;Self-Signed-Root-CA&quot;
+, $CodeSignName = &quot;$UserName Code-Signing&quot;
+, $alias        = &quot;PoshCert&quot;,
+
+
+[string]$keyBits = 4096,
+[string]$days = 365,
+[string]$daysCA = (365 * 5),
+
+[switch]$forceNew = $false,
+[switch]$importall = $false,
+[switch]$import = ($false -or $importall),
+
+## we ask you to specify the CA password and your codesign password
+## You can leave these null when importing on end-user desktops
+$CAPassword = $null,
+$CodeSignPassword = $null,
+
+## You really shouldn't pass these unless you know what you're doing
+$OpenSSLLocation = $null,
+$RootCAPassword = $Null, 
+$CodeSignCertPassword = $null
+)
+
+
+function Get-UserEmail {
+   if(!$script:email) {
+      $script:email = (Read-Host &quot;Email address&quot;)
+   }
+   return $script:email
+}
+
+function Get-RootCAPassword {
+   if(!$script:RootCAPassword) { 
+      if(!$script:CAPassword) {
+         $script:CAPassword = ((new-object System.Management.Automation.PSCredential &quot;hi&quot;,(Read-Host -AsSecureString &quot;Root CA Password&quot;)).GetNetworkCredential().Password)
+      }
+
+      ## Then down here we calculate large passwords to actually use:
+      ## This works as long as you keep the same company name and root ca name 
+      $script:RootCAPassword = [Convert]::ToBase64String( (new-Object Security.Cryptography.PasswordDeriveBytes ([Text.Encoding]::UTF8.GetBytes($CaPassword)), ([Text.Encoding]::UTF8.GetBytes(&quot;$company$RootCAName&quot;)), &quot;SHA1&quot;, 5).GetBytes(64) )
+   }
+   return $script:RootCAPassword
+}
+
+function Get-CodeSignPassword {
+   if(!$script:CodeSignCertPassword) { 
+    
+      if(!$script:CodeSignPassword) {
+         $script:CodeSignPassword = ((new-object System.Management.Automation.PSCredential &quot;hi&quot;,(Read-Host -AsSecureString &quot;Code Signing Password&quot;)).GetNetworkCredential().Password)
+      }
+      ## This works as long as you keep the same PFX password and email address
+      $script:CodeSignCertPassword = ([Convert]::ToBase64String( (new-Object Security.Cryptography.PasswordDeriveBytes ([Text.Encoding]::UTF8.GetBytes($CodeSignPassword)), ([Text.Encoding]::UTF8.GetBytes((Get-UserEmail))), &quot;SHA1&quot;, 5).GetBytes(64) ))
+   }
+   return $script:CodeSignCertPassword
+}
+
+function Get-SslConfig {
+Param ( 
+   $keyBits, 
+   $Country    = (Read-Host &quot;Country (2-Letter code)&quot;), 
+   $State      = (Read-Host &quot;State (Full Name, no intials)&quot;), 
+   $city       = (Read-Host &quot;City&quot;), 
+   $company    = (Read-Host &quot;Company Name (or Web URL)&quot;), 
+   $orgUnit    = (Read-Host &quot;Department (team, group, family)&quot;), 
+   $CommonName, 
+   $email = (Read-Host &quot;Email Address&quot;)
+)
+@&quot;
+# OpenSSL example configuration file for BATCH certificate generation
+# This definition stops the following lines choking if HOME isn't  defined.
+HOME			   = .
+RANDFILE		   = $($ENV::HOME)/.rnd
+
+# To use this configuration with the &quot;-extfile&quot; option of the &quot;openssl x509&quot; utility
+# name here the section containing the X.509v3 extensions to use:
+#extensions		= code_sign
+
+####################################################################
+[ req ]
+default_bits		   = {0}
+default_keyfile 	   = privkey.pem
+distinguished_name	= req_distinguished_name
+#attributes		      = req_attributes
+x509_extensions	   = v3_ca  # The extentions to add to the self signed cert
+# req_extensions     = v3_ca  # Other extensions to add to a certificate request?
+
+## Passwords for private keys could be specified here, instead of on the commandline
+# input_password = secret
+# output_password = secret
+
+## Set the permitted string types...
+## Some software crashes on BMPStrings or UTF8Strings, so we'll stick with 
+string_mask = nombstr
+
+[ req_distinguished_name ]
+countryName			      = Country Name (2 letter code)
+countryName_default		= {1}
+countryName_min			= 2
+countryName_max			= 2
+
+stateOrProvinceName		= State or Province Name (full name)
+stateOrProvinceName_default	= {2}
+
+localityName			= Locality Name (eg, city)
+localityName_default = {3}
+
+0.organizationName		= Organization Name (eg, company)
+0.organizationName_default	= {4}
+
+# we can do this but it is not usually needed
+#1.organizationName		= Second Organization Name (eg, company)
+#1.organizationName_default	= World Wide Web Pty Ltd
+
+organizationalUnitName		      = Organizational Unit Name (eg, section)
+organizationalUnitName_default	= {5}
+
+commonName			= Common Name (eg, YOUR name)
+commonName_default = {6}
+commonName_max			= 64
+
+emailAddress			= Email Address
+emailAddress_default = {7}
+emailAddress_max		= 64
+
+# SET-ex3			= SET extension number 3
+
+# [ req_attributes ]
+# challengePassword		= A challenge password
+# challengePassword_min		= 4
+# challengePassword_max		= 20
+# unstructuredName		= An optional company name
+
+[ v3_ca ]
+## Extensions for a typical CA
+
+## PKIX recommendations:
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer:always
+## PKIX suggests we should include email address in subject alt name
+# subjectAltName=email:copy
+## But really they want it *only* there or the certs are &quot;deprecated&quot;
+# subjectAltName=email:move
+## And the issuer details
+# issuerAltName=issuer:copy
+
+
+## This is what PKIX recommends 
+basicConstraints = critical,CA:true
+## some broken software chokes on critical extensions, so you could do this instead.
+#basicConstraints = CA:true
+
+## For a normal CA certificate you would want to specify this.
+## But it will cause problems for our self-signed certificate.
+# keyUsage = cRLSign, keyCertSign
+
+## You might want the netscape-compatible stuff too
+# nsCertType = sslCA, emailCA
+
+[ code_sign ]
+# These extensions are added when we get a code_signing cert
+## PKIX recommendations:
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+
+## PKIX suggests we should include email address in subject alt name
+# subjectAltName=email:copy
+## But really they want it *only* there or the certs are &quot;deprecated&quot;
+# subjectAltName=email:move
+## And the issuer details
+# issuerAltName=issuer:copy
+
+# This goes against PKIX guidelines but some CAs do it and some software
+# requires this to avoid interpreting an end user certificate as a CA.
+basicConstraints=CA:FALSE
+
+# If nsCertType is omitted, the certificate can be used for anything *except* object signing.
+# We just want to allow everything including object signing:
+nsCertType = server, client, email, objsign
+# This is the vital bit for code-signing
+extendedKeyUsage       = critical, serverAuth,clientAuth,codeSigning
+
+# This is typical in keyUsage for a client certificate.
+keyUsage = nonRepudiation, digitalSignature, keyEncipherment, dataEncipherment
+
+# This will be displayed in Netscape's comment listbox.
+nsComment			= &quot;OpenSSL Generated Certificate&quot;
+
+[ crl_ext ]
+# CRL extensions.
+# Only issuerAltName and authorityKeyIdentifier make any sense in a CRL.
+
+# issuerAltName=issuer:copy
+authorityKeyIdentifier=keyid:always,issuer:always
+&quot;@ -f $keyBits,$Country,$State,$city,$company,$orgUnit,$CommonName,$email
+}
+
+if(!$OpenSSLLocation) {
+   ## You should be running the script from the OpenSsl folder
+   $OpenSSLLocation = Split-Path $MyInvocation.MyCommand.Path
+   Write-Debug &quot;OpenSSL: $OpenSSLLocation&quot;
+}
+if( Test-Path $OpenSslLocation ) {
+   ## The OpenSslLoction needs to actually have OpenSsl in it ...
+   $files = ls (Join-Path $OpenSSLLocation &quot;*.[de][lx][el]&quot;) -include libeay32.dll,ssleay32.dll,OpenSSL.exe # libssl32.dll,
+   if($files.count -lt 3) {
+      THROW &quot;You need to configure a location where OpenSSL can be run from&quot;
+   }
+} else { THROW &quot;You need to configure a location where OpenSSL can be run from&quot; }
+
+## Don't touch these
+[string]$SslCnfPath = (join-path (Convert-Path $CertStorageLocation) PoshOpenSSL.config)
+New-Alias OpenSsl (join-path $OpenSSLLocation OpenSSL.exe)
+
+if( !(Test-Path $CertStorageLocation) ) {
+   New-Item -type directory -path $CertStorageLocation | Push-Location
+   $forceNew = $true
+} else {
+   Push-Location $CertStorageLocation
+}
+
+Write-Debug &quot;SslCnfPath: $SslCnfPath&quot;
+Write-Debug &quot;OpenSsl: $((get-alias OpenSsl).Definition)&quot;
+
+## Process the CSR and generate a pfx file 
+if($forceNew -or (@(Test-Path &quot;$CodeSignName.crt&quot;,&quot;$CodeSignName.pfx&quot;) -contains $false)) {
+
+   ## Generate the private code-signing key and a certificate signing request (csr)
+   if($forceNew -or (@(Test-Path &quot;$CodeSignName.key&quot;,&quot;$CodeSignName.csr&quot;) -contains $false)) {
+
+      ## Generate the private root CA key and convert it into a self-signed certificate (crt)
+      if($forceNew -or (@(Test-Path &quot;$RootCAName.key&quot;,&quot;$RootCAName.crt&quot;) -contains $false)) {
+
+         ## Change configuration before -batch processing root key
+         $CommonName = &quot;$company Certificate Authority&quot;
+         $orgUnit = &quot;$department Certificate Authority&quot;
+         $email = Get-UserEmail
+         Set-Content $SslCnfPath (Get-SslConfig $keyBits $Country $State $city $company $orgUnit $CommonName $email) ## My special config file
+
+         OpenSsl genrsa -out &quot;$RootCAName.key&quot; -des3 -passout pass:$(Get-RootCAPassword) $keyBits
+         OpenSsl req -new -x509 -days $daysCA -key &quot;$RootCAName.key&quot; -out &quot;$RootCAName.crt&quot; -passin pass:$(Get-RootCAPassword) -config $SslCnfPath -batch
+      }
+
+      ## Change configuration before -batch processing code-signing key
+      $CommonName = &quot;$UserName&quot;
+      $orgUnit = &quot;$department&quot;
+      $email = Get-UserEmail
+      Set-Content $SslCnfPath (Get-SslConfig $keyBits $Country $State $city $company $orgUnit $CommonName $email) ## My special config file
+
+      OpenSsl genrsa -out &quot;$CodeSignName.key&quot; -des3 -passout pass:$(Get-CodeSignPassword) $keyBits
+      OpenSsl req -new -key &quot;$CodeSignName.key&quot; -out &quot;$CodeSignName.csr&quot; -passin pass:$(Get-CodeSignPassword) -config $SslCnfPath -batch
+   }
+
+   ## Use the root CA key to process the CSR and sign the code-signing key in one step...
+   OpenSsl x509 -req -days $days -in &quot;$CodeSignName.csr&quot; -CA &quot;$RootCAName.crt&quot; -CAcreateserial -CAkey &quot;$RootCAName.key&quot; -out &quot;$CodeSignName.crt&quot; -setalias $alias -extfile $SslCnfPath -extensions code_sign -passin pass:$(Get-RootCAPassword)
+   ## Combine the signed certificate and the private key into a single file and specify a new password for it ...
+   OpenSsl pkcs12 -export -out &quot;$CodeSignName.pfx&quot; -inkey &quot;$CodeSignName.key&quot; -in &quot;$CodeSignName.crt&quot; -passin pass:$(Get-CodeSignPassword) -passout pass:$script:CodeSignPassword
+}
+
+Pop-Location
+
+if($import) {
+   ## Now we need to import the certificates to the computer so we can use them...
+   ## Sadly, the PowerShell Certificate Provider is read-only, so we need to do this by hand
+   
+   trap {
+      if($_.Exception.GetBaseException() -is [UnauthorizedAccessException]) {
+         write-error &quot;Cannot import certificates as 'Root CA' or 'Trusted Publisher' except in an elevated console.&quot;
+         continue
+      }
+   }
+   
+   ## In order to be able to use scripts signed by these certs
+   ## The root cert that signed the code-signing certs must be loaded into the &quot;Root&quot; store
+   $lm = new-object System.Security.Cryptography.X509certificates.X509Store &quot;root&quot;, &quot;LocalMachine&quot;
+   $lm.Open(&quot;ReadWrite&quot;)
+   $lm.Add( (Get-PfxCertificate &quot;$CertStorageLocation\$RootCAName.crt&quot;) )
+   if($?) {
+      Write-Host &quot;Successfully imported root certificate to trusted root store&quot; -fore green
+   }
+   $lm.Close()
+
+   ## In order to avoid the &quot;untrusted publisher&quot; prompt
+   ## The public code-signing cert must be loaded into the &quot;TrustedPublishers&quot; store
+   $tp = new-object System.Security.Cryptography.X509certificates.X509Store &quot;TrustedPublisher&quot;, &quot;LocalMachine&quot;
+   $tp.Open(&quot;ReadWrite&quot;)
+   $tp.Add( (Get-PfxCertificate &quot;$CertStorageLocation\$CodeSignName.crt&quot;) )
+   if($?) {
+      Write-Host &quot;Successfully imported code-signing certificate to trusted publishers store&quot; -fore green
+   }
+   $tp.Close()
+
+   if($importall) {
+      ## It's a good practice to go ahead and put our private certificates in &quot;OUR&quot; store too
+      ### Otherwise we have to load it each time from the pfx file using Get-PfxCertificate
+      ##### $cert = Get-PfxCertificate &quot;$CodeSignName.pfx&quot;
+      ##### Set-AuthenticodeSignature -Cert $cert -File Test-Script.ps1
+      $my = new-object System.Security.Cryptography.X509certificates.X509Store &quot;My&quot;, &quot;CurrentUser&quot;
+      $my.Open( &quot;ReadWrite&quot; )
+      Get-CodeSignPassword
+      $my.Add((Get-PfxCertificate &quot;$CertStorageLocation\$CodeSignName.pfx&quot;))      #$script:CodeSignPassword, $DefaultStorage)
+      if($?) {
+         Write-Host &quot;Successfully imported code-signing certificate to 'my' store&quot; -fore yellow
+      }
+      $my.Close()
+   }
+}
+
+# SIG # Begin signature block
+# MIILCQYJKoZIhvcNAQcCoIIK+jCCCvYCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUunVl0UTZlvAjOS219sL9EUT4
+# EE6gggbgMIIG3DCCBMSgAwIBAgIJALPpqDj9wp7xMA0GCSqGSIb3DQEBBQUAMIHj
+# MQswCQYDVQQGEwJVUzERMA8GA1UECBMITmV3IFlvcmsxEjAQBgNVBAcTCVJvY2hl
+# c3RlcjEhMB8GA1UEChMYaHR0cDovL0h1ZGRsZWRNYXNzZXMub3JnMSgwJgYDVQQL
+# Ex9TY3JpcHRpbmcgQ2VydGlmaWNhdGUgQXV0aG9yaXR5MTcwNQYDVQQDEy5odHRw
+# Oi8vSHVkZGxlZE1hc3Nlcy5vcmcgQ2VydGlmaWNhdGUgQXV0aG9yaXR5MScwJQYJ
+# KoZIhvcNAQkBFhhKYXlrdWxASHVkZGxlZE1hc3Nlcy5vcmcwHhcNMDkwMzE1MTkx
+# OTE5WhcNMTAwMzE1MTkxOTE5WjCBqzELMAkGA1UEBhMCVVMxETAPBgNVBAgTCE5l
+# dyBZb3JrMRIwEAYDVQQHEwlSb2NoZXN0ZXIxITAfBgNVBAoTGGh0dHA6Ly9IdWRk
+# bGVkTWFzc2VzLm9yZzESMBAGA1UECxMJU2NyaXB0aW5nMRUwEwYDVQQDEwxKb2Vs
+# IEJlbm5ldHQxJzAlBgkqhkiG9w0BCQEWGEpheWt1bEBIdWRkbGVkTWFzc2VzLm9y
+# ZzCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAPfqxOG9TQN+qZjZ6KfM
+# +zBK0YpjeyPL/cFgiGBhiIdYWTBtkbZydFr3IiERKRsUJ0/SKFbhf0C3Bvd/neTJ
+# qiZjH4D6xkrfdLlWMmmSXXqjSt48jZp+zfCAIaF8K84e9//7lMicdVFE6VcgoATZ
+# /eMKQky4JvphJpzDHYPLxLJQrKd0pjDDwspjdX5RedWkzeZBG7VfBnebLWUzgnMX
+# IxRQKfFCMryQDP8weceOnJjfJEf2FYmdpsEg5EKKKbuHsQCMVTxfteKdPvh1oh05
+# 1GWyPsvEPh4auJUT8pAVvrdxq+/O9KW/UV01UxjRYM1vdklNw8g7mkJTrrHjSjl7
+# tuugCnJjt5kN6v/OaUtRRMR68O85bSTVGOxJGCHUKlyuuTx9tnfIgy4siFYX1Ve8
+# xwaAdN3haTon3UkWzncHOq3reCIVF0luwRZu7u+TnOAnz2BRlt+rcT0O73GN20Fx
+# gyN2f5VGBbw1KuS7T8XZ0TFCspUdgwAcmTGuEVJKGhVcGAvNlLx+KPc5dba4qEfs
+# VZ0MssC2rALC1z61qWuucb5psHYhuD2tw1SrztywuxihIirZD+1+yKE4LsjkM1zG
+# fQwDO/DQJwkdByjfB2I64p6mk36OlZAFxVfRBpXSCzdzbgKpuPsbtjkb5lGvKjE1
+# JFVls1SHLJ9q80jHz6yW7juBAgMBAAGjgcgwgcUwHQYDVR0OBBYEFO0wLZyg+qGH
+# Z4WO8ucEGNIdU1T9MB8GA1UdIwQYMBaAFN2N42ZweJLF1mz0j70TMxePMcUHMAkG
+# A1UdEwQCMAAwEQYJYIZIAYb4QgEBBAQDAgTwMCoGA1UdJQEB/wQgMB4GCCsGAQUF
+# BwMBBggrBgEFBQcDAgYIKwYBBQUHAwMwCwYDVR0PBAQDAgTwMCwGCWCGSAGG+EIB
+# DQQfFh1PcGVuU1NMIEdlbmVyYXRlZCBDZXJ0aWZpY2F0ZTANBgkqhkiG9w0BAQUF
+# AAOCAgEAmKihxd6KYamLG0YLvs/unUTVJ+NW3jZP16R28PpmidY/kaBFOPhYyMl2
+# bBGQABe7LA5rpHFAs0F56gYETNoFk0qREVvaoz9u18VfLb0Uwqtnq0P68L4c7p2q
+# V3nKmWjeI6H7BAyFuogxmMH5TGDfiqrrVSuh1LtPbkV2Wtto0SAxP0Ndyts2J8Ha
+# vu/2rt0Ic5AkyD+RblFPtzkCC/MLVwSNAiDSKGRPRrLaiGxntEzR59GRyf2vwhGg
+# oAXUqcJ/CVeHCP6qdSTM39Ut3RmMZHXz5qY8bvLgNYL6MtcJAx+EeUhW497alzm1
+# jInXdbikIh0d/peTSDyLbjS8CPFFtS6Z56TDGMf+ouTpEA16otcWIPA8Zfjq+7n7
+# iBHjeuy7ONoJ2VDNgqn9B+ft8UWRwnJbyB85T83OAGf4vyhCPz3Kg8kWxY30Bhnp
+# Fayc6zQKCpn5o5T0/a0BBHwAyMfr7Lhav+61GpzzG1KfAw58N2GV8KCPKNEd3Zdz
+# y07aJadroVkW5R+35mSafKRJp5pz20GDRwZQllqGH1Y/UJFEiI0Bme9ecbl2vzNp
+# JjHyl/jLVzNVrBI5Zwb0lCLsykApgNY0yrwEqaiqwcxq5nkXFDhDPQvbdulihSo0
+# u33fJreCm2fFyGbTuvR61goSksAvLQhvijLAzcKqWKG+laOtYpAxggOTMIIDjwIB
+# ATCB8TCB4zELMAkGA1UEBhMCVVMxETAPBgNVBAgTCE5ldyBZb3JrMRIwEAYDVQQH
+# EwlSb2NoZXN0ZXIxITAfBgNVBAoTGGh0dHA6Ly9IdWRkbGVkTWFzc2VzLm9yZzEo
+# MCYGA1UECxMfU2NyaXB0aW5nIENlcnRpZmljYXRlIEF1dGhvcml0eTE3MDUGA1UE
+# AxMuaHR0cDovL0h1ZGRsZWRNYXNzZXMub3JnIENlcnRpZmljYXRlIEF1dGhvcml0
+# eTEnMCUGCSqGSIb3DQEJARYYSmF5a3VsQEh1ZGRsZWRNYXNzZXMub3JnAgkAs+mo
+# OP3CnvEwCQYFKw4DAhoFAKB4MBgGCisGAQQBgjcCAQwxCjAIoAKAAKECgAAwGQYJ
+# KoZIhvcNAQkDMQwGCisGAQQBgjcCAQQwHAYKKwYBBAGCNwIBCzEOMAwGCisGAQQB
+# gjcCARUwIwYJKoZIhvcNAQkEMRYEFGPa+3yKeAOuG8MGktIPE98U9IQyMA0GCSqG
+# SIb3DQEBAQUABIICACukiWmmkw/T3q/IukaKIIO4/jJLng9v52P60RViKwJn7TOZ
+# C6Qcov2zO8/LBm8oIlY+kQil8MXqA3+5D7TGtFfYpyzoUh+Nwks1C9KAMWeRBKAL
+# b3H6CVX0H5nRh9PLa2a4WxbYHM6IxCOa/Z8clH4veAZbs5Zq5mtjLV14u8PszAYM
+# 4P/H0sXHMZYb9nj0vKjsZdxOlM0g6JHqUszE40tND/5dFuzdr3Tyu/aC6/j/ZFGZ
+# jdyaM88kE88qAU9Bs2M18LsSUJx6GsdlXwDD4eCBRH59+QtAnQZB4HUL5KkF53DG
+# J0WtRuI+wWmeMU9nNtDMQgSGJev0LVEJ2Ui+UsVA+RvWH04VCBrzlXi2TLzS9bCQ
+# 5Fo/t/czCbC4m/WrXQyYNDoHtI/fXE2ctSPq2QQaDF9Bu65MuMGzWa3iFSFmq0uA
+# nYivtHSlgyqhPBBmu8fspePkye7PzYoH2Gpykp17R5fBx+rQriKjTkZcGNdAGdQY
+# j7SEC93e0KjtZRQA+ABxmVacmNrO6NGbMN2Zd8Pheham1T38V3aWjKvq2d94iUfh
+# dgqvWhSu6zw0yE/NaJPTKnixN0j+up/Y7jSO9Cytvl4TNWJkFjDp+u0exl4s6eQ5
+# cspbWHwWyYWyg7e0YaclbL7mPygvjxQDWOWgMN9cddvHCq8fiq6VPNTJqeLB
+# SIG # End signature block
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

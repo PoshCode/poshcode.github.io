@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Rich Kusak">
+    <title>WindowsInstallPoint - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>WindowsInstallPoint</h1>
+<h3><a href="//scripts/2609.ps1">download</a></h3>
+<p>Initialize-WindowsInstallPoint
+This function was developed to automate the process required to make a USB drive a device from which Windows can be installed. Many posts are available on the internet about the manual steps required by searching: &quot;install windows 7 from usb&quot;.</p>
+<pre><code class="language-posh">function Initialize-WindowsInstallPoint {
+&lt;#
+	.SYNOPSIS
+		Initializes a drive to become a Windows OS install point.
+		
+	.DESCRIPTION
+		The Initialize-WindowsInstallPoint function uses the &quot;diskpart&quot; utility to wipe, partition, and format a local or removable drive.
+		The &quot;bootsect&quot; tool processes the bootmgr allowing the drive to become a bootable device from which Windows can be installed.
+		Once the drive is initialized, copy the entire contents of the Windows install media to the drive.
+		Windows Vista, 7, Server 2008, and Server 2008 R2 are supported.
+	
+	.PARAMETER Drive
+		Specifies the drive to initialize as a Windows install point.
+		&lt;DriveLetter:&gt;
+	
+	.PARAMETER BootsectPath
+		The full file path to the &quot;bootsect.exe&quot; tool. For Windows versions 6.x, it's located on the installation media in the &quot;boot&quot; folder.
+	
+	.PARAMETER DiskpartPath
+		The full file path to the &quot;diskpart.exe&quot; tool. Default parameter value: $env:SystemRoot\System32\diskpart.exe
+
+	.EXAMPLE
+		Initialize-WindowsInstallPoint X: D:\boot\bootsect.exe
+		Initializes drive X: using the bootsect.exe tool located in the boot folder of drive D:
+	
+	.INPUTS
+		System.String
+	
+	.OUTPUTS
+		None
+	
+	.NOTES
+		Name: Initialize-WindowsInstallPoint
+		Author: Rich Kusak (rkusak@cbcag.edu)
+		Created: 2009-10-24
+		Last Edit: 2011-04-07 18:48
+		Version: 1.7.0.0
+		
+		#Requires Version 2.0
+
+	.LINK
+		bootsect.exe
+
+	.LINK
+		diskpart.exe
+#&gt;
+
+	[CmdletBinding(ConfirmImpact='High', SupportsShouldProcess=$true)]
+	param (
+		[Parameter(Position=0, Mandatory=$true, ValueFromPipelineByPropertyName=$true,
+			HelpMessage='The drive qualifier of the device to become a Windows install point.'
+		)]
+		[ValidateScript({
+			switch ($_) {
+				$env:SystemDrive {throw 'This operation cannot be performed on the system drive.'}
+				{$_ -match '^[a-z]:$'} {$true}
+				default {throw &quot;The argument '$_' is not a valid drive designation. Supply an argument that matches '&lt;DriveLetter&gt;:' and try the command again.&quot;}
+			}
+		})]
+		[string]$Drive,
+		
+		[Parameter(Position=1, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true,
+			HelpMessage='The full path to the bootsect.exe tool.'
+		)]
+		[Alias('FullName')]
+		[ValidateScript({
+			if (Test-Path $_ -Include '*bootsect.exe') {$true} else {
+				throw &quot;The argument '$_' is not a real path to the bootsect.exe tool.&quot;
+			}
+		})]
+		[string]$BootsectPath,
+		
+		[Parameter(ValueFromPipelineByPropertyName=$true,
+			HelpMessage='The full path to the diskpart.exe tool.'
+		)]
+		[ValidateScript({
+			if (Test-Path $_ -Include '*diskpart.exe') {$true} else {
+				throw &quot;The arguments '$_' is not a real path to the diskpart.exe tool.&quot;
+			}
+		})]
+		[string]$DiskpartPath = &quot;$env:SystemRoot\System32\diskpart.exe&quot;
+	)
+
+	begin {
+		
+		function Test-Elevation {
+			$admin = [System.Security.Principal.WindowsBuiltInRole]::Administrator
+			$identity  = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+			$principal = New-Object System.Security.Principal.WindowsPrincipal($identity)
+
+			$principal.IsInRole($admin)
+		}
+		
+		# Test that PowerShell is running as an administrator
+		if (-not (Test-Elevation)) {
+			throw 'Administrator privileges are required. PowerShell is not running as an administrator.'
+		}
+		
+		$dpExitCodes = @{
+			0 = 'No error occurred. The entire script ran without failure.'
+			1 = 'A fatal exception occurred. There may be a serious problem.'
+			2 = 'The arguments specified on a Diskpart command line were incorrect.'
+			3 = 'Diskpart was unable to open the specified script or output file.'
+			4 = 'One of the services Diskpart uses returned a failure.'
+			5 = 'A command syntax error occurred. The script failed because an object was improperly selected or was invalid for use with that command.'
+		}
+		
+		# Temporary files for the diskpart script and redirect standard output
+		$dpScript = [System.IO.Path]::GetTempFileName()
+		$rso = [System.IO.Path]::GetTempFileName()
+		
+		# Set the initial instance of the variable used to control the flow of $psCmdlet
+		$psc = $null
+	} # end begin
+	
+	process {
+		
+		# Capitalize drive letter for display
+		$Drive = $Drive.ToUpper()
+		
+		# Detrimine if the drive meets the requirements to become a Windows install point
+		Write-Debug 'Getting WMI object Win32_LogicalDisk'
+		$logicalDisk = Get-WmiObject Win32_LogicalDisk -Filter &quot;DeviceID = '$Drive' &quot;
+
+		if ($logicalDisk.DriveType -notmatch '^(2|3)$') {
+			return Write-Error &quot;Drive '$Drive' is not a local or removable drive.&quot; -TargetObject $Drive
+		} elseif ($logicalDisk.Size -lt 3.5GB) {
+			# Different Windows editions vary in size but a drive 3.5GB or greater should accomidate all editions
+			Write-Warning &quot;Drive '$Drive' may not be large enough for Windows installation files.&quot;
+		}
+
+		if ($psc -eq $null) {$psc = $psCmdlet}
+		if ($psc.ShouldProcess($Drive, &quot;Initialize Windows install point. Any existing data will be DESTROYED&quot;)) {
+			Write-Progress -Activity 'Initialize Windows Install Point' -Status &quot;Drive $Drive&quot; -CurrentOperation 'Preparing disk volume' -PercentComplete 0
+			
+			# Diskpart script content
+			@&quot;
+				Select Volume $($Drive[0])
+				Clean
+				Create Partition Primary
+				Select Partition 1
+				Active
+				Format Quick FS=NTFS Label=WindowsInstallPoint
+				Assign Letter $Drive
+				Exit
+&quot;@ | Out-File $dpScript -Encoding ASCII -Force
+
+			Write-Debug 'Starting process diskpart.exe'
+			# Using Start-Process allows the exit code to be processed from either the console or ISE.
+			$diskpart = Start-Process $DiskpartPath &quot;/s $dpScript&quot; -NoNewWindow -Wait -PassThru -RedirectStandardOutput $rso
+
+			1..45 | ForEach {
+				Write-Progress -Activity 'Initialize Windows Install Point' -Status &quot;Drive $Drive&quot; -CurrentOperation 'Preparing disk volume' -PercentComplete $_
+				Sleep -Milliseconds 20
+			}
+			
+			# Removes empty lines from the original diskpart.exe output and sends it to the verbose stream
+			Get-Content $rso | Select-String '.' | ForEach {Write-Verbose $_}
+			
+			# Diskpart error handling
+			if ($diskpart.ExitCode -eq 0) {
+				Write-Verbose &quot;Drive '$Drive' has been successfully processed by the diskpart.exe tool.&quot;
+			} elseif ($diskpart.ExitCode -gt 0) {
+				return Write-Error $dpExitCodes.($diskpart.ExitCode)
+			} else {
+				return Write-Error 'An unknown error occured.'
+			}
+			
+			Write-Debug 'Starting process bootsect.exe'
+			# Using Start-Process allows the exit code to be processed from either the console or ISE.
+			$bootsect = Start-Process $BootsectPath &quot;/NT60 $Drive&quot; -NoNewWindow -Wait -PassThru -RedirectStandardOutput $rso
+
+			46..90 | ForEach {
+				Write-Progress -Activity 'Initialize Windows Install Point' -Status &quot;Drive $Drive&quot; -CurrentOperation 'Setting boot code' -PercentComplete $_
+				Sleep -Milliseconds 20
+			}
+
+			# Removes empty lines from the original bootsect.exe output and sends it to the verbose stream
+			Get-Content $rso | Select-String '.' | ForEach {Write-Verbose $_}
+
+			# Bootsect error handling
+			if ($bootsect.ExitCode -eq 0) {
+				Write-Verbose &quot;Drive '$Drive' has been successfully processed by the bootsect.exe tool.&quot;
+				Write-Progress -Activity 'Initialize Windows Install Point' -Status &quot;Drive $Drive&quot; -CurrentOperation 'Complete' -PercentComplete 100
+				Sleep -Seconds 1
+			} else {
+				return Write-Error &quot;$bootsect&quot;
+			}
+		} # end ShouldProcess
+		
+		Write-Verbose &quot;Drive '$Drive' has been successfully initialized as a Windows install point.&quot;
+	} # end process
+
+	end {
+		
+		# Cleanup temporary files
+		Remove-Item $dpScript, $rso -Force -WhatIf:$false
+	}
+} # end function Initialize-WindowsInstallPoint
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

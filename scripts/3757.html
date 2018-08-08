@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>Invoke-ISPackage - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-ISPackage</h1>
+<h3><a href="//scripts/3757.ps1">download</a></h3>
+<p>Invoke-ISPackage.ps1 script is a wrapper around dtexec.exe to run an SSIS package.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Runs an SSIS package from an SQL package store.
+.DESCRIPTION
+Invoke-ISPackage.ps1 script is a wrapper around dtexec.exe to run an SSIS package.
+.EXAMPLE
+PowerShell.exe -File &quot;C:\Scripts\Invoke-ISPackage.ps1&quot; -PackagePath &quot;SQLPSX\sqlpsx1&quot; -ServerInstance &quot;Z001\SQL1&quot;
+This example connects to SSIS Server  and runs the an SSIS package on Z001\SQL1
+.NOTES
+Version History
+v1.0   - Chad Miller - 6/14/2012 - Initial release
+#&gt;
+param(
+[Parameter(Position=0, Mandatory=$true)]
+[string]
+$PackagePath,
+[Parameter(Position=1, Mandatory=$true)]
+[string]
+$ServerInstance,
+[Parameter(Position=2, Mandatory=$false)]
+[ValidateNotNullOrEmpty()]
+[ValidateScript({Test-Path &quot;$_&quot;})]
+[string]
+$CommandFile,
+[Parameter(Position=3, Mandatory=$false)]
+[ValidateNotNullOrEmpty()]
+[string]
+$Application=&quot;Invoke-ISPackage.ps1&quot;,
+[Parameter(Position=4, Mandatory=$false)]
+[switch]
+$Use32Bit
+)
+
+
+#This must be run as administrator on Windows 2008 and higher!
+New-EventLog -LogName Application -Source $Application -EA SilentlyContinue
+$Error.Clear()
+
+$ErrorActionPreference = &quot;Stop&quot;
+$exitCode = @{
+0=&quot;The package executed successfully.&quot;
+1=&quot;The package failed.&quot;
+3=&quot;The package was canceled by the user.&quot;
+4=&quot;The utility was unable to locate the requested package. The package could not be found.&quot;
+5=&quot;The utility was unable to load the requested package. The package could not be loaded.&quot;
+6=&quot;The utility encountered an internal error of syntactic or semantic errors in the command line.&quot;}
+
+$events = @{&quot;ApplicationStartEvent&quot; = &quot;31101&quot;; &quot;ApplicationStopEvent&quot; = &quot;31104&quot;; &quot;DatabaseException&quot; = &quot;31725&quot;; &quot;ConfigurationException&quot; = &quot;31705&quot;;&quot;BadDataException&quot; = &quot;31760&quot;}
+$msg =$null
+$MaxErrorMsgLen = 3000
+
+#######################
+function Write-Message{
+Param([string]$Severity,[string]$Category,[string]$Eventid,[string]$ShortMessage=$null,[string]$Context=$null)
+   
+   $msg = @&quot;
+Severity: $Severity
+Category: $Category
+EventID: $Eventid
+Short Message: $ShortMessage
+Context: $Context
+&quot;@
+   $msg = $msg -replace &quot;'&quot;
+     
+  Write-EventLog -LogName Application -Source $Application -EntryType $Severity -EventId $Eventid -Category $Category -Message $msg              
+
+} #Write-Message
+
+#######################
+#       MAIN          #
+#######################
+
+$options = @&quot;
+/Rep E /DTS &quot;$PackagePath&quot; /Conf &quot;c:\SSISconfig\$ServerInstance\SSISconnection.dtsConfig&quot;
+&quot;@
+
+if ($CommandFile) {
+    $options += &quot; /Com `&quot;$CommandFile`&quot;&quot;
+}
+
+$paths = [Environment]::GetEnvironmentVariable(&quot;Path&quot;, &quot;Machine&quot;) -split &quot;;&quot;
+
+if ($Use32Bit) {
+    $dtexec = $paths | where { $_ -like &quot;*Program Files(x86)\Microsoft SQL Server\*\DTS\Binn\&quot; }
+    $dtexec += 'dtexec.exe'
+}
+
+if ($dtexec -eq $null) {
+    $dtexec = $paths | where { $_ -like &quot;*Program Files\Microsoft SQL Server\*\DTS\Binn\&quot; }
+    $dtexec += 'dtexec.exe'
+}
+
+write-verbose &quot;$dtexec $options&quot;
+$Context = &quot;servername = $ServerInstance`npath = $PackagePath&quot;
+$msg = &quot;ApplicationStartEvent&quot;
+
+Write-Message -Severity Information -Category $events.ApplicationStartEvent -Eventid 1 -ShortMessage $msg -Context $Context
+
+try {
+    
+    $result = &amp; $dtexec $options
+    $result = $result -join &quot;`n&quot;
+
+    if ($lastexitcode -eq 0) {
+        $msg = &quot;ApplicationStopEvent&quot;
+        Write-Message -Severity Information -Category $events.ApplicationStopEvent -Eventid 99 -ShortMessage $msg -Context $Context
+    }
+    else {
+        throw $exitcode[$lastexitcode]
+    }
+}
+catch {
+    $result = &quot;$_ `n$result&quot;
+    if ($result -and $result.Length -gt $MaxErrorMsgLen) {
+        $result = $result.SubString($result.Length - $MaxErrorMsgLen)
+    }
+    Write-Verbose &quot;DtExecException&quot;
+    Write-Message -Severity Error -Category  $events.Get_Item(&quot;ConfigurationException&quot;) -Eventid 334 -ShortMessage &quot;ConfigurationException: $result&quot; -Context $Context
+    throw &quot;$result `n $(&quot;Failed to run PackagePath {0} to ServerInstance {1}&quot; -f $PackagePath,$ServerInstance)&quot;
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

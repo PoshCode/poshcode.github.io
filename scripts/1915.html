@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>ConvertFrom-Property - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ConvertFrom-Property</h1>
+<h3><a href="//scripts/1915.ps1">download</a></h3>
+<p>ConvertFrom-PropertyString can convert ini files, property files, and other flat key-value data strings into PSObjects</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+   Converts data from flat or single-level property files into PSObjects
+.DESCRIPTION
+   Converts delimited string data into objects
+.PARAMETER PropertyText
+   The text to be parsed
+.PARAMETER Separator
+   The value separator string used between name=value pairs. Allows regular expressions.
+   Defaults to &quot;=&quot; and is usually either &quot;=&quot; or &quot;:&quot; or &quot;;&quot;
+.PARAMETER Delimiter
+   The property separator string used between sets of name=value pairs. Allows regular expressions.
+   Defaults to &quot;\n\s*\n?&quot; and is usually either &quot;`n&quot; or &quot;`n`n&quot; or &quot;\n\s*\n&quot;
+.PARAMETER RecordSeparator
+   The record separator string is used between records or sections in a text file.
+   Defaults to &quot;\n\[(.+)\]\s*\n&quot; for ini files, and is usually either &quot;\n\s*\n&quot; or &quot;\n\[(.*)\]\s*\n&quot;
+   
+   To support named sections or records, make sure to use a regular expression here that has a capture group defined.
+.EXAMPLE
+   ConvertFrom-PropertyString config.ini
+   
+   Reads in an ini file (which has key=value pairs), using the default settings
+
+   .EXAMPLE
+   @&quot;
+   ID:3468
+   Type:Developer
+   StartDate:1998-02-01
+   Code:SWENG3
+   Name:Baraka
+
+   ID:11234
+   Type:Management
+   StartDate:2005-05-21
+   Code:MGR1
+   Name:Jax
+   &quot;@ |ConvertFrom-PropertyString -sep &quot;:&quot; -RecordSeparator &quot;\r\n\s*\r\n&quot; | Format-Table
+
+
+   Code             StartDate       Name            ID              Type           
+   ----             ---------       ----            --              ----           
+   SWENG3           1998-02-01      Baraka          3468            Developer      
+   MGR1             2005-05-21      Jax             11234           Management     
+   
+   
+   Reads records from a key:value property file with records separated by blank lines.
+.EXAMPLE
+   ConvertFrom-PropertyString data.txt -Separator &quot;:&quot;
+   
+   Reads in a property file which has key:value pairs
+.EXAMPLE
+   Get-Content data.txt -Delimiter &quot;`r`n`r`n&quot; | ConvertFrom-PropertyString -Separator &quot;;&quot;
+   
+   Reads in a property file with key;value pairs, and sections separated by blank lines, and converts it to objects
+.EXAMPLE
+   ConvertFrom-PropertyString data.txt -delimiter '\r\n\r\n' -Separator &quot;;&quot;
+   
+   Reads in a property file with key;value pairs, and sections separated by blank lines, and converts it to objects   
+.EXAMPLE
+   ConvertFrom-PropertyString data.txt -RecordSeparator &quot;^;(.*?)\r*\n&quot; -Separator &quot;;&quot;
+   
+   Reads in a property file with key:value pairs, and sections with a header that starts with the comment character ';'
+   
+   
+#&gt;
+
+#function ConvertFrom-PropertyString {
+[CmdletBinding(DefaultParameterSetName=&quot;Data&quot;)]
+param(
+   [Parameter(Position=99, Mandatory=$true, ValueFromPipeline=$true, ParameterSetName=&quot;Data&quot;)]
+   [Alias(&quot;Data&quot;,&quot;Content&quot;)]
+   [string]$RecordText
+,
+   [Parameter(Position=0, Mandatory=$true, ValueFromPipelineByPropertyName=$true, ParameterSetName=&quot;File&quot;)]
+   [Alias(&quot;PSPath&quot;,&quot;FileName&quot;)]
+   [string]$InputFile
+,
+   [Parameter()][Alias(&quot;ValueSeparator&quot;)]
+   [String]$Separator='='
+,
+   [Parameter()][Alias(&quot;PropertySeparator&quot;)]
+   [String]$Delimiter='(?:\s*\n+\s*)+'
+,
+   [Parameter()]
+   [String]$RecordSeparator='(?:\n|^)\[([^\]]+)\]\s*\n'
+,
+   [Parameter(ParameterSetName=&quot;Data&quot;)]
+   [Alias(&quot;MultiRecords&quot;,&quot;MR&quot;)]
+   [Switch]$MultipleRecords
+   
+)
+begin {
+   $Splitter = New-Object System.Text.RegularExpressions.Regex ([System.String]$RecordSeparator), ([System.Text.RegularExpressions.RegexOptions]&quot;Multiline,IgnoreCase,Compiled&quot;)
+}
+process {
+   Write-Verbose &quot;ParameterSet: $($PSCmdlet.ParameterSetName)&quot;
+   $InputData = @{}
+   if($PSCmdlet.ParameterSetName -eq &quot;File&quot;) {
+      $MultipleRecords = $true
+      $RecordText = Get-Content $InputFile -Delimiter ([char]0)
+   }
+   if($PsBoundParameters.ContainsKey(&quot;RecordSeparator&quot;)) {
+      $MultipleRecords = $true
+   }
+   if($MultipleRecords) {
+      $Records = $splitter.Split( $RecordText ) | ? { $_ }
+      if($Splitter.GetGroupNumbers().Count -gt 1) {
+         while($Records) {
+            $key,$value,$Records = $Records
+            $InputData.$Key += @($value)
+         }
+      } else {
+         $InputData.&quot;&quot; = $Records
+      }
+   } else {
+      $InputData.&quot;&quot; = @($RecordText)
+   }
+
+   foreach($key in $InputData.Keys) {
+      foreach($record in $InputData.$key) {
+         Write-Verbose &quot;Record: $record&quot;
+         if($Key) { $output = @{&quot;PSName&quot;=$key} }
+         elseif($InputFile) { $output = @{&quot;PSName&quot;=((get-item $InputFile).PSChildName)} }
+         else{ $output = @{} }
+         
+         foreach($line in $record -split $Delimiter) {
+            [string[]]$data = $line -split $Separator,2 | foreach { $_.Trim() } | where { $_ }
+            Write-Verbose &quot;Line: $Line | Data: $($data -join '--')&quot;
+            switch($data.Count) {
+               1 { $output.($Data[0]) = $null    }
+               2 { $output.($Data[0]) = $Data[1] }
+            }
+         }
+         if($output.Count) {
+            New-Object PSObject -Property $output
+         }
+      }
+   }
+}
+#}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

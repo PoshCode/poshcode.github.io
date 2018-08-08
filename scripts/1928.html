@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>JSON 1.5 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>JSON 1.5</h1>
+<h3><a href="//scripts/1928.txt">download</a> - <a href="//scripts/1927.md">parent</a></h3>
+<p>Added -File parameter to ConvertFrom-JSON and corrected handling of arrays</p>
+<p>In this JSON module, I have a full set of tools for exporting, importing, and converting Json objects (including arbitrary objects). See comments in script header for usage examples, but basically, you can do things like:</p>
+<p>@ ls | ConvertTo-Json -Depth 2 @
+@ ls | Select FullName, Length | ConvertTo-JSon -NoType @</p>
+<p>You can do full round-trips, even with partial data, as long as you specify the <em>Type</em> when converting back from JSON:</p>
+<p>@PS | Select PM, WS, CPU, ID, ProcessName | ConvertTo-json -NoType | ConvertFrom-json -Type System.Diagnostics.Process@</p>
+<p><em>FIXED IN THIS VERSION:</em>
+Fixed array handling</p>
+<pre><code class="language-text">#requires -version 2.0
+# Version History:
+# v 0.5 - First Public version
+# v 1.0 - Made ConvertFrom-Json work with arbitrary JSON 
+#       - switched to xsl style sheets for ConvertTo-JSON
+# v 1.1 - Changed ConvertFrom-Json to handle single item results
+# v 1.2 - CodeSigned to make a fellow geek happy
+# v 1.3 - Changed ConvertFrom-Json to handle zero item results (I hope)
+# v 1.4 - Added -File parmeter set to ConvertFrom-Json
+#       - Cleaned up some error messages
+# v 1.5 - Corrected handling of arrays
+#
+#  There is no help (yet) because I'm still changing and renaming everything every time I mess with this code
+#  Full RoundTrip capability:
+#
+#  &gt; ls | ConvertTo-Json | ConvertFrom-Json
+#  &gt; ps | ConvertTo-Json | Convert-JsonToXml | Convert-XmlToJson | convertFrom-Json
+#
+#  You may frequently want to use the DEPTH or NoTypeInformation parameters:
+#
+#  &gt; ConvertTo-Json -Depth 2 -NoTypeInformation
+#
+#  But then you have to specify the type when you reimport (and you can't do that for deep objects).  
+#  This problem also occurs if you convert the result of a SELECT statement (ie: PSCustomObject).
+#  For Example:
+#
+#  &gt; PS | Select PM, WS, CPU, ID, ProcessName |
+#  &gt;&gt; ConvertTo-json -NoType |
+#  &gt;&gt; convertfrom-json -Type System.Diagnostics.Process
+
+
+Add-Type -AssemblyName System.ServiceModel.Web, System.Runtime.Serialization
+$utf8 = [System.Text.Encoding]::UTF8
+
+function Write-String {
+PARAM(
+   [Parameter()]$stream,
+   [Parameter(ValueFromPipeline=$true)]$string
+)
+PROCESS {
+  $bytes = $utf8.GetBytes($string)
+  $stream.Write( $bytes, 0, $bytes.Length )
+}  
+}
+
+function Convert-JsonToXml {
+PARAM([Parameter(ValueFromPipeline=$true)][string[]]$json)
+BEGIN { 
+   $mStream = New-Object System.IO.MemoryStream 
+}
+PROCESS {
+   $json | Write-String -stream $mStream
+}
+END {
+   $mStream.Position = 0
+   try
+   {
+      $jsonReader = [System.Runtime.Serialization.Json.JsonReaderWriterFactory]::CreateJsonReader($mStream,[System.Xml.XmlDictionaryReaderQuotas]::Max)
+      $xml = New-Object Xml.XmlDocument
+      $xml.Load($jsonReader)
+      $xml
+   }
+   finally
+   {
+      $jsonReader.Close()
+      $mStream.Dispose()
+   }
+}
+}
+ 
+function Convert-XmlToJson {
+PARAM([Parameter(ValueFromPipeline=$true)][Xml]$xml)
+PROCESS {
+   $mStream = New-Object System.IO.MemoryStream
+   $jsonWriter = [System.Runtime.Serialization.Json.JsonReaderWriterFactory]::CreateJsonWriter($mStream)
+   try
+   {
+     $xml.Save($jsonWriter)
+     $bytes = $mStream.ToArray()
+     [System.Text.Encoding]::UTF8.GetString($bytes,0,$bytes.Length)
+   }
+   finally
+   {
+     $jsonWriter.Close()
+     $mStream.Dispose()
+   }
+}
+}
+
+## Rather than rewriting ConvertTo-Xml ...
+Function ConvertTo-Json {
+[CmdletBinding()]
+Param(
+   [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$true)]$InputObject
+,
+   [Parameter(Mandatory=$false)][Int]$Depth=1
+,
+   [Switch]$NoTypeInformation
+)
+END { 
+   ## You must output ALL the input at once 
+   ## ConvertTo-Xml outputs differently if you just have one, so your results would be different
+   $input | ConvertTo-Xml -Depth:$Depth -NoTypeInformation:$NoTypeInformation -As Document | Convert-CliXmlToJson
+}
+}
+
+Function Convert-CliXmlToJson {
+PARAM(
+   [Parameter(ValueFromPipeline=$true)][Xml.XmlNode]$xml
+)
+BEGIN {
+   $xmlToJsonXsl = @'
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;xsl:stylesheet version=&quot;1.0&quot; xmlns:xsl=&quot;http://www.w3.org/1999/XSL/Transform&quot;&gt;
+&lt;!--
+  CliXmlToJson.xsl
+
+  Copyright (c) 2006,2008 Doeke Zanstra
+  Copyright (c) 2009 Joel Bennett
+  All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without modification, 
+  are permitted provided that the following conditions are met:
+
+  Redistributions of source code must retain the above copyright notice, this 
+  list of conditions and the following disclaimer. Redistributions in binary 
+  form must reproduce the above copyright notice, this list of conditions and the 
+  following disclaimer in the documentation and/or other materials provided with 
+  the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; AND 
+  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
+  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
+  INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
+  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
+  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+  THE POSSIBILITY OF SUCH DAMAGE.
+--&gt;
+
+  &lt;xsl:output indent=&quot;no&quot; omit-xml-declaration=&quot;yes&quot; method=&quot;text&quot; encoding=&quot;UTF-8&quot; media-type=&quot;text/x-json&quot;/&gt;
+	&lt;xsl:strip-space elements=&quot;*&quot;/&gt;
+  &lt;!--contant--&gt;
+  &lt;xsl:variable name=&quot;d&quot;&gt;0123456789&lt;/xsl:variable&gt;
+
+  &lt;!-- ignore document text --&gt;
+  &lt;xsl:template match=&quot;text()[preceding-sibling::node() or following-sibling::node()]&quot;/&gt;
+
+  &lt;!-- string --&gt;
+  &lt;xsl:template match=&quot;text()&quot;&gt;
+    &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+      &lt;xsl:with-param name=&quot;s&quot; select=&quot;.&quot;/&gt;
+    &lt;/xsl:call-template&gt;
+  &lt;/xsl:template&gt;
+  
+  &lt;!-- Main template for escaping strings; used by above template and for object-properties 
+       Responsibilities: placed quotes around string, and chain up to next filter, escape-bs-string --&gt;
+  &lt;xsl:template name=&quot;escape-string&quot;&gt;
+    &lt;xsl:param name=&quot;s&quot;/&gt;
+    &lt;xsl:text&gt;&quot;&lt;/xsl:text&gt;
+    &lt;xsl:call-template name=&quot;escape-bs-string&quot;&gt;
+      &lt;xsl:with-param name=&quot;s&quot; select=&quot;$s&quot;/&gt;
+    &lt;/xsl:call-template&gt;
+    &lt;xsl:text&gt;&quot;&lt;/xsl:text&gt;
+  &lt;/xsl:template&gt;
+  
+  &lt;!-- Escape the backslash (\) before everything else. --&gt;
+  &lt;xsl:template name=&quot;escape-bs-string&quot;&gt;
+    &lt;xsl:param name=&quot;s&quot;/&gt;
+    &lt;xsl:choose&gt;
+      &lt;xsl:when test=&quot;contains($s,'\')&quot;&gt;
+        &lt;xsl:call-template name=&quot;escape-quot-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'\'),'\\')&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:call-template name=&quot;escape-bs-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;substring-after($s,'\')&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;xsl:otherwise&gt;
+        &lt;xsl:call-template name=&quot;escape-quot-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;$s&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+  &lt;/xsl:template&gt;
+  
+  &lt;!-- Escape the double quote (&quot;). --&gt;
+  &lt;xsl:template name=&quot;escape-quot-string&quot;&gt;
+    &lt;xsl:param name=&quot;s&quot;/&gt;
+    &lt;xsl:choose&gt;
+      &lt;xsl:when test=&quot;contains($s,'&amp;quot;')&quot;&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'&amp;quot;'),'\&amp;quot;')&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:call-template name=&quot;escape-quot-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;substring-after($s,'&amp;quot;')&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;xsl:otherwise&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;$s&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+  &lt;/xsl:template&gt;
+  
+  &lt;!-- Replace tab, line feed and/or carriage return by its matching escape code. Can't escape backslash
+       or double quote here, because they don't replace characters (&amp;#x0; becomes \t), but they prefix 
+       characters (\ becomes \\). Besides, backslash should be seperate anyway, because it should be 
+       processed first. This function can't do that. --&gt;
+  &lt;xsl:template name=&quot;encode-string&quot;&gt;
+    &lt;xsl:param name=&quot;s&quot;/&gt;
+    &lt;xsl:choose&gt;
+      &lt;!-- tab --&gt;
+      &lt;xsl:when test=&quot;contains($s,'&amp;#x9;')&quot;&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'&amp;#x9;'),'\t',substring-after($s,'&amp;#x9;'))&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;!-- line feed --&gt;
+      &lt;xsl:when test=&quot;contains($s,'&amp;#xA;')&quot;&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'&amp;#xA;'),'\n',substring-after($s,'&amp;#xA;'))&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;!-- carriage return --&gt;
+      &lt;xsl:when test=&quot;contains($s,'&amp;#xD;')&quot;&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'&amp;#xD;'),'\r',substring-after($s,'&amp;#xD;'))&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;xsl:otherwise&gt;&lt;xsl:value-of select=&quot;$s&quot;/&gt;&lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+  &lt;/xsl:template&gt;
+
+  &lt;!-- number (no support for javascript mantise) --&gt;
+  &lt;xsl:template match=&quot;text()[not(string(number())='NaN' or
+                       (starts-with(.,'0' ) and . != '0'))]&quot;&gt;
+    &lt;xsl:value-of select=&quot;.&quot;/&gt;
+  &lt;/xsl:template&gt;
+
+  &lt;!-- boolean, case-insensitive --&gt;
+  &lt;xsl:template match=&quot;text()[translate(.,'TRUE','true')='true']&quot;&gt;true&lt;/xsl:template&gt;
+  &lt;xsl:template match=&quot;text()[translate(.,'FALSE','false')='false']&quot;&gt;false&lt;/xsl:template&gt;
+
+  &lt;!-- root object(s) --&gt;
+  &lt;xsl:template match=&quot;*&quot; name=&quot;base&quot;&gt;
+    &lt;xsl:if test=&quot;not(preceding-sibling::*)&quot;&gt;
+      &lt;xsl:choose&gt;
+        &lt;xsl:when test=&quot;count(../*)&gt;1&quot;&gt;&lt;xsl:text&gt;[&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+        &lt;xsl:otherwise&gt;&lt;xsl:text&gt;{&lt;/xsl:text&gt;&lt;/xsl:otherwise&gt;
+      &lt;/xsl:choose&gt;
+    &lt;/xsl:if&gt;
+    &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+      &lt;xsl:with-param name=&quot;s&quot; select=&quot;name()&quot;/&gt;
+    &lt;/xsl:call-template&gt;
+    &lt;xsl:text&gt;:&lt;/xsl:text&gt;
+    &lt;!-- check type of node --&gt;
+    &lt;xsl:choose&gt;
+      &lt;!-- null nodes --&gt;
+      &lt;xsl:when test=&quot;count(child::node())=0&quot;&gt;null&lt;/xsl:when&gt;
+      &lt;!-- other nodes --&gt;
+      &lt;xsl:otherwise&gt;
+      	&lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+    &lt;!-- end of type check --&gt;
+    &lt;xsl:if test=&quot;following-sibling::*&quot;&gt;,&lt;/xsl:if&gt;
+    &lt;xsl:if test=&quot;not(following-sibling::*)&quot;&gt;
+      &lt;xsl:choose&gt;
+        &lt;xsl:when test=&quot;count(../*)&gt;1&quot;&gt;&lt;xsl:text&gt;]&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+        &lt;xsl:otherwise&gt;&lt;xsl:text&gt;}&lt;/xsl:text&gt;&lt;/xsl:otherwise&gt;
+      &lt;/xsl:choose&gt;
+    &lt;/xsl:if&gt;
+  &lt;/xsl:template&gt;
+
+  &lt;!-- properties of objects --&gt;
+  &lt;xsl:template match=&quot;*[count(../*[name(../*)=name(.)])=count(../*) and count(../*)&amp;gt;1]&quot;&gt;
+    &lt;xsl:variable name=&quot;inArray&quot; select=&quot;translate(local-name(),'OBJECT','object')='object' or ../@Type[starts-with(.,'System.Collections') or contains(.,'[]') or (contains(.,'[') and contains(.,']'))]&quot;/&gt;
+    &lt;xsl:if test=&quot;not(preceding-sibling::*)&quot;&gt;
+       &lt;xsl:choose&gt;
+         &lt;xsl:when test=&quot;$inArray&quot;&gt;&lt;xsl:text&gt;[&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+         &lt;xsl:otherwise&gt;
+            &lt;xsl:text&gt;{&lt;/xsl:text&gt;
+            &lt;xsl:if test=&quot;../@Type&quot;&gt;
+               &lt;xsl:text&gt;&quot;__type&quot;:&lt;/xsl:text&gt;      
+               &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+                 &lt;xsl:with-param name=&quot;s&quot; select=&quot;../@Type&quot;/&gt;
+               &lt;/xsl:call-template&gt;
+               &lt;xsl:text&gt;,&lt;/xsl:text&gt;      
+             &lt;/xsl:if&gt;
+         &lt;/xsl:otherwise&gt;
+       &lt;/xsl:choose&gt;
+    &lt;/xsl:if&gt;
+    &lt;xsl:choose&gt;
+      &lt;xsl:when test=&quot;not(child::node())&quot;&gt;
+        &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;@Name&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:text&gt;:null&lt;/xsl:text&gt;
+      &lt;/xsl:when&gt;
+      &lt;xsl:when test=&quot;$inArray&quot;&gt;
+        &lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:when&gt;
+      &lt;!--
+      &lt;xsl:when test=&quot;not(@Name) and not(@Type)&quot;&gt;
+        &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;local-name()&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:text&gt;:&lt;/xsl:text&gt;      
+        &lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:when&gt;
+      --&gt;
+      &lt;xsl:when test=&quot;not(@Name)&quot;&gt;
+        &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;local-name()&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:text&gt;:&lt;/xsl:text&gt;      
+        &lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:when&gt; 
+      &lt;xsl:otherwise&gt;
+        &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;@Name&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:text&gt;:&lt;/xsl:text&gt;
+        &lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+    &lt;xsl:if test=&quot;following-sibling::*&quot;&gt;,&lt;/xsl:if&gt;
+    &lt;xsl:if test=&quot;not(following-sibling::*)&quot;&gt;       
+      &lt;xsl:choose&gt;
+        &lt;xsl:when test=&quot;$inArray&quot;&gt;&lt;xsl:text&gt;]&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+        &lt;xsl:otherwise&gt;&lt;xsl:text&gt;}&lt;/xsl:text&gt;&lt;/xsl:otherwise&gt;
+      &lt;/xsl:choose&gt;
+    &lt;/xsl:if&gt;
+  &lt;/xsl:template&gt;
+  
+  
+  &lt;!-- convert root element to an anonymous container --&gt;
+  &lt;xsl:template match=&quot;/&quot;&gt;
+    &lt;xsl:apply-templates select=&quot;node()&quot;/&gt;
+  &lt;/xsl:template&gt;    
+&lt;/xsl:stylesheet&gt;
+'@
+}
+PROCESS {
+   if(Get-Member -InputObject $xml -Name root) {
+      Write-Verbose &quot;Ripping to Objects&quot;
+      $xml = $xml.root.Objects
+   } else {
+      Write-Verbose &quot;Was already Objects&quot;
+   }
+   Convert-Xml -Xml $xml -Xsl $xmlToJsonXsl
+}
+}
+
+Function ConvertFrom-Xml {
+   [CmdletBinding(DefaultParameterSetName=&quot;AutoType&quot;)]
+   PARAM(
+      [Parameter(ValueFromPipeline=$true,Mandatory=$true,Position=1)]
+      [Xml.XmlNode]
+      $xml
+      ,
+      [Parameter(Mandatory=$true,ParameterSetName=&quot;ManualType&quot;)]
+      [Type]$Type
+      ,
+      [Switch]$ForceType
+   )
+   PROCESS{ 
+      if(Get-Member -InputObject $xml -Name root) {
+         return $xml.root.Objects | ConvertFrom-Xml
+      } elseif(Get-Member -InputObject $xml -Name Objects) {
+         return $xml.Objects | ConvertFrom-Xml
+      }
+      $propbag = @{}
+      foreach($name in Get-Member -InputObject $xml -MemberType Properties | Where-Object{$_.Name -notmatch &quot;^__|type&quot;} | Select-Object -ExpandProperty name) {
+         Write-Verbose &quot;$Name Type: $($xml.$Name.type)&quot;
+         $propbag.&quot;$Name&quot; = Convert-Properties $xml.&quot;$name&quot;
+      }
+      if(!$Type -and $xml.HasAttribute(&quot;__type&quot;)) { $Type = $xml.__Type }
+      if($ForceType -and $Type) {
+         try {
+            $output = New-Object $Type -Property $propbag
+         } catch {
+            $output = New-Object PSObject -Property $propbag
+            $output.PsTypeNames.Insert(0, $xml.__type)
+         }
+      } else {
+         $output = New-Object PSObject -Property $propbag
+         if($Type) {
+            $output.PsTypeNames.Insert(0, $Type)
+         }
+      }
+      Write-Output $output
+   }
+}
+
+Function Convert-Properties {
+param($InputObject)
+   switch( $InputObject.type ) {
+      &quot;object&quot; {
+         return (ConvertFrom-Xml -Xml $InputObject)
+         break
+      } 
+      &quot;string&quot; {
+         $MightBeADate = $InputObject.get_InnerText() -as [DateTime]
+         ## Strings that are actually dates (*grumble* JSON is crap)               
+         if($MightBeADate -and $propbag.&quot;$Name&quot; -eq $MightBeADate.ToString(&quot;G&quot;)) {
+            return $MightBeADate
+         } else {
+            return $InputObject.get_InnerText()
+         }
+         break
+      }
+      &quot;number&quot; {
+         $number = $InputObject.get_InnerText()
+         if($number -eq ($number -as [int])) {
+            return $number -as [int]
+         } elseif($number -eq ($number -as [double])) {
+            return $number -as [double]
+         } else {
+            return $number -as [decimal]
+         }
+         break
+      }
+      &quot;boolean&quot; {
+         return [bool]::parse($InputObject.get_InnerText())
+      }
+      &quot;null&quot; {
+         return $null
+      }
+      &quot;array&quot; {
+         [object[]]$Items = $( foreach( $item in $InputObject.GetEnumerator() ) {
+            Convert-Properties $item
+         } )
+         return $Items
+      }
+      default {
+         return $InputObject
+         break
+      }
+   }
+
+}
+
+
+
+
+
+Function ConvertFrom-Json {
+   [CmdletBinding(DefaultParameterSetName=&quot;StringInput&quot;)]
+PARAM(
+   [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName=&quot;File&quot;)]
+   [Alias(&quot;PSPath&quot;)]
+   [string]$File
+,
+   [Parameter(ValueFromPipeline=$true,Mandatory=$true,Position=1,ParameterSetName=&quot;StringInput&quot;)]
+   [string]$InputObject
+,
+   [Parameter(Mandatory=$true,ParameterSetName=&quot;ManualType&quot;)]
+   [Type]$Type
+   ,
+   [Switch]$ForceType
+)
+BEGIN {
+   [bool]$AsParameter = $PSBoundParameters.ContainsKey(&quot;File&quot;) -or $PSBoundParameters.ContainsKey(&quot;InputObject&quot;) 
+}
+PROCESS {
+   if($PSCmdlet.ParameterSetName -eq &quot;File&quot;) {
+      [string]$InputObject = @(Get-Content $File) -Join &quot;`n&quot;
+      $null = $PSBoundParameters.Remove(&quot;File&quot;)
+   }
+   else 
+   {
+      $null = $PSBoundParameters.Remove(&quot;InputObject&quot;)
+   }
+   [Xml.XmlElement]$xml = (Convert-JsonToXml $InputObject).Root
+   if($xml) {
+      if($xml.Objects) {
+         $xml.Objects.Item.GetEnumerator() | ConvertFrom-Xml @PSBoundParameters
+      }elseif($xml.Item -and $xml.Item -isnot [System.Management.Automation.PSParameterizedProperty]) {
+         $xml.Item | ConvertFrom-Xml @PSBoundParameters
+      }else {
+         $xml | ConvertFrom-Xml @PSBoundParameters
+      }
+   } else {
+      Write-Error &quot;Failed to parse JSON with JsonReader&quot;
+   }
+}
+}
+
+#########
+### The JSON library is dependent on Convert-Xml from my Xml script module
+
+function Convert-Node {
+param(
+[Parameter(Mandatory=$true,ValueFromPipeline=$true)]
+[System.Xml.XmlReader]$XmlReader,
+[Parameter(Position=1,Mandatory=$true,ValueFromPipeline=$false)]
+[System.Xml.Xsl.XslCompiledTransform]$StyleSheet
+) 
+PROCESS {
+   $output = New-Object IO.StringWriter
+   $StyleSheet.Transform( $XmlReader, $null, $output )
+   Write-Output $output.ToString()
+}
+}
+   
+function Convert-Xml {
+#.Synopsis
+#  The Convert-XML function lets you use Xslt to transform XML strings and documents.
+#.Description
+#.Parameter Content
+#  Specifies a string that contains the XML to search. You can also pipe strings to Select-XML.
+#.Parameter Namespace
+#   Specifies a hash table of the namespaces used in the XML. Use the format @{&lt;namespaceName&gt; = &lt;namespaceUri&gt;}.
+#.Parameter Path
+#   Specifies the path and file names of the XML files to search.  Wildcards are permitted.
+#.Parameter Xml
+#  Specifies one or more XML nodes to search.
+#.Parameter Xsl
+#  Specifies an Xml StyleSheet to transform with...
+[CmdletBinding(DefaultParameterSetName=&quot;Xml&quot;)]
+PARAM(
+   [Parameter(Position=1,ParameterSetName=&quot;Path&quot;,Mandatory=$true,ValueFromPipelineByPropertyName=$true)]
+   [ValidateNotNullOrEmpty()]
+   [Alias(&quot;PSPath&quot;)]
+   [String[]]$Path
+,
+   [Parameter(Position=1,ParameterSetName=&quot;Xml&quot;,Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+   [ValidateNotNullOrEmpty()]
+   [Alias(&quot;Node&quot;)]
+   [System.Xml.XmlNode[]]$Xml
+,
+   [Parameter(ParameterSetName=&quot;Content&quot;,Mandatory=$true,ValueFromPipeline=$true)]
+   [ValidateNotNullOrEmpty()]
+   [String[]]$Content
+,
+   [Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false)]
+   [ValidateNotNullOrEmpty()]
+   [Alias(&quot;StyleSheet&quot;)]
+   [String[]]$Xslt
+)
+BEGIN { 
+   $StyleSheet = New-Object System.Xml.Xsl.XslCompiledTransform
+   if(Test-Path @($Xslt)[0] -ErrorAction 0) { 
+      Write-Verbose &quot;Loading Stylesheet from $(Resolve-Path @($Xslt)[0])&quot;
+      $StyleSheet.Load( (Resolve-Path @($Xslt)[0]) )
+   } else {
+      Write-Verbose &quot;$Xslt&quot;
+      $StyleSheet.Load(([System.Xml.XmlReader]::Create((New-Object System.IO.StringReader ($Xslt -join &quot;`n&quot;)))))
+   }
+   [Text.StringBuilder]$XmlContent = [String]::Empty 
+}
+PROCESS {
+   switch($PSCmdlet.ParameterSetName) {
+      &quot;Content&quot; {
+         $null = $XmlContent.AppendLine( $Content -Join &quot;`n&quot; )
+      }
+      &quot;Path&quot; {
+         foreach($file in Get-ChildItem $Path) {
+            Convert-Node -Xml ([System.Xml.XmlReader]::Create((Resolve-Path $file))) $StyleSheet
+         }
+      }
+      &quot;Xml&quot; {
+         foreach($node in $Xml) {
+            Convert-Node -Xml (New-Object Xml.XmlNodeReader $node) $StyleSheet
+         }
+      }
+   }
+}
+END {
+   if($PSCmdlet.ParameterSetName -eq &quot;Content&quot;) {
+      [Xml]$Xml = $XmlContent.ToString()
+      Convert-Node -Xml $Xml $StyleSheet
+   }
+}
+}
+
+
+New-Alias fromjson ConvertFrom-Json
+New-Alias tojson ConvertTo-Json
+
+#New-Alias ipjs Import-Json
+#New-Alias epjs Export-Json
+#Import-Json, Export-Json, 
+
+Export-ModuleMember -Function ConvertFrom-Json, ConvertTo-Json, Convert-JsonToXml, Convert-XmlToJson, Convert-CliXmlToJson -Alias *
+
+# SIG # Begin signature block
+# MIIRDAYJKoZIhvcNAQcCoIIQ/TCCEPkCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUXAqZYYkg9cBlXfWUCYbkYZzl
+# ynaggg5CMIIHBjCCBO6gAwIBAgIBFTANBgkqhkiG9w0BAQUFADB9MQswCQYDVQQG
+# EwJJTDEWMBQGA1UEChMNU3RhcnRDb20gTHRkLjErMCkGA1UECxMiU2VjdXJlIERp
+# Z2l0YWwgQ2VydGlmaWNhdGUgU2lnbmluZzEpMCcGA1UEAxMgU3RhcnRDb20gQ2Vy
+# dGlmaWNhdGlvbiBBdXRob3JpdHkwHhcNMDcxMDI0MjIwMTQ1WhcNMTIxMDI0MjIw
+# MTQ1WjCBjDELMAkGA1UEBhMCSUwxFjAUBgNVBAoTDVN0YXJ0Q29tIEx0ZC4xKzAp
+# BgNVBAsTIlNlY3VyZSBEaWdpdGFsIENlcnRpZmljYXRlIFNpZ25pbmcxODA2BgNV
+# BAMTL1N0YXJ0Q29tIENsYXNzIDIgUHJpbWFyeSBJbnRlcm1lZGlhdGUgT2JqZWN0
+# IENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyiOLIjUemqAbPJ1J
+# 0D8MlzgWKbr4fYlbRVjvhHDtfhFN6RQxq0PjTQxRgWzwFQNKJCdU5ftKoM5N4YSj
+# Id6ZNavcSa6/McVnhDAQm+8H3HWoD030NVOxbjgD/Ih3HaV3/z9159nnvyxQEckR
+# ZfpJB2Kfk6aHqW3JnSvRe+XVZSufDVCe/vtxGSEwKCaNrsLc9pboUoYIC3oyzWoU
+# TZ65+c0H4paR8c8eK/mC914mBo6N0dQ512/bkSdaeY9YaQpGtW/h/W/FkbQRT3sC
+# pttLVlIjnkuY4r9+zvqhToPjxcfDYEf+XD8VGkAqle8Aa8hQ+M1qGdQjAye8OzbV
+# uUOw7wIDAQABo4ICfzCCAnswDAYDVR0TBAUwAwEB/zALBgNVHQ8EBAMCAQYwHQYD
+# VR0OBBYEFNBOD0CZbLhLGW87KLjg44gHNKq3MIGoBgNVHSMEgaAwgZ2AFE4L7xqk
+# QFulF2mHMMo0aEPQQa7yoYGBpH8wfTELMAkGA1UEBhMCSUwxFjAUBgNVBAoTDVN0
+# YXJ0Q29tIEx0ZC4xKzApBgNVBAsTIlNlY3VyZSBEaWdpdGFsIENlcnRpZmljYXRl
+# IFNpZ25pbmcxKTAnBgNVBAMTIFN0YXJ0Q29tIENlcnRpZmljYXRpb24gQXV0aG9y
+# aXR5ggEBMAkGA1UdEgQCMAAwPQYIKwYBBQUHAQEEMTAvMC0GCCsGAQUFBzAChiFo
+# dHRwOi8vd3d3LnN0YXJ0c3NsLmNvbS9zZnNjYS5jcnQwYAYDVR0fBFkwVzAsoCqg
+# KIYmaHR0cDovL2NlcnQuc3RhcnRjb20ub3JnL3Nmc2NhLWNybC5jcmwwJ6AloCOG
+# IWh0dHA6Ly9jcmwuc3RhcnRzc2wuY29tL3Nmc2NhLmNybDCBggYDVR0gBHsweTB3
+# BgsrBgEEAYG1NwEBBTBoMC8GCCsGAQUFBwIBFiNodHRwOi8vY2VydC5zdGFydGNv
+# bS5vcmcvcG9saWN5LnBkZjA1BggrBgEFBQcCARYpaHR0cDovL2NlcnQuc3RhcnRj
+# b20ub3JnL2ludGVybWVkaWF0ZS5wZGYwEQYJYIZIAYb4QgEBBAQDAgABMFAGCWCG
+# SAGG+EIBDQRDFkFTdGFydENvbSBDbGFzcyAyIFByaW1hcnkgSW50ZXJtZWRpYXRl
+# IE9iamVjdCBTaWduaW5nIENlcnRpZmljYXRlczANBgkqhkiG9w0BAQUFAAOCAgEA
+# UKLQmPRwQHAAtm7slo01fXugNxp/gTJY3+aIhhs8Gog+IwIsT75Q1kLsnnfUQfbF
+# pl/UrlB02FQSOZ+4Dn2S9l7ewXQhIXwtuwKiQg3NdD9tuA8Ohu3eY1cPl7eOaY4Q
+# qvqSj8+Ol7f0Zp6qTGiRZxCv/aNPIbp0v3rD9GdhGtPvKLRS0CqKgsH2nweovk4h
+# fXjRQjp5N5PnfBW1X2DCSTqmjweWhlleQ2KDg93W61Tw6M6yGJAGG3GnzbwadF9B
+# UW88WcRsnOWHIu1473bNKBnf1OKxxAQ1/3WwJGZWJ5UxhCpA+wr+l+NbHP5x5XZ5
+# 8xhhxu7WQ7rwIDj8d/lGU9A6EaeXv3NwwcbIo/aou5v9y94+leAYqr8bbBNAFTX1
+# pTxQJylfsKrkB8EOIx+Zrlwa0WE32AgxaKhWAGho/Ph7d6UXUSn5bw2+usvhdkW4
+# npUoxAk3RhT3+nupi1fic4NG7iQG84PZ2bbS5YxOmaIIsIAxclf25FwssWjieMwV
+# 0k91nlzUFB1HQMuE6TurAakS7tnIKTJ+ZWJBDduUbcD1094X38OvMO/++H5S45Ki
+# 3r/13YTm0AWGOvMFkEAF8LbuEyecKTaJMTiNRfBGMgnqGBfqiOnzxxRVNOw2hSQp
+# 0B+C9Ij/q375z3iAIYCbKUd/5SSELcmlLl+BuNknXE0wggc0MIIGHKADAgECAgFR
+# MA0GCSqGSIb3DQEBBQUAMIGMMQswCQYDVQQGEwJJTDEWMBQGA1UEChMNU3RhcnRD
+# b20gTHRkLjErMCkGA1UECxMiU2VjdXJlIERpZ2l0YWwgQ2VydGlmaWNhdGUgU2ln
+# bmluZzE4MDYGA1UEAxMvU3RhcnRDb20gQ2xhc3MgMiBQcmltYXJ5IEludGVybWVk
+# aWF0ZSBPYmplY3QgQ0EwHhcNMDkxMTExMDAwMDAxWhcNMTExMTExMDYyODQzWjCB
+# qDELMAkGA1UEBhMCVVMxETAPBgNVBAgTCE5ldyBZb3JrMRcwFQYDVQQHEw5XZXN0
+# IEhlbnJpZXR0YTEtMCsGA1UECxMkU3RhcnRDb20gVmVyaWZpZWQgQ2VydGlmaWNh
+# dGUgTWVtYmVyMRUwEwYDVQQDEwxKb2VsIEJlbm5ldHQxJzAlBgkqhkiG9w0BCQEW
+# GEpheWt1bEBIdWRkbGVkTWFzc2VzLm9yZzCCASIwDQYJKoZIhvcNAQEBBQADggEP
+# ADCCAQoCggEBAMfjItJjMWVaQTECvnV/swHQP0FTYUvRizKzUubGNDNaj7v2dAWC
+# rAA+XE0lt9JBNFtCCcweDzphbWU/AAY0sEPuKobV5UGOLJvW/DcHAWdNB/wRrrUD
+# dpcsapQ0IxxKqpRTrbu5UGt442+6hJReGTnHzQbX8FoGMjt7sLrHc3a4wTH3nMc0
+# U/TznE13azfdtPOfrGzhyBFJw2H1g5Ag2cmWkwsQrOBU+kFbD4UjxIyus/Z9UQT2
+# R7bI2R4L/vWM3UiNj4M8LIuN6UaIrh5SA8q/UvDumvMzjkxGHNpPZsAPaOS+RNmU
+# Go6X83jijjbL39PJtMX+doCjS/lnclws5lUCAwEAAaOCA4EwggN9MAkGA1UdEwQC
+# MAAwDgYDVR0PAQH/BAQDAgeAMDoGA1UdJQEB/wQwMC4GCCsGAQUFBwMDBgorBgEE
+# AYI3AgEVBgorBgEEAYI3AgEWBgorBgEEAYI3CgMNMB0GA1UdDgQWBBR5tWPGCLNQ
+# yCXI5fY5ViayKj6xATCBqAYDVR0jBIGgMIGdgBTQTg9AmWy4SxlvOyi44OOIBzSq
+# t6GBgaR/MH0xCzAJBgNVBAYTAklMMRYwFAYDVQQKEw1TdGFydENvbSBMdGQuMSsw
+# KQYDVQQLEyJTZWN1cmUgRGlnaXRhbCBDZXJ0aWZpY2F0ZSBTaWduaW5nMSkwJwYD
+# VQQDEyBTdGFydENvbSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eYIBFTCCAUIGA1Ud
+# IASCATkwggE1MIIBMQYLKwYBBAGBtTcBAgEwggEgMC4GCCsGAQUFBwIBFiJodHRw
+# Oi8vd3d3LnN0YXJ0c3NsLmNvbS9wb2xpY3kucGRmMDQGCCsGAQUFBwIBFihodHRw
+# Oi8vd3d3LnN0YXJ0c3NsLmNvbS9pbnRlcm1lZGlhdGUucGRmMIG3BggrBgEFBQcC
+# AjCBqjAUFg1TdGFydENvbSBMdGQuMAMCAQEagZFMaW1pdGVkIExpYWJpbGl0eSwg
+# c2VlIHNlY3Rpb24gKkxlZ2FsIExpbWl0YXRpb25zKiBvZiB0aGUgU3RhcnRDb20g
+# Q2VydGlmaWNhdGlvbiBBdXRob3JpdHkgUG9saWN5IGF2YWlsYWJsZSBhdCBodHRw
+# Oi8vd3d3LnN0YXJ0c3NsLmNvbS9wb2xpY3kucGRmMGMGA1UdHwRcMFowK6ApoCeG
+# JWh0dHA6Ly93d3cuc3RhcnRzc2wuY29tL2NydGMyLWNybC5jcmwwK6ApoCeGJWh0
+# dHA6Ly9jcmwuc3RhcnRzc2wuY29tL2NydGMyLWNybC5jcmwwgYkGCCsGAQUFBwEB
+# BH0wezA3BggrBgEFBQcwAYYraHR0cDovL29jc3Auc3RhcnRzc2wuY29tL3N1Yi9j
+# bGFzczIvY29kZS9jYTBABggrBgEFBQcwAoY0aHR0cDovL3d3dy5zdGFydHNzbC5j
+# b20vY2VydHMvc3ViLmNsYXNzMi5jb2RlLmNhLmNydDAjBgNVHRIEHDAahhhodHRw
+# Oi8vd3d3LnN0YXJ0c3NsLmNvbS8wDQYJKoZIhvcNAQEFBQADggEBACY+J88ZYr5A
+# 6lYz/L4OGILS7b6VQQYn2w9Wl0OEQEwlTq3bMYinNoExqCxXhFCHOi58X6r8wdHb
+# E6mU8h40vNYBI9KpvLjAn6Dy1nQEwfvAfYAL8WMwyZykPYIS/y2Dq3SB2XvzFy27
+# zpIdla8qIShuNlX22FQL6/FKBriy96jcdGEYF9rbsuWku04NqSLjNM47wCAzLs/n
+# FXpdcBL1R6QEK4MRhcEL9Ho4hGbVvmJES64IY+P3xlV2vlEJkk3etB/FpNDOQf8j
+# RTXrrBUYFvOCv20uHsRpc3kFduXt3HRV2QnAlRpG26YpZN4xvgqSGXUeqRceef7D
+# dm4iTdHK5tIxggI0MIICMAIBATCBkjCBjDELMAkGA1UEBhMCSUwxFjAUBgNVBAoT
+# DVN0YXJ0Q29tIEx0ZC4xKzApBgNVBAsTIlNlY3VyZSBEaWdpdGFsIENlcnRpZmlj
+# YXRlIFNpZ25pbmcxODA2BgNVBAMTL1N0YXJ0Q29tIENsYXNzIDIgUHJpbWFyeSBJ
+# bnRlcm1lZGlhdGUgT2JqZWN0IENBAgFRMAkGBSsOAwIaBQCgeDAYBgorBgEEAYI3
+# AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwGCisG
+# AQQBgjcCAQsxDjAMBgorBgEEAYI3AgEWMCMGCSqGSIb3DQEJBDEWBBRNHcO5UPhV
+# wjODDayGQUXYcBnNOTANBgkqhkiG9w0BAQEFAASCAQBKuS11xBxF3aMYELX0TyUy
+# 43NYaG9Ey88a2M4Dd1e/lNsN4ve7VKJao86ESuHLe+G+tkQXeGuF2Aykkk2ZfZlJ
+# 3+53p5g/t1jwGGsSGcatuxjgTZYYEe2le5R+/aO3hgmWa0Ya2eIyTxWR8SaSy4fE
+# SJs2l9NtEuF+aOkVOIXiZsGo+Iv1zPVfeALPTDyE0kc3s9JCELSN1oqoGB8uPa/V
+# mjh+QcupQyd7tEKPFuUIHdUlEvRugKS8l/D6Zy4eA4r02Z0BhXOQ7rU5eYmUESLH
+# rUoj3tyyQiB02dIvgRqFwZ+44vQSoJGI5mdgrJiCBQvZOGO84dVIhaJCoWccOZIt
+# SIG # End signature block
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

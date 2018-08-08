@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>ACE.psm1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ACE.psm1</h1>
+<h3><a href="//scripts/2630.ps1">download</a></h3>
+<p>ACE.psm1 is a module for getting data from Microsoft Office Access (*.mdb and <em>.accdb) files and Microsoft Office Excel (</em>.xls, *.xlsx, and *.xlsb) files.</p>
+<pre><code class="language-posh">####################### 
+function Get-ACEConnection 
+{ 
+    param($ConnectionString) 
+ 
+    $conn = new-object System.Data.OleDb.OleDbConnection($ConnectionString) 
+    $conn.open() 
+    $conn 
+ 
+} #Get-ACEConnection 
+ 
+####################### 
+function Get-ACETable 
+{ 
+    param($Connection) 
+     
+    $Connection.GetOleDbSchemaTable([System.Data.OleDb.OleDbSchemaGuid]::tables,$null) 
+ 
+} #Get-ACETable 
+ 
+####################### 
+function Get-ACEConnectionString 
+{ 
+    param($FilePath) 
+ 
+    switch -regex ($FilePath) 
+    { 
+        '\.xls$|\.xlsx$|\.xlsb$' {&quot;Provider=Microsoft.ACE.OLEDB.12.0;Data Source=`&quot;$filepath`&quot;;Extended Properties=`&quot;Excel 12.0 Xml;HDR=YES`&quot;;&quot;} 
+        '\.mdb$|\.accdb$'        {&quot;Provider=Microsoft.ACE.OLEDB.12.0;Data Source=`&quot;$filepath`&quot;;Persist Security Info=False;&quot;} 
+    } 
+ 
+} #Get-ACEConnectionString 
+ 
+####################### 
+&lt;# 
+.SYNOPSIS 
+Queries Excel and Access files. 
+.DESCRIPTION 
+Get-ACEData gets data from Microsoft Office Access (*.mdb and *.accdb) files and Microsoft Office Excel (*.xls, *.xlsx, and *.xlsb) files 
+.INPUTS 
+None 
+    You cannot pipe objects to Get-ACEData 
+.OUTPUTS 
+   System.Data.DataSet 
+.EXAMPLE 
+Get-ACEData -FilePath ./budget.xlsx -WorkSheet 'FY2010$','FY2011$' 
+This example gets data for the worksheets FY2010 and FY2011 from the Excel file 
+.EXAMPLE 
+Get-ACEData - -FilePath ./budget.xlsx -WorksheetListOnly 
+This example list the Worksheets for the Excel file 
+.EXAMPLE 
+Get-ACEData -FilePath ./projects.xls -Query 'Select * FROM [Sheet1$]' 
+This example gets data using a query from the Excel file 
+.NOTES 
+Imporant!!!  
+Install ACE 12/26/2010 or higher version from LINK below 
+If using an x64 host install x64 version and use x64 PowerShell 
+Version History 
+v1.0   - Chad Miller - 4/21/2011 - Initial release 
+.LINK 
+http://www.microsoft.com/downloads/en/details.aspx?FamilyID=c06b8369-60dd-4b64-a44b-84b371ede16d&amp;displaylang=en 
+#&gt; 
+function Get-ACEData 
+{ 
+     
+    [CmdletBinding()] 
+    param( 
+    [Parameter(Position=0, Mandatory=$true)]  
+    [ValidateScript({$_ -match  '\.xls$|\.xlsx$|\.xlsb$|\.mdb$|\.accdb$'})] [string]$FilePath, 
+    [Parameter(Position=1, Mandatory=$false)]  
+    [alias(&quot;Worksheet&quot;)] [string[]]$Table, 
+    [Parameter(Position=2, Mandatory=$false)] [string]$Query, 
+    [Parameter(Mandatory=$false)] 
+    [alias(&quot;WorksheetListOnly&quot;)] [switch]$TableListOnly 
+    ) 
+ 
+    $FilePath = $(resolve-path $FilePath).path 
+    $conn = Get-ACEConnection -ConnectionString $(Get-ACEConnectionString $FilePath) 
+ 
+    #If TableListOnly switch specified list tables/worksheets then exit 
+    if ($TableListOnly) 
+    {  
+        Get-ACETable -Connection $conn 
+        $conn.Close() 
+ 
+    } 
+    #Else tablelistonly switch not specified 
+    else 
+    { 
+        $ds = New-Object system.Data.DataSet 
+        $cmd = new-object System.Data.OleDb.OleDbCommand 
+        $cmd.Connection = $conn 
+        $da = new-object System.Data.OleDb.OleDbDataAdapter 
+ 
+        if ($Query) 
+        { 
+            $qry = $Query 
+            $cmd.CommandText = $qry 
+            $da.SelectCommand = $cmd 
+            $dt = new-object System.Data.dataTable 
+            $null = $da.fill($dt) 
+            $ds.Tables.Add($dt) 
+        } 
+        #Return one or more specified tables/worksheets 
+        elseif ($Table) 
+        { 
+            $Table |  
+            foreach{ $qry = &quot;select * from [{0}]&quot; -f $_; 
+            $cmd.CommandText = $qry; 
+            $da.SelectCommand = $cmd; 
+            $dt = new-object System.Data.dataTable(&quot;$_&quot;); 
+            $null = $da.fill($dt); 
+            $ds.Tables.Add($dt)} 
+        } 
+        #Return all tables/worksheets 
+        else 
+        { 
+            Get-ACETable $conn |  
+            where {$_.TABLE_TYPE -eq  'TABLE' } | 
+            foreach{ $qry = &quot;select * from [{0}]&quot; -f $_.TABLE_NAME; 
+            $cmd.CommandText = $qry; 
+            $da.SelectCommand = $cmd; 
+            $dt = new-object System.Data.dataTable(&quot;$($_.TABLE_NAME)&quot;); 
+            $null = $da.fill($dt); 
+            $ds.Tables.Add($dt)} 
+        } 
+ 
+        $conn.Close() 
+        Write-Output ($ds) 
+    } 
+ 
+} #Get-ACEData 
+ 
+Export-ModuleMember -function Get-ACEData
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

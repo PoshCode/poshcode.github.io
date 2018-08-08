@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Tim Dunn">
+    <title>profile.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>profile.ps1</h1>
+<h3><a href="//scripts/6444.ps1">download</a></h3>
+<p>Posting my profile.ps1 in case anyone is interested:</p>
+<pre><code class="language-posh">#requires -Version 3
+#$PSModuleAutoLoadingPreference = 'None'
+
+#region module management
+########################################
+
+# $cloudDrivePath = $null # OneNote, GoogleDrive, DropBox, Carbonite, eieio...
+
+[System.Collections.ArrayList]$Private:moduleList = @(
+    #&quot;$cloudDrivePath\PSHModules\PSReadLine\PSReadline.psd1&quot;,
+    #&quot;$cloudDrivePath\PSHModules\Add-on.CopyAsColorizedHTML\Add-on.CopyAsColorizedHTML.psd1&quot;,
+
+    # my function library
+    &quot;$cloudDrivePath\PSHModules\Toolkit&quot;, 
+
+    &quot;$cloudDrivePath\PSHModules\Pester&quot;
+) 
+
+if ($Host.Name -match 'Ise Host') 
+{
+    $Private:moduleList += &quot;$cloudDrivePath\PSHModules\ISESteroids&quot;
+}
+
+$Private:moduleList| ForEach-Object -Process {
+    if (Test-Path -Path $_) 
+    {
+        Import-Module -Force -Name $_ 
+    } 
+}
+
+########################################
+#endregion module management
+#region $host.$env:USERNAME session state noteproperty
+########################################
+
+if (!$Host.$env:USERNAME)  
+{
+    Add-Member -InputObject $global:Host -MemberType NoteProperty -Name $env:USERNAME -Value @{} -Force 
+}
+    
+if ($Host.$env:USERNAME.IsAdministrator -eq $null)
+{ 
+    $CurrentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $CurrentUserPrincipal = New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList $CurrentUser
+    $AdminRole = [Security.Principal.WindowsBuiltinRole]::Administrator
+    $global:Host.$env:USERNAME.IsAdministrator = $CurrentUserPrincipal.IsInRole($AdminRole)
+}
+
+if (!($Private:userDomain = $env:USERDNSDOMAIN)) 
+{
+    $Private:userDomain = $env:USERDOMAIN  
+}
+
+$global:Host.$env:USERNAME.UserDomain = $Private:userDomain
+$global:Host.$env:USERNAME.ComputerDomain = (Get-WmiObject -Class Win32_ComputerSystem).Domain
+$global:Host.$env:USERNAME.Process = Get-Process -Id $pid
+
+########################################
+#endregion $host.$env:USERNAME session state noteproperty
+#region ISE Preview management
+# https://blogs.msdn.microsoft.com/powershell/2016/01/20/introducing-the-windows-powershell-ise-preview/
+########################################
+
+$private:staticIsePreviewreleasePath = 'C:\Program Files\WindowsPowerShell\Modules\PowerShellISE-preview\5.1.1\powershell_ise.exe'
+
+if ($psISE.IsPreviewRelease)
+{
+    if ($private:staticIsePreviewreleasePath -ne $Host.$env:USERNAME.Process.Path)
+    {
+        Write-Warning -Message 'Need to update outdated $private:staticIsePreviewreleasePath in'
+        Write-Warning -Message &quot;    $PSCommandPath from&quot;
+        Write-Warning -Message &quot;    $private:staticIsePreviewreleasePath to &quot;
+        Write-Warning -Message &quot;    $($Host.$env:USERNAME.Process.Path)&quot;
+    }
+    $private:staticIsePreviewreleasePath = $Host.$env:USERNAME.Process.Path
+}
+
+if (Test-Path -Path $private:staticIsePreviewreleasePath)
+{
+    # we want the path to persist, but not pollute the user's variable: PSDrive, so we embed it in a scriptblock
+
+    # type 'isep' to start the ISE-Preview
+    Set-Content -Path function:Start-IsePreviewRelease -Value ([scriptblock]::Create(&quot;Invoke-Item -Path '$private:staticIsePreviewreleasePath'&quot;))
+    Set-Alias -Name isep -Value Start-IsePreviewRelease
+}
+
+########################################
+#endregion ISE Preview management
+#region function prompt {}
+########################################
+
+&lt;# 
+Break the close-multiline-comment tag to un-collapse only this function#&gt;
+function prompt
+{
+    [CmdletBinding()]
+    param (
+        [switch]$ForceWindowTitle
+    )
+
+    #region get PSH window data cached in $Host
+    ########################################
+
+    $userDomain = $Host.$env:USERNAME.UserDomain
+    $ComputerDomain = $Host.$env:USERNAME.ComputerDomain
+
+    ########################################
+    #endregion get PSH window data cached in $Host
+    #region get dynamic data
+    ########################################
+
+    if ($Host.$env:USERNAME.IsAdministrator) 
+    {
+        $windowTitleAdminString = 'Administrator: '
+        $promptAdminString = '#!#' # for the command prompt line
+    }
+    else
+    {
+        $windowTitleAdminString = $null
+        $promptAdminString = '#' # for the command prompt line
+    }
+
+    if ($history = Get-History | Select-Object -Last 1)
+    {
+        $lastCommandElapsedTime = ($history.EndExecutionTime - $history.StartExecutionTime).ToString() -replace '\..*'
+    }
+    else
+    {
+        $lastCommandElapsedTime = '00:00:00'
+    } 
+
+    $historyId = [int]($history.Id) + 1
+    $now = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $path = $ExecutionContext.SessionState.Path.CurrentLocation
+
+    ########################################
+    #endregion get dynamic data
+    #region update the UI
+    ########################################
+
+    # set the titlebar if it's default
+    if ($ForceWindowTitle -or $Host.UI.RawUI.WindowTitle -match 'Windows PowerShell$') 
+    {
+        $Host.UI.RawUI.WindowTitle = &quot;$windowTitleAdminString $path [$now]&quot; 
+    }
+
+    # set the prompt
+    &quot;`n$promptAdminString $userDomain\$env:USERNAME @ $env:computerName.$ComputerDomain $lastCommandElapsedTime ($historyId)&quot;.ToLower() +
+    &quot;`n$promptAdminString $path $now $('&gt;' * $nestedPromptLevel)&gt;`n&quot;
+
+    ########################################
+    #endregion update the UI
+} #&gt; # function prompt
+
+&lt;# 
+Break the close-multiline-comment tag to un-collapse only this function#&gt;
+function Set-DefaultPrompt
+{
+    {
+        &quot;PS $($ExecutionContext.SessionState.Path.CurrentLocation)$('&gt;' * ($nestedPromptLevel + 1)) &quot; 
+    } | Set-Content -Path function:prompt
+} #&gt; # function Set-DefaultPrompt
+
+&lt;# 
+Break the close-multiline-comment tag to un-collapse only this function#&gt;
+function Set-SimplePrompt
+{
+    {
+        &quot;PS $($ExecutionContext.SessionState.Path.CurrentLocation) ($(1 + (Get-History | Select-Object -Last 1).Id)) $('&gt;' * ($nestedPromptLevel + 1)) &quot; 
+    } | Set-Content -Path function:prompt
+} #&gt; # function Set-SimplePrompt
+
+########################################
+#endregion function prompt {}
+#region catch-all
+########################################
+
+# $profile points to &quot;$MyDocuments\WindowsPowerShell\Microsoft.PowerShellISE_profile.ps1&quot; or '...\Microsoft.PowerShell_profile.ps1', but they're empty
+# this is where all my setup code goes.  Therefore, typing '. $profile' doesn't work for me.  I type 'ip' to (re)load *this* file
+Set-Content -Path function:Invoke-Profile -Value ([scriptblock]::Create(&quot;. '$PSCommandPath'&quot;))
+Set-Alias -Name ip -Value Invoke-Profile
+
+########################################
+#endregion catch-all
+#region actual stuff to execute
+########################################
+
+# 'Open as Administrator' shells always start in c:\windows\system32, which is a Very Bad Idea
+$sys32folder = $env:ComSpec -replace 'cmd\.exe$' -replace '\\', '\\' 
+if ((Get-Location).ProviderPath -match &quot;^$sys32folder&quot;) 
+{
+    Set-Location -Path $HOME 
+}
+
+$pshFso = Get-Item -Path $Host.$env:USERNAME.Process.Path
+Write-Host -ForegroundColor Green -Object &quot;$($pshFso.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')) $($pshFso.FullName) $($Host.$env:USERNAME.Process.FileVersion)&quot;
+
+($PSCommandPath, $profile) |
+Where-Object -FilterScript {
+    $_ 
+} |
+ForEach-Object -Process {
+    $fso = Get-Item -Path $_
+    Write-Host -ForegroundColor Green -Object &quot;$($fso.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')) $($fso.FullName)&quot;
+}
+
+$error.Clear()
+
+########################################
+#endregion actual stuff to execute
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

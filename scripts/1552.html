@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Thell">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/1552.ps1">download</a></h3>
+<p>just a script in progress</p>
+<pre><code class="language-posh">#Params is file or folder
+param([string] $PSUnitTestFile, [string] $Category =&quot;All&quot;, [switch] $ShowReportInBrowser)
+
+Write-Debug &quot;PSUnit.Run.ps1: Parameter `$PSUnitTestFile=`&quot;$PSUnitTestFile`&quot;&quot;
+Write-Debug &quot;PSUnit.Run.ps1: Parameter `$Category=`&quot;$Category`&quot;&quot;
+
+#Don't run the script with an empty path to test file
+if ([String]::IsNullOrEmpty($PSUnitTestFile))
+{
+    Throw &quot;The `$PSUnitTestFile parameter is required!&quot;
+}
+
+#Make sure the test file exists
+if( ! (Test-Path -Path $PSUnitTestFile) )
+{
+    Throw &quot;`$PSUnitTestFile: $PSUnitTestFile is not a valid file!&quot;
+}
+
+#This is there to prevent this script from running itself as a test
+$PSUnitTestFileInfo = Get-Item -Path $PSUnitTestFile
+if ($PSUnitTestFileInfo.Name -eq &quot;PSUnit.Run.ps1&quot;)
+{
+    Throw &quot;This script can't run itself as a test!&quot;
+}
+
+
+
+#Data Model for the test result report
+$TestEnvironment = @{}
+$TestStatistics = @{}
+$TestResults = New-Object -TypeName &quot;System.Collections.ArrayList&quot;
+$Statistics = @{}
+$TestStartTime = [DateTime]::Now
+$TestEndTime = [DateTime]::Now
+
+#Deleting test functions from global scope
+$TestFunctions = Get-Item function:Test.*
+If ($TestFunctions)
+{
+  Write-Debug &quot;PSUnit.Run.ps1: Deleting test functions from global scope!&quot;
+  $TestFunctions | Remove-Item
+}
+
+#Loading test functions into global scope
+$ScriptLines = Get-Content -Path $PSUnitTestFile -Encoding &quot;UTF8&quot;
+$ScriptText = [String]::Join(&quot;`n`r&quot;, $ScriptLines)
+Invoke-Expression $ScriptText 
+
+#Make sure that the $PSTestScript has tests defined
+if (! (Test-Path -Path function:Test.*))
+{
+    Throw &quot;Script `&quot;$PSUnitTestFile`&quot; doesn't have any test functions defined!&quot;
+}
+
+#Get all Test. functions. This will get every function in global scope, even the ones that we didn't explicitly load
+$TestFunctions = Get-Item function:Test.*
+
+function Execute-Test([System.Management.Automation.FunctionInfo] $Test)
+{
+  Try
+  {
+    Write-Debug &quot;Execute-Test: Executing: $($Test.Name)&quot;
+    &amp; $Test
+  }
+  Catch
+  {
+    Write-Debug &quot;Execute-Test: Caught exception: $($_.Exception.GetType().FullName)&quot;
+    Throw $_ 
+  }
+}
+
+function Report-TestResult([System.Management.Automation.FunctionInfo] $Test, [string] $Result, [System.Management.Automation.ErrorRecord] $Reason)
+{
+    #Creating test results object collection
+    $TestResult = New-Object -TypeName &quot;System.Management.Automation.PSObject&quot;
+    $TestResult = Add-Member -passthru -InputObject $TestResult -MemberType NoteProperty -Name &quot;Test&quot; -Value $Test
+    $TestResult = Add-Member -passthru -InputObject $TestResult -MemberType NoteProperty -Name &quot;Result&quot; -Value $Result
+    $TestResult = Add-Member -passthru -InputObject $TestResult -MemberType NoteProperty -Name &quot;Reason&quot; -Value $Reason
+    $null = $TestResults.Add($TestResult);
+  
+    #Writing Console output
+    if($Test.Name.Length -ge 99)
+    {
+        $TestNameString = $Test.Name.Substring(0, 95) + &quot;...&quot;
+    }
+    else
+    {
+        $TestNameString = $Test.Name
+    }
+    
+    switch ($Result)
+    {
+        &quot;PASS&quot; 
+        {
+            Write-Host &quot;$($TestNameString.PadRight(100, ' '))&quot; -foregroundcolor &quot;blue&quot; -backgroundcolor &quot;white&quot; -nonewline
+            Write-Host &quot;PASS&quot; -foregroundcolor &quot;black&quot; -backgroundcolor &quot;green&quot; -nonewline
+            Write-Host $(&quot;  N/A&quot;.PadRight(100, ' ')) -foregroundcolor &quot;blue&quot; -backgroundcolor &quot;white&quot;
+        }
+        &quot;FAIL&quot;
+        {
+            if($Reason.ToString().Length -ge 99)
+            {
+                $ReasonString = $Reason.ToString().Substring(0, 95) + &quot;...&quot;
+            }
+            else
+            {
+                $ReasonString = $Reason.ToString()
+            }
+            Write-Host &quot;$($TestNameString.PadRight(100, ' '))&quot; -foregroundcolor &quot;blue&quot; -backgroundcolor &quot;white&quot; -nonewline
+            Write-Host &quot;FAIL&quot; -foregroundcolor &quot;white&quot; -backgroundcolor &quot;red&quot; -nonewline
+            Write-Host $(&quot;  $ReasonString&quot;.PadRight(100, ' ')) -foregroundcolor &quot;red&quot; -backgroundcolor &quot;white&quot;
+        }
+        &quot;SKIP&quot;
+        {
+            Write-Host &quot;$($TestNameString.PadRight(100, ' '))&quot; -foregroundcolor &quot;blue&quot; -backgroundcolor &quot;white&quot; -nonewline
+            Write-Host &quot;SKIP&quot; -foregroundcolor &quot;black&quot; -backgroundcolor &quot;yellow&quot; -nonewline
+            Write-Host $(&quot;  N/A&quot;.PadRight(100, ' ')) -foregroundcolor &quot;blue&quot; -backgroundcolor &quot;white&quot;
+        }
+    }
+}
+
+function Get-ExpectedExceptionTypeName([System.Management.Automation.FunctionInfo] $Test)
+{    
+    $ExpectedExceptionTypeName = &quot;ExpectedException Parameter is not defined in function $($Test.Name)&quot;
+    $ExpectedExceptionParameter = $Test.Parameters[&quot;ExpectedException&quot;]
+    if( $ExpectedExceptionParameter -ne $Null)
+    {
+      $ExpectedExceptionTypeName = $ExpectedExceptionParameter.ParameterType.FullName
+    }
+    else
+    {
+      Write-Debug &quot;Get-ExpectedExceptionTypeName: $($Test.Name) doesn't use ExpectedException parameter&quot;
+    }
+    return $ExpectedExceptionTypeName
+}
+
+function Get-TestFunctionCategory([System.Management.Automation.FunctionInfo] $Test)
+{    
+    $TestFunctionCategory = &quot;All&quot;
+    $Test.Parameters.GetEnumerator() | ForEach-Object `
+    { 
+        if($_.Key -match '^Category_(?&lt;CATEGORY&gt;.*)$') 
+        {   
+            $TestFunctionCategory = $Matches[&quot;CATEGORY&quot;]
+        }
+    }
+    Write-Debug &quot;Get-TestFunctionCategory: Found Category=`&quot;$TestFunctionCategory`&quot;&quot;
+    return $TestFunctionCategory
+}
+
+function Get-TestFunctionSkip([System.Management.Automation.FunctionInfo] $Test)
+{    
+    $IsSkipSet = $false
+    $SkipParameter = $Test.Parameters[&quot;Skip&quot;]
+    if( $SkipParameter -ne $Null)
+    {
+      $IsSkipSet = $true
+      Write-Debug &quot;Get-TestFunctionSkip: $($Test.Name) uses Skip parameter&quot;
+
+    }
+    else
+    {
+      Write-Debug &quot;Get-TestFunctionSkip: $($Test.Name) doesn't use Skip parameter&quot;
+    }
+    return $IsSkipSet
+}
+
+if ($TestFunctions -eq $Null)
+{
+    Write-Error &quot;No function that starts with test.* was found in function: drive. Make sure that $PSUnitTestFile is in the correct path.&quot;
+}
+else
+{
+  $TestStartTime = [DateTime]::Now
+  
+  #Execute each function
+  $TestFunctions | ForEach-Object `
+  { 
+    $CurrentFunction = $_
+    $ExpectedExceptionTypeName = Get-ExpectedExceptionTypeName -Test $CurrentFunction
+    $TestFunctionCategory = Get-TestFunctionCategory -Test $CurrentFunction
+    $TestFunctionSkip = Get-TestFunctionSkip -Test $CurrentFunction
+    
+    if ($TestFunctionSkip)
+    {
+        Report-TestResult -Test $CurrentFunction -Result &quot;SKIP&quot;
+        return
+    }
+    
+    if (($TestFunctionCategory -ne $Category) -and ($Category -ne &quot;All&quot;))
+    {
+        Write-Debug &quot;PSUnit.Run.ps1: Not running `&quot;$($CurrentFunction.Name)`&quot;. Its category is `&quot;$TestFunctionCategory`&quot;, but the required category is `&quot;$Category`&quot;&quot;
+        return
+    }
+
+    Try
+    {
+      $FunctionOutput = Execute-Test $_
+      Report-TestResult -Test $CurrentFunction -Result &quot;PASS&quot;
+    }
+    Catch
+    {            
+      $ActualExceptionTypeName = $_.Exception.GetType().FullName
+      Write-Debug &quot;PSUnit.Run.ps1: Execution of `&quot;$CurrentFunction`&quot; caused following Exception `&quot;$($_.Exception.GetType().FullName)`&quot;&quot;
+      Write-Debug &quot;PSUnit.Run.ps1: ExpectedException = `&quot;$ExpectedExceptionTypeName`&quot;&quot;
+      
+      if ($ActualExceptionTypeName -eq $ExpectedExceptionTypeName)
+      {
+        Report-TestResult -Test $CurrentFunction -Result &quot;PASS&quot;
+      }
+      else
+      {
+        Report-TestResult -Test $CurrentFunction -Result &quot;FAIL&quot; -Reason $_
+      }
+    }
+  }
+  $TestEndTime = [DateTime]::Now
+}
+
+
+function Get-TestResultStatistics([System.Collections.ArrayList] $Results)
+{
+    $Stats = @{}
+    $Stats[&quot;Total&quot;] =0
+    $Stats[&quot;Passed&quot;] = 0
+    $Stats[&quot;Failed&quot;] = 0
+    $Stats[&quot;Skipped&quot;] = 0
+    
+    if(!$Results -or $Results.Count -eq 0)
+    {
+        return $Stats
+    }
+    
+    $Stats[&quot;Total&quot;] = $Results.Count
+    
+    $Results | Foreach-Object `
+    {
+        switch ( $_.Result )
+        {
+            &quot;PASS&quot; {$Stats[&quot;Passed&quot;]++} 
+            &quot;FAIL&quot; {$Stats[&quot;Failed&quot;]++}
+            &quot;SKIP&quot; {$Stats[&quot;Skipped&quot;]++}
+        }
+    }
+    return $Stats
+}
+
+function Get-TestReportFileName([System.Collections.HashTable] $EnvironmentData, [System.Collections.HashTable] $Stats )
+{
+    $StatsTotal = 0
+    $StatsPassed = 0
+    $StatsFailed = 0
+    $StatsSkipped = 0
+    If($Stats.Total) {$StatsTotal = $Stats.Total}
+    If($Stats.Passed) {$StatsPassed = $Stats.Passed}
+    If($Stats.Failed) {$StatsFailed = $Stats.Failed}
+    If($Stats.Skipped) {$StatsSkipped = $Stats.Skipped}
+
+    $StatsFileNamePart = &quot;T{0}P{1}F{2}S{3}&quot; -f $StatsTotal, $StatsPassed, $StatsFailed, $StatsSkipped
+    
+    $StartDateString = $EnvironmentData.StartTime.ToString(&quot;yyyy-MM-dd-HH-mm-ss&quot;)
+    $TestFile = dir $($EnvironmentData.TestFilename)
+    $FileName = $TestFile.Name
+    $TestReportFileName = &quot;PSUnitTestReport_{0}_{1}_{2}.html&quot; -f $FileName, $StartDateString, $StatsFileNamePart
+    Write-Debug &quot;Get-TestReportFileName: `$TestReportFileName = $TestReportFileName&quot;
+
+    return $TestReportFileName
+}
+
+function Get-TestReportTitleAsHtml([System.Collections.HashTable] $EnvironmentData)
+{
+    $TestReportTitle = &quot;PSUnit Test Report - {0} - {1}&quot; -f $EnvironmentData.TestFilename, $EnvironmentData.StartTime
+    $TestReportTitle = Encode-Html -StringToEncode $TestReportTitle
+    return $TestReportTitle
+}
+
+function Compile-TestResultReport()
+{
+    $TestFile = dir $PSUnitTestFile
+    $TestEnvironment[&quot;TestFileName&quot;] = $TestFile.FullName
+    $TestEnvironment[&quot;SourceCodeRevision&quot;] = &quot;Not yet implemeted!&quot;
+    $TestEnvironment[&quot;Category&quot;] = $Category
+    $TestEnvironment[&quot;StartTime&quot;] = $TestEndTime
+    $TestEnvironment[&quot;EndTime&quot;] = $TestEndTime
+    $TestEnvironment[&quot;Duration&quot;] = ($TestEnvironment.EndTime - $TestEnvironment.StartTime).TotalSeconds
+    $TestEnvironment[&quot;UserName&quot;] = $env:username
+    $TestEnvironment[&quot;MachineName&quot;] = $env:computername
+    $TestEnvironment[&quot;PowerShellVersion&quot;] = $host.version.ToString()
+    $OSProperties = get-wmiobject -class &quot;Win32_OperatingSystem&quot; -namespace &quot;root\CIMV2&quot; -computername $env:computername
+    $OperatingSystem = &quot;{0} {1} Build {2}&quot; -f $OSProperties.Caption, $OSProperties.CSDVersion, $OSProperties.BuildNumber
+    $TestEnvironment[&quot;OperatingSystem&quot;] = $OperatingSystem 
+    
+    
+    
+    $Statistics = Get-TestResultStatistics -Results $TestResults
+    
+    $TestReportFileName = Get-TestReportFileName -EnvironmentData $TestEnvironment -Stats $Statistics
+    $TestEnvironment[&quot;TestReportFileName&quot;] = $TestReportFileName
+    
+    $TestReportTitle = Get-TestReportTitleAsHtml -EnvironmentData $TestEnvironment
+    $TestEnvironment[&quot;TestReportTitle&quot;] = $TestReportTitle
+    
+    $ReportHtml = Render-TestResultReport -Results $TestResults -HeaderData $TestEnvironment -Statistics $Statistics
+            
+    #Get PSUNIT_HOME folder
+    $PSUnitHome = dir env:PSUNIT_HOME
+    Write-Debug &quot;PSUNIT_HOME: $PSUnitHome&quot;
+    
+    $TestReportFile = Join-Path -Path $($PSUnitHome.Value) -ChildPath $TestReportFileName
+    
+    #Save report as file in PSUnit Home folder
+    $ReportHtml &gt; $TestReportFile
+    
+    if ($ShowReportInBrowser)
+    {#Open Report File
+        &amp; ($TestReportFile)
+    }
+}
+
+Compile-TestResultReport
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

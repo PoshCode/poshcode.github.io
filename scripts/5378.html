@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="GodEater">
+    <title>DuckDNS Update Script - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>DuckDNS Update Script</h1>
+<h3><a href="//scripts/5378.ps1">download</a> - <a href="//scripts/5377.md">parent</a></h3>
+<p>A pure powershell script to run periodic updates to your DuckDNS IP Address.
+Survives reboots, and writes to windows event log in case of problems.</p>
+<pre><code class="language-posh">#########################################################################
+## DuckDNS Powershell                                                  ##
+## This script needs to be run from an Administrator Powershell prompt ##
+## Otherwise it won't be able to create the Eventlog entry to post     ##
+## problems to.                                                        ##
+#########################################################################
+
+# Make your changes here!
+[string]$MyDomain       = &quot;YOURDOMAIN&quot;
+[string]$MyToken        = &quot;YOURTOKEN&quot;
+# Update interval in minutes
+[int]$MyUpdateInterval  = 5
+
+# Leave $MyIP alone unless you know what you're doing :)
+[string]$MyIP     = &quot;&quot;
+
+# DON'T MAKE CHANGES BELOW THIS LINE
+
+# This scriptblock is the code which does the actual update call to the
+# DuckDNS web service.
+[scriptblock]$UpdateDuckDns = {
+    param(
+        [Parameter(Mandatory=$true,Position=0)]
+        [string]$strUrl
+    )
+    $Encoding = [System.Text.Encoding]::UTF8;
+
+    # Run the call to DuckDNS's website
+    $HTTP_Response = Invoke-WebRequest -Uri $strUrl;
+
+    # Turn the response into english ;)
+    $Text_Response = $Encoding.GetString($HTTP_Response.Content);
+
+    # If the response is anything other than 'OK' then log an error in the windows event log
+    if($Text_Response -ne &quot;OK&quot;){
+        Write-EventLog -LogName Application -Source &quot;DuckDNS Updater&quot; -EntryType Information -EventID 1 -Message &quot;DuckDNS Update failed for some reason. Check your Domain or Token.&quot;;
+    }
+}
+
+# This scriptblock is the code which gets run when the system starts up each time,
+# and is responsible for setting up the job which will repeat every five minutes
+# to update your IP address with DuckDNS
+[scriptblock]$SetupRepeatingJob = {
+    param(
+        [Parameter(Mandatory=$true,Position=0)]
+        [string]$strDomain,
+        [Parameter(Mandatory=$true,Position=1)]
+        [string]$strToken,
+        [Parameter(Mandatory=$true,Position=2)]
+        [int]$iUpdateInterval,
+        [Parameter(Mandatory=$false,Position=3)]
+        [string]$strIP=&quot;&quot;
+    )
+    # Build DuckDNS update URL using supplied domain, token and optional IP parameters
+    $duckdns_url = &quot;https://www.duckdns.org/update?domains=&quot; + $strDomain + &quot;&amp;token=&quot; + $strToken + &quot;&amp;ip=&quot; + $strIP;
+
+    # Set how often we want the job to repeat based on the interval set at the start of the script
+    $RepeatTimeSpan = New-TimeSpan -Minutes $iUpdateInterval;
+
+    # Set the time to start running this job (it will be $iUpdateInterval minutes from now)
+    $At = $(Get-Date) + $RepeatTimeSpan;
+
+    # Create the trigger to start this job
+    $UpdateTrigger = New-JobTrigger -Once -At $At -RepetitionInterval $RepeatTimeSpan -RepeatIndefinitely;
+
+    # Register the job with Windows Task scheduling system
+    Register-ScheduledJob -Name &quot;RunDuckDnsUpdate&quot; -ScriptBlock $UpdateDuckDns -Trigger $UpdateTrigger -ArgumentList @($duckdns_url);
+}
+
+# Check to see if the script is being run under adminstrator credentials, and stop if it's not.
+if(!([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] &quot;Administrator&quot;)){
+    Write-Warning &quot;You need to run this from an Administrator Powershell prompt&quot;
+    Break
+}
+
+# Check to see if the &quot;DuckDNS Updater&quot; event log source already exists,
+# and if it doesn't then create it
+if (!([System.Diagnostics.EventLog]::SourceExists(&quot;DuckDNS Updater&quot;))){
+    New-EventLog  -LogName &quot;Application&quot; -Source &quot;DuckDNS Updater&quot;
+}
+
+# Set the trigger for the bootup task
+$StartTrigger = New-JobTrigger -AtStartup
+
+# Check to see if the user is super advanced and supplied their own IP address or not
+if($MyIP.Length -ne 0){
+    # Register the job that will run when windows first starts with the Windows Task Scheduler service
+    Register-ScheduledJob -Name &quot;StartDuckDnsJob&quot; -ScriptBlock $SetupRepeatingJob -Trigger $StartTrigger -ArgumentList @($MyDomain,$MyToken,$MyUpdateInterval,$MyIP)
+    # Run the actual update job
+    &amp; $SetupRepeatingJob $MyDomain $MyToken $MyUpdateInterval $MyIP
+} else {
+    # Register the job that will run when windows first starts with the Windows Task Scheduler service
+    Register-ScheduledJob -Name &quot;StartDuckDnsJob&quot; -ScriptBlock $SetupRepeatingJob -Trigger $StartTrigger -ArgumentList @($MyDomain,$MyToken,$MyUpdateInterval)
+    # Run the actual update job
+    &amp; $SetupRepeatingJob $MyDomain $MyToken $MyUpdateInterval
+}
+
+Write-Host &quot;All done - your DuckDNS will now update automatically, and will continue to do so across system restarts.&quot;
+Write-Host &quot;Have a nice day!&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

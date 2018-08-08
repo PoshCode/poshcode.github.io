@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="simesch">
+    <title>Copy-Shares - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Copy-Shares</h1>
+<h3><a href="//scripts/4578.ps1">download</a> - <a href="//scripts/4001.md">parent</a></h3>
+<p>This script &quot;copies&quot; shares and share permissions from one computer to another. The drive letter can change between computers, but the path(s) on the drive may not. This script does not copy the data; for that you will need another solution, such as xcopy or a decent SAN that can do it for you. It works on OSes as old as Windows 2000, and at least as new as Server 2008 R2. It probably has a hundred possible improvements.</p>
+<pre><code class="language-posh">&lt;#   
+.SYNOPSIS   
+	Recreates shares and copies share permissions. 
+.DESCRIPTION 
+	Recreates shares and copies share permissions. 
+.NOTES   
+	Name: Copy-Shares
+	Author: Sysiphus
+	DateCreated: 2013:03:06
+	Inspiration: http://poshcode.org/935
+		http://gallery.technet.microsoft.com/scriptcenter/a231026a-3fdb-4190-9915-38d8cd827348
+		http://serverfault.com/questions/9011/creating-a-share-with-permissions-with-windows-powershell
+	Info: This script &quot;copies&quot; shares and share permissions from one computer to another. The drive
+		letter can change between computers, but the path(s) on the drive may not. This script does not
+		copy the data; for that you will need another solution, such as xcopy or a decent SAN that can
+		do it for you. It works on OSes as old as Windows 2000, and at least as new as Server 2008 R2.
+		It probably has a hundred possible improvements.
+	
+.EXAMPLE   
+    Copy-Shares -SourceComputer Oldbox -SourceDrive E -DestComputer Newbox -DestDrive K
+#&gt;  
+Param (
+	[Parameter(
+		Position=0,
+		ValueFromRemainingArguments=$true,
+		HelpMessage=&quot;Name of computer to get shares from, with no domain or slashes.&quot;
+		)]
+	[Alias(&quot;Old&quot;)]
+	[ValidatePattern(&quot;^[^\\]&quot;)]
+	[ValidateNotNullOrEmpty()]
+	[String]$SourceComputer = &quot;OldAndBusted&quot;,
+	
+	[Parameter(
+		Position=1,
+		ValueFromRemainingArguments=$true,
+		HelpMessage=&quot;Source drive letter, with no colon or slash.&quot;
+		)]
+	[ValidatePattern('[^:]$')]
+	[ValidateNotNullOrEmpty()]
+	[String]$SourceDrive = &quot;D&quot;,
+	
+	[Parameter(
+		Position=2,
+		ValueFromRemainingArguments=$true,
+		HelpMessage=&quot;Name of computer to create shares on, with no domain or slashes.&quot;
+		)]
+	[Alias(&quot;New&quot;)]
+	[ValidatePattern(&quot;^[^\\]&quot;)]
+	[ValidateNotNullOrEmpty()]
+	[String]$DestComputer = &quot;NewHotness&quot;,
+	
+	[Parameter(
+		Position=3,
+		ValueFromRemainingArguments=$true,
+		HelpMessage=&quot;Destination drive letter, with no colon or slash.&quot;
+		)]
+	[ValidatePattern('[^:]$')]
+	[ValidateNotNullOrEmpty()]
+	[String]$DestDrive = &quot;F&quot;
+	)
+
+
+#Format the drives to include &quot;:\&quot;. I know there's a much better way to do it out there.
+$SourceDrive = $SourceDrive + &quot;:\&quot;
+$DestDrive =  $DestDrive + &quot;:\&quot;
+
+#Some early WMI queries to establish what needs to be done
+[Array]$SourceShares = Get-WmiObject -ComputerName $SourceComputer -Class Win32_Share -Filter &quot;Type = '0'&quot; # To eliminate all admin and non-disk shares
+[Array]$SourcePerms  = Get-WmiObject -ComputerName $SourceComputer -Class Win32_LogicalShareSecuritySetting
+[Array]$DestShares   = Get-WmiObject -ComputerName $DestComputer   -Class Win32_Share -Filter &quot;Type = '0'&quot; # see http://msdn.microsoft.com/en-us/library/windows/desktop/aa394435%28v=vs.85%29.aspx
+[Array]$DestPerms    = Get-WmiObject -ComputerName $DestComputer   -Class Win32_LogicalShareSecuritySetting
+
+
+#Region Limit to shares on specified source drive, warn on others
+$SourceShareWrongDrive = $SourceShares | Where {$_.Path -notlike &quot;$SourceDrive*&quot;}
+[Array]$SourceShares = $SourceShares | Where {$_.Path -like &quot;$SourceDrive*&quot;}
+If ($SourceShareWrongDrive) {
+	Write-Host -Fore Cyan -No &quot;`nThe following shares are on a different source drive than the one you specified ($SourceDrive):&quot;
+	$SourceShareWrongDrive
+	Write-Host -Fore Cyan &quot;You will need to either do these shares manually, skip them, or re-run the script again for each additional drive.`n&quot;	
+	}
+#EndRegion
+
+#Region Limit to shares with security settings
+#This little line of voodoo gets just the names of $SourceShares, and selects only those which are not in just the names of $SourcePerms
+#Feel free to pick it apart and make it cleaner, I just didn't want four more free variables running amok.
+#I also confess that I do these lines sometimes just to see if they really work...
+[Array]$MissingPerms = $SourceShares | %{$_.Name} | %{ if (($SourcePerms | %{$_.Name}) -notcontains $_) {$_} }
+If ($MissingPerms) {
+	Write-Host -Fore Yellow -No &quot;`nThe following shares do not have share permissions that can be read by a script:&quot;
+	$SourceShares | Where {$MissingPerms -contains $_.Name}
+	Write-Host -Fore Yellow &quot;These shares cannot be processed and will be skipped. To fix this, for each share&quot; `
+	&quot;listed, manually open the Share permissions on the source computer, uncheck and recheck any box, and apply.&quot; `
+	&quot;Rerun this script and it will read the share permissions and work properly. Sadly, I'm not sure why this works.`n&quot;
+		#Update, it works because http://qa.social.technet.microsoft.com/Forums/en-US/winserverpowershell/thread/e9e9c619-ef54-4ce6-a520-202c7a3ffabc
+		#and could probably be scripted around. Ah, well.
+	$SourceShares = $SourceShares | Where {$MissingPerms -notcontains $_.Name}
+	}
+#EndRegion
+
+#Region Don't create shares that already exist
+#Like above, just go with the voodoo...
+[Array]$DuplicateShares = $SourceShares | %{$_.Name} | %{if (($DestShares | %{$_.Name}) -contains $_) {$_} }
+If ($DuplicateShares) {
+	Write-Host -Fore Green &quot;`nDuplicate share(s) found on source and destination computers. You need to fix these manually if this is a problem.&quot;
+	ForEach ($Duplicate in $DuplicateShares) {
+		Write-Host -Fore Green &quot;           Share :&quot; $Duplicate
+		Write-Host -Fore Green &quot;     Source path :&quot; ($SourceShares | where {$_.Name -like $Duplicate}).Path
+		Write-Host -Fore Green &quot;Destination Path :&quot; ($DestShares | where {$_.Name -like $Duplicate}).Path
+		}
+		$SourceShares = $SourceShares | where {$DuplicateShares -notcontains $_.Name}
+	}
+#EndRegion
+
+
+
+#Main bit happens here
+ForEach ($SourceShare in $SourceShares) {
+	#Get the perms that match the share...
+	$SourcePerm = $SourcePerms | Where {$_.Name -like $SourceShare.Name}
+	
+	#And grab its SecurityDescriptor to re-use on the destination share
+	$ShareSecurity = $SourcePerm.GetSecurityDescriptor().Descriptor
+	
+	#Then get the share info, like the (modified) path and other stuff
+	$DestPath = $SourceShare.Path -replace &quot;$SourceDrive\&quot;, $DestDrive
+		#The regex needed the extra &quot;\&quot; in the replacement string and that really bugs me. :-( 
+	$ShareName = $SourceShare.Name
+	If ($SourceShare.MaximumAllowed) {$ShareMax = $SourceShare.MaximumAllowed}
+	Else {[Void]$ShareMax = $null}
+	$ShareDescription = $SourceShare.Description
+	
+	
+	
+	#Then create a new share WMI object on the destination computer's runspace...
+	[wmiclass]$NewShare = &quot;\\$DestComputer\root\cimv2:win32_share&quot;
+	#And create the share there! (Oh, and snag the return value...)
+	Write-Host &quot;Attempting to create the share $ShareName...&quot;
+	$Return = $NewShare.Create($DestPath, $ShareName, 0, $ShareMax, $ShareDescription, $null, $ShareSecurity)
+	#Hint about that line, it is Path, Name, Type (Disk Drive is 0), Max connections, Description,
+	#	Password (null because using user-level security), and Access (a Win32_SecurityDescriptor)
+	
+	#Filter the return value into something readable...
+    Switch ($return.returnvalue) {
+        0 {$ReturnVal = &quot;Success&quot;}
+        2 {$ReturnVal = &quot;Access Denied&quot;}
+        8 {$ReturnVal = &quot;Unknown Failure&quot;}
+        9 {$ReturnVal = &quot;Invalid Name&quot;}
+        10 {$ReturnVal = &quot;Invalid Level&quot;}
+        21 {$ReturnVal = &quot;Invalid Parameter&quot;}
+        22 {$ReturnVal = &quot;Duplicate Share&quot;}
+        23 {$ReturnVal = &quot;Redirected Path&quot;}
+        24 {$ReturnVal = &quot;Unknown Device or Directory&quot;}
+        25 {$ReturnVal = &quot;Net Name Not Found&quot;}
+    	}
+	
+	If ($Return.ReturnValue -eq 0) {
+		Write-Host -Fore Green &quot;Success!&quot;
+		}
+	Else {
+		Write-Host -Fore Yellow &quot;Error&quot; $ReturnVal &quot;creating share&quot; $ShareName &quot;on $DestComputer. Good luck.&quot;
+		}
+	
+	
+	}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

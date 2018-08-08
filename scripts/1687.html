@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Oisin Grehan">
+    <title>partial application - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>partial application</h1>
+<h3><a href="//scripts/1687.ps1">download</a></h3>
+<p>A proof of concept module implementing partial application (not currying) of functions and cmdlets in powershell. This is a functional language technique often used in languages like Haskell, ML etc.</p>
+<pre><code class="language-posh">Set-StrictMode -Version 2
+
+$commonParameters = @(&quot;Verbose&quot;,
+                      &quot;Debug&quot;,
+                      &quot;ErrorAction&quot;,
+                      &quot;WarningAction&quot;,
+                      &quot;ErrorVariable&quot;,
+                      &quot;WarningVariable&quot;,
+                      &quot;OutVariable&quot;,
+                      &quot;OutBuffer&quot;)
+
+&lt;#
+.SYNOPSIS
+    Support function for partially-applied cmdlets and functions.
+#&gt;
+function Get-ParameterDictionary {
+    [outputtype([Management.Automation.RuntimeDefinedParameterDictionary])]
+    [cmdletbinding()]
+    param(
+        [validatenotnull()]
+        [management.automation.commandinfo]$CommandInfo,
+        [validatenotnull()]
+        [management.automation.pscmdlet]$PSCmdletContext = $PSCmdlet
+    )
+    
+    # dictionary to hold dynamic parameters
+    $rdpd = new-object Management.Automation.RuntimeDefinedParameterDictionary
+
+    try {
+        # grab parameters from function
+        if ($CommandInfo.parametersets.count &gt; 1) {
+            $parameters = $CommandInfo.ParameterSets[[string]$CommandInfo.DefaultParameterSet].parameters
+        } else {
+            $parameters = $CommandInfo.parameters.getenumerator() | % {$CommandInfo.parameters[$_.key]}
+        }        
+                
+        $parameters | % {
+            
+            write-verbose &quot;testing $($_.name)&quot;
+                                    
+            # skip common parameters        
+            if ($commonParameters -like $_.Name) {                                  
+                
+                write-verbose &quot;skipping common parameter $($_.name)&quot;
+                
+            } else {
+                
+                $rdp = new-object management.automation.runtimedefinedparameter
+                $rdp.Name = $_.Name
+                $rdp.ParameterType = $_.ParameterType
+                
+                # tag new parameters to match this function's parameterset
+                $pa = new-object system.management.automation.parameterattribute
+                $pa.ParameterSetName = $PSCmdletContext.ParameterSetName
+                $rdp.Attributes.Add($pa)
+                
+                $rdpd.add($_.Name, $rdp)
+            }
+            
+        }
+    } catch {
+    
+        Write-Warning &quot;Error getting parameter dictionary: $_&quot;
+    }
+    
+    # return
+    $rdpd
+}
+
+&lt;#
+.SYNOPSIS
+    Function that accepts a FunctionInfo or CmdletInfo reference and one or more parameters
+    and returns a FunctionInfo bound to those parameter(s) and their value(s.)
+.DESCRIPTION
+    Function that accepts a FunctionInfo or CmdletInfo reference and one or more parameters
+    and returns a FunctionInfo bound to those parameter(s) and their value(s.)
+    
+    Any parameters &quot;merged&quot; into the function are removed from the available parameters for
+    future invocations. Multiple chained merge-parameter calls are permitted.
+.EXAMPLE
+
+    First, we define a simple function:
+    
+    function test {
+        param($a, $b, $c, $d);
+        &quot;a: $a; b: $b; c:$c; d:$d&quot;
+    }
+    
+    Now we merge -b parameter into functioninfo with the static value of 5, returning a new
+    functioninfo:
+    
+    ps&gt; $x = merge-parameter (gcm test) -b 5
+    
+    We execute the new functioninfo with the &amp; (call) operator, passing in the remaining 
+    arguments:
+    
+    ps&gt; &amp; $x -a 2 -c 4 -d 9
+    a: 2; b: 5; c: 4; d: 9
+    
+    Now we merge two new parameters in, -c with the value 3 and -d with 5:
+    
+    ps&gt; $y = merge-parameter $x -c 3 -d 5
+    
+    Again we call $y with the remaining named parameter -a:
+    
+    ps&gt; &amp; $y -a 2
+    a: 2; b: 5; c: 3; d: 5
+.EXAMPLE
+
+    Cmdlets can also be subject to partial application. In this case we create a new
+    function with the returned functioninfo:
+    
+    ps&gt; si function:get-function (merge-parameter (gcm get-command) -commandtype function)
+    ps&gt; get-function
+    &lt;lists all commands of commandtype &quot;function&quot;&gt;            
+.PARAMETER _CommandInfo
+    The FunctionInfo or CmdletInfo into which to merge (apply) parameter(s.)
+    
+    The parameter is named with a leading underscore character to prevent parameter
+    collisions when exposing the targetted command's parameters and dynamic parameters.
+.INPUTS
+    FunctionInfo or CmdletInfo
+.OUTPUTS
+    FunctionInfo
+#&gt;
+function Merge-Parameter {    
+    [OutputType([Management.Automation.FunctionInfo])]
+    [CmdletBinding()]
+    param(
+        [parameter(position=0, mandatory=$true)]
+        [validatenotnull()]
+        [validatescript({
+            ($_ -is [management.automation.functioninfo]) -or `
+            ($_ -is [management.automation.cmdletinfo])
+        })]
+        [management.automation.commandinfo]$_Command
+    )
+    
+    dynamicparam {
+        # strict mode compatible check for parameter
+        if ((test-path variable:_command)) {
+            # attach input functioninfo's parameters to self
+            Get-ParameterDictionary $_Command $PSCmdlet
+        }
+    }
+
+    begin {
+        write-verbose &quot;merge-parameter: begin&quot;
+        
+        # copy our bound parameters, except common ones              
+        $mergedParameters = new-object 'collections.generic.dictionary[string,object]' $PSBoundParameters
+        
+        # remove our parameters, leaving only target function/CommandInfo's args to curry in
+        $mergedParameters.remove(&quot;_Command&quot;) &gt; $null
+        
+        # remove common parameters
+        $commonParameters | % {
+            if ($mergedParameters.ContainsKey($_)) {
+                $mergedParameters.Remove($_)  &gt; $null
+            }
+        }
+    }
+    
+    process {
+        write-verbose &quot;merge-parameter: process&quot;
+        
+        # temporary function name
+        $temp = [guid]::NewGuid()
+
+        $target = $_Command
+
+        # splat our fixed named parameter(s) and then splat remaining args
+        $partial = {
+            [cmdletbinding()]
+            param()
+            
+            # begin dynamicparam
+            dynamicparam
+            {                
+                $targetRdpd = Get-ParameterDictionary $target $PSCmdlet
+        
+                # remove fixed parameters
+                $mergedParameters.keys | % {
+                    $targetRdpd.remove($_) &gt; $null
+                }
+                $targetRdpd
+            }
+            begin {
+                write-verbose &quot;i have $($mergedParameters.count) fixed parameter(s).&quot;
+                write-verbose &quot;i have $($targetrdpd.count) remaining parameter(s)&quot;
+            }
+            # end dynamicparam
+            process {
+                $boundParameters = $PSCmdlet.MyInvocation.BoundParameters
+                
+                # remove common parameters (verbose, whatif etc)
+                $commonParameters | % {
+                    if ($boundParameters.ContainsKey($_)) {
+                        $boundParameters.Remove($_)  &gt; $null
+                    }
+                }
+                
+                # invoke command with fixed parameters and passed parameters (all named)
+                . $target @mergedParameters @boundParameters
+                
+                if ($args) {
+                    write-warning &quot;received $($args.count) arg(s) not part of function.&quot;
+                }
+            }
+        }
+        
+        # emit function/CommandInfo
+        new-item -Path function:$temp -Value $partial.GetNewClosure()
+    }
+    
+    end {
+        # cleanup
+        rm function:$temp
+    }    
+}
+
+new-alias papp Merge-Parameter -force
+
+Export-ModuleMember -Alias papp -Function Merge-Parameter, Get-ParameterDictionary
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

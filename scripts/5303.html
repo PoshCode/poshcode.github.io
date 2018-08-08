@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="kobric">
+    <title>Get-DriveGeometry - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-DriveGeometry</h1>
+<h3><a href="//scripts/5303.ps1">download</a></h3>
+<p>From my useful scripts collection. The script author is greg zakharov.</p>
+<pre><code class="language-posh">function Get-DriveGeometry {
+  &lt;#
+    .NOTES
+        Author: greg zakharov
+        
+        If you have enough rights the simplest way to get drive geometry will be using
+        Win32_DiskDrive, for example:
+        $param = @'
+          Model,
+          DeviceID,
+          MediaType,
+          TotalCylinders,
+          TracksPerCylinder,
+          SectorsPerTrack, 
+          BytesPerSector,
+          Size
+        '@
+        ([wmisearcher]&quot;SELECT $($param) FROM Win32_DiskDrive&quot;).Get() | select -First 1
+  #&gt;
+  
+  begin {
+    $cd = [AppDomain]::CurrentDomain
+    $attr = 'AnsiClass, Class, Public, SequentialLayout, Sealed, BeforeFieldInit'
+    #get required pinvoke functions
+    $assm = $cd.GetAssemblies() | ? {
+      $_.ManifestModule.ScopeName.Equals('System.dll') -or
+      $_.ManifestModule.ScopeName.Equals('System.Data.dll')
+    }
+    
+    $CreateFile = $assm[0].GetType(
+      'Microsoft.Win32.UnsafeNativeMethods'
+    ).GetMethod('CreateFile', [Reflection.BindingFlags]44)
+    
+    $DeviceIoControl = $assm[1].GetType(
+      'System.Data.SqlTypes.UnsafeNativeMethods'
+    ).GetMethod('DeviceIoControl', [Reflection.BindingFlags]44)
+    #define structure
+    if (!($cd.GetAssemblies() | ? {
+      $_.Fullname.Contains('DiskGeometry')
+    })) {
+      $type = (($cd.DefineDynamicAssembly(
+        (New-Object Reflection.AssemblyName('DiskGeometry')), [Reflection.Emit.AssemblyBuilderAccess]::Run
+      )).DefineDynamicModule('DiskGeometry', $false)).DefineType('DISK_GEOMETRY', $attr)
+      [void]$type.DefineField('Cylinders',         [Int64], 'Public')
+      [void]$type.DefineField('MediaType',         [Byte],  'Public')
+      [void]$type.DefineField('TracksPerCylinder', [Int32], 'Public')
+      [void]$type.DefineField('SectorsPerTrack',   [Int32], 'Public')
+      [void]$type.DefineField('BytesPerSector',    [Int32], 'Public')
+      $global:DISK_GEOMETRY = $type.CreateType()
+    }
+    #get model of drive
+    $key = 'HKLM:\SYSTEM\CurrentControlSet'
+    $geo = @{
+      'Model' = (
+        gp (Join-Path $key ( 'Enum\' + (gp (Join-Path $key 'Services\Disk\Enum')).('0')))
+      ).FriendlyName;
+      'DeviceID' = '\\.\PhysicalDrive0';
+    }
+    #media types
+    $mt = @(
+      'Unknown',
+      'F5_1Pt2_512',
+      'F3_1Pt44_512',
+      'F3_2Pt88_512',
+      'F3_20Pt8_512',
+      'F3_720_512',
+      'F5_360_512',
+      'F5_320_512',
+      'F5_320_1024',
+      'F5_180_512',
+      'F5_160_512',
+      'RemovableMedia',
+      'FixedMedia',
+      'F3_120M_512',
+      'F3_640_512',
+      'F5_640_512',
+      'F5_720_512',
+      'F3_1Pt2_512',
+      'F3_1Pt23_1024',
+      'F5_1Pt23_1024',
+      'F3_128Mb_512',
+      'F3_230Mb_512',
+      'F8_256_128',
+      'F3_200Mb_512',
+      'F3_240M_512',
+      'F3_32M_512'
+    )
+  }
+  process {
+    $hndl = $CreateFile.Invoke(
+      $null, @($geo['DeviceID'], 0, 3, [IntPtr]::Zero, 3, 0, [IntPtr]::Zero)
+    )
+    if (!$hndl.IsInvalid) {
+      [UInt32]$dgs = [Runtime.InteropServices.Marshal]::SizeOf($DISK_GEOMETRY)
+      $dgp = [Runtime.InteropServices.Marshal]::AllocHGlobal($dgs)
+      
+      [UInt32]$IOCTL_DISK_GET_DRIVE_GEOMETRY = 0x00070000
+      [UInt32]$ret = 0
+      
+      if ($DeviceIoControl.Invoke(
+        $null, @(
+          [Microsoft.Win32.SafeHandles.SafeFileHandle]$hndl,
+          $IOCTL_DISK_GET_DRIVE_GEOMETRY, [IntPtr]::Zero, [UInt32]0, $dgp, $dgs, $ret, [IntPtr]::Zero
+        )
+      )) {
+        $dg = [Activator]::CreateInstance($DISK_GEOMETRY)
+        [Runtime.InteropServices.Marshal]::PtrToStructure($dgp, $dg)
+        
+        $dg | gm -MemberType Property | % {$i = 1}{
+          if ($_.Name -ne 'MediaType') {
+            $geo[$_.Name] = $dg.($_.Name)
+            $i *= $dg.($_.Name)
+          }
+          else {
+            $geo[$_.Name] = $mt[$dg.($_.Name)]
+          }
+        }
+        $geo['DiskSize'] = $i
+      }
+      
+      [Runtime.InteropServices.Marshal]::FreeHGlobal($dgp)
+    }
+    $hndl.Close()
+  }
+  end { $geo }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

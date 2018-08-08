@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BSonPosh">
+    <title>Get-TopProcess - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-TopProcess</h1>
+<h3><a href="//scripts/1225.ps1">download</a></h3>
+<p>Returns the top processes by CPU usage</p>
+<pre><code class="language-posh">
+param( 
+    [string] $sortCriteria = &quot;Processor&quot;, 
+    [int] $Count = 5
+    ) 
+
+function main 
+{ 
+    ## Store the performance counters we need 
+    ## for the CPU, and Disk I/O numbers 
+    $cpuPerfCounters = @{} 
+    $ioOtherOpsPerfCounters = @{} 
+    $ioOtherBytesPerfCounters = @{} 
+    $ioDataOpsPerfCounters = @{} 
+    $ioDataBytesPerfCounters = @{} 
+    $processes = $null 
+    $lastPoll = get-date 
+     
+    $lastSnapshotCount = 0 
+    $lastWindowHeight = 0 
+     
+    $processes = get-process | sort Id 
+
+    ## Go through all of the processes we captured 
+    foreach($process in $processes) 
+    { 
+        ## Get the disk activity, based on I/O Perf Counters, 
+        ## for the process in question.  Then, add it as a note.
+        $cpuPercent = @(for($i=0;$i -lt 10;$i++)
+        { 
+            get-cpuPercent $process
+        }) | measure-object -average 
+        
+        [int]$Percent = $cpuPercent.Average
+        #$process | add-member NoteProperty Disk $activity  -force
+        $process | add-member NoteProperty Processor $Percent -force
+
+     } 
+     
+     $output = $processes | sort -desc $sortCriteria | select -first  $Count
+     $output | format-table Id,ProcessName,MainWindowTitle,WorkingSet 
+         
+} 
+
+## As a heuristic, gets the total IO and Data operations per second, and 
+## returns their sum. 
+function get-diskActivity ( 
+    $process = $(throw &quot;Please specify a process for which to get disk usage.&quot;) 
+    ) 
+{ 
+    $processName = get-processName $process 
+     
+    ## We store the performance counter objects in a hashtable.  If we don't, 
+    ## then they fail to return any information for a few seconds. 
+    if(-not $ioOtherOpsPerfCounters[$processName]) 
+    { 
+        $ioOtherOpsPerfCounters[$processName] = new-object System.Diagnostics.PerformanceCounter(&quot;Process&quot;,&quot;IO Other Operations/sec&quot;,$processName)
+    } 
+    if(-not $ioOtherBytesPerfCounters[$processName]) 
+    { 
+        $ioOtherBytesPerfCounters[$processName] = new-object System.Diagnostics.PerformanceCounter(&quot;Process&quot;,&quot;IO Other Bytes/sec&quot;,$processName) 
+    } 
+    if(-not $ioDataOpsPerfCounters[$processName]) 
+    { 
+        $ioDataOpsPerfCounters[$processName] = new-object System.Diagnostics.PerformanceCounter(&quot;Process&quot;,&quot;IO Data Operations/sec&quot;,$processName)
+    } 
+    if(-not $ioDataBytesPerfCounters[$processName]) 
+    { 
+        $ioDataBytesPerfCounters[$processName] = new-object System.Diagnostics.PerformanceCounter(&quot;Process&quot;,&quot;IO Data Bytes/sec&quot;,$processName)
+    } 
+
+
+    ## If a process exits between the time we capture the processes and now, 
+    ## then we will be unable to get its NextValue().  This trap simply 
+    ## catches the error and continues. 
+    trap { continue; } 
+
+    ## Get the performance counter values 
+    $ioOther = (100 * $ioOtherOpsPerfCounters[$processName].NextValue()) + ($ioOtherBytesPerfCounters[$processName].NextValue()) 
+    $ioData = (100 * $ioDataOpsPerfCounters[$processName].NextValue()) + ($ioDataBytesPerfCounters[$processName].NextValue()) 
+     
+    return [int] ($ioOther + $ioData)     
+} 
+
+## Get the percentage of time spent by a process. 
+## Note: this is multiproc &quot;unaware.&quot;  We need to divide the 
+## result by the number of processors. 
+function get-cpuPercent ( 
+    $process = $(throw &quot;Please specify a process for which to get CPU usage.&quot;) 
+    ) 
+{ 
+    $processName = get-processName $process 
+     
+    ## We store the performance counter objects in a hashtable.  If we don't, 
+    ## then they fail to return any information for a few seconds. 
+    if(-not $cpuPerfCounters[$processName]) 
+    { 
+        $cpuPerfCounters[$processName] = new-object System.Diagnostics.PerformanceCounter(&quot;Process&quot;,&quot;% Processor Time&quot;,$processName)
+    } 
+
+    ## If a process exits between the time we capture the processes and now, 
+    ## then we will be unable to get its NextValue().  This trap simply 
+    ## catches the error and continues. 
+    trap { continue; } 
+
+    ## Get the performance counter values 
+    $cpuTime = ($cpuPerfCounters[$processName].NextValue() / $env:NUMBER_OF_PROCESSORS) 
+    return [int] $cpuTime 
+} 
+
+## Performance counters are keyed by process name.  However, 
+## processes may share the same name, so duplicates are named 
+## &lt;process&gt;#1, &lt;process&gt;#2, etc. 
+function get-processName ( 
+    $process = $(throw &quot;Please specify a process for which to get the name.&quot;) 
+    ) 
+{ 
+    ## If a process exits between the time we capture the processes and now, 
+    ## then we will be unable to get its information.  This simply 
+    ## ignores the error. 
+    $errorActionPreference = &quot;SilentlyContinue&quot; 
+
+    $processName = $process.ProcessName 
+    $localProcesses = get-process -ProcessName $processName | sort Id 
+     
+    if(@($localProcesses).Count -gt 1) 
+    { 
+        ## Determine where this one sits in the list 
+        $processNumber = -1 
+        for($counter = 0; $counter -lt $localProcesses.Count; $counter++) 
+        { 
+            if($localProcesses[$counter].Id -eq $process.Id) { break } 
+        } 
+         
+        ## Append its unique identifier, if required 
+        $processName += &quot;#$counter&quot; 
+    } 
+     
+    return $processName 
+} 
+
+. main
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

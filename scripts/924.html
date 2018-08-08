@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="glnsize">
+    <title>Get-NaCifs - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-NaCifs</h1>
+<h3><a href="//scripts/924.ps1">download</a></h3>
+<p>Get detailed information on every CIFS share on a NetApp Filer.  Function requires the NetApp Manage OnTap SDK 3.5.
+~Glenn</p>
+<pre><code class="language-posh"># Glenn Sizemore www . Get-Admin . Com
+# Requires the NetApp OnTap SDK v3.5
+#
+# Will connect to the destination Filer and retrieve detailed information on every
+# Cifs share.  This function will not retrieve permissions.
+#
+# Usage:
+# Connect to the filler
+# $Filer = 'TOASTER'
+# $NetApp = New-Object NetApp.Manage.NaServer($filer,1,0)
+# $NetApp.SetAdminUser(UserName,Password)
+#
+# Call the function
+# Get-NaCifs -Server $NetApp
+Function Get-NaCifs {
+    Param(
+        [NetApp.Manage.NaServer]$Server
+    )
+    Process {
+        # Establish a connection and prepair to iterate through all shares.
+        $NaElement = New-Object NetApp.Manage.NaElement(&quot;cifs-share-list-iter-start&quot;)
+        $results = $Server.InvokeElem($naelement)
+        $Tag = $results.GetChildContent(&quot;tag&quot;)  
+        $RecordReturned = $results.GetChildContent(&quot;records&quot;)
+        
+        $processing=$true
+        $increment = 50 #How many records should we process at a time
+        # Loop until we get all shares
+        While ($processing) {
+            $NaElement = New-Object NetApp.Manage.NaElement(&quot;cifs-share-list-iter-next&quot;)
+            $NaElement.AddNewChild(&quot;maximum&quot;,$increment)
+            $NaElement.AddNewChild(&quot;tag&quot;,$Tag)
+            $results = $Server.InvokeElem($naelement)
+            $RecordReturned = $results.GetChildContent(&quot;records&quot;)
+            IF ($RecordReturned -eq 0) {
+                break
+            } else {
+                Foreach ($share in $results.GetChildByName(&quot;cifs-shares&quot;).GetChildren()) {
+                    $S = &quot;&quot; | Select @{
+                        N='Name'
+                        E={$share.GetChildContent(&quot;share-name&quot;)}
+                    }, @{
+                        N='Path'
+                        E={$share.GetChildContent(&quot;mount-point&quot;)}
+                    }
+                    # From here on out we'll use add-member because default shares
+                    # Won't contain any of these properties.
+                    switch($share) {
+                        {$_.GetChildByName(&quot;caching&quot;)}
+                            {
+                                $S|Add-Member 'NoteProperty' 'Caching' $_.GetChildContent(&quot;caching&quot;)
+                            }
+                        {$_.GetChildByName(&quot;description&quot;)}
+                            {
+                                $S|Add-Member 'NoteProperty' 'Description' $_.GetChildContent(&quot;description&quot;)
+                            }
+                        {$_.GetChildByName(&quot;dir-umask&quot;)}
+                            {
+                                $S|Add-Member 'NoteProperty' 'DirUmask' $_.GetChildContent(&quot;dir-umask&quot;)
+                            }
+                        {$_.GetChildByName(&quot;file-umask&quot;)}
+                            {
+                                $S|Add-Member 'NoteProperty' 'FileUmask' $_.GetChildContent(&quot;file-umask&quot;)
+                            }
+                        {$_.GetChildByName(&quot;forcegroup&quot;)}
+                            {
+                                $S|Add-Member 'NoteProperty' 'Forcegroup' $_.GetChildContent(&quot;forcegroup&quot;)
+                            }
+                        {$_.GetChildByName(&quot;is-access-based-enum&quot;)}
+                            {
+                                $S|Add-Member 'NoteProperty' 'ABE' $true
+                            }
+                        {$_.GetChildByName(&quot;is-symlink-strict-security&quot;)}
+                            {
+                                if ($_.GetChildContent(&quot;is-symlink-strict-security&quot;) -eq &quot;false&quot;) {
+                                    $S|Add-Member 'NoteProperty' 'SymlinkStrictSecurity' $False
+                                }
+                            }
+                        {$_.GetChildByName(&quot;is-vol-offline&quot;)}
+                            {
+                                IF ($_.GetChildContent(&quot;is-vol-offline&quot;) -eq &quot;true&quot;) {
+                                    $S|Add-Member 'NoteProperty' 'VolOffline' $true
+                                }
+                            }
+                        {$_.GetChildByName(&quot;is-vscan&quot;)}
+                            {
+                                IF ($_.GetChildContent(&quot;is-vscan&quot;) -eq &quot;true&quot;) {
+                                    $S|Add-Member 'NoteProperty' 'VirusScanOnOpen' $True 
+                                }
+                            }
+                        {$_.GetChildByName(&quot;is-vscanread&quot;)}
+                            {
+                                IF ($_.GetChildContent(&quot;is-vscanread&quot;) -eq &quot;true&quot;) {
+                                    $S|Add-Member 'NoteProperty' 'VirusScanOnRead' $True 
+                                }
+                               
+                            }
+                        {$_.GetChildByName(&quot;is-widelink&quot;)}
+                            {
+                                IF ($_.GetChildContent(&quot;is-widelink&quot;) -eq &quot;true&quot;) {
+                                    $S|Add-Member 'NoteProperty' 'WideLink' $True 
+                                }
+                            }
+                        {$_.GetChildByName(&quot;maxusers&quot;)}
+                            {
+                                $S|Add-Member 'NoteProperty' 'MaxUsers' $_.GetChildContent(&quot;maxusers&quot;)
+                            }
+                        {$_.GetChildByName(&quot;umask&quot;)}
+                            {
+                                $S|Add-Member 'NoteProperty' 'Umask' $_.GetChildContent(&quot;umask&quot;)
+                            }
+                    }
+                    Write-Output $S
+                }
+            }
+        }
+        $NaElement = New-Object NetApp.Manage.NaElement(&quot;cifs-share-list-iter-end&quot;)
+        $NaElement.AddNewChild(&quot;tag&quot;,$Tag)
+        [VOID]$Server.InvokeElem($naelement)
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

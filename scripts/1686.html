@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Stuart McHugh">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/1686.ps1">download</a></h3>
+<p>PowerCLI to upgrade guests tools, hardware and record to CSV</p>
+<pre><code class="language-posh">
+Function PowerOn-VM($vm){
+
+	Start-VM -VM $vm -Confirm:$false -RunAsync | Out-Null
+	
+		do {
+			$vmview = get-VM $vm | Get-View
+			$status = $vmview.Guest.ToolsStatus
+	
+				Write-Host $vm is starting! -ForegroundColor Yellow
+				sleep 5
+	
+		}until(($status -match &quot;toolsOld&quot;) -or ($status -match &quot;toolsOk&quot;))
+		
+		if ($status -match &quot;Ok&quot;){
+			$Startup = &quot;Ok&quot;}
+		elseif($status -match &quot;toolsOld&quot;){
+			$Startup = &quot;ToolsOld&quot;}
+		else{
+			$Startup = &quot;Not Ready&quot;}
+		
+		return $Startup
+
+}
+
+Function PowerOff-VM($vm){
+		
+		sleep 20
+		Shutdown-VMGuest -VM $vm -Confirm:$false | Out-Null
+					
+			do {
+				$vmview = Get-VM $vm | Get-View
+				$status = $vmview.Guest.ToolsStatus
+	
+					Write-Host $vm is stopping! -ForegroundColor Yellow
+					sleep 5
+	
+			}until($status -match &quot;toolsNotRunning&quot;) 
+			if ($status -match &quot;toolsNotRunning&quot;){
+			$Shutdown = &quot;Ok&quot;}
+			else{
+			$Shutdown = &quot;Not Ready&quot;}
+			return $Shutdown	
+}
+
+Function Check-ToolsStatus($vm){
+
+	$vmview = get-VM $vm | Get-View
+	$status = $vmview.Guest.ToolsStatus
+
+		if ($status -match &quot;toolsOld&quot;){
+			$vmTools = &quot;Old&quot;}
+		elseif($status -match &quot;toolsNotRunning&quot;){
+			$vmTools = &quot;Not Running&quot;}
+		else{
+			$vmTools = &quot;Ok&quot;}
+		return $vmTools
+}
+
+Function Check-VMHardwareVersion($vm){
+	$vmView = get-VM $vm | Get-View
+	$vmVersion = $vmView.Config.Version
+	$v4 = &quot;vmx-04&quot;
+	$v7 = &quot;vmx-07&quot;
+	
+		if ($vmVersion -eq $v4){
+			$vmHardware = &quot;Old&quot;}
+		elseif($vmVersion -eq $v7){
+			$vmHardware = &quot;Ok&quot;}		
+		else{Write-Host &quot;Error!!&quot; -ForegroundColor Red
+			$vmHardware = &quot;Error&quot;}
+		
+		return $vmHardware
+}
+
+Function Upgrade-VMHardware($vm){
+
+	$vmview = Get-VM $vm | Get-View
+	$vmVersion = $vmView.Config.Version
+	$v4 = &quot;vmx-04&quot;
+	$v7 = &quot;vmx-07&quot;
+
+		if ($vmVersion -eq $v4){
+			Write-Host &quot;Version 4 detected&quot; -ForegroundColor Red
+			
+			# Update Hardware
+			Write-Host &quot;Upgrading Hardware on&quot; $vm -ForegroundColor Yellow
+			Get-View ($vmView.UpgradeVM_Task($v7)) | Out-Null
+	}	
+}
+
+Function CreateBeforeList{
+
+Write-Host &quot;Creating a CSV File with VM info&quot; -ForegroundColor Yellow
+
+$MyCol = @()
+   ForEach ($vm in Get-Folder $Folder | Get-VM )
+   {
+   	$vmview = get-VM $vm | Get-View
+   
+      $myObj = &quot;&quot; | Select Host, VMName, PowerState, IPAddress, MacAddress, Nics, VMToolsVersion, VMToolsStatus, VMToolsRunningStatus
+      $myObj.Host = $VM.Host.Name
+      $myObj.VMName = $VM.Name
+      $myObj.PowerState = $VM.PowerState
+	  $myObj.IPAddress = [String]($vmview.Guest.Net| ForEach {$_.IpAddress})
+      $myObj.MacAddress = [String]($vmview.Guest.Net | ForEach {$_.MacAddress})
+	  $myObj.Nics = $vmview.Guest.Net.Count
+	  $myObj.VMToolsVersion = $vmview.Config.Tools.ToolsVersion
+	  $myObj.VMToolsStatus = $vmview.Guest.ToolsStatus
+	  $myObj.VMToolsRunningStatus = $vmview.Guest.ToolsRunningStatus
+	  
+      $myCol += $myObj
+    }
+	$myCol | Export-Csv C:\beforeHWchange.csv -NoTypeInformation 
+}
+
+Function CreateAfterList{
+
+Write-Host &quot;Creating a CSV and an Excel File with VM info&quot; -ForegroundColor Yellow
+
+$xlCSV = 6
+$xlXLS = 56
+$csvfile = &quot;C:\afterHWchange.csv&quot;
+$xlsfile = &quot;C:\afterHWchange.xls&quot;
+
+$Excel = New-Object -ComObject Excel.Application
+$Excel.visible = $True
+$Excel = $Excel.Workbooks.Add()
+
+$Sheet = $Excel.Worksheets.Item(1)
+$Sheet.Cells.Item(1,1) = &quot;VMName&quot;
+$Sheet.Cells.Item(1,2) = &quot;IPAddress&quot;
+$Sheet.Cells.Item(1,3) = &quot;Settings&quot;
+
+$intRow = 2
+
+$WorkBook = $Sheet.UsedRange
+$WorkBook.Interior.ColorIndex = 19
+$WorkBook.Font.ColorIndex = 11
+$WorkBook.Font.Bold = $True
+
+
+$import = Import-Csv &quot;C:\beforeHWchange.csv&quot;
+$vms = Get-Folder $Folder | Get-VM 
+
+foreach($vm in $vms){
+	$vmview = $vm | Get-View
+
+	foreach($item in $import){
+	$oldIp = $item.IPAddress
+	$newIP = $vm.Guest.IPAddress
+
+
+		if($item.VMName -eq $vm){
+			if($oldIp -eq $newIP){
+				
+				$Sheet.Cells.Item($intRow, 1) = [String]$vmview.Name 
+				$Sheet.Cells.Item($intRow, 2) = [String]$vm.Guest.IPAddress
+				$Sheet.Cells.Item($intRow, 3) = &quot;Good&quot;
+				$Sheet.Cells.Item($intRow, 3).Interior.ColorIndex = 4
+				}
+				else{
+				$Sheet.Cells.Item($intRow, 1) = [String]$vmview.Name 
+				$Sheet.Cells.Item($intRow, 2) = [String]$vm.Guest.IPAddress
+				$Sheet.Cells.Item($intRow, 3) = &quot;Wrong&quot;
+				$Sheet.Cells.Item($intRow, 3).Interior.ColorIndex = 3
+				
+				}
+		}
+	}
+
+
+$intRow = $intRow + 1}
+
+$WorkBook.EntireColumn.AutoFit()
+
+sleep 5
+
+$Sheet.SaveAs($xlsfile,$xlXLS)
+$Sheet.SaveAs($csvfile,$xlCSV) 
+
+}
+
+Function CreateAfterListreboot{
+
+Write-Host &quot;Creating a CSV and an Excel File with VM info&quot; -ForegroundColor Yellow
+
+$xlCSV = 6
+$xlXLS = 56
+$csvfile = &quot;C:\afterHWchangeRB.csv&quot;
+$xlsfile = &quot;C:\afterHWchangeRB.xls&quot;
+
+$Excel = New-Object -ComObject Excel.Application
+$Excel.visible = $True
+$Excel = $Excel.Workbooks.Add()
+
+$Sheet = $Excel.Worksheets.Item(1)
+$Sheet.Cells.Item(1,1) = &quot;VMName&quot;
+$Sheet.Cells.Item(1,2) = &quot;IPAddress&quot;
+$Sheet.Cells.Item(1,3) = &quot;Settings&quot;
+
+$intRow = 2
+
+$WorkBook = $Sheet.UsedRange
+$WorkBook.Interior.ColorIndex = 19
+$WorkBook.Font.ColorIndex = 11
+$WorkBook.Font.Bold = $True
+
+
+$import = Import-Csv &quot;C:\beforeHWchange.csv&quot;
+$vms = Get-Folder $Folder | Get-VM 
+
+foreach($vm in $vms){
+	$vmview = $vm | Get-View
+
+	foreach($item in $import){
+	$oldIp = $item.IPAddress
+	$newIP = $vm.Guest.IPAddress
+
+
+		if($item.VMName -eq $vm){
+			if($oldIp -eq $newIP){
+				
+				$Sheet.Cells.Item($intRow, 1) = [String]$vmview.Name 
+				$Sheet.Cells.Item($intRow, 2) = [String]$vm.Guest.IPAddress
+				$Sheet.Cells.Item($intRow, 3) = &quot;Good&quot;
+				$Sheet.Cells.Item($intRow, 3).Interior.ColorIndex = 4
+				}
+				else{
+				$Sheet.Cells.Item($intRow, 1) = [String]$vmview.Name 
+				$Sheet.Cells.Item($intRow, 2) = [String]$vm.Guest.IPAddress
+				$Sheet.Cells.Item($intRow, 3) = &quot;Wrong&quot;
+				$Sheet.Cells.Item($intRow, 3).Interior.ColorIndex = 3
+				
+				}
+		}
+	}
+
+
+$intRow = $intRow + 1}
+
+$WorkBook.EntireColumn.AutoFit()
+
+sleep 5
+
+$Sheet.SaveAs($xlsfile,$xlXLS)
+$Sheet.SaveAs($csvfile,$xlCSV) 
+
+}
+
+$vCenter = &quot;vCenterServer&quot;
+$Folder = &quot;FolderNAme&quot;
+Connect-VIServer $vCenter 
+
+$vms = Get-Folder $Folder | Get-VM  | Get-View | Where-Object {-not $_.config.template -and $_.Config.Version -eq &quot;vmx-04&quot; } | Select Name
+
+CreateBeforeList
+
+foreach($item in $vms){	
+		$vm = $item.Name
+		$vmHardware = Check-VMHardwareVersion $vm
+		$vmToolsStatus = Check-ToolsStatus $vm
+		
+			Write-Host &quot;Hardware is old on:&quot; $vm -ForegroundColor Red
+
+					if($vmToolsStatus -eq &quot;Old&quot;){
+							Write-Host &quot;The VMware Tools are old on:&quot; $vm -ForegroundColor Red
+							Sleep 20
+ 							
+							Get-VMGuest $vm | Update-Tools
+							Sleep 120
+							Write-Host &quot;VMware Tools are installed on:&quot; $vm -ForegroundColor Cyan
+								
+								$vmToolsStatus = Check-ToolsStatus $vm
+							
+								if($vmToolsStatus -eq &quot;Ok&quot;){
+									
+									$PowerOffVM = PowerOff-VM $vm
+									if($PowerOffVM -eq &quot;Ok&quot;){
+										Write-Host $vm &quot;is down&quot; -ForegroundColor Yellow
+										
+										Upgrade-VMHardware $vm
+										PowerOn-VM $vm
+										Write-Host $vm &quot;is up to date&quot; -ForegroundColor Green
+									}
+								}
+					
+					}
+					else{
+						$PowerOffVM = PowerOff-VM $vm
+						if($PowerOffVM -eq &quot;Ok&quot;){
+							Upgrade-VMHardware $vm
+							PowerOn-VM $vm
+							Write-Host $vm &quot;is up to date&quot; -ForegroundColor Green
+							
+						}	
+					}
+}
+
+Sleep 40
+
+CreateAfterList
+
+Get-Folder $Folder | Get-VM | Restart-VMGuest -Confirm:$false
+
+Sleep 300
+
+CreateAfterListreboot
+
+Disconnect-VIServer -Confirm:$false			
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Halkan">
+    <title>Get-DiskUsage - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-DiskUsage</h1>
+<h3><a href="//scripts/3904.ps1">download</a> - <a href="//scripts/3903.md">parent</a></h3>
+<p>A function/CMDlet that simulates the DU command in Linux/Unix. Descriptions are provided in the Help entry for this module.</p>
+<pre><code class="language-posh">Function Get-DiskUsage {
+
+&lt;#
+
+.SYNOPSIS
+A tribute to the excellent Unix command DU.
+
+.DESCRIPTION
+This command will output the full path and the size of any object 
+and it's subobjects. Using just the Get-DiskUsage command without 
+any parameters will result in an output of the directory you are 
+currently placed in and it's subfolders.
+
+.PARAMETER Path
+If desired a path can be specified with the Path parameter. In no path
+is specified $PWD will be used.
+
+.PARAMETER h
+the -h paramater is the same as -h in Unix. It will list the folders 
+and subfolders in the most appropriate unit depending on the size 
+(i.e. Human Readable).
+
+.PARAMETER l
+The -l paramater will add the largest file to the end of the output.
+
+.PARAMETER Sort
+Allows you to sort by Folder or Size. If none i specified the default
+of Folder will be used.
+
+.PARAMETER Depth
+Depth will allow you to specify a maximum recursion depth. A depth 
+of 1 would return the immediate subfolders under the root. 
+
+.PARAMETER Force
+Works the same way as Get-ChildItem -force.
+
+.PARAMETER Descending
+Works the same way as Sort-Object -descending.
+
+.LINK 
+http://www.donthaveasite.nu
+
+.NOTES
+Author: Jonas Hallqvist
+Developed with Powershell v3
+
+#&gt;
+
+    [CmdletBinding(
+        SupportsShouldProcess=$True
+    )]
+
+    param (
+        [String]$Path=$PWD,
+        [Switch]$h,
+        [Switch]$l,
+        [String]$Sort=&quot;Folder&quot;,
+        [Int]$Depth,
+        [Switch]$Force,
+        [Switch]$Descending
+    )
+
+    $ErrorActionPreference = &quot;silentlycontinue&quot;
+
+    function HumanReadable {
+        param ($size)
+        switch ($size) {
+            {$_ -ge 1PB}{&quot;{0:#'P'}&quot; -f ($size / 1PB); break}
+            {$_ -ge 1TB}{&quot;{0:#'T'}&quot; -f ($size / 1TB); break}
+            {$_ -ge 1GB}{&quot;{0:#'G'}&quot; -f ($size / 1GB); break}
+            {$_ -ge 1MB}{&quot;{0:#'M'}&quot; -f ($size / 1MB); break}
+            {$_ -ge 1KB}{&quot;{0:#'K'}&quot; -f ($size / 1KB); break}
+            default {&quot;{0}&quot; -f ($size) + &quot;B&quot;}
+        }
+    }
+
+    function LargestFolder {
+        if ($h) {
+            $large = ($results | Sort-Object -Property Size -Descending)[0] | Format-Table @{Label=&quot;Size&quot;;Expression={HumanReadable $_.Size};Align=&quot;Right&quot;},Folder  -AutoSize -HideTableHeaders
+            Write-host &quot;Largest Folder is:&quot; -NoNewline
+            $large
+        }
+        else {
+            $large = ($results | Sort-Object -Property Size -Descending)[0] | Format-Table @{Label=&quot;Size&quot;;Expression={&quot;$($_.Size)B&quot;};Align=&quot;Right&quot;},Folder -AutoSize -HideTableHeaders
+            Write-host &quot;Largest Folder is:&quot; -NoNewline
+            $large
+        }
+    }
+
+    function Max-Depth {
+        param(
+            [String]$Path = '.',
+            [String]$Filter = '*',
+            [Int]$Level = 0,
+            [Switch]$Force,
+            [Switch]$Descending,
+            [int]$i=0
+        )
+        $results=@()
+        $root = (Resolve-Path $Path).Path
+ 
+        if ($root -notmatch '\\$') {$root += '\'}
+ 
+        if (Test-Path $root -PathType Container) {
+ 
+            do {
+                [String[]]$_path += $root + &quot;$Filter&quot;
+                $Filter = '*\' + $Filter
+                $i++
+            } 
+            until ($i -eq $Level)
+ 
+            $dirs=Get-ChildItem -directory $_path -Force:$Force
+    
+            foreach ($dir in $dirs) {
+                $size = 0
+                $size += (gci $dir.Fullname -recurse | Measure-Object -Property Length -Sum).Sum
+                $results += New-Object psobject -Property @{Folder=$dir.fullname;Size=$size}
+            }
+            if ($h) {
+                $results | Sort-Object $Sort -Descending:$Descending | Format-Table @{Label=&quot;Size&quot;;Expression={HumanReadable $_.Size};Align=&quot;Right&quot;},Folder -AutoSize
+            }
+            if ($l) {
+                LargestFolder
+            }
+            if (($h -eq $false) -and ($l -eq $false)) {
+                $results | Sort-Object $Sort -Descending:$Descending | Format-Table @{Label=&quot;Size&quot;;Expression={&quot;$($_.Size)B&quot;};Align=&quot;Right&quot;},Folder -AutoSize
+            }
+        }
+    }
+
+    if ($Depth) {
+        Max-Depth -Path $Path -Level $Depth -Force:$Force -Descending:$Descending
+    }
+
+    else {
+        $results = @()
+        $dirs=Get-ChildItem -directory $Path -Force:$Force -Recurse 
+        foreach ($dir in $dirs) {
+            $size = 0
+            $size += (gci $dir.FullName -Recurse | Measure-Object -Property Length -Sum).Sum
+            $results+= New-Object psobject -Property @{Folder=$dir.FullName;Size=$size}
+        }
+        if ($h) {
+            $results | Sort-Object $Sort -Descending:$Descending | Format-Table @{Label=&quot;Size&quot;;Expression={HumanReadable $_.Size};Align=&quot;Right&quot;},Folder -AutoSize
+        }
+        if ($l) {
+            LargestFolder
+        }
+        if (($h -eq $false) -and ($l -eq $false)) {
+            $results | Sort-Object $Sort -Descending:$Descending | Format-Table @{Label=&quot;Size&quot;;Expression={&quot;$($_.Size)B&quot;};Align=&quot;Right&quot;},Folder -AutoSize
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

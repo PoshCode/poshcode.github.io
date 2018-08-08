@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joe Otto">
+    <title>Spin-Busy - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Spin-Busy</h1>
+<h3><a href="//scripts/158.ps1">download</a> - <a href="//scripts/157.md">parent</a></h3>
+<p>Spin-Busy displays a &quot;spinning&quot; character with each step reflecting an individual pipeline object being passed through.
+The current cursor position, fg/bg colors, screen width, etc. can be specified or automatically detected.</p>
+<pre><code class="language-posh">## Spin-Busy displays a &quot;spinning&quot; character with each step reflecting an individual pipeline object being passed through.
+## The current cursor position, fg/bg colors, screen width, etc. can be specified or automatically detected.
+##
+## This is *very* loosly adapted from Out-Working by Joel Bennett (http://powershellcentral.com/scripts/105).
+##
+## Parameters:
+##   -msWait	Can be specified in order to insert a delay (in ms) after each character is written
+##   -spinStr	Can be specified in order to use an alternate set of &quot;spin&quot; characters (see below)
+##   -spinChars	Can be specified in order to use an alternate set of &quot;spin&quot; characters (see below)
+##   -rawUI		Can be specified if an alternate console window is to be used
+##   -bgColor	Can be specified to use a background color different than the current configuration
+##   -fgColor	Can be specified to use a foreground color different than the current configuration
+##   -curPos	Can be specified to spin in a different location than the current cursor position
+##   -startX	Can be specified to start spinning at a different &quot;X&quot; coordinate than the current cursor position
+##   -maxX		Can be specified to limit spinning to less than the current window width
+##   -trails	Can be used to leave a &quot;trail&quot; of characters to help with longer term waits
+##
+## If specified, -spinStr is passed as a string of characters with the last 2 characters being the trailing and blank character, respectively.
+##   Default: '-\|/. ', spinning '-\|/', trailing with '.' and blanking empty cells with ' ' when complete.
+##
+## If specified, -spinChars is passed as an array of characters with the last 2 elements being the trailing and blank character, respectively.
+##   Default: @('-', '\', '|', '/', '.', ' '), spinning '-\|/', trailing with '.' and blanking empty cells with ' ' when complete.
+##
+## Examples:
+##   $t = (0..1000 | Spin-Busy)
+##   $t = (0..1000 | Spin-Busy -trails)
+##   $t = (0..1000 | Spin-Busy -mswait 1 -trails)
+##   $t = (0..1000 | Spin-Busy -mswait 1 -spinStr &quot;123456789. &quot; -trails)
+##   $t = (0..1000 | Spin-Busy 1 -fgColor &quot;Red&quot; -trails)
+##   $t = (0..1000 | Spin-Busy 1 -fgColor &quot;Red&quot; -bgColor &quot;Black&quot; -trails)
+
+function Spin-Busy {
+	param(
+		[Int]														$msWait =		0,
+		[String]													$spinStr =		'-\|/. ',
+		[Char[]]													$spinChars =	[Char[]] ($spinStr.ToCharArray()),
+		[System.Management.Automation.Host.PSHostRawUserInterface]	$rawUI =		(Get-Host).UI.RawUI,
+		[ConsoleColor]												$bgColor =		$rawUI.BackgroundColor,
+		[ConsoleColor]												$fgColor =		$rawUI.ForegroundColor,
+		[System.Management.Automation.Host.Coordinates]				$curPos =		$rawUI.Get_CursorPosition(),
+		[Int32]														$startX =		$curPos.X,
+		[Int32]														$maxX =			$rawUI.WindowSize.Width,
+		[Switch]													$trails
+	)
+
+	begin {
+		$trailCell =	$rawUI.NewBufferCellArray(@($spinChars[-2]), $fgColor, $bgColor);
+		$blankCell =	$rawUI.NewBufferCellArray(@($spinChars[-1]), $fgColor, $bgColor);
+
+		$spinCells =	$spinChars[0..($spinChars.Count - 3)];
+
+		for ($i=0; $i -lt ($spinCells.Count); ++$i) {
+			$spinCells[$i] = $rawUI.NewBufferCellArray(@($spinCells[$i]), $fgColor, $bgColor)
+		}
+
+		$charNdx =	0;
+	}
+
+	process {
+		if ($charNdx -lt $spinCells.Count)	{					$rawUI.SetBufferContents($curPos, $spinCells[$charNdx++]);					}
+		else								{ $charNdx = 0;		$rawUI.SetBufferContents($curPos, $trailCell);
+			if ($trails) {
+				if (++$curPos.X -gt $maxX) 	{ do { --$curPos.X;	$rawUI.SetBufferContents($curPos, $blankCell)	} until ($curPos.X -le $startX)	}
+			}
+		}
+
+		Start-Sleep -milliseconds $msWait
+		$_
+	}
+
+	end {
+		do { $rawUI.SetBufferContents($curPos, $blankCell);	}
+		until (--$curPos.X -le $startX)
+	}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

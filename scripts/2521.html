@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Andy Arismendi">
+    <title>Get-WebsiteCertificate - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-WebsiteCertificate</h1>
+<h3><a href="//scripts/2521.ps1">download</a></h3>
+<p>This will return the specified website's X.509 certificate either as an object or a file (if the -OutputFile parameter is specified). See included comment based help for documentation.</p>
+<pre><code class="language-posh">function Get-WebsiteCertificate {
+	[CmdletBinding()]
+	param (
+		[Parameter(Mandatory=$true)] [System.Uri]
+			$Uri,
+		[Parameter()] [System.IO.FileInfo]
+			$OutputFile,
+		[Parameter()] [Switch]
+			$UseSystemProxy,	
+		[Parameter()] [Switch]
+			$UseDefaultCredentials,
+		[Parameter()] [Switch]
+			$TrustAllCertificates
+	)
+	try {
+		$request = [System.Net.WebRequest]::Create($Uri)
+		if ($UseSystemProxy) {
+			$request.Proxy = [System.Net.WebRequest]::DefaultWebProxy
+		}
+		
+		if ($UseSystemProxy -and $UseDefaultCredentials) {
+			$request.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+		}
+		
+		if ($TrustAllCertificates) {
+			# Create a compilation environment
+			$Provider=New-Object Microsoft.CSharp.CSharpCodeProvider
+			$Compiler=$Provider.CreateCompiler()
+			$Params=New-Object System.CodeDom.Compiler.CompilerParameters
+			$Params.GenerateExecutable=$False
+			$Params.GenerateInMemory=$True
+			$Params.IncludeDebugInformation=$False
+			$Params.ReferencedAssemblies.Add(&quot;System.DLL&quot;) &gt; $null
+			$TASource=@'
+			  namespace Local.ToolkitExtensions.Net.CertificatePolicy {
+			    public class TrustAll : System.Net.ICertificatePolicy {
+			      public TrustAll() { 
+			      }
+			      public bool CheckValidationResult(System.Net.ServicePoint sp,
+			        System.Security.Cryptography.X509Certificates.X509Certificate cert, 
+			        System.Net.WebRequest req, int problem) {
+			        return true;
+			      }
+			    }
+			  }
+'@ 
+			$TAResults=$Provider.CompileAssemblyFromSource($Params,$TASource)
+			$TAAssembly=$TAResults.CompiledAssembly
+
+			## We now create an instance of the TrustAll and attach it to the ServicePointManager
+			$TrustAll=$TAAssembly.CreateInstance(&quot;Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll&quot;)
+			[System.Net.ServicePointManager]::CertificatePolicy=$TrustAll
+		}
+		
+		$response = $request.GetResponse()
+		$servicePoint = $request.ServicePoint
+		$certificate = $servicePoint.Certificate
+		
+		if ($OutputFile) {
+			$certBytes = $certificate.Export(
+					[System.Security.Cryptography.X509Certificates.X509ContentType]::Cert
+				)
+			[System.IO.File]::WriteAllBytes( $OutputFile, $certBytes )
+			$OutputFile.Refresh()
+			return $OutputFile
+		} else {
+			return $certificate
+		}
+	} catch {
+		Write-Error &quot;Failed to get website certificate. The error was '$_'.&quot;
+		return $null
+	}
+	
+	&lt;#
+		.SYNOPSIS
+			Retrieves the certificate used by a website.
+	
+		.DESCRIPTION
+			Retrieves the certificate used by a website. Returns either an object or file.
+	
+		.PARAMETER  Uri
+			The URL of the website. This should start with https.
+	
+		.PARAMETER  OutputFile
+			Specifies what file to save the certificate as.
+			
+		.PARAMETER  UseSystemProxy
+			Whether or not to use the system proxy settings.
+			
+		.PARAMETER  UseDefaultCredentials
+			Whether or not to use the system logon credentials for the proxy.
+			
+		.PARAMETER  TrustAllCertificates
+			Ignore certificate errors for certificates that are expired, have a mismatched common name or are self signed.
+	
+		.EXAMPLE
+			PS C:\&gt; Get-WebsiteCertificate &quot;https://www.gmail.com&quot; -UseSystemProxy -UseDefaultCredentials -TrustAllCertificates -OutputFile C:\gmail.cer
+		
+		.INPUTS
+			Does not accept pipeline input.
+	
+		.OUTPUTS
+			System.Security.Cryptography.X509Certificates.X509Certificate, System.IO.FileInfo
+	#&gt;
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

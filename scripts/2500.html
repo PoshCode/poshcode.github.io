@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Archdeacon">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/2500.ps1">download</a></h3>
+<p>This script will trap events such as USB insertion, file changes, registry key
+change, Unhibernate, etc, and should be modified to suit individual requirements.
+The Script Monitor Service mentioned is a full Windows Service (for XP &amp; 7) that logs the start and end times of all scripts (vbs, bat, cmd, ps1, etc). The Notepad Scripting Editor can create, edit and run any such scripts in its own command window. Both are available from www.SeaStarDevelopment.Bravehost.com.</p>
+<pre><code class="language-posh">###############################################################################
+# Use Unregister-Event -SourceIdentifier &lt;name&gt; -Force (to stop an Event).
+# Include script in $profile to register all these events. Modify to suit own
+# requirements and comment out any of the examples below that are not needed. 
+# Please visit www.SeaStarDevelopment.Bravehost.com for more utilities.
+###############################################################################
+# This ACTION will trap Script start/stop events (SourceId = ScriptMonitor); but
+# only if started externally via 'powershell.exe -noexit -command &amp; example.ps1'
+# NOTE: this duplicates the actions of Script Monitor Service and both should 
+# not be run together (Uncomment the lines below to start). 
+###############################################################################
+
+$action = {
+    $pattern = '^(.*)(\s+|\\)([-_a-z0-9]+\.(?!(psc1))[a-ehmpstv1]{3,4})\b'
+    $script = $msg = 'BLANK'
+    $e = $Event.SourceEventArgs.NewEvent
+    $process   = $e.TargetInstance.Name
+    $processID = $e.TargetInstance.ProcessId
+    $cmdline   = $e.TargetInstance.CommandLine
+    If ($cmdline -match $pattern) {
+        $script = $matches[3]
+        $path = $matches[1]
+        If ($path -match '^.*( sc|/TR ).*$') {       #Skip lines with SC or /TR
+            $script = 'BLANK'
+        }
+    }
+    Switch ($e.__CLASS) {
+        '__InstanceCreationEvent' { 
+            If ($script -ne 'BLANK') {
+                $msg  = &quot;Script Job: $script ($processID) started.&quot;
+                $time = Get-Date -Format &quot;dd/MM/yyyy HH:mm:ss&quot;
+                $tag  = &quot;$time [$script] start. --&gt; $cmdline&quot;
+                $ID   = &quot;2&quot;
+            }
+        }
+        '__InstanceDeletionEvent' {
+            If ($script -ne 'BLANK') { 
+                $msg  = &quot;Script Job: $script ($processID) ended.&quot;
+                $time = Get-Date -Format &quot;dd/MM/yyyy HH:mm:ss&quot;
+                $tag  = &quot;$time [$script] ended. --&gt; $cmdline&quot;
+                $ID   = &quot;1&quot;
+            }
+        }
+        Default                   {$_ | Out-Null }
+    }
+    If ($cmdline.StartsWith(&quot;cscript&quot;) -and $cmdline.Contains(&quot;//logo&quot;)) {
+        $msg = 'BLANK'       #Skip duplicate entry from Notepad Script Editor.
+    }
+    If ($msg -ne 'BLANK') {
+        $file = Join-Path (get-Location) &quot;Monitor.txt&quot;
+        If (Test-Path $file) {
+            $tag | Out-File $file -encoding 'Default' -Append
+        }
+        Write-LogEvent Scripts $ID $msg
+    }
+}    
+     
+$query = &quot;SELECT * FROM __InstanceOperationEvent WITHIN 2 WHERE `
+     TargetInstance ISA 'Win32_Process' AND `
+    (TargetInstance.Name = 'cmd.exe' OR `
+     TargetInstance.Name = 'wscript.exe' OR `
+     TargetInstance.Name = 'Cscript.exe' OR `
+     TargetInstance.Name = 'mshta.exe')&quot;
+#Register-WmiEvent -Query $query -SourceIdentifier ScriptMonitor -Action $action `
+#    | Out-Null
+ 
+###############################################################################
+#This ACTION will trap any USB insertions (SourceId = USBdevice).
+###############################################################################
+$action1 = {
+    $file   = 'c:\Scripts\AutoAvast.vbs'    #Change to run desired script, etc.
+    $e = $Event.SourceEventArgs.NewEvent
+    $drive  = $e.TargetInstance.DeviceID
+    $volume = $e.TargetInstance.VolumeName
+    $free   = $e.TargetInstance.FreeSpace
+    $size   = $e.TargetInstance.Size
+    If ($e.TargetInstance.VolumeSerialNumber -ne &quot;&quot;) {
+        &amp; 'c:\windows\system32\wscript.exe' $file $drive $volume $free $size
+    }
+}
+$query1 = &quot;SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE `
+    TargetInstance ISA 'Win32_LogicalDisk' AND TargetInstance.DriveType = 2&quot;
+
+Register-WmiEvent -Query $query1 -SourceIdentifier USBdevice -Action $action1 `
+    | Out-Null
+
+###############################################################################
+#This ACTION will trap any file downloads (SourceId = Download).
+###############################################################################
+$action2 = {
+    $eventLog = &quot;Internet Explorer&quot;
+    $id = 99
+    $e = $Event.SourceEventArgs.NewEvent
+    $drive  = $e.TargetInstance.Drive
+    $file   = $e.TargetInstance.FileName + &quot;.&quot; + `
+              $e.TargetInstance.Extension
+    $path   = $e.TargetInstance.Path
+    $folder = $drive + &quot;\Downloads&quot;
+    Switch ($e.TargetInstance.Extension) {
+        'exe'   {$id = 20; break}
+        'enu'   {$id = 21; break}
+        'html'  {$id = 23; break}
+        'zip'   {$id = 24; break}
+        'rar'   {$id = 25; break}
+        'msi'   {$id = 29; break}
+        Default {$id = 99}
+    }
+    $formatString = &quot;{0:##.#}Mb&quot;
+    $size = $formatString -f ($e.TargetInstance.FileSize/1KB)
+    $desc = &quot;File $file has been added to the $folder folder; filesize = $size&quot; 
+    Write-LogEvent $eventLog $ID $desc
+}
+$query2 = &quot;SELECT * FROM __InstanceCreationEvent WITHIN 30 WHERE TargetInstance `
+    ISA 'CIM_DataFile' AND TargetInstance.Path = '\\Downloads\\' AND `
+        (TargetInstance.Drive = 'C:' OR TargetInstance.Drive = 'E:')&quot;
+
+Register-WmiEvent -Query $query2 -SourceIdentifier Download -Action $action2 `
+    | Out-Null
+
+###############################################################################
+#This ACTION will catch Avast Database Update (SourceId = FileWatcher)
+#Change to run any script, etc. (Prompter.exe is now included in the Scripting
+#Editor download from www.SeaStarDevelopment.Bravehost.com and is used to put
+# a message in the notification area). Uncomment the 2 lines below to run.
+###############################################################################
+$action3 = {
+    $file = $Event.SourceEventArgs.Name
+    &amp; 'c:\Scripts\prompt.exe' /Notify update /Title Avast Update Service `
+      /Msg Updating file: $file
+}
+
+$folder = &quot;c:\Program Files\Alwil Software\Avast5\Setup&quot;
+$filter = &quot;*.vpx&quot;
+$fsw = New-Object -TypeName System.IO.FileSystemWatcher -ArgumentList `
+    $folder, $filter
+$fsw.IncludeSubDirectories = $false
+$fsw.EnableRaisingEvents   = $true
+#Register-ObjectEvent -InputObject $fsw -EventName &quot;Changed&quot; `
+#    -SourceIdentifier FileWatcher -Action $action3 | Out-Null
+
+###############################################################################
+#This ACTION runs Ccleaner and Keylog Backup (SourceId = UnHibernate)
+###############################################################################
+$action4 = {
+    $file = &quot;c:\scripts\KeylogBackup.vbs&quot;
+    $args = $Event.SourceEventArgs.NewEvent.EventType    #Type 18 = UnHibernate.
+    &amp; 'c:\windows\system32\wscript.exe' $file $args
+    &amp; &quot;$env:programfiles\ccleaner\ccleaner.exe&quot; /AUTO
+}
+$query4 = &quot;SELECT * FROM Win32_PowerManagementEvent WHERE EventType = '18'&quot;
+
+Register-WmiEvent -Query $query4 -SourceIdentifier UnHibernate -Action $action4 `
+    | Out-Null
+
+###############################################################################
+#This ACTION will detect Avast Database changes (Updates). Replaces 3 above.
+###############################################################################
+$action5 = {
+    &amp; 'c:\Scripts\prompt.exe' /Notify update /Title Avast Update Service `
+       /Msg Starting database update
+    Write-Eventlog -logname Antivirus -source avast -eventID 90 -entryType `
+        Information -message &quot;Avast5 Automatic Database Update&quot;
+}
+$query5 = &quot;SELECT * FROM __InstanceCreationEvent WITHIN 180 WHERE `
+    TargetInstance ISA 'Win32_Process' AND TargetInstance.Name = 'avast.setup'&quot;
+
+Register-WmiEvent -Query $query5 -SourceIdentifier Avast -Action $action5 `
+    | Out-Null
+
+###############################################################################
+#This ACTION will detect Windows Media Player &amp; then start ActiveSyncToggle
+###############################################################################
+$action7 = {
+    $e = $Event.SourceEventArgs.NewEvent
+    If (Test-Path &quot;e:\downloads\ActiveSyncToggle.exe&quot;) {
+        &amp; 'e:\downloads\ActiveSyncToggle.exe'
+    } 
+}
+$query7 = &quot;SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE `
+    TargetInstance ISA 'Win32_Process' AND TargetInstance.Name = 'wmplayer.exe'&quot;
+
+Register-WmiEvent -Query $query7 -SourceIdentifier MediaPlayer -Action $action7 `
+    | Out-Null
+ 
+###############################################################################
+# This ACTION will detect any changes to the registry HKLM\Run key.
+###############################################################################
+$hive = &quot;HKEY_LOCAL_MACHINE&quot;
+$keyPath = &quot;SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run&quot;
+
+$action8 = {
+    $file = 'c:\Scripts\HKLMrun.vbs' 
+    &amp; 'c:\windows\system32\wscript.exe' $file 
+}
+$query8 = &quot;SELECT * FROM RegistryKeyChangeEvent WHERE Hive = '$hive' AND KeyPath = '$keyPath'&quot;
+
+Register-WmiEvent -Query $query8 -Namespace 'root\default' `
+    -SourceIdentifier HKLMRunKey -Action $action8 | Out-Null
+ 
+###############################################################################
+# To capture scripts started within the current session a 'Run' function (below) 
+# should be added to the $profile, and each script should then be started with 
+# Run example.ps1, etc. The $logfile is created by the Script Monitor Service.
+#
+# Function Run([String]$scriptName = '-BLANK-') {
+#     $logfile = &quot;$env:programfiles\Sea Star Development\&quot; + 
+#         &quot;Script Monitor Service\ScriptMon.txt&quot;
+#     $parms  = $myInvocation.Line -replace &quot;run(\s+)$scriptName(\s*)&quot;
+#     $script = $scriptName -replace &quot;\.ps1\b&quot;     #Replace from word end only.          
+#     $script = $script + &quot;.ps1&quot;
+#     If (Test-Path $pwd\$script) {
+#         If(!(Test-Path Variable:\Session.Script.Job)) {
+#             Set-Variable Session.Script.Job -value 1 -scope global `
+#                 -description &quot;Script counter&quot;
+#         }
+#         $Job    = Get-Variable -name Session.Script.Job
+#         $number = $job.Value.ToString().PadLeft(4,'0')
+#         $job.Value += 1                #Increment here in case script aborts.
+#         $startTime = Get-Date -Format &quot;dd/MM/yyyy HH:mm:ss&quot;
+#         $tag = &quot;$startTime [$script] start. --&gt; $($myInvocation.Line)&quot;
+#         If (Test-Path $logfile) {
+#             $tag | Out-File $logfile -encoding 'Default' -Append
+#         }
+#         Write-LogEvent Scripts 2 &quot;Script Job: $script (PS$number) started.&quot;
+#         Invoke-Expression -command &quot;$pwd\$script $parms&quot;
+#         $endTime = Get-Date -Format &quot;dd/MM/yyyy HH:mm:ss&quot;
+#         $tag = &quot;$endTime [$script] ended. --&gt; $($myInvocation.Line)&quot;
+#         If (Test-Path $logfile) {
+#             $tag | Out-File $logfile -encoding 'Default' -Append
+#         }
+#         Write-LogEvent Scripts 1 &quot;Script Job: $script (PS$number) ended.&quot;
+#     }
+#     Else {
+#         Write-Error &quot;$pwd\$script does not exist.&quot;
+#     }
+# }
+###############################################################################
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

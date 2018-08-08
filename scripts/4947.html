@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Archdeacon">
+    <title>Set-Watcher.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-Watcher.ps1</h1>
+<h3><a href="//scripts/4947.ps1">download</a> - <a href="//scripts/2501.md">parent</a></h3>
+<p>This script will trap events such as USB insertion, file changes, registry key
+change, Unhibernate, etc, and should be modified to suit individual requirements.
+The Script Monitor Service mentioned is a full Windows Service (for XP &amp; 7) that logs the start and end times of all scripts (vbs, bat, cmd, ps1, etc). The Notepad Scripting Editor can create, edit and run any such scripts in its own command window. Both are available from www.SeaStarDevelopment.Bravehost.com.</p>
+<pre><code class="language-posh">###############################################################################
+# Use Unregister-Event -SourceIdentifier &lt;name&gt; -Force (to stop)
+# Include script in $profile to register all these events. (Access events via 
+# $MyEvent.SourceEventArgs.NewEvent for the current session only). Must only 
+# be run once per session (via $profile).
+# Please visit www.SeaStar.99k.org for many more utilities. 
+# The Set-Variable below is needed for both Actions 3 and 9. Ensure that any
+# unwanted 'actions' (Register-WmiEvent) are commented out.
+###############################################################################
+Set-Variable MSEupdate -Value 0 -Scope Global -Description `
+    &quot;MSE Database Status&quot;
+
+###############################################################################
+#This ACTION will trap any USB insertions (SourceId = USBdevice).
+###############################################################################
+$action1 = {
+    $file   = 'd:\Scripts\AutoMSE.vbs'    #Change to run desired script, etc.
+    If (!(test-Path variable:\MyEvent)) {
+        Set-Variable -name MyEvent -scope global
+    }                         #$MyEvent.TargetInstance will display properties.
+    $GLOBAL:MyEvent = $Event         #Expose to session for testing (As above).
+    $e = $Event.SourceEventArgs.NewEvent
+    $drive  = $e.TargetInstance.DeviceID   #Add a line here to exclude any USB device.
+    $volume = $e.TargetInstance.VolumeName
+    $serial = $e.TargetInstance.VolumeSerialNumber
+    $free   = $e.TargetInstance.FreeSpace
+    $size   = $e.TargetInstance.Size
+    If ($volume -eq &quot;&quot;) {
+        $volume = &quot;&lt;BLANK&gt;&quot;
+    }                                      #Now just add any exclusions here...
+    If (($serial -ne &quot;&quot;) -and ($volume -ne 'AIRCARD')) {           
+        &amp; c:\windows\system32\wscript.exe $file $drive $volume #Only single quotes here, if any!
+    }
+}
+$query1 = &quot;SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE `
+    TargetInstance ISA 'Win32_LogicalDisk' AND TargetInstance.DriveType = 2&quot;
+
+$errorActionPreference = &quot;SilentlyContinue&quot;
+$status = &quot;FAIL&quot;
+While ($status -ne &quot;OK&quot;) {
+    try {
+        Register-WmiEvent -Query $query1 -SourceIdentifier USBdevice -SupportEvent -Action $action1 `
+        | Out-Null
+        $status = &quot;OK&quot;
+        Write-Host &quot;USB Filter (Source: USBdevice) has been loaded successfully.&quot;
+        Write-Host &quot;&quot;
+    }
+    catch {
+        Write-Warning &quot;WMI Error - USB filter has failed to load. Retrying ...&quot;
+        Start-Sleep -Seconds 3                                  #Wait 3 seconds.
+    }
+}
+$errorActionPreference = &quot;Continue&quot;
+###############################################################################
+#This ACTION will trap any file downloads (SourceId = Download).
+# New-Eventlog -Source Download -Logname 'Internet Explorer' must be added.
+###############################################################################
+$action2 = {
+    $GLOBAL:MyEvent = $Event                  #Save for testing purposes later.
+    $eventLog = &quot;Internet Explorer&quot;
+    $id = 99
+    $e = $Event.SourceEventArgs.NewEvent
+    $drive  = $e.TargetInstance.Drive
+    $file   = $e.TargetInstance.FileName + &quot;.&quot; + `
+              $e.TargetInstance.Extension
+    $path   = $e.TargetInstance.Path
+    $folder = $drive + &quot;\Users\Derf\Downloads&quot;
+    Switch ($e.TargetInstance.Extension) {
+        'exe'   {$id = 20; break}
+        'enu'   {$id = 21; break}
+        'ps1'   {$id = 22; break}
+        'html'  {$id = 23; break}
+        'zip'   {$id = 24; break}
+        'rar'   {$id = 25; break}
+        'part'  {$id = 26; break}
+        'msi'   {$id = 29; break}
+        Default {$id = 99}                 
+    }
+    $formatString = &quot;{0:0.0}Kb&quot;
+    $size = $formatString -f ($e.TargetInstance.FileSize/1KB)
+    $file = $file.Replace(&quot;.part&quot;,&quot;&quot;)
+    $desc = &quot;File $file has been added to the $folder folder (Filesize = $size)&quot;
+    If (!$desc.EndsWith(&quot;= 0.0Kb)&quot;)) {                     #Skip blank entries.
+        Write-EventLog -Logname $eventLog -Source Download -EntryType Information -EventID $ID -Message $desc
+    }
+}
+$query2 = &quot;SELECT * FROM __InstanceCreationEvent WITHIN 30 WHERE TargetInstance `
+    ISA 'CIM_DataFile' AND TargetInstance.Path = '\\Users\\Derf\\Downloads\\' AND `
+        (TargetInstance.Drive = 'C:')&quot;
+
+Register-WmiEvent -Query $query2 -SourceIdentifier Download -SupportEvent -Action $action2 `
+    | Out-Null
+
+###############################################################################
+# This ACTION will catch MSE Database Update (SourceId = FileWatcher) .There is
+# no Event Log entry for this so use FileSystemWatcher instead.
+# Change to run any script, etc. (Prompter.exe is now included in the Scripting
+# Editor download from www.SeaStar.99k.org and is used to put a message in the
+# notification area; simpler than using PowerShell). 
+###############################################################################
+$action3 = {
+    $file = $Event.SourceEventArgs.Name
+    $changeType = $Event.SourceEventArgs.ChangeType
+    If (($GLOBAL:MSEupdate -eq 0) -and (Test-Path .\Prompter.exe)) {
+        &amp; 'd:\Scripts\prompter.exe' /Notify update /Title Microsoft Security Essentials Update `
+          /Msg Update started: File $file is being updated. /Time
+        [Console]::Beep(800,500)
+        $GLOBAL:MSEupdate = 1 #This will ensure only 1 run and allow EndUpdate.
+    }
+}
+
+$folder = &quot;c:\ProgramData\Microsoft\Microsoft Antimalware\Definition Updates\&quot;
+$filter = &quot;*.vdm&quot;
+$fsw = New-Object -TypeName System.IO.FileSystemWatcher -ArgumentList `
+    $folder, $filter
+$fsw.IncludeSubDirectories = $true #The '{**}' folder name changes on each run!
+$fsw.EnableRaisingEvents   = $true
+
+Register-ObjectEvent -InputObject $fsw -EventName &quot;Changed&quot; `
+    -SourceIdentifier FileWatcher -SupportEvent -Action $action3 | Out-Null
+
+###############################################################################
+#This ACTION runs Ccleaner and WinPlayer.vbs (SourceId = UnHibernate)
+###############################################################################
+$action4 = {
+    $file = 'd:\scripts\WinPlayer.vbs'
+    &amp; 'c:\windows\system32\wscript.exe' $file 2000   #Play Windows start sound.
+    &amp; &quot;$env:programfiles\ccleaner\ccleaner.exe&quot; /AUTO
+    attrib -s -h 'C:\Users'         #Missing Explorer folders:Clear attributes.
+    attrib -s -h 'C:\Users\derf'
+}
+$query4 = &quot;SELECT * FROM Win32_PowerManagementEvent WHERE EventType = '18'&quot;
+
+Register-WmiEvent -Query $query4 -SourceIdentifier UnHibernate -SupportEvent -Action $action4 `
+    | Out-Null
+
+###############################################################################
+#This ACTION will detect Avast Database changes (Updates). 
+###############################################################################
+$action5 = {
+    If (!(test-Path variable:\MyEvent)) {
+        Set-Variable -name MyEvent -scope Global
+    }
+    $GLOBAL:MyEvent = $Event
+    $e = $Event.SourceEventArgs.NewEvent
+    &amp; 'd:\Scripts\prompter.exe' /Notify update /Title Avast Update Service `
+       /Msg Starting database update
+    Write-Eventlog -logname Antivirus -source avast -eventID 90 -entryType `
+        Information -message &quot;Avast5 Automatic Database Update&quot;
+}
+$query5 = &quot;SELECT * FROM __InstanceCreationEvent WITHIN 180 WHERE `
+    TargetInstance ISA 'Win32_Process' AND TargetInstance.Name = 'avast.setup'&quot;
+
+#Register-WmiEvent -Query $query5 -SourceIdentifier Avast -Action $action5 `
+#    | Out-Null
+
+###############################################################################
+#This ACTION will detect Windows Media Player &amp; then start ActiveSyncToggle
+###############################################################################
+$action7 = {
+    If (Test-Path &quot;d:\Applications\ActiveSyncToggle.exe&quot;) {
+        &amp; 'd:\Applications\ActiveSyncToggle.exe'
+    } 
+}
+$query7 = &quot;SELECT * FROM __InstanceCreationEvent WITHIN 10 WHERE `
+    TargetInstance ISA 'Win32_Process' AND TargetInstance.Name = 'wmplayer.exe'&quot;
+
+#Register-WmiEvent -Query $query7 -SourceIdentifier MediaPlayer -Action $action7 `
+#    | Out-Null
+ 
+###############################################################################
+# This ACTION will detect any changes to the registry HKLM\Run key and write
+# a Warning event in the Applications Event log. The message box will timeout
+# after 10 seconds.
+###############################################################################
+
+$hive = &quot;HKEY_LOCAL_MACHINE&quot;
+$keyPath = &quot;SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run&quot;
+
+$action8 = {
+    $HKLM = 'The key HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run' +
+       ' has been modified; check if the change is intentional.'
+    $logType = 2
+    $shell = New-Object -Com Wscript.Shell
+    If (!(test-Path variable:\MyEvent)) {
+        Set-Variable -name MyEvent -scope Global
+    }
+    $GLOBAL:MyEvent = $Event
+    $shell.Popup($HKLM,10,'PS Automatic Event Monitor',48) | Out-Null  
+    $Shell.LogEvent($logType,$HKLM) | Out-Null 
+}
+$query8 = &quot;SELECT * FROM RegistryKeyChangeEvent WHERE Hive = '$hive' AND KeyPath = '$keyPath'&quot;
+
+Register-WmiEvent -Query $query8 -Namespace 'root\default' `
+    -SourceIdentifier HKLMRunKey -SupportEvent -Action $action8 | Out-Null
+
+###############################################################################
+# This ACTION will detect the end of the update of MSE database (EventID 2000)
+###############################################################################
+
+$action9 = {
+    If (($GLOBAL:MSEupdate -eq 1) -and (Test-Path .\Prompter.exe)) {
+        &amp; 'd:\Scripts\prompter.exe' /Notify mse /Title Microsoft Security Essentials Update `
+              /Msg Database update completed. /Time
+        [Console]::Beep(800,500)
+        $GLOBAL:MSEupdate = 0         #One run only and allow next StartUpdate.
+    }
+}
+
+$query9 = &quot;SELECT * FROM __InstanceCreationEvent WHERE TargetInstance ISA `
+             'Win32_NTLogEvent' AND TargetInstance.EventCode = '2000' AND `
+                TargetInstance.LogFile = 'System'&quot;
+
+Register-WmiEvent -Query $query9 -SourceIdentifier 'EndUpdate' -SupportEvent -Action $action9 `
+    | Out-Null 
+
+###############################################################################
+# This ACTION will only write once to the 'Ipconfig.txt' log each time online
+# status is confirmed, although 1 or more Event 10000 entries may appear.
+# These Events are forwarded automatically from the NetworkProfile\Operational 
+# Event Log by a scheduled task, running 'ForwardEvent.exe'*, and if any number
+# appear the 'action' will run once after 90 seconds. 
+# [Type ForwardEvent ? in cmd window to list all the options.]
+###############################################################################
+$action10 = {
+    $file    = &quot;d:\scripts\ipconfig.txt&quot;                       #Change to suit.
+    $GLOBAL:MyNewEvent = $Event
+    $command = &quot;ipconfig.exe /all&quot;
+    $date    = (&quot;{0:F}&quot; -f [DateTime]::Now).PadRight(36,' ')
+    $string  = ('-' * 80)
+    $ping    = &quot;ping -n 1 Yahoo.com&quot;
+
+##Now start the Here-String (End of string must be in Column 1)
+$myString = @&quot;
+
+$date                              LAN Restart:
+$string
+&quot;@
+##End of Here-String
+
+    Invoke-Expression $ping | Out-Null    #Only run next line if we are Online.
+    $GLOBAL:PingStatus = $lastExitCode
+    If (($lastExitCode -eq 0) -and (Test-Path $file)) {
+        $myString | Out-File -Filepath $file -Encoding ASCII -Append
+        Invoke-Expression $command | Out-File -Filepath $file -Encoding ASCII -Append
+    } 
+}
+
+# Collect events forwarded from the NetworkProfile\Operational to the Scripts 
+# Event Log. 
+
+$query10 = &quot;SELECT * FROM __InstanceCreationEvent WHERE TargetInstance ISA `
+             'Win32_NTLogEvent' AND TargetInstance.EventCode = '300' AND `
+                TargetInstance.SourceName = 'Internet' GROUP WITHIN 90 HAVING `
+                  NumberOfEvents &gt; 0&quot;
+
+Register-WmiEvent -Query $query10 -SourceIdentifier 'OnlineStatus' -SupportEvent -Action $action10 `
+    | Out-Null 
+ 
+#################################################################################
+# Save all the available history items on exit from current PowerShell session.
+# Use PowerShell's exiting event &amp; hide the registration with -supportevent. This
+# only works after typing 'EXIT', not via the top right 'X' button (although it
+# will work in ISE).
+#################################################################################
+
+Register-EngineEvent -SourceIdentifier PowerShell.Exiting -SupportEvent -Action {
+   $error | ForEach-Object { $_.InvocationInfo.historyId} |
+      Where-Object {$_ -gt 0} | 
+         ForEach-Object {clear-history -id $_ -errorAction SilentlyContinue}
+   Get-History | Sort-Object -Property CommandLine -Unique |
+      Where-Object {$_.CommandLine -ne 'exit'} |
+         Sort-Object -Property EndExecutionTime -Descending |
+            Export-Clixml (Join-Path (Split-Path $profile) history.clixml) 
+}
+ 
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

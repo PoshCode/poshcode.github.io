@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>DekiWiki Module 1.5 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>DekiWiki Module 1.5</h1>
+<h3><a href="//scripts/692.ps1">download</a></h3>
+<p>The first of many script cmdlets for working with DekiWiki
+Depends on the HttpRest script-module: http://poshcode.org/691</p>
+<pre><code class="language-posh">## DekiWiki Module 1.5
+#require -version 2.0
+## Depends on the HttpRest script-module:
+##              http :// huddledmasses.org/using-rest-apis-from-powershell-with-the-dream-sdk/ 
+####################################################################################################
+## The first of many script cmdlets for working with DekiWiki, based on the HttpREST module
+##
+## For documentation of the DekiWiki REST API:
+## http :// wiki.developer.mindtouch.com/MindTouch_Deki/API_Reference
+####################################################################################################
+## USAGE:
+##   Add-Module DekiWiki
+##   Set-DekiUrl http`://powershell.wik.is
+##   ...
+## ## For usage of each cmdlet, see the comments above each individual function ## ## ## ## ## ## ##
+####################################################################################################
+## History:
+## v 1.5 Rewrite with the &quot;Dream&quot; specific code extracted to the HttpRest module
+## v 1.2 Remove-DekiFile
+## v 1.0 Set-DekiCredential, Get-DekiContent, Set-DekiContent, New-DekiContent, Set-DekiFile
+## 
+$hr = Add-Module HttpRest -Passthru
+Add-Module &quot;$PSScriptRoot\Utilities.ps1&quot;
+
+$url = &quot;http://powershell.wik.is&quot;
+$api = &quot;$url/@api/deki&quot;
+
+#New-Alias Set-DekiCredential Set-HttpCredential -EA &quot;SilentlyContinue&quot;
+#New-Alias Set-DekiUrl Set-HttpDefaultUrl -EA &quot;SilentlyContinue&quot;
+
+FUNCTION Set-DekiUrl {
+   PARAM ([uri]$baseUri=$(Read-Host &quot;Please enter the base Uri for your RESTful web-service&quot;))
+   Set-HttpDefaultUrl $baseUri
+}
+
+FUNCTION Set-DekiCredential {
+   PARAM($Credential=$(Get-Credential -Title &quot;Http Authentication Request - $($global:url.Host)&quot; `
+                                      -Message &quot;Your login for $($global:url.Host)&quot; `
+                                      -Domain $global:url.Host ))
+   Set-HttpCredential $Credential
+}
+
+New-Alias e2 Encode-Twice -EA &quot;SilentlyContinue&quot;
+
+
+Add-Type '
+public class ModuleInfo {
+   public string Name;
+   public string[] Author;
+   public string CompanyName;
+   public string[] Copyright;
+   public string[] Description;
+   public System.Version ModuleVersion;
+   public string[] RequiredAssemblies;
+   public string[] Dependencies;
+   public System.Guid GUID = System.Guid.NewGuid();
+   public string[] PowerShellVersion;
+   public string[] ModulesToProcess;
+   public System.Version CLRVersion;
+   public string[] FormatsToProcess;
+   public string[] TypesToProcess;
+   public string[] OtherItems;
+   public string ModuleFile;
+}
+' -EA &quot;SilentlyContinue&quot;
+
+# Retrieve a sitemap of all the pages in a wiki, 
+# OR Retrieve all the subpages of a page as a sitemap
+# Added by Mark E. Schill
+CMDLET Get-DekiSiteMap {
+PARAM( 
+	[Parameter(Position=0, Mandatory=$false)]
+	[string]
+	$StartPage
+,
+	[Parameter(Position=1, Mandatory=$false)]
+	[ValidateSet(&quot;xml&quot;,&quot;html&quot;,&quot;google&quot;)]
+	[string]
+	$Format = &quot;xml&quot;
+)
+   if($StartPage) {
+      Invoke-Http GET &quot;pages/=$(e2 $StartPage)/tree&quot; @{&quot;format&quot;=$format} | Receive-Http -Out Xml
+   } else {
+      Invoke-Http GET &quot;pages&quot; @{&quot;format&quot;=$format} | Receive-Http -Out Xml
+   }
+}
+
+
+# Get the contents of a page from a DekiWiki
+# Note that by default you retrieve the &quot;view&quot; (rendered) markup
+# If you want to see it before the extensions run, you should specify at least -mode viewnoexecute
+# If you want to see the source so you can make changes, be sure to specify -mode edit
+CMDLET Get-DekiContent {
+PARAM(
+   [Parameter(Position=0, Mandatory=$true)]
+   [string]
+   $pageName
+, 
+   [Parameter(Position=1, Mandatory=$false)]
+   [int]
+   $section
+, 
+   [Parameter(Position=5, Mandatory=$false)]
+   [ValidateSet(&quot;edit&quot;, &quot;raw&quot;, &quot;view&quot;, &quot;viewnoexecute&quot;)]
+   [string]
+   $mode=&quot;view&quot;
+)
+   Invoke-Http &quot;GET&quot; &quot;pages/=$(e2 $pageName)/contents&quot; @{mode=$mode;section=$section} | Receive-Http -Out Xml
+}
+
+# Get-DekiFile will LIST all files if called with just a PageName
+# Otherwise, fileName can be a single fileName, or wildcards
+# To download all the attachments on a page, try:
+# Get-DekiFile PageName | Get-DekiFile 
+CMDLET Get-DekiFile {
+PARAM(
+   [Parameter(Position=0, Mandatory=$true, ValueFromPipelineByPropertyName=$true)]
+   [string]
+   $pageName
+,
+   [Parameter(Position=1, Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [string]
+   $fileName
+,
+   [Parameter(Position=2, Mandatory=$false)]
+   [string]
+   $destination
+)
+PROCESS {
+   ## Remember, we can get both on the pipeline, so ...
+   $files = Invoke-Http &quot;GET&quot; &quot;pages/=$(e2 $pageName)/files&quot; | Receive-Http Xml //file
+   
+   Write-Verbose &quot;Fetching $($fileName) from the $($files.Count) in $pageName&quot;
+   if(!$fileName) {
+      ## Add a PageName property, because then you can pipe the output back to Get-DekiFile after filtering...
+      write-output $files | Add-Member NoteProperty PageName $pageName -passthru
+   } else {
+      ## Using -like means $fileName allows globbing
+      foreach($file in $($files | where { $_.filename -like $fileName } )) {
+         Invoke-Http &quot;GET&quot; &quot;pages/=$(e2 $pageName)/files/=$(e2 $file.filename)&quot; | Receive-Http File $(Get-FileName $file.filename $destination)
+      }
+   }
+}
+}
+
+# Set the contents of a DekiWiki page
+# Note that you can pass the content as an XML document, plain text, or a filename...
+CMDLET Set-DekiContent {
+PARAM(
+   [Parameter(Position=0, Mandatory=$true)]
+   [string]
+   $pageName
+, 
+   [Parameter(Position=1, Mandatory=$true, 
+                          ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;FullName&quot;)]
+   [string]
+   $content
+, 
+   [Parameter(Position=2, Mandatory=$false)]
+   $section
+,
+   [switch]$new
+,
+   [switch]$append
+)
+   $with = @{&quot;edittime&quot;=$(Get-UtcTime &quot;yyyyMMddhhmmss&quot;)}
+   
+   if($new) {
+      $with.abort = &quot;exists&quot;
+   }
+   if($append) {
+      $with.section = &quot;0&quot;
+   } elseif($section) {
+      $with.section = $section
+   }
+
+   $result = Invoke-Http POST &quot;pages/=$(e2 $pageName)/contents&quot; -With $with -Content $content -Auth $true -Wait
+   if($result.IsSuccessful) {
+      return &quot;$url/$($result | Receive-Http Text //edit/page/path)&quot;
+   } else {
+      return $result
+   }
+}
+
+# Same as Set-DekiContent, except this one crashes if the page already exists.
+# This is technically the only safe way to create new pages without fear of conflicts...
+CMDLET New-DekiContent {
+PARAM(
+   [Parameter(Position=0, Mandatory=$true)]
+   [string]$pageName
+, 
+   [Parameter(Position=1, Mandatory=$true, 
+              ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;FullName&quot;)]
+   [string]
+   $content
+)
+PROCESS {
+   Set-DekiContent $pageName $content -new
+}
+}
+
+# Add a new attachment (or a new version of an existing attachment)
+# You can use wildcards, and specify arrays.  But you could also include descriptions
+# USAGE:
+## Set-DekiFile Path/PageName *.ps1,*.psm1
+## Set-DekiFile Path/PageName @{&quot;Neat.jpg&quot;=&quot;A really cool screenshot&quot;;&quot;Source.zip&quot;=&quot;The source code&quot;}
+## Set-DekiFile Path/PageName Something.png
+## ls *.png | Set-DekiFile Path/PageName
+CMDLET Set-DekiFile {
+param(
+   [Parameter(Position=0, Mandatory=$true)]
+   [string]$pageName
+, 
+   [Parameter(Position=1, Mandatory=$true,
+              ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;FullName&quot;)]
+   $Files
+)
+   # Two ways to specify files: 1) hashtable: file = &quot;description&quot; 1) array: file, file, file
+   $hasDescriptions = $false;
+   if($files -is [Hashtable]) {
+      $hasDescriptions = $true;
+      $fileNames = $files.Keys
+   } else {
+      $fileNames = $files
+   }
+   
+   foreach($fileName in $fileNames) {
+      foreach($file in (gci $fileName)) {
+         $with = @{}
+         if($hasDescriptions) {
+            $With.description = $files[$fileName]
+         }
+
+         $result = Http-Invoke PUT &quot;pages/=$(e2 $pageName)/files/=$($file.Name)&quot; $With $file.FullName -Wait
+         if($result.IsSuccessful) {
+            return ($result | Receive-Http Text //file/href)
+         } else {
+            return $result.Response
+         }
+      }
+   }
+}
+
+## Move a page from one place to another (leaving an &quot;alias&quot; placeholder)
+
+CMDLET Move-DekiContent {
+PARAM(
+   [Parameter(Position=0, Mandatory=$true)]
+   [string]
+   $pageName
+, 
+   [Parameter(Position=1, Mandatory=$true)]
+   [string]
+   $newPageName
+)
+   $with = @{&quot;to&quot;=&quot;$newPageName&quot;}
+   
+   $result = Invoke-Http POST &quot;pages/=$(e2 $pageName)/move&quot; -With $with -Auth $true -Wait
+   if($result.IsSuccessful) {
+      return &quot;$url/$($result | Receive-Http Text '//page[1]/path' )&quot;
+   } else {
+      return $result
+   }
+}
+
+CMDLET New-DekiAlias {
+PARAM(
+   [Parameter(Position=0, Mandatory=$true)]
+   [string]
+   $pageName
+, 
+   [Parameter(Position=1, Mandatory=$true)]
+   [string]
+   $Alias
+)
+  
+   $result = Invoke-Http POST &quot;pages/=$(e2 $pageName)/move&quot; @{&quot;to&quot;=&quot;$Alias&quot;} -Auth $true -Wait
+   if($result.IsSuccessful) {
+      $aliasPage = &quot;$url/$($result | Receive-Http Text '//page[1]/path' )&quot;
+      $result = Invoke-Http POST &quot;pages/=$(e2 $Alias)/move&quot; @{&quot;to&quot;=&quot;$pageName&quot;} -Auth $true -Wait
+      if($result.IsSuccessful) {
+         return $aliasPage
+      } else {
+         return $result
+      }
+   } else {
+      return $result
+   }
+}
+
+# Delete a page from a dekiwiki, with an option to RECURSIVELY delete all child pages.
+# NOTE: if you delete a page that has children, and don't recurse, the contents are removed
+#       and then replaced with template text, because they can't go away completely
+# NOTE: if you delete a page, it is actually put in the archive
+# TODO: add a -Force parameter to allow them to be permanently deleted from the archive
+CMDLET Remove-DekiContent {
+PARAM(
+   [Parameter(Position=0, Mandatory=$true,ValueFromPipelineByPropertyName=$true)][string]$pageName
+,
+   [Parameter(Position=2, Mandatory=$false)][switch]$recurse
+)
+
+   Http-Invoke DELETE &quot;pages/=$(e2 $pageName)&quot; @{recursive=$($recurse.ToBool())}
+   if($result.IsSuccessful) {
+      return &quot;DELETED $url/$PageName&quot;
+   } else {
+      return $result.Response
+   }
+}
+
+# Delete a file attachment from a dekiwiki page
+# You can use wildcards, and specify arrays:
+## USAGE:
+## Remove-DekiFile Path/PageName *.ps1,*.psm1
+## Remove-DekiFile Path/PageName Something.png
+## ls *.png | Remove-DekiFile Path/PageName
+CMDLET Remove-DekiFile {
+PARAM(
+   [Parameter(Position=0, Mandatory=$true,ValueFromPipelineByPropertyName=$true)][string]$pageName
+,
+   [Parameter(Position=1, Mandatory=$true,
+              ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Name&quot;)]
+   $fileNames
+)
+   $files = Invoke-Http GET &quot;pages/=$(e2 $pageName)/files&quot; | Receive-Http Text //file/filename
+   foreach($fileName in $fileNames) {
+      foreach($file in $($files -like $fileName)) {
+         $path = &quot;pages/=$(e2 $pageName)/files/=$(e2 $file)&quot;
+         Write-Host $path -fore cyan
+         $result = Invoke-Http DELETE $path -Auth $true -Wait
+      
+         if($result.IsSuccessful) {
+            &quot;DELETED: $api/$path&quot;
+         } else {
+            $result.Response
+         }
+      }
+   }
+}
+
+Export-ModuleMember Set-DekiCredential, Set-DekiUrl, 
+                    Get-HtmlHelp, Get-DekiFile, Get-DekiSiteMap, Get-DekiContent, 
+                    Set-DekiContent, New-DekiContent,
+                    Move-DekiContent, New-DekiAlias,
+                    Remove-DekiContent, Remove-DekiFile,
+                    Set-DekiFile
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

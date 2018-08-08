@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Kurt Falde">
+    <title>Evt XPath Creation - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Evt XPath Creation</h1>
+<h3><a href="//scripts/5876.ps1">download</a></h3>
+<p>Parses a Windows Event log entry by specifying EventRecordID and Log name and outputs XPath that can be used in an event filter/view or Windows Event Forwarding Filter</p>
+<pre><code class="language-posh">&lt;#
+Script written to parse Event Log Entries to make usable Windows Event log filtering xpath for Windows Event Filters and Windows Eventlog Forwarding
+Finds all Nodes and Attributes that are not empty and not null and then recurses 3 levels up to find the 'Event' node and writes out the correct xpath
+This includes replacing tabs and carriage returns in the #text of the node which do not transport properly to an event filter via copy/paste
+Written 5/22/2015 - Kurt Falde
+#&gt;
+
+
+$EventRecordIDToParse = &quot;3139115&quot;
+$xpath =  &quot;*[System[EventRecordID=($EventRecordIDtoparse)]]&quot;
+$EventToParse = Get-WinEvent -LogName 'Security' -FilterXPath &quot;$xpath&quot;
+[xml]$EventToParsexml = $EventToParse.ToXml()
+$nodes = $EventToParsexml | Select-Xml -XPath './/*'
+Foreach ($node in $nodes){
+
+#Parse Nodes that are not empty, not null and do not have attributes
+if (($node.node.IsEmpty -eq $false) -and ($node.node.'#text' -ne $null) -and ($node.node.HasAttributes -eq $false)){ 
+    
+    $Ntext = $node.Node.'#text'
+    #write-Host $Ntext
+    $Ntext = $Ntext.Replace(&quot;`n&quot;, &quot;&amp;#xD;&amp;#xA;&quot;).Replace(&quot;`t&quot;, &quot;&amp;#x09;&quot;)
+    #write-host $Ntext
+    $Nname = $node.Node.Name
+    #write-host $Nname
+    if($node.node.Parentnode.ParentNode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.Parentnode.name)[($Nname=$Ntext)]]&quot;}
+    if($node.node.Parentnode.ParentNode.ParentNode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.ParentNode.Parentnode.name)[$($node.node.parentnode.name)[($Nname=$Ntext)]]]&quot;}
+    if($node.node.Parentnode.ParentNode.ParentNode.Parentnode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.ParentNode.Parentnode.Parentnode.name)[$($node.node.ParentNode.Parentnode.name)[$($node.node.parentnode.name)[($Nname=$Ntext)]]]]&quot;}
+  }
+
+
+#Parses nodes that are not empty, not null and have attributes
+if (($node.node.IsEmpty -eq $false) -and ($node.node.'#text' -ne $null) -and ($node.node.HasAttributes -eq $true)){ 
+    $Ntext = $node.Node.'#text'
+    #write-Host $Ntext
+    $Ntext = $Ntext.Replace(&quot;`n&quot;, &quot;&amp;#xD;&amp;#xA;&quot;).Replace(&quot;`t&quot;, &quot;&amp;#x09;&quot;)
+    #write-host $Ntext
+    $Nname = $node.Node.Name
+    #write-host $Nname
+    # *[EventData[Data[@Name='Properties'] and (Data='%%7688&amp;#x
+    if($node.node.Parentnode.ParentNode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.Parentnode.name)[$($node.node.LocalName)[@Name='$Nname'] and ($($node.node.LocalName)='$Ntext')]]&quot;}
+    if($node.node.Parentnode.ParentNode.ParentNode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.ParentNode.Parentnode.name)[$($node.node.parentnode.name)[($Nname=$Ntext)]]]&quot;}
+    if($node.node.Parentnode.ParentNode.ParentNode.Parentnode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.ParentNode.Parentnode.Parentnode.name)[$($node.node.ParentNode.Parentnode.name)[$($node.node.parentnode.name)[($Nname=$Ntext)]]]]&quot;}
+    }
+
+
+#Parses nodes that are empty/null but have attributes
+if (($node.node.IsEmpty -ne $false) -and ($node.node.'#text' -eq $null) -and ($node.node.HasAttributes -eq $true)){ 
+    $AttributeText = &quot;&quot;
+    $Attributes = $node.node.Attributes
+    Foreach($Attribute in $Attributes){
+    $AttrName = $Attribute.Name
+    $AttrText = $Attribute.'#text'
+    $AttributeText += &quot;@$AttrName='$AttrText' and &quot;
+    #write-host $AttributeText
+    }
+    $AttributeText = $AttributeText.TrimEnd(&quot; and &quot;)
+    $Nname = $node.Node.Name
+    if($node.node.Parentnode.ParentNode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.Parentnode.name)[$($node.node.LocalName)[$AttributeText]]&quot;}
+    if($node.node.Parentnode.ParentNode.ParentNode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.ParentNode.Parentnode.name)[$($node.node.parentnode.name)[$AttributeText]]]&quot;}
+    if($node.node.Parentnode.ParentNode.ParentNode.Parentnode.Name -eq &quot;Event&quot;){
+    write-host &quot;*[$($node.node.ParentNode.Parentnode.Parentnode.name)[$($node.node.ParentNode.Parentnode.name)[$($node.node.parentnode.name)[$AttributeText]]]]&quot;}
+    }
+
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>ConvertHelpTo-Html - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ConvertHelpTo-Html</h1>
+<h3><a href="//scripts/670.ps1">download</a></h3>
+<p>ConvertTo-DekiContent is an improvement on &quot;New-HtmlHelp&quot;:http://blogs.vmware.com/vipowershell/2007/09/new-htmlhelp.html, with a specific focus on output suitable for DekiWiki.  I commented out the html and body tags, etc. because the HTML markup is destined for the DekiWiki.  It's an improvement over the original because we cleaned up the parameter and example code, and broke apart the syntax, so it's easier to read.</p>
+<p><em>NOTE:</em> This has been tested as a v2 Module, but should work in v1 (<em>fingers crossed</em>)</p>
+<pre><code class="language-posh">## ConvertTo-DekiContent (aka Convert Help to Html)
+####################################################################################################
+## Converts the -Full help output to HTML markup for insertion into web pages.
+####################################################################################################
+## Usage:
+##
+## foreach($cmd in (gcm -type cmdlet | ? { $_.PsSnapin -like &quot;Microsoft.PowerShell*&quot; })) {
+##
+##    Get-Help $cmd.Name -full | ConvertTo-DekiContent Cmdlet_Help | 
+##    %{ Set-DekiContent &quot;Cmdlet_Help/$($cmd.PSSnapin)/$($cmd.Name)&quot; $_ }
+## }
+##
+####################################################################################################
+## History:
+## v2.0 - Refactoring of markup and code by Joel &quot;Jaykul&quot; Bennett to avoid line-wrapping, and 'pre'
+##        blocks in the code and to format the parameters and examples more like the originals.
+## v1.0 - Original version by http://blogs.vmware.com/vipowershell/2007/09/new-htmlhelp.html
+####################################################################################################
+
+#Import System.Web in order to use HtmlEncode functionality
+[System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Web&quot;) | out-null
+
+## Get-HtmlHelp - A Helper function for generating help:
+## Usage:  Get-HtmlHelp Get-*
+function Get-HtmlHelp {
+   param([string[]]$commands, [string]$baseUrl)
+   $commands | Get-Command -type Cmdlet -EA &quot;SilentlyContinue&quot; | get-help -Full | ConvertTo-DekiContent $baseUrl
+}
+
+function ConvertTo-DekiContent {
+param($baseUrl)
+PROCESS {
+   if($_ -and ($_.PSObject.TypeNames -contains &quot;MamlCommandHelpInfo#FullView&quot;)) {
+      $help = $_
+      
+      # Name isn't needed, since this is going as the body, but ...
+      # $data = &quot;&lt;html&gt;&lt;head&gt;&lt;title&gt;$(encode($help.Name))&lt;/title&gt;&lt;/head&gt;&lt;body&gt;&quot;;
+      # $data += &quot;&lt;h1&gt;$(encode($help.Name))&lt;/h1&gt;&quot;
+   
+      # Synopsis
+      $data += &quot;&lt;h2&gt;Synopsis&lt;/h2&gt;$($help.Synopsis | Out-HtmlPara)&quot;
+      
+      # Syntax
+      $data += &quot;&lt;h2&gt;Syntax&lt;/h2&gt;$($help.Syntax | Out-HtmlPara)&quot;
+   
+      # Related Commands
+      $data += &quot;&lt;h2&gt;Related Commands&lt;/h2&gt;&quot;
+      foreach ($relatedLink in $help.relatedLinks.navigationLink) {
+         if($relatedLink.linkText -ne $null -and $relatedLink.linkText.StartsWith(&quot;about&quot;) -eq $false) {
+            $uri = &quot;&quot;
+            if( $relatedLink.uri -ne &quot;&quot; ) {
+               $uri = $relatedLink.uri
+            } else{
+               $uri = &quot;$baseUrl/$((get-command $relatedLink.linkText -EA &quot;SilentlyContinue&quot;).PSSnapin.Name)/$($relatedLink.linkText)&quot;
+            }
+            $data += &quot;&lt;a href='$(encode($uri)).html'&gt;$(encode($relatedLink.linkText))&lt;/a&gt;&lt;br&gt;&quot;
+         }
+      }
+   
+      # Detailed Description
+      $data += &quot;&lt;h2&gt;Detailed Description&lt;/h2&gt;$(encode(&amp;{$help.Description | out-string -width 200000}))&quot;
+   
+      # Parameters
+      $data += &quot;&lt;h2&gt;Parameters&lt;/h2&gt;&quot;
+      $help.parameters.parameter | %{
+         $param = $_
+         $data += &quot;&lt;h4&gt;-$(encode($param.Name)) [&amp;lt;$(encode($param.type.name))&amp;gt;]&lt;/h4&gt;&quot;
+         $data += $param.Description | Out-HtmlPara
+         $data += &quot;&lt;table&gt;&quot;
+         $data += &quot;&lt;tr&gt;&lt;th&gt;Required? &amp;nbsp;&lt;/th&gt;&lt;td&gt; $(encode($param.Required))&lt;/td&gt;&lt;/tr&gt;&quot;
+         $data += &quot;&lt;tr&gt;&lt;th&gt;Position? &amp;nbsp;&lt;/th&gt;&lt;td&gt; $(encode($param.Position))&lt;/td&gt;&lt;/tr&gt;&quot;
+         $data += &quot;&lt;tr&gt;&lt;th&gt;Default value? &amp;nbsp;&lt;/th&gt;&lt;td&gt; $(encode($param.defaultValue))&lt;/td&gt;&lt;/tr&gt;&quot;
+         $data += &quot;&lt;tr&gt;&lt;th&gt;Accept pipeline input? &amp;nbsp;&lt;/th&gt;&lt;td&gt; $(encode($param.pipelineInput))&lt;/td&gt;&lt;/tr&gt;&quot;
+         $data += &quot;&lt;tr&gt;&lt;th&gt;Accept wildcard characters? &amp;nbsp;&lt;/th&gt;&lt;td&gt; $(encode($param.globbing))&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&quot;
+      }
+   
+      if($help.inputTypes) {
+         # Input Type
+         $data += &quot;&lt;h3&gt;Input Type&lt;/h3&gt;$($help.inputTypes | Out-HtmlPara)&quot;
+      }
+      if($help.returnValues) {
+         # Return Type
+         $data += &quot;&lt;h3&gt;Return Type&lt;/h3&gt;$($help.returnValues | Out-HtmlPara)&quot;
+      }
+      # Notes
+      $data += &quot;&lt;h2&gt;Notes&lt;/h2&gt;$($help.alertSet | Out-HtmlPara)&quot;
+   
+      # Examples
+      $data += &quot;&lt;h2&gt;Examples&lt;/h2&gt;&quot;
+      
+      $help.Examples.example | %{
+         $example = $_
+         $data += &quot;&lt;h4&gt;$(encode($example.title.trim(' -')))&lt;/h4&gt;&quot;
+         $data += &quot;&lt;code&gt;&lt;strong&gt;PS&amp;gt;&lt;/strong&gt;&amp;nbsp;$(encode($example.code))&lt;/code&gt;&quot;
+         $data += &quot;&lt;p&gt;$($example.remarks | out-string -width ([int]::MaxValue) | Out-HtmlPara)&lt;/p&gt;&quot;
+
+      }
+      # $data += &quot;&lt;/body&gt;&quot;
+
+      write-output $data
+   } else { 
+      Write-Error &quot;Can only process -Full view help output&quot;
+   }
+}}
+
+
+
+function encode($str) {
+   begin{ if($str){ $str.split(&quot;`n&quot;) | encode  } }
+   process{ if($_){ [System.Web.HttpUtility]::HtmlEncode($_).Trim() } }
+}
+
+function trim($str) {
+   begin{ if($str){ $str.Trim() } }
+   process{ if($_){ $_.Trim() } }
+}
+
+function split($Separator=&quot;`n&quot;,$inputObject) {
+   begin{ if($inputObject){ $inputObject | split $Separator } }
+   process{ if($_){ [regex]::Split($_,$Separator) | ? {$_.Length} } }
+}
+
+function join($Separator=$ofs,$inputObject) {
+   begin{ if($inputObject){ [string]::Join($Separator,$inputObject) } else { $array =@() }}
+   process{ if($_){ $array += $_ } }
+   end{ if($array.Length) { [string]::Join($Separator,$array) } }
+}
+
+function Out-HtmlPara {
+   process{if($_){&quot;&lt;p&gt;$($_ | out-string -width ([int]::MaxValue) | split &quot;\s*`n&quot; | encode | trim | join &quot;&lt;/p&gt;`n&lt;p&gt;&quot;)&lt;/p&gt;&quot;}}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

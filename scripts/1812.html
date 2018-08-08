@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Nathan Linley">
+    <title>Dell hardware checker - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Dell hardware checker</h1>
+<h3><a href="//scripts/1812.ps1">download</a></h3>
+<p>This script runs a variety of checks on server hardware to get status or basic information.  It can check memory, perc events, firmware versions, gets service tags, shows summary hardware status, retrieves ESM log, and can auto load the omsa webpage.  This is a basic overview of some dell WMI related namespace operations which can be easily extended as needed.  To run the script, provide the name of the function you want to call and the remote machine name to check.  Note:  WMI namespace for Dell is installed with dell openmanage software, v4 and higher.</p>
+<pre><code class="language-posh">function load-omsa([string]$server) {
+
+	$omsaie = new-object -com InternetExplorer.Application
+	if (($server -eq $null) -or ($server -eq &quot;&quot;)) {
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;Usage: omsa servername&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;     Enter servername to open OMSA connection to server&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;&quot;
+		exit
+	}
+
+	$portopen = tcpt $server 1311
+	if ($portopen -eq $false) {
+		write-host -foregroundcolor &quot;red&quot; &quot;OMSA Port not accessible, may be behind firewall or service not running&quot;
+		exit
+	}
+
+
+	
+	$omsaie.visible = 1
+	$url = &quot;https://&quot; + $server + &quot;:1311//servlet/Login?omacmd=getlogin&amp;amp;page=Login&quot;
+	$omsaie.navigate($url)
+	sleep 5
+	if ($omsaie.document -ne $null) {	
+		if ($omsaie.document.getElementById(&quot;overridelink&quot;) -ne $null) {
+			$omsaie.document.getElementById(&quot;overridelink&quot;).click()	
+			
+		} 
+	}
+
+
+}
+
+function tcpt ([string]$serv, [string]$p) {
+	#simple tcp port checker.  Return true if port is open and connection worked
+	 $error.clear()
+	 trap {continue;}
+	 $conn = new-object system.net.sockets.tcpclient($serv,$p)
+	 if ($error) { return $false } else { return $true}
+}
+
+
+
+Function memory ([string]$server) {
+	$errfound = $false
+	if ($server -eq $null) {
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;Usage memory servername&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;   Enter servername to see DIMM status&quot;
+		exit 
+	}
+
+	$server = &amp;namescrub $server
+
+	$a = Get-WMIObject -Namespace root\CIMv2\Dell -computername $server -Class CIM_PhysicalMemory -erroraction silentlycontinue -errorvariable err
+
+	if (-not($?)) {
+		omsaerr
+		exit
+	}
+
+	if ($a -eq $null) {
+		write-host -foregroundcolor &quot;red&quot; &quot;Could not get memory information on this machine&quot;
+		&amp;wantomsa
+		write-host
+		exit 
+	} else {
+		$b = $a |select-object Name,Capacity,Status
+		echo &quot;Location           Capacity      Status&quot;
+		write-host
+		foreach ($item in $b) {
+			$item.capacity = $item.capacity / 1073741824
+			$itemstring = [string]$item.capacity + &quot; GB&quot;
+			write-host $item.Name &quot;       &quot;   $itemstring  &quot;       &quot;   $item.status
+	
+		}
+		foreach ($item in $b) {
+			if ($item.Status -eq &quot;Error&quot;) {
+				$errfound = $true
+			}
+		}
+
+		write-host
+		if ($errfound) {
+			&amp;amdb $server
+		}
+
+		exit 
+	}
+}
+
+Function hwlog ([string]$server) {
+	if ($server -eq $null) {
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;Usage hwlog servername&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;    Enter servername to pull OMSA hardware event log&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;&quot;
+		exit
+	}
+
+	$server = &amp;namescrub $server
+
+	$a = Get-WMIOBject -Namespace root\CIMv2\DELL -computername $server -Class DELL_EsmLog -erroraction silentlycontinue -errorvariable err
+	
+	if (-not($?)) {
+		omsaerr
+		exit
+	}
+
+	if ($a -eq $null) {
+		write-host -foregroundcolor &quot;red&quot; &quot;Could not get omsa log for this machine&quot;
+		write-host
+		exit
+	} else {
+
+		$b = $a |select-object EventTime,LogRecord
+		foreach ($item in $b) {
+			if ($item.EventTime -ne $null) {
+				$item.EventTime = &amp;converttime $item.EventTime
+			} else {
+				
+			}
+		}
+
+		$b |format-table -wrap -autosize |more
+
+		write-host
+	}
+}
+
+
+Function perc ([string]$server) {
+	if ($server -eq $null) {
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;Usage perc servername&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;    Enter servername to get Perc events&quot;
+		write-host
+		exit
+	}
+
+	$server = &amp;namescrub $server
+
+	$a = Get-WmiObject -Class Win32_NTLogEvent -filter &quot;Logfile='Application' AND SourceName='VxSvc_PercPro' AND Type='Warning'&quot; -computer $server -erroraction silentlycontinue -errorvariable err
+
+	if ($a -eq $null) {
+		write-host -foregroundcolor &quot;red&quot; &quot;Could not get event log perc events&quot;
+		&amp;wantomsa
+		write-host
+		exit
+	} else {
+		$n = 6
+		$b = $a |select-object TimeGenerated,EventCode,Message
+		foreach ($item in $b) {
+			if ($item.TimeGenerated -ne $null) {
+				$item.TimeGenerated = &amp;converttime $item.TimeGenerated
+				write-host $item.TimeGenerated   $item.EventCode   $item.Message
+			} else {
+				write-host &quot;No time given&quot;   $item.LogRecord
+			}
+			$n = $n - 1
+			if ($n -eq 0) { write-host; exit}
+		}
+		#$b | format-list  |more		
+		
+
+	}
+}
+
+Function hwstatus ([string]$server) {
+	if ($server -eq $null) {
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;Usage hwstatus servername&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;   Enter servername to get status of chassis&quot;
+		write-host
+		exit
+	}
+
+	$server = &amp;namescrub $server
+
+	$a = Get-WMIObject -Namespace root\CIMv2\Dell -computername $server -Class DELL_Chassis -erroraction silentlycontinue -errorvariable err
+
+	if (-not($?)) {
+		omsaerr
+		exit
+	}	
+
+	if ($a -eq $null) {
+		write-host -foregroundcolor &quot;red&quot; &quot;Could not get chassis status on this machine&quot;
+		write-host
+		exit
+	} else {
+
+		$b = $a |select-object Model,SerialNumber,Status,ProcStatus,PsStatus,TempStatus,VoltStatus,FanStatus
+		$b
+	}
+
+}
+
+
+function omsaerr {
+    
+	$exception = $error[0].Exception.ErrorCode
+	if ($exception -eq &quot;InvalidNamespace&quot;) {
+		write-host &quot;OMSA version not high enough to query machine&quot;  -foregroundcolor &quot;red&quot;
+		
+	} elseif ($error[0].CategoryInfo.Reason -eq &quot;UnauthorizedAccessException&quot;) {
+		write-host &quot;Access is Denied&quot; -foregroundcolor &quot;red&quot;
+	} elseif ($error[0].Exception.ErrorCode -eq -2147023174) {	
+		write-host &quot;Can't connect to RPC service on machine, if OS is windows, server might be down or behind a firewall. &quot; -foregroundcolor &quot;red&quot;
+	} else {
+		write-host &quot;OMSA connection failed&quot; -foregroundcolor &quot;red&quot;
+	
+	}
+		write-host
+		$error.clear()
+		&amp;wantomsa
+}
+
+function firmware ([string]$server) {
+	if (($server -eq $null) -or ($server -eq &quot;&quot;)) {
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;Usage:  Firmware servername&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;    Enter servername to get all firmware information on the dell components&quot;
+		write-host
+		exit
+	}
+
+	$server = &amp;namescrub $server
+
+	$a = Get-WMIObject -Namespace root\CIMv2\Dell -computername $server -Class DELL_Firmware -erroraction silentlycontinue -errorvariable err
+
+	if (-not($?)) {
+		omsaerr
+		exit
+	}	
+
+	if ($a -eq $null) {
+		write-host -foregroundcolor &quot;red&quot; &quot;Could not get firmware information for this machine (OMSA needs to be &gt;=4.4)&quot;
+		&amp;wantomsa
+		write-host
+		exit
+	} else {
+
+		$b = $a |select-object Name,SoftwareElementID
+		$b
+	}
+
+}
+
+
+Function wantomsa() {
+	
+	$omsatest = tcpt $server 1311
+	if ($omsatest) {
+		write-host
+		echo &quot;Would you like to run OMSA to check further? (y/n)&quot;
+		$key = $host.ui.RawUI.ReadKey(12)
+		if (($key.Character -eq 'y') -or ($key.Character -eq 'Y')) {
+			&amp;load-omsa $server
+		}
+
+	}
+	write-host
+}
+
+Function gettag([string]$server) {
+	#This function gets the machine's service tag
+
+	$server = &amp;namescrub $server
+
+	if ($server -eq &quot;&quot;) {
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;Usage: gettag servername&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;    Enter the name of the server that you would like to get&quot;
+		write-host -foregroundcolor &quot;yellow&quot;  &quot;    the service tag for&quot;
+		exit
+	}
+
+	write-host
+	$a = Get-WmiObject Win32_BIOS -computername $server -erroraction silentlycontinue -errorvariable err
+	if ($a -eq $null) { 
+		write-host -foregroundcolor &quot;red&quot; &quot;Server not found or can't connect, could not get tag number&quot;
+		&amp;wantomsa
+		exit
+	} 
+	else {
+		$a = $a | select-object SerialNumber
+		$b = $a.serialnumber
+		echo &quot;Service tag for $server is $b&quot;
+		write-host
+	}
+}
+
+Function converttime ([string]$timestr) {
+	$formattime = $timestr.Substring(0,4) + &quot; &quot; + $timestr.Substring(4,2) + &quot;M &quot; + $timestr.Substring(6,2) + &quot;D &quot; + $timestr.Substring(8,2) + &quot;:&quot; + $timestr.Substring(10,2)
+	return $formattime
+}
+
+$server = $args[1]
+$function = $args[0]
+
+if ($function -eq $null -or $server -match &quot;\?&quot;) {
+	Write-Host -ForegroundColor &quot;yellow&quot; &quot;Usage:  Dell-hwchecks-wmi.ps1 &lt;function&gt; [servername]&quot;
+	Write-Host -ForegroundColor &quot;yellow&quot; &quot;     Functions:&quot;
+	Write-Host -ForegroundColor &quot;yellow&quot; &quot;        hwlog     -  Prints ESM log&quot;
+	write-host -ForegroundColor &quot;yellow&quot; &quot;        load-omsa -  Open OMSA web interface on remote machine&quot;
+	Write-Host -ForegroundColor &quot;yellow&quot; &quot;        hwstatus  -  Chassis component health check&quot;
+	Write-Host -ForegroundColor &quot;yellow&quot; &quot;        gettag    -  Print service tag&quot;
+	Write-Host -ForegroundColor &quot;yellow&quot; &quot;        firmware  -  List firmware versions&quot;
+	Write-Host -ForegroundColor &quot;yellow&quot; &quot;        perc      -  Search event log for perc events&quot;
+	Write-Host -ForegroundColor &quot;yellow&quot; &quot;        memory   -  List memory modules and status&quot;
+	exit
+}
+if ($server -eq $null -or $server -eq &quot;&quot;) { $server = &quot;locahost&quot; }
+
+&amp;$function $server
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

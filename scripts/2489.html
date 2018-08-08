@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BartekB">
+    <title>CD.psm1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>CD.psm1</h1>
+<h3><a href="//scripts/2489.ps1">download</a></h3>
+<p>Very simple module that's add 'cd -' functionality. It basically keeps track of folders you have visited (using prompt function) and make those available in Set-PrevLocation function. Alias cd- make it (almost) feel like original. You can add argument [int] that will limit list's length. If you have other modules that modify prompt: keep in mind that it will restore prompt function on removal but will use state that existed when it was imported... So any changes done in between will be probably lost.</p>
+<pre><code class="language-posh">PARAM ( $MaxEntryCount = 50) 
+&lt;# 
+    Author: Bartek Bielawski (@bielawb on Twitter)
+    Adds cd- functionality known in bash, an probably some other shells.
+    Version: 0.1
+    Any comments/ feedback welcome, ping me on twitter on via e-mail (bartb at aster dot pl)
+#&gt;
+
+
+&lt;#
+    We have to modify prompt function to handle changes in current location.
+    To prevent Remove-Module from deleting it we stored in private variable and restore from there OnRemove event.
+#&gt;
+
+$oldPrompt = Get-Content function:\prompt -ErrorAction SilentlyContinue
+$MyPrompt = @&quot;
+    # Added by cd module
+        Add-LocationToList
+    # Back to your original prompt
+&quot;@
+
+Set-Content function:\prompt -Force $($MyPrompt + $oldPrompt)
+
+$MyInvocation.MyCommand.ScriptBlock.Module.OnRemove = {
+    # Remove-Module would actually remove Funtion:\Prompt and we... would like to avoid it
+    Set-Content Function:\prompt -Value $oldPrompt
+}
+
+
+function Add-LocationToList {
+  
+&lt;#
+    .Synopsis
+        Adds directory to list of recent locations used by Set-PrevLocation function
+    .Description
+        This command will add string to collection of recent folders. It checks if string is a valid path.
+        It will ignore path if it's the last one added to collection.
+        By default it uses global $pwd variable as a parameter, so when launched without parameters will add current location to the list.
+    .Example
+        Add-LocationtoList
+        Adds current location (if not last one added) to collection of recent folders.
+    .Example
+        Add-LocationList C:\temp\foo\bar
+        Adds c:\temp\foo\bar (if it exists and is a container) to the list of recent folders.  
+#&gt;
+  
+    param (
+        [ValidateScript( { Test-Path -Path $_ -PathType Container })]
+        [string]$pwd = $global:pwd
+    )
+    if (!($Script:LocationList)) {
+        $Script:LocationList = New-Object System.Collections.Generic.List[string]
+    }
+    if ($Script:LocationList[0] -ne $pwd) { 
+        $Script:LocationList.Insert(0,$pwd) 
+    }
+    while ($Script:LocationList.Count -gt $MaxEntryCount) {
+        $Script:LocationList.RemoveAt($MaxEntryCount - 1)
+    }
+}
+    
+
+function Set-PrevLocation {
+
+&lt;#
+    .Synopsis
+        Goes to folder that was previously visited/ added to the list of recent folders.
+    .Description
+        This function has 3 possible uses:
+        cd- =&gt; when used without parameters it will simply move to the folder that is first on the list. Usually that means last visited folder.
+        cd- -List =&gt; lists all folders available, with Level assigned to them.
+        cd- -Level X =&gt; changes location to folder with level equal to X
+        In order to work correctly requires that prompt function will not be overwritten after module was loaded.
+    .Example
+        cd c:\
+        cd ~
+        cd-
+        If prompt function have not been overwritten:
+        This will change to root directory, than to home (OS/ user dependent path), and than back to root folder (last visited).
+    .Example
+        Set-PrevLocation -List
+        Lists all folders that are stored on the list of recent folders.
+    .example
+        cd c:\
+        cd ~
+        cd hklm:
+        cd hkcu:
+        cd function:
+        cd alias:
+        cd- 5
+        If prompt function have not been overwritten:
+        Moves to each folder and than jumps back to the one that was visited 5 'jumps' ago.
+#&gt;
+    PARAM (
+        [int]$Level = 1,
+        [switch]$List
+        )
+    if ($List) {
+        if ( $Script:LocationList.Count -gt 1) {
+            for ($i = 1; $i -lt $LocationList.Count; $i ++) {
+                New-Object PSObject -Property @{Level = $I; Path = $LocationList[$i] }
+            } 
+        } else {
+            &quot;List is empty.&quot;
+        }
+        return
+    }
+    if ($script:LocationList.Count -gt $Level) { 
+        Set-Location $script:LocationList[$Level]; 
+        for($RemoveAt = 0;$RemoveAt -lt $Level; $RemoveAt++) { 
+            $Script:LocationList.RemoveAt(0)
+            # That will move others up so next one will always have '0' index. ;)
+        }        
+    } else {
+        Write-Error &quot;Value of Level parameter out of range. Try different value or check list of stored folders (-List).&quot;
+    }
+}
+
+New-Alias -Name cd- -Value Set-PrevLocation -Force
+    
+Export-ModuleMember -Function Set-PrevLocation, Add-LocationToList -Alias cd-
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

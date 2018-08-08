@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="David Chung">
+    <title>Hostprofile Update GUI - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Hostprofile Update GUI</h1>
+<h3><a href="//scripts/3202.ps1">download</a> - <a href="//scripts/3201.md">parent</a></h3>
+<p>GUI interface that helps you update host profiles faster.</p>
+<pre><code class="language-posh">################################################################################################################
+#
+# Purpose:  Host Profile Update
+# Author:   David Chung
+#
+# Ver 1.0 - 09/22/2011  Initial Script
+# Ver 1.1 - 09/26/2011  Added Full GUI support (Primal Forms)
+# Ver 1.2 - 09/26/2011  Enabled User and Password Field
+#						Added Login Fail-safe feature.
+# 						Added Compliance Check Only Box
+#						Search for Powered On Hosts only
+#						Windows Resize Disabled
+#						Removed Progress Bar
+# Ver 1.3 - 09/28/2011	Added hosts in maintenace mode in cluster check 
+#							-stops host profile update if any host in the cluster is in mainteance mode prior to the update
+# Ver 1.4	09/29/2011	Added checks that if the cluster is not selected, the script does not proceed.
+#
+################################################################################################################
+
+#Generated Form Function
+function GenerateForm {
+
+#region Import the Assemblies
+[reflection.assembly]::loadwithpartialname(&quot;System.Drawing&quot;) | Out-Null
+[reflection.assembly]::loadwithpartialname(&quot;System.Windows.Forms&quot;) | Out-Null
+#endregion
+
+#region Generated Form Objects
+$form1 = New-Object System.Windows.Forms.Form
+$button4 = New-Object System.Windows.Forms.Button
+$groupBox3 = New-Object System.Windows.Forms.GroupBox
+$ComplianceBox1 = New-Object System.Windows.Forms.CheckBox
+$label4 = New-Object System.Windows.Forms.Label
+$ClusterName = New-Object System.Windows.Forms.ListBox
+$BeginButton = New-Object System.Windows.Forms.Button
+$CloseButton = New-Object System.Windows.Forms.Button
+$groupBox2 = New-Object System.Windows.Forms.GroupBox
+$ProgressLog = New-Object System.Windows.Forms.ListBox
+$groupBox1 = New-Object System.Windows.Forms.GroupBox
+$LoginButton = New-Object System.Windows.Forms.Button
+$Password = New-Object System.Windows.Forms.TextBox
+$User = New-Object System.Windows.Forms.TextBox
+$vCenter = New-Object System.Windows.Forms.TextBox
+$label3 = New-Object System.Windows.Forms.Label
+$label2 = New-Object System.Windows.Forms.Label
+$label1 = New-Object System.Windows.Forms.Label
+$InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
+#endregion Generated Form Objects
+
+#----------------------------------------------
+#Generated Event Script Blocks
+#----------------------------------------------
+#Provide Custom Code for events specified in PrimalForms.
+$BeginButton_OnClick= 
+{
+#TODO: Place custom script here
+$scluster = $ClusterName.SelectedItem
+if ($scluster -eq $null) {
+	$ProgressLog.items.add(&quot;&quot;)
+	$ProgressLog.items.add(&quot;Please select a cluster from the cluster list&quot;)
+	[Windows.Forms.Application]::DoEvents()	
+	}
+Else {
+	$vcluster = Get-Cluster $scluster
+	$ProgressLog.items.add(&quot;Collecting Powered On Hosts in $vcluster...&quot;)	
+	[Windows.Forms.Application]::DoEvents()	
+	$VMhosts = $vcluster| Get-VMHost | where {$_.PowerState -eq &quot;PoweredOn&quot;} | sort name
+	$ProgressLog.items.add(&quot;....completed&quot;)	
+	$ProgressLog.items.add(&quot;&quot;)
+	[Windows.Forms.Application]::DoEvents()
+	If ($ComplianceBox1.Checked) {
+		$ProgressLog.items.add(&quot;Checking Hosts in $vcluster...&quot;)
+		[Windows.Forms.Application]::DoEvents()
+		ForEach ($VMhost in $VMhosts) {
+			$profile = Test-VMHostProfileCompliance -VMHost $VMhost
+			If ($PROFILE -ne $null) {
+				$hostprofile = Get-vmhostprofile -entity $VMhost
+				$ProgressLog.items.add(&quot;$VMHost is NOT Compliant.&quot;)
+				[Windows.Forms.Application]::DoEvents()
+			}
+			Else {
+				$ProgressLog.items.add(&quot;$vmhost is Compliant.&quot;)
+				[Windows.Forms.Application]::DoEvents()
+			}
+		}
+	$ProgressLog.items.add(&quot;&quot;)
+	$ProgressLog.items.add(&quot;Compliance Check is Completed&quot;)	
+	$ProgressLog.items.add(&quot;&quot;)
+	}
+	Else {
+		$ProgressLog.items.add(&quot;Checking Hosts in $vcluster...&quot;)
+		[Windows.Forms.Application]::DoEvents()
+		$VMhosts = $vcluster| Get-VMHost | where {$_.PowerState -eq &quot;PoweredOn&quot;} | sort name
+		$ClusterHostCount = @($VMhosts).Count
+	    $ClusterConnectedCount = @($VMhosts | where {$_.ConnectionState -eq &quot;Connected&quot;}).Count
+		If ($ClusterHostCount -ne $ClusterConnectedCount){
+	        $ProgressLog.items.add(&quot;WARNING: One or more hosts in $vcluster in Maint. mode.&quot;)
+			$ProgressLog.items.add(&quot;Please try to remediate before updating the host profile.&quot;)
+	       	[Windows.Forms.Application]::DoEvents()
+			}
+		Else {
+			ForEach ($VMhost in $VMhosts) {
+				$profile = Test-VMHostProfileCompliance -VMHost $VMhost
+				If ($PROFILE -ne $null) {
+					$hostprofile = Get-vmhostprofile -entity $VMhost
+					$ProgressLog.items.add(&quot;$VMHost is NOT Compliant.&quot;)
+					[Windows.Forms.Application]::DoEvents()
+					if ($vcluster.DrsAutomationLevel -ne &quot;FullyAutomated&quot;){
+				    	$ProgressLog.items.add(&quot;WARNING: DRS FullyAutomated not set on $vcluster&quot;)
+						$ProgressLog.items.add(&quot;WARNING: Enabling DRS FullyAutomated&quot;)
+						[Windows.Forms.Application]::DoEvents()
+			       		Set-Cluster -Cluster $vcluster -DrsAutomationLevel FullyAutomated -Confirm:$false
+			    	}
+			    	foreach ($vm in ($VMHost | get-vm)){
+			        	if ((get-cddrive -VM $vm).ConnectionState.Connected -eq &quot;true&quot;){
+			            	$ProgressLog.items.add(&quot;WARNING: $VM has a CDROM drive attached, detaching.&quot;)
+							$ProgressLog.items.add(&quot;WARNING: Detaching CDROM.&quot;)
+							[Windows.Forms.Application]::DoEvents()
+			            	Set-CDDrive -CD (get-cddrive -VM $vm) -StartConnected:$false -Connected:$False -Confirm:$false 
+			        	}
+					}
+					$ProgressLog.items.add(&quot;Setting $VMhost to Maintenance Mode...&quot;)
+					[Windows.Forms.Application]::DoEvents()
+					Set-VMHost -State 'Maintenance' -VMHost $VMhost -Evacuate:$true -Confirm:$false
+					$ProgressLog.items.add(&quot;Applying Host Profilie...&quot;)
+					[Windows.Forms.Application]::DoEvents()
+					Apply-VMHostProfile -Entity $VMHost -Profile $hostprofile -ErrorAction SilentlyContinue -Confirm:$false
+					$ProgressLog.items.add(&quot;Taking the Host out of maintenance mode....&quot;)
+					[Windows.Forms.Application]::DoEvents()
+			    	Set-VMHost -VMHost $VMhost -State 'Connected'
+					Test-VMHostProfileCompliance -VMHost $VMhost 
+				}	
+				Else {
+					$ProgressLog.items.add(&quot;$vmhost is Compliant.&quot;)
+					$ProgressLog.items.add(&quot;&quot;)
+					[Windows.Forms.Application]::DoEvents()
+				}
+			}
+			$ProgressLog.items.add(&quot;Compliance Update is Completed&quot;)
+			}
+		}
+	}	
+}
+
+$CloseButton_OnClick= 
+{
+#TODO: Place custom script here
+$form1.Close()
+}
+
+$LoginButton_OnClick= 
+{
+#TODO: Place custom script here
+if ($VCenter.text -like &quot;&quot; -or $Password.text -like &quot;&quot; -or $User.text -like &quot;&quot;) {
+	$ProgressLog.items.add(&quot;Field can not be empty.  Try Again&quot;)
+	[Windows.Forms.Application]::DoEvents()
+	}
+Else {	
+	$LoginButton.Enabled = $false
+	$V = $vCenter.text
+	$PSW = $Password.text
+	$iUser = $User.text
+	#$BSTR = [System.Runtime.InteropServices.marshal]::SecureStringToBSTR($PSW)
+	#$PSW = [System.Runtime.InteropServices.marshal]::PtrToStringAuto($BSTR)
+	$ProgressLog.items.add(&quot;Connecting to $V...&quot;)
+	[Windows.Forms.Application]::DoEvents()
+	#Connect-VIServer -Server $V -User $iUser -Password $PSW -WarningAction:SilentlyContinue
+	$connection = Connect-VIServer $V -User $iuser -Password $PSW -WarningAction:SilentlyContinue
+	if ($connection.Port -notlike &quot;*443*&quot;) {
+		$ProgressLog.items.add(&quot;....Failed!&quot;)
+		$ProgressLog.items.add(&quot;Failed to connect. Check vCenter and credentials.&quot;)
+		$LoginButton.Enabled = $true
+		[Windows.Forms.Application]::DoEvents()
+	}
+	Else {
+	$ProgressLog.items.add(&quot;....connected&quot;)
+	$ProgressLog.items.add(&quot;&quot;)
+	$ProgressLog.items.add(&quot;Getting Cluster Name from $V...&quot;)
+	[Windows.Forms.Application]::DoEvents()
+	$Clusters = Get-Cluster | sort name
+		Foreach ($Cluster in $Clusters){
+			$ClusterName.items.add($Cluster.Name)
+			[Windows.Forms.Application]::DoEvents()
+		}
+	$ProgressLog.items.add(&quot;....completed&quot;)	
+	[Windows.Forms.Application]::DoEvents()	
+	$BeginButton.Enabled = $True
+	}
+}	
+}
+$button4_OnClick= 
+{
+#TODO: Place custom script here
+$vCenter.Text = $null
+$User.Text = $null
+$Password.Text = $null
+$ClusterName.items.clear()
+$ProgressLog.items.clear()
+[Windows.Forms.Application]::DoEvents()
+$BeginButton.Enabled = $false
+$LoginButton.Enabled = $true
+Disconnect-VIServer * -ErrorAction:SilentlyContinue -Confirm:$false 
+}
+
+
+
+$OnLoadForm_StateCorrection=
+{#Correct the initial state of the form to prevent the .Net maximized form issue
+	$form1.WindowState = $InitialFormWindowState
+}
+
+#region Generated Form Code
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 583
+$System_Drawing_Size.Width = 452
+$form1.ClientSize = $System_Drawing_Size
+$form1.DataBindings.DefaultDataSourceUpdateMode = 0
+$form1.FormBorderStyle = 1
+$form1.Name = &quot;form1&quot;
+$form1.Text = &quot;Host Profile Update by David Chung&quot;
+
+
+$button4.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 277
+$System_Drawing_Point.Y = 548
+$button4.Location = $System_Drawing_Point
+$button4.Name = &quot;button4&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 23
+$System_Drawing_Size.Width = 75
+$button4.Size = $System_Drawing_Size
+$button4.TabIndex = 5
+$button4.Text = &quot;Reset Form&quot;
+$button4.UseVisualStyleBackColor = $True
+$button4.add_Click($button4_OnClick)
+
+$form1.Controls.Add($button4)
+
+
+$groupBox3.DataBindings.DefaultDataSourceUpdateMode = 0
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 13
+$System_Drawing_Point.Y = 124
+$groupBox3.Location = $System_Drawing_Point
+$groupBox3.Name = &quot;groupBox3&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 66
+$System_Drawing_Size.Width = 427
+$groupBox3.Size = $System_Drawing_Size
+$groupBox3.TabIndex = 4
+$groupBox3.TabStop = $False
+$groupBox3.Text = &quot;Profile Update&quot;
+
+$form1.Controls.Add($groupBox3)
+
+$ComplianceBox1.CheckAlign = 64
+$ComplianceBox1.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 262
+$System_Drawing_Point.Y = 42
+$ComplianceBox1.Location = $System_Drawing_Point
+$ComplianceBox1.Name = &quot;ComplianceBox1&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 18
+$System_Drawing_Size.Width = 150
+$ComplianceBox1.Size = $System_Drawing_Size
+$ComplianceBox1.TabIndex = 3
+$ComplianceBox1.Text = &quot;Compliance Check Only&quot;
+$ComplianceBox1.UseVisualStyleBackColor = $True
+
+$groupBox3.Controls.Add($ComplianceBox1)
+
+$label4.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 7
+$System_Drawing_Point.Y = 29
+$label4.Location = $System_Drawing_Point
+$label4.Name = &quot;label4&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 23
+$System_Drawing_Size.Width = 100
+$label4.Size = $System_Drawing_Size
+$label4.TabIndex = 2
+$label4.Text = &quot;Select Cluster&quot;
+
+$groupBox3.Controls.Add($label4)
+
+$ClusterName.DataBindings.DefaultDataSourceUpdateMode = 0
+$ClusterName.FormattingEnabled = $True
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 113
+$System_Drawing_Point.Y = 19
+$ClusterName.Location = $System_Drawing_Point
+$ClusterName.Name = &quot;ClusterName&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 30
+$System_Drawing_Size.Width = 122
+$ClusterName.Size = $System_Drawing_Size
+$ClusterName.Sorted = $True
+$ClusterName.TabIndex = 0
+
+$groupBox3.Controls.Add($ClusterName)
+
+
+$BeginButton.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 345
+$System_Drawing_Point.Y = 13
+$BeginButton.Location = $System_Drawing_Point
+$BeginButton.Name = &quot;BeginButton&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 23
+$System_Drawing_Size.Width = 75
+$BeginButton.Size = $System_Drawing_Size
+$BeginButton.TabIndex = 2
+$BeginButton.Text = &quot;Begin&quot;
+$BeginButton.UseVisualStyleBackColor = $True
+$BeginButton.add_Click($BeginButton_OnClick)
+$BeginButton.Enabled = $False
+#
+
+$groupBox3.Controls.Add($BeginButton)
+
+
+
+$CloseButton.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 358
+$System_Drawing_Point.Y = 548
+$CloseButton.Location = $System_Drawing_Point
+$CloseButton.Name = &quot;CloseButton&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 23
+$System_Drawing_Size.Width = 75
+$CloseButton.Size = $System_Drawing_Size
+$CloseButton.TabIndex = 3
+$CloseButton.Text = &quot;Close&quot;
+$CloseButton.UseVisualStyleBackColor = $True
+$CloseButton.add_Click($CloseButton_OnClick)
+
+$form1.Controls.Add($CloseButton)
+
+
+$groupBox2.DataBindings.DefaultDataSourceUpdateMode = 0
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 13
+$System_Drawing_Point.Y = 196
+$groupBox2.Location = $System_Drawing_Point
+$groupBox2.Name = &quot;groupBox2&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 345
+$System_Drawing_Size.Width = 427
+$groupBox2.Size = $System_Drawing_Size
+$groupBox2.TabIndex = 1
+$groupBox2.TabStop = $False
+$groupBox2.Text = &quot;Progress Log&quot;
+
+$form1.Controls.Add($groupBox2)
+$ProgressLog.DataBindings.DefaultDataSourceUpdateMode = 0
+$ProgressLog.FormattingEnabled = $True
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 6
+$System_Drawing_Point.Y = 20
+$ProgressLog.Location = $System_Drawing_Point
+$ProgressLog.Name = &quot;ProgressLog&quot;
+$ProgressLog.SelectionMode = 0
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 316
+$System_Drawing_Size.Width = 414
+$ProgressLog.Size = $System_Drawing_Size
+$ProgressLog.TabIndex = 3
+
+$groupBox2.Controls.Add($ProgressLog)
+
+
+
+$groupBox1.DataBindings.DefaultDataSourceUpdateMode = 0
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 13
+$System_Drawing_Point.Y = 12
+$groupBox1.Location = $System_Drawing_Point
+$groupBox1.Name = &quot;groupBox1&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 106
+$System_Drawing_Size.Width = 427
+$groupBox1.Size = $System_Drawing_Size
+$groupBox1.TabIndex = 0
+$groupBox1.TabStop = $False
+$groupBox1.Text = &quot;vCenter Login&quot;
+
+$form1.Controls.Add($groupBox1)
+
+$LoginButton.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 345
+$System_Drawing_Point.Y = 41
+$LoginButton.Location = $System_Drawing_Point
+$LoginButton.Name = &quot;LoginButton&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 23
+$System_Drawing_Size.Width = 75
+$LoginButton.Size = $System_Drawing_Size
+$LoginButton.TabIndex = 6
+$LoginButton.Text = &quot;Login&quot;
+$LoginButton.UseVisualStyleBackColor = $True
+$LoginButton.add_Click($LoginButton_OnClick)
+
+$groupBox1.Controls.Add($LoginButton)
+
+$Password.DataBindings.DefaultDataSourceUpdateMode = 0
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 113
+$System_Drawing_Point.Y = 71
+$Password.Location = $System_Drawing_Point
+$Password.Name = &quot;Password&quot;
+$Password.PasswordChar = '*'
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 20
+$System_Drawing_Size.Width = 122
+$Password.Size = $System_Drawing_Size
+$Password.TabIndex = 5
+
+$groupBox1.Controls.Add($Password)
+
+$User.DataBindings.DefaultDataSourceUpdateMode = 0
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 113
+$System_Drawing_Point.Y = 44
+$User.Location = $System_Drawing_Point
+$User.Name = &quot;User&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 20
+$System_Drawing_Size.Width = 122
+$User.Size = $System_Drawing_Size
+$User.TabIndex = 4
+
+$groupBox1.Controls.Add($User)
+
+$vCenter.DataBindings.DefaultDataSourceUpdateMode = 0
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 113
+$System_Drawing_Point.Y = 17
+$vCenter.Location = $System_Drawing_Point
+$vCenter.Name = &quot;vCenter&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 20
+$System_Drawing_Size.Width = 122
+$vCenter.Size = $System_Drawing_Size
+$vCenter.TabIndex = 3
+
+$groupBox1.Controls.Add($vCenter)
+
+$label3.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 7
+$System_Drawing_Point.Y = 74
+$label3.Location = $System_Drawing_Point
+$label3.Name = &quot;label3&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 23
+$System_Drawing_Size.Width = 100
+$label3.Size = $System_Drawing_Size
+$label3.TabIndex = 2
+$label3.Text = &quot;Password&quot;
+
+$groupBox1.Controls.Add($label3)
+
+$label2.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 7
+$System_Drawing_Point.Y = 47
+$label2.Location = $System_Drawing_Point
+$label2.Name = &quot;label2&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 23
+$System_Drawing_Size.Width = 100
+$label2.Size = $System_Drawing_Size
+$label2.TabIndex = 1
+$label2.Text = &quot;User Name&quot;
+
+$groupBox1.Controls.Add($label2)
+
+$label1.DataBindings.DefaultDataSourceUpdateMode = 0
+
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 7
+$System_Drawing_Point.Y = 20
+$label1.Location = $System_Drawing_Point
+$label1.Name = &quot;label1&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Height = 23
+$System_Drawing_Size.Width = 100
+$label1.Size = $System_Drawing_Size
+$label1.TabIndex = 0
+$label1.Text = &quot;VI Server&quot;
+
+$groupBox1.Controls.Add($label1)
+
+
+#endregion Generated Form Code
+
+#Save the initial state of the form
+$InitialFormWindowState = $form1.WindowState
+#Init the OnLoad event to correct the initial state of the form
+$form1.add_Load($OnLoadForm_StateCorrection)
+#Show the Form
+$form1.ShowDialog()| Out-Null
+
+
+
+
+} #End Function
+
+#Call the Function
+GenerateForm
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

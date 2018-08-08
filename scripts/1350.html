@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="glnsize">
+    <title>Remove-SMVISnapshots - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Remove-SMVISnapshots</h1>
+<h3><a href="//scripts/1350.ps1">download</a></h3>
+<p>from time to time SMVI will fail to cleanup after it self.  This can quickly get out of control, the following will clean up any errant vSphere Snapshots.</p>
+<pre><code class="language-posh">&lt;#
+.Synopsis
+    Cleanup after SMVI
+.PARAMETER Max
+    Maximum number of concurrent snapshot delete tasks.  Default: 5
+.PARAMETER Recurse
+    Recursively process snapshots untill they are all gone.
+.Example
+    .\Remove-SMVISnapshots.ps1 -Max 10
+    
+    removes the 10 newest smvi leftovers, and returns the prompt
+.Example
+    .\Remove-SMVISnapshots.ps1 -Max 3 -Recurse 
+    
+    will chew through all SMVI snapshots three at a time.
+.notes
+    #Requires -verson 2 
+    Author: Glenn Sizemore
+#&gt;
+[CmdletBinding(SupportsShouldProcess=$True,SupportsTransactions=$False,ConfirmImpact=&quot;low&quot;,DefaultParameterSetName=&quot;&quot;)]
+Param(
+    [parameter()]
+    [int]
+    $Max=2,
+    
+    [parameter()]
+    [switch]
+    $Recurse,
+    
+    [parameter()]
+    [switch]
+    $RunAsync
+)
+begin{
+    Function Get-Snapinfo {
+        &lt;#
+        .Synopsis
+            Get the snapshot info out of a Virtual Machine Managed Entity.  Most useful for
+            reporting!
+        .PARAMETER VM
+            VirtualMachine object to scan to extract snapshots from
+        .PARAMETER VirtualMachineSnapshotTree
+            used to recursively crawl a VM for snapshots... just use -VM
+        .PARAMETER Filter
+            Specify the name of the snapshots you want to retrieve, will perform a regex match.
+        .Example
+            Get-View -ViewType virtualmachine | Get-Snapinfo
+        .Example
+            Get-View -ViewType virtualmachine | Get-Snapinfo -Filter &quot;^SMVI&quot;
+        .notes
+            #Requires -verson 2 
+            Author: Glenn Sizemore
+            get-admin.com/blog/?p=879
+        #&gt;
+        [cmdletBinding(SupportsShouldProcess=$false,DefaultParameterSetName=&quot;VM&quot;)]
+        Param(
+            [parameter(Mandatory=$true,ValueFromPipeline=$true, ParameterSetName=&quot;VM&quot;)]
+            [VMware.Vim.VirtualMachine[]]
+            $VM,
+            
+            [parameter(Mandatory=$true,ValueFromPipeline=$true, ParameterSetName=&quot;Snaptree&quot;)]
+            [VMware.Vim.VirtualMachineSnapshotTree[]]
+            $VirtualMachineSnapshotTree,
+            
+            [parameter(ParameterSetName=&quot;VM&quot;)] 
+            [parameter(ParameterSetName=&quot;Snaptree&quot;)]
+            [string]
+            $Filter
+        )
+        Process {
+            switch ($PScmdlet.ParameterSetName) 
+            {
+                &quot;Snaptree&quot;
+                {
+                    Foreach ($Snapshot in $VirtualMachineSnapshotTree) {
+                        Foreach ($ChildSnap in $Snapshot.ChildSnapshotList) {
+                            if ($ChildSnap) {
+                                Get-Snapinfo -VirtualMachineSnapshotTree $ChildSnap -Filter $Filter
+                            }
+                        }
+                        If ($Snapshot.Name -match $Filter ) {
+                            write-output $Snapshot | Select Name, CreateTime, Vm, Snapshot
+                        }
+                    }
+                }
+                &quot;VM&quot;
+                {
+                    Foreach ($v in $VM) {
+                        Get-Snapinfo -VirtualMachineSnapshotTree $v.Snapshot.RootSnapshotList -Filter $Filter
+                    }
+                }
+            }
+        }
+    }
+    $Snapshots = Get-View -ViewType virtualmachine `
+            -Property snapshot `
+            -Filter @{&quot;Snapshot&quot;=&quot;VMware.Vim.VirtualMachineSnapshotInfo&quot;} `
+            -verbose:$False |
+                Get-Snapinfo -Filter &quot;^smvi_&quot; |
+                Sort-Object @{Expression=&quot;VM&quot;;Descending=$false},@{Expression=&quot;CreateTime&quot;;Descending=$true}
+    $Start = Get-date
+}
+Process
+{
+    while ($snapshots.count -gt 0)
+    {
+        $VirtualMachineSnapshots = $Snapshots | 
+            Group-Object -Property VM | 
+            Foreach-Object { 
+                # Select one snapshot for each VM we do this to ensure we
+                # don't try to delete more than one snapshot per VM, Per pass
+                $_.Group | Select-Object -first 1 
+            } | Select-Object -first $max
+        
+        $tasks = @()
+        # Remove snapshots 
+        Foreach ($VirtualMachineSnapshot in $VirtualMachineSnapshots ) {
+            If ($pscmdlet.ShouldProcess($VirtualMachineSnapshot.VM,&quot;removing snapshot $($VirtualMachineSnapshot.Name)&quot;)) {
+                $snap = Get-View $VirtualMachineSnapshot.snapshot -verbose:$False
+                
+                # RemoveSnapshot_Task will return the task moref
+                $taskMoRef = $snap.RemoveSnapshot_Task($false)
+                
+                #  Convert that moref into a Task object
+                $Tasks += Get-VIObjectByVIView -MORef $taskMoRef -verbose:$False
+            }
+        }
+        
+        if ($RunAsync) {
+            #return the taskimpl, and then break out
+            Foreach ($t in $Tasks) {
+                write-output $t
+            }
+            break
+        }
+        sleep 2
+        #Pause for snap delets
+        Wait-Task -Task $tasks -Verbose:$false
+        
+        # if not recurse break out!
+        if (!$recurse -or $PSCmdlet.MyInvocation.BoundParameters.whatif.IsPresent){
+            $snapshots = $null
+        } 
+        Else {
+            $Snapshots = Get-View -ViewType virtualmachine `
+                -Property snapshot `
+                -Filter @{&quot;Snapshot&quot;=&quot;VMware.Vim.VirtualMachineSnapshotInfo&quot;} `
+                -verbose:$False |
+                    Get-Snapinfo -Filter &quot;^smvi_&quot; |
+                    Sort-Object @{Expression=&quot;VM&quot;;Descending=$false},@{Expression=&quot;CreateTime&quot;;Descending=$true}
+        }
+        
+        
+        
+    }
+}
+End {write-output (New-TimeSpan -start $start)}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Leon Scheltema">
+    <title>Step02a-Export_VM-to-Fol - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Step02a-Export_VM-to-Fol</h1>
+<h3><a href="//scripts/5664.ps1">download</a></h3>
+<p>Export vCenter Folder structure incl VM relations</p>
+<pre><code class="language-posh"># Export vCenter Folder structure incl VM relations
+# By Leon Scheltema AVANCE ICT Groep Nederland
+# Functions used by Grzegorz Kulikowski / Robert van den Nieuwendijk
+
+# Begin variables
+$DefaultVIServers
+$OldVC = &quot;Old vCenter&quot;
+$NewVC = &quot;New vCenter&quot;
+# End variables
+
+# Connect to vCenter server
+Connect-VIServer &quot;$OldVC&quot;
+Connect-VIServer &quot;$NewVC&quot;
+
+
+function Copy-VCFolderStructure {
+&lt;#
+    .SYNOPSIS
+        Copy-VCFolderStructure copies folder and its structure from one VC to another..
+ 
+    .DESCRIPTION
+        Copy-VCFolderStructure can be handy when doing migrations of clusters/hosts between
+        Virtual Center servers. It takes folder structure from 'old' VC and it recreates it on 'new'
+        VC. While doing this it will also output virtualmachine name and folderid. Why would you
+        want to have it ? Let's say that you have a cluster on old virtual center server 
+        oldvc.local.lab
+        DC1\Cluster1\folder1
+        DC1\Cluster1\folderN\subfolderN
+        Copy-VCFolderStructure will copy entire folder structure to 'new' VC, and while doing this
+        it will output to screen VMs that resides in those structures. VM name that will be shown on
+        screen will show also folderid, this ID is the folderid on new VC.  After you have migrated 
+        your hosts from old cluster in old VC to new cluster in new VC, and folder structure is there,
+        you can use move-vm cmdlet with -Location parameter. As location you would have give the
+        folder object that corresponds to vm that is being moved. Property Name is the name of VM
+        that was discovered in that folder and Folder is the folderid in which the vm should be moved
+        into. This folderid has to first changed to folder, for example :
+        $folderobj=get-view -id $folder|Get-VIObjectByVIView
+        We can then use $folderobj as parameter to move-vm Location parameter
+ 
+    .PARAMETER  OldFolder
+        This should be the extensiondata of folder that you want to copy to new VC.
+        $folderToRecreate=Get-Folder -Server oldVC.lab.local -Name teststruct
+        Have in mind that this should be an single folder and not an array.
+         
+ 
+    .PARAMETER  ParentOfNewFolder
+        When invoking the function this is the root folder where you want to attach the copied folder.
+        Let's say you are copying folder from \DatacenterA\FolderX\myfolder
+        If you will have the same structure on the new VC, you would have set ParentOfNew folder
+        to FolderX. Still it's not a problem if you have a new structure on new VC. Let's say that on
+        new VC you have folder: \DatacenterZ\NewStructure\FolderZ and you want to copy entire
+        'myfolder' beneath the FolderZ. In that case, first create a variable that has desired folder
+        $anchor=get-folder 'FolderZ' -Server newVC 
+        Make sure that $anchor variable will have only 1 element.
+         
+    .PARAMETER  NewVC
+        This parameter describes virtual center to which we are copying the folder structure.
+        Copy-VCFolderStructure works only when you are connected to both old and new vc at the
+        same time. You need to set your configuration of PowerCLI to handle multiple connections.
+        Set-PowerCLIConfiguration -DefaultVIServerMode 'Multiple'
+        You can check if you are connected to both servers using $global:DefaultVIServers variable
+ 
+    .PARAMETER  OldVC
+        This parameter describes virtual center from which we are copying the folder structure.
+        Copy-VCFolderStructure works only when you are connected to both old and new vc at the
+        same time. You need to set your configuration of PowerCLI to handle multiple connections.
+        Set-PowerCLIConfiguration -DefaultVIServerMode 'Multiple'
+        You can check if you are connected to both servers using $global:DefaultVIServers variable
+         
+         
+ 
+    .EXAMPLE
+        PS C:\&gt; Set-PowerCLIConfiguration -DefaultVIServerMode 'multiple'
+        PS C:\&gt; $DefaultVIServers 
+        Ensure that you are connected to both VC servers
+        Establish variables:
+        This will be the folder that we will be copying from old VC
+        $folderToRecreate=Get-Folder -Server $OldVC -Name 'teststruct'
+        This will be the folder to which we will be copying the folder structure
+        $anchor=get-folder 'IWantToPutMyStructureHere' -Server $NewVC
+        $OldVC='myoldvc.lab.local'
+        $NewVC='mynewvc.lab.local'
+        Copy-VCFolderStructure -OldFolder $folderToRecreate.exensiondata -NewVC $NewVC 
+        -OldVC $OldVC -ParentOfNewFolder $anchor
+        $OldFolder expects to get exensiondata object from the folder, if you will not provide it, function will
+        block it.
+ 
+    .EXAMPLE
+        If you are planning to move vms after hosts/vm/folders were migrated to new VC, you might use it in this way.
+        By default Copy-VCFolderStructure will output also vms and their folder ids in which they should reside on new
+        VC. You can grab them like this:
+        $vmlist=Copy-VCFolderStructure -OldFolder $folderToRecreate.exensiondata -NewVC $NewVC -OldVC $OldVC -ParentOfNewFolder $anchor
+        You can now export $vmlist to csv
+        $vmlist |export-csv -Path 'c:\migratedvms.csv' -NoTypeInformation
+        And once all virtual machines are in new virtual center, you can import this list and do move-vm operation on those
+        vms. Each vm has name and folder properties. Folder is a folderid value, which has to be converted to Folder object.
+        move-vm -vm $vmlist[0].name -Location (get-view -id $vmlist[0].folder -Server $newVC|get-viobjectbyviview) -Server $newVC
+        This would move vm that was residing in previously on old VC in migrated folder to its equivalent on new VC.
+ 
+    .NOTES
+        NAME:  Copy-VCFolderStructure
+         
+        AUTHOR: Grzegorz Kulikowski
+         
+        NOT WORKING ? #powercli @ irc.freenode.net 
+         
+        THANKS: Huge thanks go to Robert van den Nieuwendijk for helping me out with the recursion in this function.
+ 
+    .LINK
+ 
+http://psvmware.wordpress.com
+ 
+#&gt;
+ 
+   param(
+   [parameter(Mandatory = $true)]
+   [ValidateNotNullOrEmpty()]
+   [VMware.Vim.Folder]$OldFolder,
+   [parameter(Mandatory = $true)]
+   [ValidateNotNullOrEmpty()]
+   [VMware.VimAutomation.ViCore.Impl.V1.Inventory.FolderImpl]$ParentOfNewFolder,
+   [parameter(Mandatory = $true)]
+   [ValidateNotNullOrEmpty()]
+   [string]$NewVC,
+   [parameter(Mandatory = $true)]
+   [ValidateNotNullOrEmpty()]
+   [string]$OldVC
+   )
+  $NewFolder = New-Folder -Location $ParentOfNewFolder -Name $OldFolder.Name -Server $NewVC
+  Get-VM -NoRecursion -Location ($OldFolder|Get-VIObjectByVIView) -Server $OldVC|Select-Object Name, @{N='Folder';E={$NewFolder.id}}
+  foreach ($childfolder in $OldFolder.ChildEntity|Where-Object {$_.type -eq 'Folder'})
+                  {
+                   Copy-VCFolderStructure -OldFolder (Get-View -Id $ChildFolder -Server $OldVC) -ParentOfNewFolder $NewFolder -NewVC $NewVC -OldVC $OldVC
+                  }
+}
+
+
+$folderToRecreate=Get-Folder -Server $OldVC
+$anchor=get-folder vm -Server $NewVC
+$vmlist=Copy-VCFolderStructure -OldFolder $folderToRecreate.extensiondata -NewVC $NewVC -OldVC $OldVC -ParentOfNewFolder $anchor 
+$vmlist |export-csv -Path &quot;migratedvms.csv&quot; -NoTypeInformation
+
+# Disconnect from vCenter server
+Disconnect-VIServer -server &quot;*&quot; -Force -Confirm:$false
+ 
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

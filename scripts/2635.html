@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Get-Application 2.1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-Application 2.1</h1>
+<h3><a href="//scripts/2635.ps1">download</a> - <a href="//scripts/174.md">parent</a></h3>
+<p>Attempt to resolve the path to an Application using Get-Command or the &quot;App Paths&quot; registry key or the start menu search.
+Returns ApplicationInfo objects if an application is found.</p>
+<pre><code class="language-posh">function Find-Application {
+[CmdletBinding()]
+   param( [string]$Name )
+begin {
+   [String[]]$Path = (Get-Content Env:Path).Split(&quot;;&quot;) |
+                     ForEach-Object { 
+                        if($_ -match &quot;%.*?%&quot;){
+                           $expansion = Get-Content ($_ -replace '.*%(.*?)%.*','Env:$1')
+                           ($_ -replace &quot;%.*?%&quot;, $expansion).ToLower().Trim(&quot;\&quot;,&quot;/&quot;) + &quot;\&quot;
+                        } else {
+                           $_.ToLower().Trim(&quot;\&quot;,&quot;/&quot;) + &quot;\&quot;
+                        }
+                     }
+}
+end {
+   ## First, try Get-Command (which searches the PATH) but suppress command not found error
+   $eap, $ErrorActionPreference = $ErrorActionPreference, &quot;SilentlyContinue&quot;
+   $command = Get-Command $Name -Type Application
+   $ErrorActionPreference = $eap
+
+   ## Second, try HKLM App Paths (which are used by ShellExecute)
+   if(!$command) {
+      $AppPaths = &quot;HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths&quot;
+      if(Test-Path $AppPaths\$Name) {
+         $default = (Get-ItemProperty $AppPaths\$Name).&quot;(default)&quot;
+         if($default) {
+            $command = Get-Command $default.Trim(&quot;`&quot;'&quot;) # | Select -First 1
+         }
+      }
+      if(!$command) {
+         $Name = [IO.Path]::GetFileNameWithoutExtension($Name)
+         if(Test-Path $AppPaths\$Name) {
+            $default = (Get-ItemProperty $AppPaths\$Name).&quot;(default)&quot;
+            if($default) {
+               $command = Get-Command $default.Trim(&quot;`&quot;'&quot;) # | Select -First 1
+            }
+         }
+      }
+      if(!$command){
+         if(Test-Path &quot;$AppPaths\$Name.exe&quot;) {
+            $default = (Get-ItemProperty &quot;$AppPaths\$Name.exe&quot;).&quot;(default)&quot;
+            if($default) {
+               $command = Get-Command $default.Trim(&quot;`&quot;'&quot;) # | Select -First 1
+            }
+         }
+      }
+   }
+
+   ## Third, try Windows Search against the start menu as a last resort
+   if(!$command) {
+      $Name = [IO.Path]::GetFileNameWithoutExtension($Name)
+      $query =@&quot;
+SELECT System.ItemName, System.Link.TargetParsingPath FROM SystemIndex
+WHERE  System.Kind = 'link' AND System.ItemPathDisplay like '%Start Menu%' AND
+       ( System.Link.TargetParsingPath like '%${Name}.exe' OR System.ItemName like '%${Name}%' )
+&quot;@
+
+      $Connection = New-Object System.Data.OleDb.OleDbConnection &quot;Provider=Search.CollatorDSO;Extended Properties='Application=Windows';&quot;
+      $Adapter = New-Object System.Data.OleDb.OleDbDataAdapter (New-Object System.Data.OleDb.OleDbCommand $Query, $Connection)
+      $DataSet = New-Object System.Data.DataSet
+      $Connection.Open()
+      if($Adapter.Fill($DataSet)) {
+         $command = $DataSet.Tables[0] | ForEach-Object { 
+                     Get-Command $_[&quot;System.Link.TargetParsingPath&quot;] | 
+                     Add-Member -Type NoteProperty -Name Shortcut -Value $_[&quot;System.ItemName&quot;] -Passthru 
+                  }
+      }
+      $Connection.Close()
+   }
+
+   ## Now, make sure that we output everything in the right order: 
+   ## Get-Command, Keep the Shortcut value if there is one
+   ## Then sort by the position in the PATH and make sure if it's not in there, it comes last
+   ## Finally, sort LONG shortcut names after SHORT ones ...
+   ##  .... because we do partial matching on them, so the LONGER one matches less precisely.
+   $( foreach($cmd in $command) {
+         Get-Command $cmd.Path -ErrorAction SilentlyContinue -Type Application | ForEach-Object {
+            Add-Member -InputObject $_ -Type NoteProperty -Name Shortcut -Value $cmd.ShortCut -Passthru
+         }
+      }
+   ) | Sort-Object Definition -Unique | Sort-Object {
+         $index = [array]::IndexOf( $Path, [IO.Path]::GetDirectoryName($_.Path).ToLower().Trim(&quot;\&quot;,&quot;/&quot;) + &quot;\&quot; )
+         if($index -lt 0) { $index = 1e5 } else { $index *= 100 }
+         if($_.Shortcut) {
+            $index += $_.Shortcut.Length
+         }
+         $index
+      }
+}
+
+#.Synopsis 
+#    Finds an executable by searching the path, using Get-Command, the AppPaths registry key, and Windows Search.
+#.Example
+#    Get-App Notepad
+#       Finds notepad.exe using Get-Command
+#.Example
+#    Get-App pbrush
+#       Finds mspaint.exe using the &quot;App Paths&quot; registry key
+#.Example
+#    &amp;(Get-App WinWord)
+#       Finds, and launches, Word (if it's installed) using the &quot;App Paths&quot; registry key
+#.Example
+#    Get-App &quot;Windows PowerShell&quot;
+#       Finds PowerShell.exe by searching the Start menu for the link
+#.Notes
+## Revision History (latest first)
+## 2.1 - Fix output and sorting so that:
+##     - We output more than one if there is more than one, 
+##     - But sort them by path and accuracy
+## 2.0 - Add Windows Search
+## 1.1 - strip quotes from results...
+## 1.0 - initial release
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

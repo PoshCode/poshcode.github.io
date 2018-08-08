@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Patrick Sczepanski">
+    <title>Import-Certificate.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Import-Certificate.ps1</h1>
+<h3><a href="//scripts/2643.txt">download</a> - <a href="//scripts/1937.md">parent</a></h3>
+<p>Imports certificate in specified certificate store.</p>
+<pre><code class="language-text">function Import-Certificate {
+&lt;#
+	.SYNOPSIS
+		Imports certificate in specified certificate store.
+
+	.DESCRIPTION
+		Imports certificate in specified certificate store.
+
+	.PARAMETER  CertFile
+		The certificate file to be imported.
+
+	.PARAMETER  StoreNames
+		The certificate store(s) in which the certificate should be imported.
+
+	.PARAMETER  LocalMachine
+		Using the local machine certificate store to import the certificate
+
+	.PARAMETER  CurrentUser
+		Using the current user certificate store to import the certificate
+
+	.PARAMETER  CertPassword
+		The password which may be used to protect the certificate file
+
+	.EXAMPLE
+		PS C:\&gt; Import-Certificate C:\Temp\myCert.cer my
+
+	.EXAMPLE
+		PS C:\&gt; Import-Certificate -CertFile C:\Temp\myCert.cer -StoreNames my
+
+	.EXAMPLE
+		PS C:\&gt; Import-Certificate -Cert $certificate -StoreNames my -StoreType LocalMachine
+
+	.EXAMPLE
+		PS C:\&gt; Import-Certificate -Cert $certificate -StoreNames my -ST Machine
+
+	.EXAMPLE
+		PS C:\&gt; ls cert:\currentUser\TrustedPublisher | Import-Certificate -ST Machine -SN TrustedPublisher
+        
+        Copies the certificates found in current users TrustedPublishers store to local machines TrustedPublisher using alias  
+
+    .INPUTS
+		System.String|System.Security.Cryptography.X509Certificates.X509Certificate2, System.String, System.String
+
+	.OUTPUTS
+		NA
+
+	.NOTES
+        NAME:      Import-Certificate
+        AUTHOR:    Patrick Sczepanksi (Original anti121)
+        VERSION:   20110428
+        #Requires -Version 2.0
+    .LINK
+        http://poshcode.org/1937 (Link to original script)
+
+#&gt;
+
+    [CmdletBinding()]
+	param
+	(
+        [Parameter(ValueFromPipeline=$true,Mandatory=$true, Position=0, ParameterSetName=&quot;CertFile&quot;)]
+		[System.IO.FileInfo]
+        $CertFile,
+
+        [Parameter(ValueFromPipeline=$true,Mandatory=$true, Position=0, ParameterSetName=&quot;Cert&quot;)]
+		[System.Security.Cryptography.X509Certificates.X509Certificate2]
+        $Cert,
+        
+        [Parameter(Position=1)]
+        [Alias(&quot;SN&quot;)]
+		[string[]] $StoreNames = &quot;My&quot;,
+        
+        [Parameter(Position=2)]
+        [Alias(&quot;Type&quot;,&quot;ST&quot;)]
+		[ValidateSet(&quot;LocalMachine&quot;,&quot;Machine&quot;,&quot;CurrentUser&quot;,&quot;User&quot;)]
+        [string]$StoreType = &quot;CurrentUser&quot;,
+
+        [Parameter(Position=3)]
+        [Alias(&quot;Password&quot;,&quot;PW&quot;)]
+        [string] $CertPassword
+	)
+	
+	begin
+	{
+		[void][System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Security&quot;)
+	}
+	
+	process 
+	{
+        switch ($pscmdlet.ParameterSetName) {
+            &quot;CertFile&quot; {
+        		try {
+                    $Cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $($CertFile.FullName),$CertPassword
+                }
+                catch {   
+        			Write-Error (&quot;Error reading '$CertFile': $_ .&quot;) -ErrorAction:Continue
+        		}
+            }
+            &quot;Cert&quot; {
+           
+            }
+            default {
+                Write-Error &quot;Missing parameter:`nYou need to specify either a certificate or a certificate file name.&quot;
+            }
+	    }
+
+        switch -regex ($storeType) {
+            &quot;Machine$&quot; { $StoreScope = &quot;LocalMachine&quot; }
+            &quot;User$&quot;  { $StoreScope = &quot;CurrentUser&quot; }
+        } 
+        
+        if ( $Cert ) {
+			$StoreNames | ForEach-Object {
+				$StoreName = $_
+                Write-Verbose &quot; [Import-Certificate] :: $($Cert.Subject) ($($Cert.Thumbprint))&quot;
+                Write-Verbose &quot; [Import-Certificate] :: Import into cert:\$StoreScope\$StoreName&quot;
+                
+				if (Test-Path &quot;cert:\$StoreScope\$StoreName&quot;) {
+					try
+					{
+						$store = New-Object System.Security.Cryptography.X509Certificates.X509Store $StoreName, $StoreScope
+						$store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+						$store.Add($Cert)
+                        if ( $CertFile ) {
+        					Write-Verbose &quot; [Import-Certificate] :: Successfully added '$CertFile' to 'cert:\$StoreScope\$StoreName'.&quot;
+        				} else {
+        					Write-Verbose &quot; [Import-Certificate] :: Successfully added '$($Cert.Subject) ($($Cert.Thumbprint))' to 'cert:\$StoreScope\$StoreName'.&quot;
+                        }
+                    }
+					catch
+					{
+						Write-Error (&quot;Error adding '$($Cert.Subject) ($($Cert.Thumbprint))' to 'cert:\$StoreScope\$StoreName': $_ .&quot;) -ErrorAction:Continue
+					}
+                    if ( $store ) {
+                        $store.Close()
+                    }
+				} 
+                else {
+					Write-Warning &quot;Certificate store '$StoreName' does not exist. Skipping...&quot;
+				}
+			}
+		} else {
+            Write-Warning &quot;No certificates found.&quot;
+        }
+	}
+	
+	end { 
+        Write-Host &quot;Finished importing certificates.&quot; 
+    }
+}
+
+ls &quot;D:\Temp\Source&quot; -filter &quot;*.cet&quot; | Import-Certificate -SN &quot;My&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

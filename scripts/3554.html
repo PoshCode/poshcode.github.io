@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Josh Feierman">
+    <title>Execute-RunspaceJob - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Execute-RunspaceJob</h1>
+<h3><a href="//scripts/3554.ps1">download</a></h3>
+<p>A function to facilitate use of background runspaces in Powershell.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+   Executes a set of parameterized script blocks asynchronously using runspaces, and returns the resulting data.
+.DESCRIPTION
+  Encapsulates generic logic for using Powershell background runspaces to execute parameterized script blocks in an 
+  efficient, multi-threaded fashion.
+  
+  For detailed examples of how to use the function, see http://awanderingmind.com/tag/execute-runspacejob/.
+  
+.PARAMETER ScriptBlock
+   The script block to execute. Should contain one or more parameters.
+.PARAMETER ArgumentList
+  A hashtable containing data about the entity to be processed. The key should be a unique string to 
+  identify the entity to be processed, such as a server name. The value should be another hashtable
+  of arguments to be passed into the script block.
+.PARAMETER ThrottleLimit
+  The maximum number of concurrent threads to use. Defaults to 10.
+.PARAMETER RunAsync
+  If specified, the function will not wait for all the background runspaces to complete. Instead, it will return
+  an array of runspace objects that can be used to further process the results at a later time.
+.NOTES
+  Author: Josh Feierman
+  Date: 7/15/2012
+  Version: 1.1
+   
+#&gt;
+
+function Execute-RunspaceJob
+{
+	[Cmdletbinding()]
+	param
+	(
+		[parameter(mandatory=$true)]
+		[System.Management.Automation.ScriptBlock]$ScriptBlock,
+		[parameter(mandatory=$true,ValueFromPipeline=$true)]
+		[System.Collections.Hashtable]$ArgumentList,
+		[parameter(mandatory=$false)]
+		[int]$ThrottleLimit = 10,
+    [parameter(mandatory=$false)]
+    [switch]$RunAsync
+	)
+
+	begin
+  {
+    try
+    {
+      #Instantiate runspace pool
+      $runspacePool = [runspacefactory]::CreateRunspacePool(1,$ThrottleLimit)
+      $runspacePool.Open()
+      
+      #Array to hold runspace data
+      $runspaces = @()
+      
+      #Array to hold return data
+      $data = @()
+    }
+    catch
+    {
+      Write-Warning &quot;Error occurred initializing function setup.&quot;
+      Write-Warning $_.Exception.Message
+      break
+    }
+  }
+  process
+  {
+    # Queue all sets of parameters for execution
+    foreach ($Argument in $ArgumentList.Keys)
+    {
+      try
+      {
+        $rowIdentifier = $Argument
+        Write-Verbose &quot;Queuing item $rowIdentifier for processing.&quot;
+        
+        $runspaceRow = &quot;&quot; | Select-Object @{n=&quot;Key&quot;;e={$rowIdentifier}},
+                                          @{n=&quot;Runspace&quot;;e={}},
+                                          @{n=&quot;InvokeHandle&quot;;e={}}
+        $powershell = [powershell]::Create()
+        $powershell.RunspacePool = $runspacePool
+        $powershell.AddScript($scriptBlock).AddParameters($ArgumentList[$rowIdentifier]) | Out-Null
+        
+        $runspaceRow.Runspace = $powershell
+        $runspaceRow.InvokeHandle = $powershell.BeginInvoke()
+        $runspaces += $runspaceRow
+      }
+      catch
+      {
+        Write-Warning &quot;Error occurred queuing item '$Argument'.&quot;
+        Write-Warning $_.Exception.Message
+      }
+    }
+  }
+  
+  end
+  {
+    try
+    {
+      if ($RunAsync)
+      {
+        Write-Output $runspaces
+      }
+      else
+      {
+        $totalCount = $runspaces.Count
+    
+        # Wait for all runspaces to complete
+        while (($runspaces | Where-Object {$_.InvokeHandle.IsCompleted -eq $false}).Count -gt 0)
+        {
+          $completedCount = ($runspaces | Where-Object {$_.InvokeHandle.IsCompleted -eq $true}).Count
+          Write-Verbose &quot;Completed $completedCount of $totalCount&quot;
+          Start-Sleep -Seconds 1
+        }
+        
+        # Retrieve returned data and handle any threads that had errors
+        foreach ($runspaceRow in $runspaces)
+        {
+          try
+          {
+            Write-Verbose &quot;Retrieving data for item $($runspaceRow.Key).&quot;
+            if ($runspaceRow.Runspace.InvocationStateInfo.State -eq &quot;Failed&quot;)
+            {
+              $errorMessage = $runspaceRow.Runspace.InvocationStateInfo.Reason.Message
+              Write-Warning &quot;Processing of item $($runspaceRow.Key) failed with error: $errorMessage&quot;
+            }
+            else
+            {
+              $data += $runspaceRow.Runspace.EndInvoke($runspaceRow.InvokeHandle)
+            }
+          }
+          catch
+          {
+            Write-Warning &quot;Error occurred processing result of runspace for set '$($runspaceRow.Key)'.&quot;
+            Write-Warning $_.Exception.Message
+          }
+          finally
+          {
+            $runspaceRow.Runspace.dispose()
+          }
+          
+        }
+        
+        $runspacePool.Close()
+        
+        Write-Output $data
+      }
+    }
+    catch
+    {
+      Write-Warning &quot;Error occurred processing returns of runspaces.&quot;
+      Write-Warning $_.Exception.Message
+    }
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

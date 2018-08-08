@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Oisin Grehan">
+    <title>CSV Validator Framework - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>CSV Validator Framework</h1>
+<h3><a href="//scripts/1664.ps1">download</a></h3>
+<p>A simple CSV validator framework supporting external rulesets. Run: .\test-csv.ps1 my.csv .\myruleset.ps1
+The rulset script should return a hashtable with two keys: FirstRow and AllRows. These keys point at hashtables containing rules. The key is the rulename, the value is a scriptblock that will be passed the current row and will return true if passes validation, and false if not. FirstRow rules only run on the first row, so it  should contain rules that validate structure like column count, name etc. AllRows rules run on ever row, so validate content.</p>
+<pre><code class="language-posh"># --- begin test-csv.ps1 ---
+param(
+    [string]$Path = $(throw &quot;require CSV path!&quot;),
+    [string]$RulesetPath = $(throw &quot;require Ruleset path!&quot;)
+)
+
+$csvFiles = Resolve-Path -Path $Path
+
+# load rules
+if ((Test-Path (Resolve-Path $RulesetPath))) {
+    
+    # ruleset is found, execute and assign result to variable (should be hashtable)
+    $ruleset = (&amp; $RulesetPath)
+    
+    write-host &quot;Ruleset has $($ruleset.firstrow.keys.count) first row rule(s)&quot;
+    write-host &quot;Ruleset has $($ruleset.allrows.keys.count) all rows rule(s)&quot;
+
+    if (-not ($ruleset.firstrow)) {
+        write-warning &quot;ruleset $rulesetpath has no rules for first row (list/table validation)&quot;
+    }
+    
+    if (-not ($ruleset.allrows)) {
+        throw &quot;ruleset $rulesetpath has no rules for allrows (row validation)&quot;
+    }
+    
+} else {
+    throw &quot;Could not find ruleset $rulesetpath&quot;
+}
+
+write-verbose &quot;Found $($csvfiles.length) file(s)&quot;
+
+$csvFiles | where-object {
+        
+    # only pass on CSV files
+    [io.path]::GetExtension( $_.providerpath ) -eq &quot;.csv&quot;
+    
+    } | foreach-object { 
+    
+        write-host &quot;processing CSV $_&quot;
+        # import csv files        
+        
+        $firstRow = $true
+        $rowcount = 0
+        
+        import-csv $_.path &lt;#| select -first 20#&gt; | foreach-object {
+            
+            write-host &quot;row $rowcount&quot;
+            $currentRow = $_
+            
+            # process &quot;first row only&quot; rules, only on first row            
+            if ($firstRow) {
+                
+                $ruleset.FirstRow.Keys | % {
+                    write-host -nonewline &quot;Processing rule $_ ... &quot;
+                    
+                    # execute the scriptblock with the current row as an argument
+                    # the scriptblock is the value of the imported hashtable
+                    if ((&amp; $ruleset.firstrow[$_] $currentRow)) {
+                    
+                        write-host -fore green &quot;passed&quot;
+                    
+                    } else {
+                        # displays green in ISE (lol)
+                        write-host -fore red &quot;failed&quot;
+                    
+                    }
+                }
+                
+                $firstRow = $false
+            }
+            
+            # process &quot;all rows&quot; rules                
+            $ruleset.AllRows.Keys | % {
+                write-host -nonewline &quot;Processing rule $_ ... &quot;
+
+                # execute the scriptblock with the current row as an argument
+                # the scriptblock is the value of the imported hashtable                                
+                if ((&amp; $ruleset.AllRows[$_] $currentRow)) {
+                
+                    write-host -fore green &quot;passed&quot;
+                
+                } else {
+                    # displays green in ISE (lol)
+                    write-host -fore red &quot;failed&quot;                
+                }
+            }
+            
+            $rowcount++
+        }
+    }
+# --- end test-csv.ps1 ---
+
+# --- begin ruleset-sample.ps1 ---
+@{
+    FirstRow = @{
+            ruleVerifyColumns = {
+                param($row)
+                
+                $columns = @(&quot;u_logon_name&quot;,
+                  &quot;u_user_security_password&quot;,
+                  &quot;g_user_id_changed_by&quot;,
+                  &quot;i_account_status&quot;,
+                  &quot;d_date_registered&quot;,
+                  &quot;d_date_last_changed&quot;,
+                  &quot;d_date_created&quot;)
+                
+                $count = 0
+                
+                $columns | ForEach-Object &lt;# alias = % #&gt; {
+                    if ($row.psobject.members.Match($_)) { $count++ }
+                }            
+            
+            $count -eq $columns.length
+        };
+    };
+    
+    AllRows = @{
+        ruleLogonNameLengthGreaterThan8 = {
+            param($row)        
+            $row.u_logon_name -gt 8
+        };
+        
+        ruleChangedByIsValidGuid = {
+            param($row)
+
+            try {
+                # try cast to guid and swallow result if successful
+               [guid]$row.g_user_id_changed_by &gt; $null
+               
+                $true
+            
+            } catch { $false }
+        };
+   }
+}
+
+# --- end ruleset-sample.ps1 ---
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

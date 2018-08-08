@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Oisin Grehan">
+    <title>New-WebServiceProxy.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-WebServiceProxy.ps1</h1>
+<h3><a href="//scripts/538.ps1">download</a></h3>
+<p>compatibility: PowerShell 1.0, PowerShell v2.0</p>
+<p>Many simple webservice scripts can not handle more complex webservices like the MSDN ContentService for example, so I wrote this script from the ground up and modeled it on the .NET SDK's WSDL.EXE. It supports Basic Profile 1.1 and can generate proxy instances for simple ASMX services and more complicated multi-schema services like the MSDN/TechNet Publishing System (MTPS) Content Service.</p>
+<ul>
+<li>No need for the .NET 2.0 SDK, just PowerShell</li>
+<li>Auto discovery of all referenced schema</li>
+<li>No need to point it at page.asmx?wsdl any more, just the asmx</li>
+<li>Validation against WS-I Basic Profile 1.1</li>
+</ul>
+<p>By default, it asks for credentials. If targetting a public webservice, specify the -Anonymous switch.</p>
+<pre><code class="language-posh">#
+# New-WebServiceProxy.ps1 (v2.0 Aug 6, 2007)
+#
+# Oisin Grehan &lt;oising@gmail.com&gt; (x0n)
+#
+# Usage: 
+#   $proxy = .\New-WebServiceProxy.ps1 [-Url] http://site/service.asmx [-Anonymous] [[-SoapProtocol] &lt;Soap | Soap12&gt;]
+#
+# to see available webmethods:
+# $proxy | gm
+#
+ 
+# $url = &quot;http://services.msdn.microsoft.com/contentservices/contentservice.asmx?wsdl&quot;
+ 
+param($url = $(throw &quot;need `$url&quot;), [switch]$Anonymous, [string]$protocol = &quot;Soap&quot;)
+ 
+[void][system.Reflection.Assembly]::LoadWithPartialName(&quot;system.web.services&quot;)
+ 
+trap {
+        &quot;Error:`n`n $error&quot;;
+        break; 
+}
+ 
+#$request = [System.Net.WebRequest]::Create($url);
+$dcp = new-object system.web.services.discovery.discoveryclientprotocol
+ 
+if (! $Anonymous) {
+    Write-Progress &quot;Network Credentials&quot; &quot;Awaiting input...&quot;
+    $dcp.Credentials = (Get-Credential).GetNetworkCredential()
+}
+ 
+Write-Progress &quot;Discovery&quot; &quot;Searching...&quot;
+$dcp.AllowAutoRedirect = $true
+[void]$dcp.DiscoverAny($url)
+$dcp.ResolveAll()
+ 
+# get service name
+foreach ($entry in $dcp.Documents.GetEnumerator()) { # needed for Dictionary
+    if ($entry.Value -is [System.Web.Services.Description.ServiceDescription]) {
+        $script:serviceName = $entry.Value.Services[0].Name
+        Write-Verbose &quot;Service: $serviceName&quot;
+    }
+}
+ 
+Write-Progress &quot;WS-I Basic Profile 1.1&quot; &quot;Validating...&quot;
+$ns = new-Object System.CodeDom.CodeNamespace # &quot;WebServices&quot;
+ 
+$wref = new-object System.Web.Services.Description.WebReference $dcp.Documents, $ns
+$wrefs = new-object system.web.services.description.webreferencecollection
+[void]$wrefs.Add($wref)
+ 
+$ccUnit = new-object System.CodeDom.CodeCompileUnit
+[void]$ccUnit.Namespaces.Add($ns)
+ 
+$violations = new-object system.web.Services.Description.BasicProfileViolationCollection
+$wsi11 = [system.web.services.WsiProfiles]::BasicProfile1_1
+ 
+if ([system.web.Services.Description.WebServicesInteroperability]::CheckConformance($wsi11, $wref, $violations)) {
+    Write-Progress &quot;Proxy Generation&quot; &quot;Compiling...&quot;
+    
+    $webRefOpts = new-object System.Web.Services.Description.WebReferenceOptions
+        $webRefOpts.CodeGenerationOptions = &quot;GenerateNewAsync&quot;,&quot;GenerateProperties&quot; #,&quot;GenerateOldAsync&quot;
+ 
+        #StringCollection strings = ServiceDescriptionImporter.GenerateWebReferences(
+        #       webReferences, codeProvider, codeCompileUnit, parameters.GetWebReferenceOptions());
+ 
+    $csprovider = new-object Microsoft.CSharp.CSharpCodeProvider
+        $warnings = [System.Web.Services.Description.ServiceDescriptionImporter]::GenerateWebReferences(
+                $wrefs, $csprovider, $ccunit, $webRefOpts)
+        
+    if ($warnings.Count -eq 0) {
+        $param = new-object system.CodeDom.Compiler.CompilerParameters
+        [void]$param.ReferencedAssemblies.Add(&quot;System.Xml.dll&quot;)
+        [void]$param.ReferencedAssemblies.Add(&quot;System.Web.Services.dll&quot;)        
+        $param.GenerateInMemory = $true;
+        #$param.TempFiles = (new-object System.CodeDom.Compiler.TempFileCollection &quot;c:\temp&quot;, $true)
+        $param.GenerateExecutable = $false;
+        #$param.OutputAssembly = &quot;$($ns.Name)_$($sdname).dll&quot;
+        $param.TreatWarningsAsErrors = $false;
+        $param.WarningLevel = 4;
+        
+        # do it
+        $compileResults = $csprovider.CompileAssemblyFromDom($param, $ccUnit);
+ 
+        if ($compileResults.Errors.Count -gt 0) {
+            Write-Progress &quot;Proxy Generation&quot; &quot;Failed.&quot;
+            foreach ($output in $compileResults.Output) { write-host $output }
+            foreach ($err in $compileResults.Errors) { write-warning $err }            
+        } else {            
+            $assembly = $compileResults.CompiledAssembly
+ 
+            if ($assembly) {
+                $serviceType = $assembly.GetType($serviceName)                
+                $assembly.GetTypes() | % { Write-Verbose $_.FullName }
+            } else {
+                Write-Warning &quot;Failed: `$assembly is null&quot;
+                                return
+            }
+            
+            # return proxy instance
+            $proxy = new-object $serviceType.FullName
+            if (! $Anonymous) {
+                $proxy.Credentials = $dcp.Credentials
+            }
+            $proxy # dump instance to pipeline
+        }
+    } else {
+        Write-Progress &quot;Proxy Generation&quot; &quot;Failed.&quot;        
+        Write-Warning $warnings
+    }
+    #Write-Progress -Completed
+} 
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

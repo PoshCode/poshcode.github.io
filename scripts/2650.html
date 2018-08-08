@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="The Dark Lord">
+    <title>Sith - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Sith</h1>
+<h3><a href="//scripts/2650.ps1">download</a></h3>
+<p>The VBS script is intended to audit an Active Directory Domain Controller by the events that it generates in the event log. Most usefull events are harvested and piped out into a report that will also generate a summary report of the main report and also e-mail the report to an admin.</p>
+<p>Directories that will be created when running this script are:</p>
+<p>C:\audit_AD [Reports are generated in this folder temporarily - Temp folder]</p>
+<p>The script can be used to run a a daily scheduled task and Additional scripts can be programmed to automatically move these daily reports to a secure archive (I also have secondary scripts to this and will post upon request)</p>
+<p>IMPORTANT = The security event log will also be backed up and cleared, the security event log will also be placed in the mentioned folder in a date format.</p>
+<p>This Script is SPECIFICALY for server 2008! The event ID's are different in server 2003. The version of this script for Server2003 will be published upon request.</p>
+<p>Lines 797-800 must be set with your own mail attributes</p>
+<p>NOTE: The script can take up to to anything from 5minutes to 30minutes, depending on the size and amount of security entries in the security event log of the DC. Thus the event log is cleared daily and also backed up and moved. By doing this daily, the script runs faster incrementally.</p>
+<pre><code class="language-posh">' Script:    Master_Audit_AD_Account_Management - 2008 v4 S1S2.vbs (Version 4 Section1 and Section2 combi script) 
+' Purpose:  Parse a DC's security event log and generate account management events, log and e-mail for past 24hs 
+' Author:   Paperclips (The Dark Lord) 
+' Email:    magiconion_M@hotmail.com 
+' Date:     Feb 2011 
+' Comments: Make sure relevant auditing is already set up in AD before using this script. Auditing event logs must be set up for relevant ID's to be audited 
+' Notes:     
+'            - 
+'================================================================SECTION 1 AD Auditing MASTER REPORT GEN============================================================== 
+Dim objFSO, objFolder, objFile, objWMI, objItem, objEmail 
+Dim strComputer, strFileName, strFileOpen, strFolder, strPath 
+Dim intEvent, colLoggedEvents, datenow, EventDate 
+Dim count1, count2, count3, count4, count5, count6, count7, count8, count9, count10 
+Dim count11, count12, count13, count14, count15, count16, count17, count18, count19, count20 
+Dim count21, count22, count23, count24, count25 
+ 
+count1 = 0 
+count2 = 0 
+count3 = 0 
+count4 = 0 
+count5 = 0 
+count6 = 0 
+count7 = 0 
+count8 = 0 
+count9 = 0 
+count10 = 0 
+count11 = 0 
+count12 = 0 
+count13 = 0 
+count14 = 0 
+count15 = 0 
+count16 = 0 
+count17 = 0 
+count18 = 0 
+count19 = 0 
+count20 = 0 
+count21 = 0 
+count22 = 0 
+count23 = 0 
+count24 = 0 
+count25 = 0 
+ 
+On error resume next 
+' ---------------------------------------------------Set the folder and file name------------------------------------------------------------------- 
+ 
+strComputer = &quot;.&quot; 
+strFileName = &quot;\AD_Account_Management_Events.txt&quot; 
+strFolder = &quot;c:\audit_AD&quot; 
+strPath = strFolder &amp; strFileName 
+'-----------------------------------------------------Set numbers/Date------------------------------------------------------------------------------ 
+ 
+DateNow = Now() 
+' ----------------------------------------------------Create the File System Object----------------------------------------------------------------- 
+ 
+Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;) 
+'-----------------------------------------------------Check that the strFolder folder exists-------------------------------------------------------- 
+ 
+If objFSO.FolderExists(strFolder) Then 
+Set objFolder = objFSO.GetFolder(strFolder) 
+Else 
+Set objFolder = objFSO.CreateFolder(strFolder) 
+End If 
+ 
+If objFSO.FileExists(strFolder &amp; strFileName) Then 
+Set objFolder = objFSO.GetFolder(strFolder) 
+Else 
+Set objFile = objFSO.CreateTextFile(strFolder &amp; strFileName) 
+End If  
+' ----------------------------------------------------CLEANUP -------------------------------------------------------------------------------------- 
+ 
+set objFile = nothing 
+set objFolder = nothing 
+' -----------------------------------------------------Write the information to the file------------------------------------------------------------ 
+ 
+Set strFileOpen = objFSO.CreateTextFile(strPath, True) 
+ 
+' -----------------------------------------------------Log Header----------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;Script started at &quot; &amp; Datenow &amp; &quot; on Your DC&quot;) 
+strFileOpen.WriteLine(&quot;===================================================&quot;) 
+strFileOpen.WriteLine(&quot;&quot;) 
+strFileOpen.WriteLine(&quot;Created by Paperclips&quot;) 
+strFileOpen.WriteLine(&quot;......................&quot;) 
+strFileOpen.WriteLine(&quot;&quot;) 
+strFileOpen.WriteLine(&quot;IMPORTANT NOTES:&quot;) 
+strFileOpen.WriteLine(&quot;----------------&quot;) 
+strFileOpen.WriteLine(&quot;Sections 21,22,23,24 all related to Directory Service Objects. These 4 categories are repetative of other sections,&quot;) 
+strFileOpen.WriteLine(&quot;meaning that if an object was amended, (For example the permissions changed on a user account in section 5 etc.) the&quot;) 
+strFileOpen.WriteLine(&quot;event will also appear in section 24 with specific details. Thus sections 21,22,23 and 24 will log in depth changes&quot;) 
+strFileOpen.WriteLine(&quot;creations, deletions, move's and permissions. Thus in this example section 5 will only notify that a change has occured&quot;) 
+strFileOpen.WriteLine(&quot;and section 24 will log the exact specific change made.&quot;) 
+strFileOpen.WriteLine(&quot;&quot;) 
+strFileOpen.WriteLine(&quot;Thus when reviewing logs in sections 21,22,23 and 24, look at the line that says Class: to see what object was changed&quot;) 
+strFileOpen.WriteLine(&quot;This will be either, user, computer, group, organisationalunit etc.....&quot;) 
+strFileOpen.WriteLine(&quot;Additionally if the LDAP Display Name: variable is NTSecurityDescriptor and the Class: is OrganisationalUnit this means&quot;) 
+strFileOpen.WriteLine(&quot;that the permission has changed on the OU. Additional Totals have been added for OU's in the summary report with regards&quot;) 
+strFileOpen.WriteLine(&quot;to sections 21, 22, 23 and 24.&quot;) 
+strFileOpen.WriteLine(&quot;&quot;) 
+strFileOpen.WriteLine(&quot;&quot;) 
+' -----------------------------------------------------WMI Core Section1---------------------------------------------------------------------------- 
+  
+Set objWMI = GetObject(&quot;winmgmts:&quot; _ 
+&amp; &quot;{impersonationLevel=impersonate,(Security)}!\\&quot; _  
+&amp; strComputer &amp; &quot;\root\cimv2&quot;) 
+Set colLoggedEvents = objWMI.ExecQuery _ 
+(&quot;Select * from Win32_NTLogEvent Where Logfile = 'Security' AND EventCode = '1102'&quot; ) 
+'------------------------------------------------------Next few sections loops through ID properties------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;    =====================================================================&quot;) 
+strFileOpen.WriteLine(&quot;    = The Security Event Log on this Domain Controller was last cleared =&quot;) 
+strFileOpen.WriteLine(&quot;    =====================================================================&quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+For Each objItem in colLoggedEvents 
+ 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+     
+    'If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -25 Then 
+            'If objItem.EventType=4 then 
+                'If objItem.EventCode =1102 Then 
+                    strFileOpen.WriteLine (&quot;Time of last clear: &quot; &amp; EventDate) 
+                    strFileOpen.WriteLine(&quot;DC Name: &quot; &amp; objItem.ComputerName)  
+                    strFileOpen.WriteLine(&quot;Logfile: &quot; &amp; objItem.SourceName)  
+                    strFileOpen.WriteLine(&quot;Message: &quot; &amp; objItem.Message) 
+                    strFileOpen.WriteLine (&quot; &quot;) 
+                    strFileOpen.WriteLine (&quot; &quot;) 
+                'End If 
+            'End If 
+    'end if 
+Next 
+' -----------------------------------------------------WMI Core Section2 ---------------------------------------------------------------------------- 
+  
+Set objWMI = GetObject(&quot;winmgmts:&quot; _ 
+&amp; &quot;{impersonationLevel=impersonate,(Security)}!\\&quot; _  
+&amp; strComputer &amp; &quot;\root\cimv2&quot;) 
+Set colLoggedEvents = objWMI.ExecQuery _ 
+(&quot;Select * from Win32_NTLogEvent Where Logfile = 'Security'&quot; ) 
+'1------------------------------------------------------Next few sections loops through ID properties------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;===========================================================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 1. User Password Change Attempts by SUBJECT in the past 24hrs (most likely by an admin) =&quot;) 
+strFileOpen.WriteLine(&quot;===========================================================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+        If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4724 Then 
+                count1 = count1 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine     (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine     (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine     (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 1.)User Password Change Attempts by SUBJECT in the past 24hrs (most likely by an admin) TOTAL = &quot; &amp; Count1) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'2--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;==============================================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 2. User Password Change Attempts by THE USER HIM/HERSELF in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==============================================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+        If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4723 Then 
+                count2 = count2 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 2.)User Password Change Attempts by THE USER HIM/HERSELF in the past 24hrs TOTAL = &quot; &amp; Count2) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'3--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;==============================================&quot;) 
+strFileOpen.WriteLine(&quot;= 3. User Accounts Created in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==============================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4720 Then 
+                count3 = count3 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 3.)User Accounts Created in the past 24hrs TOTAL = &quot; &amp; Count3) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'4--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;==============================================&quot;) 
+strFileOpen.WriteLine(&quot;= 4. User Accounts Deleted in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==============================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4726 Then 
+                count4 = count4 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 4.)User Accounts Deleted in the past 24hrs TOTAL = &quot; &amp; Count4) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'5--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;==============================================&quot;) 
+strFileOpen.WriteLine(&quot;= 5. User Accounts Changed in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==============================================&quot;) 
+strFileOpen.WriteLine(&quot;&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+        If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4738 Then 
+                count5 = count5 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Important Note:    To see exactly what changed on the user object refer to events created&quot;) 
+                strFileOpen.WriteLine    (&quot;---------------    for (Directory Service Changes) later in this log for Class: User&quot;) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+        end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 5.)User Accounts Changed in the past 24hrs TOTAL = &quot; &amp; Count5) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'6--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;=================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 6. User Accounts Locked Out in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;=================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4740 Then 
+                count6 = count6 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;)     
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 6.)User Accounts Locked Out in the past 24hrs TOTAL = &quot; &amp; Count6) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'7--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;===============================================&quot;) 
+strFileOpen.WriteLine(&quot;= 7. User Accounts Unlocked in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;===============================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+        If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4767 Then 
+                count7 = count7 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;)     
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 7.)User Accounts Unlocked in the past 24hrs TOTAL = &quot; &amp; Count7) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'8--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;==================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 8. Computer Accounts Created in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4741 Then 
+                count8 = count8 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 8.)Computer Accounts Created in the past 24hrs TOTAL = &quot; &amp; Count8) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'9--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;==================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 9. Computer Accounts Deleted in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4743 Then 
+                count9 = count9 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 9.)Computer Accounts Deleted in the past 24hrs TOTAL = &quot; &amp; Count9) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'10--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;===================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 10. Computer Accounts Amended in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;===================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+        If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4742 Then 
+                count10 = count10 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Important Note:    To see exactly what changed on the computer object refer to events created&quot;) 
+                strFileOpen.WriteLine    (&quot;---------------    for (Directory Service Changes) later in this log for Class: Computer&quot;) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+        end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 10.)Computer Accounts Amended in the past 24hrs TOTAL = &quot; &amp; Count10) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'11--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;===========================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 11. User or Computer Objects Disabled in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;===========================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+        If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4725 Then 
+                count11 = count11 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+        end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 11.)User or Computer Objects Disabled in the past 24hrs TOTAL = &quot; &amp; Count11) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'12--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;==========================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 12. User or Computer Objects Enabled in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==========================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+        If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4722 Then 
+                count12 = count12 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+        end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 12.)User or Computer Objects Enabled in the past 24hrs TOTAL = &quot; &amp; Count12) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'13--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;=========================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 13.  Users Added to Security Groups in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;=========================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4728 Then 
+                count13 = count13 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 13.)Users Added to Security Groups in the past 24hrs TOTAL = &quot; &amp; Count13) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'14----------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;==================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 14.  Security Groups Deleted in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4730 Then 
+                count14 = count14 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 14.)Security Groups Deleted in the past 24hrs TOTAL = &quot; &amp; Count14) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'15------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;=================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 15. Security Groups Created in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;=================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4727 Then 
+                count15 = count15 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 15.)Security Groups Created in the past 24hrs TOTAL = &quot; &amp; Count15) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'16------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;=========================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 16. Security Groups Amended/Changed in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;=========================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4737 Then 
+                count16 = count16 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Important Note:    To see exactly what changed on the Group object refer to events created&quot;) 
+                strFileOpen.WriteLine    (&quot;---------------    for (Directory Service Changes) later in this log for Class: Group&quot;) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 16.)Security Groups Amended/Changed in the past 24hrs TOTAL = &quot; &amp; Count16) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'17------------------------------------------------------------------------------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;==========================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 17. Mail Distribution Groups Created in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==========================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4749 Then 
+                count17 = count17 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 17.)Mail Distribution Groups Created in the past 24hrs TOTAL = &quot; &amp; Count17) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'18------------------------------------------------------------------------------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;==========================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 18. Mail Distribution Groups Deleted in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==========================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4753 Then 
+                count18 = count18 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 18.)Mail Distribution Groups Deleted in the past 24hrs TOTAL = &quot; &amp; Count18) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'19------------------------------------------------------------------------------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;=================================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 19. Users Added To Mail Distribution Groups in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;=================================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4751 Then 
+                count19 = count19 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 19.)Users Added To Mail Distribution Groups in the past 24hrs TOTAL = &quot; &amp; Count19) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'20------------------------------------------------------------------------------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;==================================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 20. Mail Distribution Groups Amended/Changed in the past 24hrs =&quot;) 
+strFileOpen.WriteLine(&quot;==================================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4750 Then 
+                count20 = count20 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Important Note:    To see exactly what changed on the Group object refer to events created&quot;) 
+                strFileOpen.WriteLine    (&quot;---------------    for (Directory Service Changes) later in this log for Class: Group&quot;) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 20.)Mail Distribution Groups Amended/Changed in the past 24hrs TOTAL = &quot; &amp; Count20) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'21------------------------------------------------------------------------------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;=========================================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 21. Directory Service Objects Created in the past 24hrs (Check CLASS) =&quot;) 
+strFileOpen.WriteLine(&quot;=========================================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =5137 Then 
+                count21 = count21 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 21.)Directory Service Objects Created in the past 24hrs (Check CLASS) TOTAL = &quot; &amp; Count21) 
+strFileOpen.WriteLine(&quot;stop21&quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'22------------------------------------------------------------------------------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;=======================================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 22. Directory Service Objects Moved in the past 24hrs (Check CLASS) =&quot;) 
+strFileOpen.WriteLine(&quot;=======================================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =5139 Then 
+                count22 = count22 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 22.)Directory Service Objects Moved in the past 24hrs (Check CLASS) TOTAL = &quot; &amp; Count22) 
+strFileOpen.WriteLine(&quot;stop22&quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'23------------------------------------------------------------------------------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;=========================================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 23. Directory Service Objects Deleted in the past 24hrs (Check CLASS) =&quot;) 
+strFileOpen.WriteLine(&quot;=========================================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =5141 Then 
+                count23 = count23 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 23.)Directory Service Objects Deleted in the past 24hrs (Check CLASS) TOTAL = &quot; &amp; Count23) 
+strFileOpen.WriteLine(&quot;stop23&quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'24------------------------------------------------------------------------------------------------------------------------ 
+ 
+strFileOpen.WriteLine(&quot;=================================================================================================&quot;) 
+strFileOpen.WriteLine(&quot;= 24. A directory service object was modified (CHECK OBJECT CLASS) for object that was modified =&quot;) 
+strFileOpen.WriteLine(&quot;=================================================================================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =5136 Then 
+                count24 = count24 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 24.)A directory service object was modified (CHECK OBJECT CLASS) for object that was modified TOTAL = &quot; &amp; Count24) 
+strFileOpen.WriteLine(&quot;stop24&quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'25--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+strFileOpen.WriteLine(&quot;========================================================================================================================&quot;) 
+strFileOpen.WriteLine(&quot;==================================&quot;) 
+strFileOpen.WriteLine(&quot;= 25. EPIC LOGON FAILED ATTEMPTS =&quot;) 
+strFileOpen.WriteLine(&quot;==================================&quot;) 
+For Each objItem in colLoggedEvents 
+    EventDate = GetVBDate(objItem.TimeGenerated) 
+    If DateDiff(&quot;h&quot;,DateNow,EventDate) &gt; -24 Then 
+            If objItem.EventCode =4625 Then 
+                count25 = count25 + 1 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot;---------------------------------Start Of Entry--------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot;EventDate\Time:    &quot; &amp; EventDate) 
+                strFileOpen.WriteLine    (&quot;Message:            &quot; &amp; objItem.Message) 
+                strFileOpen.WriteLine    (&quot;----------------------------------End Of Entry---------------------------------&quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+                strFileOpen.WriteLine    (&quot; &quot;) 
+            End If 
+    end if 
+Next 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot;** 25.)EPIC LOGON FAILED ATTEMPTS TOTAL = &quot; &amp; Count25) 
+strFileOpen.WriteLine(&quot; &quot;) 
+strFileOpen.WriteLine(&quot; &quot;) 
+'-------------------------------------backup and Clear security event log--------------------------------------------------------------------------- 
+ 
+dtmThisDay = Day(Date) 
+dtmThisMonth = Month(Date) 
+dtmThisYear = Year(Date) 
+strBackupName = dtmThisYear &amp; &quot;_&quot; &amp; dtmThisMonth _ 
+    &amp; &quot;_&quot; &amp; dtmThisDay 
+strComputer = &quot;.&quot; 
+Set objWMIService = GetObject(&quot;winmgmts:&quot; _ 
+    &amp; &quot;{impersonationLevel=impersonate,(Backup)}!\\&quot; &amp; _ 
+        strComputer &amp; &quot;\root\cimv2&quot;) 
+Set colLogFiles = objWMIService.ExecQuery _ 
+    (&quot;Select * from Win32_NTEventLogFile &quot; _ 
+        &amp; &quot;Where LogFileName='Security'&quot;) 
+For Each objLogfile in colLogFiles 
+    objLogFile.BackupEventLog(&quot;c:\audit_AD\&quot; _ 
+        &amp; strBackupName &amp; _ 
+        &quot;_Security.evt&quot;) 
+    objLogFile.ClearEventLog() 
+Next 
+'--------------------------------------------------------------------------------------------------------------------------------------------------- 
+ 
+Function GetVBDate(wd) 
+  GetVBDate = DateSerial(left(wd,4),mid(wd,5,2),mid(wd,7,2))+ TimeSerial(mid(wd,9,2),mid(wd,11,2),mid(wd,13,2)) 
+End Function 
+'--------------------------------------------------------------------------------------------------------------------------------------------------- 
+'================================================================SECTION 2 AD Auditing============================================================== 
+'-----------------------------------------------------Declaring and setting variables--------------------------------------------------------------- 
+WScript.Sleep(4000) 
+ 
+Dim strEmailFrom, strEmailTo, strEmailSubject, strEmailBody, strSMTP, OUcreateCount, OUDeleteCount, OUMoveCount, OUChangeCount 
+Dim PermChangeCount 
+ 
+OUcreateCount = 0 
+OUDeleteCount = 0 
+OUMoveCount = 0 
+OUChangeCount = 0 
+PermChangeCount = 0 
+ 
+Const ForReading=1 
+ 
+ 
+Set WshNetwork = WScript.CreateObject(&quot;WScript.Network&quot;) 
+StrComputer = WshNetwork.ComputerName 
+ 
+Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;) 
+folder = &quot;C:\audit_AD\&quot; 
+filePath = folder &amp; &quot;AD_Account_Management_Events.txt&quot;             'original log created by SECTION 1 that will be used in this script to generate the  
+Set myFile = objFSO.OpenTextFile(filePath, ForReading, True)    'summary report, This file must exist for this Script to work 
+ 
+strEmailFrom = &quot;xx@xx.com&quot; 
+strEmailTo = &quot;aa@aa.com; bb@bb.com&quot; 
+strEmailSubject = &quot;Summary Of AD Activity on &quot; &amp; StrComputer &amp; &quot; for the past 24hrs - Date/TimeStamp: &quot; &amp; Datenow 
+strSMTP = &quot;xxx.xxx.xxx.xxx&quot; 
+ 
+'------------------------------------------------------Important Notes Area in Body Of E-mail------------------------------------------------------- 
+strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;IMPORTANT NOTES to Auditor:&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;Sections 21,22,23,24 all related to Directory Service Objects. These 4 categories are repetative of other sections,&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;meaning that if an object was amended, (For example the permissions changed on a user account in section 5 etc.) the&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;event will also appear in section 24 with specific details. Thus sections 21,22,23 and 24 will log in depth changes&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;creations, deletions, move's and permissions. Thus in this example section 5 will only notify that a change has occured&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;and section 24 will log the exact specific change made.&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;Thus when reviewing logs in sections 21,22,23 and 24, look at the line that says Class: to see what object was changed&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;This will be either, user, computer, group, organisationalunit etc.....&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;Additionally if the LDAP Display Name: variable is NTSecurityDescriptor and the Class: is OrganisationalUnit this means&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;that the permission has changed on the OU. Additional Totals have been added for OU's in the summary report with regards to sections 21, 22, 23 and 24.&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;The Full report can be viewed at on the DC at C:\Audit_Ad&quot; 
+    strEmailBody = strEmailbody &amp; vbCRLf 
+    strEmailBody = strEmailbody &amp; vbCRLf 
+ 
+'------------------This section reads the original log file created in SECTION 1 and generates a summary report------------------------------------- 
+Do While Not myFile.AtEndofStream 
+    myLine = myFile.ReadLine 
+ 
+    MarkersLine = left(myline,3) ' main summary markers(Will read all lines starting with &quot;** &quot; in log and append into email body) 
+    EventLine = left(myline,19) 'eventlog (Will read all lines starting with &quot;defined field&quot; in original log and append into email body) 
+ 
+    If EventLine = &quot;Time of last clear:&quot; Then 
+            strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;Security Event Log &quot; &amp; MyLine &amp; &quot; on &quot; &amp; StrComputer &amp; vbCRLf 
+            strEmailBody = strEmailbody &amp; vbCRLf 
+    End If 
+ 
+    If MarkersLine = &quot;** &quot; Then 
+        strEmailBody = strEmailbody &amp; vbCRLf &amp; MyLine &amp; vbCRLf 
+    End If 
+ 
+Loop 
+myFile.Close 
+ 
+'1.---------This section reads the original log file created in SECTION 1 and generates a summary report specifically for OU Creations-------------- 
+Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;) 
+folder = &quot;C:\audit_AD\&quot; 
+filePath = folder &amp; &quot;AD_Account_Management_Events.txt&quot; 
+Set myFile = objFSO.OpenTextFile(filePath, ForReading, True) 
+ 
+blnAddToBody = False 
+ 
+Do While Not myFile.AtEndofStream 
+    myLine = myFile.ReadLine 
+ 
+    ClassLine = &quot;    Class:    organizationalUnit&quot; ' Sets the class that will be searched inside the original log 
+    strStartLine1 = &quot;= 21. Directory Service Objects Created in the past 24hrs (Check CLASS) =&quot; 
+    StrEndLine1 = &quot;stop21&quot; 
+ 
+    If myLine = strStartLine1 Then 
+        blnAddToBody = True 
+    End If 
+ 
+    If myLine = ClassLine Then 
+        If blnAddToBody = True Then 
+            OUcreateCount = OUcreateCount + 1 
+        end if 
+    end if 
+ 
+    if myLine = strEndLine1 Then 
+        blnAddToBody = False 
+    end if 
+Loop 
+myFile.Close 
+ 
+'2.---------This section reads the original log file created in SECTION 1 and generates a summary report specifically for OU Moves------------------- 
+Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;) 
+folder = &quot;C:\audit_AD\&quot; 
+filePath = folder &amp; &quot;AD_Account_Management_Events.txt&quot; 
+Set myFile = objFSO.OpenTextFile(filePath, ForReading, True) 
+ 
+blnAddToBody = True 
+ 
+Do While Not myFile.AtEndofStream 
+    myLine = myFile.ReadLine 
+ 
+    ClassLine = &quot;    Class:    organizationalUnit&quot; ' Sets the class that will be searched inside the original log 
+    strStartLine2 = &quot;= 22. Directory Service Objects Moved in the past 24hrs (Check CLASS) =&quot; 
+    StrEndLine2 = &quot;stop22&quot; 
+ 
+    If myLine = strStartLine2 Then 
+        blnAddToBody = True 
+    End If 
+ 
+    If myLine = ClassLine Then 
+        If blnAddToBody = True Then 
+            OUMoveCount = OUMoveCount + 1 
+        end if 
+    end if 
+ 
+    if myLine = strEndLine2 Then 
+        blnAddToBody = False 
+    end if 
+Loop 
+myFile.Close 
+ 
+'3.---------This section reads the original log file created in SECTION 1 and generates a summary report specifically for OU Deletions---------------- 
+Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;) 
+folder = &quot;C:\audit_AD\&quot; 
+filePath = folder &amp; &quot;AD_Account_Management_Events.txt&quot; 
+Set myFile = objFSO.OpenTextFile(filePath, ForReading, True) 
+ 
+blnAddToBody = False 
+ 
+Do While Not myFile.AtEndofStream 
+    myLine = myFile.ReadLine 
+ 
+    ClassLine = &quot;    Class:    organizationalUnit&quot; ' Sets the class that will be searched inside the original log 
+    strStartLine3 = &quot;= 23. Directory Service Objects Deleted in the past 24hrs (Check CLASS) =&quot; 
+    StrEndLine3 = &quot;stop23&quot; 
+ 
+    If myLine = strStartLine3 Then 
+        blnAddToBody = True 
+    End If 
+ 
+    If myLine = ClassLine Then 
+        If blnAddToBody = True Then 
+            OUDeleteCount = OUDeleteCount + 1 
+        end if 
+    end if 
+ 
+    if myLine = strEndLine3 Then 
+        blnAddToBody = False 
+    end if 
+Loop 
+myFile.Close 
+ 
+'4.---------This section reads the original log file created in SECTION 1 and generates a summary report specifically for OU Changes---------------- 
+Set objFSO = CreateObject(&quot;Scripting.FileSystemObject&quot;) 
+folder = &quot;C:\audit_AD\&quot; 
+filePath = folder &amp; &quot;AD_Account_Management_Events.txt&quot; 
+Set myFile = objFSO.OpenTextFile(filePath, ForReading, True) 
+ 
+blnAddToBody = False 
+ 
+Do While Not myFile.AtEndofStream 
+    myLine = myFile.ReadLine 
+ 
+    ClassLine = &quot;    Class:    organizationalUnit&quot; ' Sets the class that will be searched inside the original log 
+    strStartLine4 = &quot;= 24. A directory service object was modified (CHECK OBJECT CLASS) for object that was modified =&quot; 
+    StrEndLine4 =  &quot;stop24&quot; 
+ 
+        If myLine = strStartLine4 Then 
+        blnAddToBody = True 
+    End If 
+ 
+    If myLine = ClassLine Then 
+        If blnAddToBody = True Then 
+            OUChangeCount = OUChangeCount + 1 
+        end if 
+    end if 
+ 
+    if myLine = strEndLine4 Then 
+        blnAddToBody = False 
+    end if 
+Loop 
+myFile.Close 
+ 
+'============================================================END OF SUMMARY ENUMERATION============================================================= 
+    strEmailBody = strEmailbody &amp; vbCRLf 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;With regards to section 21: Specific OU Creations = &quot; &amp; OUCreateCount &amp; vbCRLf 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;With regards to section 22: Specific OU Moves = &quot; &amp; OUMoveCount &amp; vbCRLf 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;With regards to section 23: Specific OU Deletions = &quot; &amp; OUDeleteCount &amp; vbCRLf 
+    strEmailBody = strEmailbody &amp; vbCRLf &amp; &quot;With regards to section 24: Specific OU Changes e.g. Permissions = &quot; &amp; OUChangeCount &amp; vbCRLf 
+ 
+            Set objEmail = CreateObject(&quot;CDO.Message&quot;) 
+            objEmail.From = strEmailFrom 
+            objEmail.To = strEmailTo 
+            objEmail.Subject = strEmailSubject 
+            objEmail.Textbody = strEmailBody 
+            objEmail.Configuration.Fields.Item _ 
+            (&quot;http://schemas.microsoft.com/cdo/configuration/sendusing&quot;) = 2 
+            objEmail.Configuration.Fields.Item _ 
+            (&quot;http://schemas.microsoft.com/cdo/configuration/smtpserver&quot;) = strSMTP 
+            objEmail.Configuration.Fields.Item _ 
+                (&quot;http://schemas.microsoft.com/cdo/configuration/smtpserverport&quot;) = 25 
+            objEmail.Configuration.Fields.Update 
+            objEmail.Send
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

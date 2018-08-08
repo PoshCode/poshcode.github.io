@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-ElevatedTask - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-ElevatedTask</h1>
+<h3><a href="//scripts/907.ps1">download</a></h3>
+<p>Creates a new &quot;On Demand Only&quot; scheduled task to run an &quot;Elevated&quot; application, and a shortcut to launch it on demand, so you can bypass UAC prompting on specific apps.</p>
+<pre><code class="language-posh">#requires -version 2.0
+####################################################################################################
+## Version History
+## 2.0 - First version with shortcut support
+##     - Still weak on documentation of the arguments, sorry ...
+## 2.5 - Improved defaults and documentation (run with -?)
+## 2.6 - CTP 3 version, with AutoHelp and CmdletBinding
+function New-ElevatedTask {
+&lt;#
+.SYNOPSIS
+	Creates a new &quot;On Demand Only&quot; scheduled task to run an &quot;Elevated&quot; application, and a shortcut to launch it.
+.DESCRIPTION
+	New-ElevatedTask creates a scheduled task on Vista or Windows7 which runs &quot;On Demand&quot; with full priviledges (Elevated) and then creates a shortcut to launch it on demand.
+	
+   It works by exploiting the import from XML feature of schtasks.exe /Create /XML ... and the ability to run tasks on demand via schtasks.exe /run /tn ...
+	
+   You may specify the shortcut path as a folder path (which must exist), with a name for the new file (ending in .lnk), or you may specify one of the &quot;SpecialFolder&quot; names like &quot;QuickLaunch&quot; or &quot;CommonDesktop&quot; followed by the name.  The shortcut feature depends on the New-Shortcut function (a separate script).
+   
+	
+   NOTE: You MUST run this in an elevated PowerShell instance.
+
+.Example
+	New-ElevatedTask C:\Windows\Notepad.exe
+
+   Will create a task to run notepad elevated, and creates a shortcut to run it the current folder, named &quot;Notepad.lnk&quot;
+	
+.Example
+	New-ElevatedTask C:\Windows\Notepad.exe -Shortcut QuickLaunch\Editor.lnk -FriendlyName &quot;Run Notepad&quot; -TaskName &quot;Elevated Text Editor&quot;
+
+   Will create a task to run notepad elevated, and names it &quot;Elevated Text Editor&quot;. Also creates a shortcut on the QuickLaunch bar with the name &quot;Run Notepad.lnk&quot; and the tooltip &quot;Elevated Text Editor&quot;
+
+.NOTE
+   Must be run from an elevated PowerShell instance
+   Some features depend on New-Shortcut (which is also available on the repository: http://PoshCode.org/search/New-Shortcut)
+#&gt;
+[CmdletBinding()]
+param(
+   $TargetPath       = &quot;&quot;
+,  $Arguments        = &quot;&quot;
+,  $WorkingDirectory = $(Split-Path -parent (Resolve-Path $TargetPath))
+,  $FriendlyName     = $(Split-Path $TargetPath -leaf)
+,  $TaskName         = $( &quot;Elevated $friendlyName&quot; )
+,  $IconLocation     = $null
+,  $ShortcutPath     = $null
+,  $Hotkey           = $Null
+,  $UserName         = $null
+,  $password         = $null
+,
+   [System.Management.Automation.PSCredential]
+   $credential       = $null
+)
+
+$SchTasks = Join-Path ([Environment]::GetFolderPath(&quot;System&quot;)) &quot;schtasks.exe&quot;
+
+if(-not (Test-Path $SchTasks) ) {
+	$SchTasks = Read-Host &quot;You need to set the correct location for the SchTasks.exe application on your system&quot;
+}
+
+
+
+if($args -contains &quot;-?&quot; -or $TargetPath.Trim(&quot; &quot;).Length -eq 0 -or (-not (Test-Path $TargetPath) )) {
+	if( -not($args -contains &quot;-?&quot;)) { Write-Error &quot;TargetPath must be an existing file for the scheduled task to point at!&quot; }
+	Write-Host $UseMessage
+	return
+}
+
+
+$xml = @&quot;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-16&quot;?&gt;
+&lt;Task version=&quot;1.2&quot; xmlns=&quot;http://schemas.microsoft.com/windows/2004/02/mit/task&quot;&gt;
+  &lt;RegistrationInfo&gt;
+    &lt;Author&gt;{4}&lt;/Author&gt;
+    &lt;Description&gt;Run {0} &quot;As Administrator&quot;&lt;/Description&gt;
+  &lt;/RegistrationInfo&gt;
+  &lt;Triggers /&gt;
+  &lt;Principals&gt;
+    &lt;Principal id=&quot;Author&quot;&gt;
+      &lt;UserId&gt;{4}&lt;/UserId&gt;
+      &lt;LogonType&gt;{5}&lt;/LogonType&gt;
+      &lt;RunLevel&gt;HighestAvailable&lt;/RunLevel&gt;
+    &lt;/Principal&gt;
+  &lt;/Principals&gt;
+  &lt;Settings&gt;
+    &lt;MultipleInstancesPolicy&gt;Parallel&lt;/MultipleInstancesPolicy&gt;
+    &lt;DisallowStartIfOnBatteries&gt;false&lt;/DisallowStartIfOnBatteries&gt;
+    &lt;StopIfGoingOnBatteries&gt;false&lt;/StopIfGoingOnBatteries&gt;
+    &lt;AllowHardTerminate&gt;true&lt;/AllowHardTerminate&gt;
+    &lt;StartWhenAvailable&gt;false&lt;/StartWhenAvailable&gt;
+    &lt;RunOnlyIfNetworkAvailable&gt;false&lt;/RunOnlyIfNetworkAvailable&gt;
+    &lt;AllowStartOnDemand&gt;true&lt;/AllowStartOnDemand&gt;
+    &lt;Enabled&gt;true&lt;/Enabled&gt;
+    &lt;Hidden&gt;false&lt;/Hidden&gt;
+    &lt;RunOnlyIfIdle&gt;false&lt;/RunOnlyIfIdle&gt;
+    &lt;DisallowStartOnRemoteAppSession&gt;false&lt;/DisallowStartOnRemoteAppSession&gt;
+    &lt;UseUnifiedSchedulingEngine&gt;false&lt;/UseUnifiedSchedulingEngine&gt;
+    &lt;WakeToRun&gt;false&lt;/WakeToRun&gt;
+    &lt;ExecutionTimeLimit&gt;P3D&lt;/ExecutionTimeLimit&gt;
+    &lt;Priority&gt;7&lt;/Priority&gt;
+  &lt;/Settings&gt;
+  &lt;Actions Context=&quot;Author&quot;&gt;
+    &lt;Exec&gt;
+      &lt;Command&gt;{1}&lt;/Command&gt;
+      &lt;Arguments&gt;{2}&lt;/Arguments&gt;
+      &lt;WorkingDirectory&gt;{3}&lt;/WorkingDirectory&gt;
+    &lt;/Exec&gt;
+  &lt;/Actions&gt;
+&lt;/Task&gt;
+&quot;@ 
+
+$xFile = [IO.Path]::GetTempFileName()
+
+# if they specify a user name, assume they want to do password authentication
+if($UserName -ne $null -and $password -ne $null)  {
+  $xml -f $friendlyName, $TargetPath, $arguments, $WorkingDirectory, $UserName, &quot;Password&quot; | set-content $xFile
+  &amp;$SchTasks /Create /XML $xFile /TN $taskname /RU $UserName /RP $password
+
+  # if they didn't include a password, prompt them for one ...
+} elseif($UserName -ne $null -and $password -eq $null)  {
+  $xml -f $friendlyName, $TargetPath, $arguments, $WorkingDirectory, $UserName, &quot;Password&quot; | set-content $xFile
+  &amp;$SchTasks /Create /XML $xFile /TN $taskname /RU $UserName /RP
+
+  # if they supplied credentials instead, use that
+} elseif($credential -ne $null) {
+  $xml -f $friendlyName, $TargetPath, $arguments, $WorkingDirectory, $($Credential.UserName), &quot;Password&quot; | set-content $xFile
+
+  &amp;$SchTasks /Create /XML $xFile /TN $taskname /RU $credential.UserName /RP $($Credential.GetNetworkCredential().Password)
+
+} else {
+  # if they suppplied neither user nor credentials, lets assume they want the &quot;current&quot; user
+    $UserName = ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
+
+  # if they passed a password, use that
+  if($password -ne $null) {
+    $xml -f $friendlyName, $TargetPath, $arguments, $WorkingDirectory, $UserName, &quot;Password&quot; | set-content $xFile
+    &amp;$SchTasks /Create /XML $xFile /TN $taskname /RU $UserName /RP $password
+  
+  # otherwise, there are no special credentials needed, &quot;Interactive&quot; means only &quot;this&quot; user can run it.
+  } else {
+    $xml -f $friendlyName, $TargetPath, $arguments, $WorkingDirectory, $UserName, &quot;InteractiveToken&quot; | set-content $xFile
+    &amp;$SchTasks /Create /XML $xFile /TN $taskname
+  }
+}
+
+if($IconLocation -eq $null -or $IconLocation.Length -eq 0) {
+	$IconLocation = $TargetPath
+}
+if(([IO.FileInfo]$ShortcutPath).Extension.Length -eq 0 ) {
+    $ShortcutPath = &quot;$ShortcutPath\$FriendlyName.lnk&quot;
+	$Description  = $TaskName
+} else {
+	$Description  = $FriendlyName
+}
+## New-ShortCut $TargetPath $LinkPath $Arguments $WorkingDirectory $WindowStyle $IconLocation $Hotkey $Description
+if(Get-Command New-Shortcut -ErrorAction SilentlyContinue) {
+   New-Shortcut -Target $SchTasks -LinkPath $ShortcutPath -Arg &quot;/Run /TN `&quot;$TaskName`&quot;&quot; -WorkingDirectory $WorkingDirectory -Window &quot;Minimized&quot; -Icon $IconLocation -Hotkey $Hotkey -Description $Description
+}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

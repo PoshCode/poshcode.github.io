@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Get-PerformanceHistory 2 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-PerformanceHistory 2</h1>
+<h3><a href="//scripts/155.ps1">download</a> - <a href="//scripts/147.md">parent</a></h3>
+<p>This much more complicated version of Get-PerformanceHistory shows the approximate length of the command or script, as well as how long it took to run.  Great for those &quot;my script is shorter/faster/cooler&quot; than yours bragging sessions on IRC ... or whatever. Lets you compare several commands by just running each of them and then calling Get-PerformanceHistory -Count 4</p>
+<pre><code class="language-posh">#requires -version 2.0
+## Get-PerformanceHistory.ps1
+##############################################################################################################
+## Lets you see the amount of time recent commands in your history have taken
+## History:
+## v2 - adds a ton of parsing to make the output pretty
+##    - added measuring the scripts involved in the command, (uses Tokenizer)
+##############################################################################################################
+param( [int]$count=1, [int]$id=((Get-History -count 1| Select Id).Id) )
+
+$Parser = [System.Management.Automation.PsParser]
+function FormatTimeSpan($ts) {
+   if($ts.Minutes) {
+      if($ts.Hours) {
+         if($ts.Days) {
+            return &quot;{0:##}d {1:00}:{2:00}:{3:00}.{4:00000}&quot; -f $ts.Days, $ts.Hours, $ts.Minutes, $ts.Seconds, [int](100000 * ($ts.TotalSeconds - [Math]::Floor($ts.TotalSeconds)))
+         }
+         return &quot;{0:##}:{1:00}:{2:00}.{3:00000}&quot; -f $ts.Hours, $ts.Minutes, $ts.Seconds, [int](100000 * ($ts.TotalSeconds - [Math]::Floor($ts.TotalSeconds)))
+      }
+      return &quot;{0:##}:{1:00}.{2:00000}&quot; -f $ts.Minutes, $ts.Seconds, [int](100000 * ($ts.TotalSeconds - [Math]::Floor($ts.TotalSeconds)))
+   }
+   return &quot;{0:#0}.{1:00000}&quot; -f $ts.Seconds, [int](100000 * ($ts.TotalSeconds - [Math]::Floor($ts.TotalSeconds)))
+}
+
+Get-History -count $count -id $id | 
+ForEach {
+   $msr = $null
+   $cmd = $_
+   $len = 8
+   $com = @( $Parser::Tokenize( $cmd.CommandLine, [ref]$null ) | 
+                  where {$_.Type -eq &quot;Command&quot;} | 
+                  foreach { get-command $_.Content } | 
+                  where { $_.CommandType -eq &quot;ExternalScript&quot; } |
+                  foreach { $_.Path } )
+
+   # If we actually got a script, measure it out
+   if($com.Count -gt 0){
+      $msr = Get-Content -path $com | Measure-Object -L -W -C
+   } else {
+      $msr = Measure-Object -in $cmd.CommandLine -L -W -C
+   }
+   
+   &quot;&quot; | Select @{n=&quot;Id&quot;;        e={$cmd.Id}},
+               @{n=&quot;Duration&quot;;  e={FormatTimeSpan ($cmd.EndExecutionTime - $cmd.StartExecutionTime)}},
+               @{n=&quot;Lines&quot;;     e={$msr.Lines}},
+               @{n=&quot;Words&quot;;     e={$msr.Words}},
+               @{n=&quot;Chars&quot;;     e={$msr.Characters}},
+               @{n=&quot;Type&quot;;      e={if($com.Count -gt 0){&quot;Script&quot;}else{&quot;Command&quot;}}},
+               @{n=&quot;Commmand&quot;;  e={$cmd.CommandLine}}
+} | 
+# I have to figure out what the longest time string is to make it look its best
+Foreach { $len = [Math]::Max($len,$_.Duration.Length); $_ } | Sort Id |
+Format-Table @{l=&quot;Duration&quot;;e={&quot;{0,$len}&quot; -f $_.Duration}},Lines,Words,Chars,Type,Commmand -auto
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

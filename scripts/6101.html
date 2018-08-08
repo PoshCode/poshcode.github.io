@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="dochak">
+    <title>Get-FileTail 1.01 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-FileTail 1.01</h1>
+<h3><a href="//scripts/6101.ps1">download</a> - <a href="//scripts/1061.md">parent</a></h3>
+<p>An update to the orignal Get-FileTail that replaces a specific int with a long to accommodate particularly large files.  Original text: A PowerShell 2.0 function to do the equivalent of the 'nix tail, including the continuous feature (tail -f).  Notice this <em>does not</em> try to emulate the 'nix command parameters, which never made sense to me. I'll leave that to someone else.</p>
+<pre><code class="language-posh">#.Synopsis 
+#  Show the last n lines of a text file
+#.Description
+#  This is just a tail script for PowerShell, using seekable streams to avoid reading the whole file and using v2 eventing to detect changes and provide a -Continuous mode.
+#.Parameter Name
+#  The file name to tail
+#.Parameter Lines
+#  The number of lines to display (or start with, in -Continuous mode)
+#.Parameter Continuous
+#  Whether or not to continue watching for new content to be added to the tail of the function
+#.Parameter Linesep
+#  Allows you to override the line separator character used for counting lines. 
+#  By default we use `n, which works for Windows `r`n and Linux `n but not old-school Mac `r files
+#.Parameter Encoding
+#  Allows you to manually override the text encoding. 
+#  By default we can detect various unicode formats, and we default to UTF-8 which will handle ASCII
+#.Example
+#  Get-FileTail ${Env:windir}\Windowsupdate.log 25
+#
+#  get the last 25 lines from the specified log
+#.Example
+#  Get-FileTail ${Env:windir}\Windowsupdate.log -Continuous
+#
+#  Start reading from WindowsUpdate.log as it is written to.
+
+#function Get-FileTail {
+PARAM( $Name, [int]$lines=10, [switch]$continuous, $linesep = &quot;`n&quot;, [string]$encoding )
+BEGIN {
+   if(Test-Path $Name) {
+      $Name = (Convert-Path (Resolve-Path $Name))
+   }
+   [byte[]]$buffer = new-object byte[] 1024
+
+   if($encoding) { 
+      [System.Text.Encoding]$encoding = [System.Text.Encoding]::GetEncoding($encoding) 
+      Write-Debug &quot;Specified Encoding: $encoding&quot;
+   }
+   #  else { 
+      #  $detector = New-Object System.IO.StreamReader $Name, $true
+      #  [Text.Encoding]$encoding = $detector.CurrentEncoding
+      #  Write-Debug &quot;Detected Encoding:  $encoding&quot;
+      #  $detector.Dispose()
+   #  }
+
+   function tailf {
+   PARAM($StartOfTail=0)
+      [string[]]$content = @()
+      #trap { return }
+      ## You must use ReadWrite sharing so you can open files which other apps are writing to...
+      $reader = New-Object System.IO.FileStream $Name, &quot;OpenOrCreate&quot;, &quot;Read&quot;, &quot;ReadWrite&quot;, 8, &quot;None&quot;
+
+      if(!$encoding) {
+         $b1 = $reader.ReadByte()
+         $b2 = $reader.ReadByte()
+         $b3 = $reader.ReadByte()
+         $b4 = $reader.ReadByte()
+
+         if (($b1 -eq 0xEF) -and ($b2 -eq 0xBB) -and ($b3 -eq 0xBF)) {
+            Write-Debug &quot;Detected Encoding:  UTF-8&quot;
+            [System.Text.Encoding]$encoding = [System.Text.Encoding]::UTF8
+         } elseif (($b1 -eq 0) -and ($b2 -eq 0) -and ($b3 -eq 0xFE) -and ($b4 -eq 0xFF)) {
+            Write-Debug &quot;Detected Encoding:  12001 UTF-32 Big-Endian&quot;
+            [System.Text.Encoding]$encoding = [System.Text.Encoding]::GetEncoding(12001)
+         } elseif (($b1 -eq 0xFF) -and ($b2 -eq 0xFE) -and ($b3 -eq 0) -and ($b4 -eq 0)) {
+            Write-Debug &quot;Detected Encoding:  12000 UTF-32 Little-Endian&quot;
+            [System.Text.Encoding]$encoding = [System.Text.Encoding]::UTF32
+         } elseif (($b1 -eq 0xFE) -and ($b2 -eq 0xFF)) {
+            Write-Debug &quot;Detected Encoding:  1201 UTF-16 Big-Endian&quot;
+            [System.Text.Encoding]$encoding = [System.Text.Encoding]::BigEndianUnicode
+         } elseif (($b1 -eq 0xFF) -and ($b2 -eq 0xFE)) {
+            Write-Debug &quot;Detected Encoding:  1200 UTF-16 Little-Endian&quot;
+            [System.Text.Encoding]$encoding = [System.Text.Encoding]::Unicode
+         } elseif (($b1 -eq 0x2B) -and ($b2 -eq 0x2F) -and ($b3 -eq 0x76) -and (
+               ($b4 -eq 0x38) -or ($b4 -eq 0x39) -or ($b4 -eq 0x2b) -or ($b4 -eq 0x2f))) {
+            Write-Debug &quot;Detected Encoding:  UTF-7&quot;
+            [System.Text.Encoding]$encoding = [System.Text.Encoding]::UTF7
+         } else {
+            Write-Debug &quot;Unknown Encoding: [$('0x{0:X}' -f $b1) $('0x{0:X}' -f $b2) $('0x{0:X}' -f $b3) $('0x{0:X}' -f $b4)] using UTF-8&quot;
+            [System.Text.Encoding]$encoding = [System.Text.Encoding]::UTF8
+         }
+      }
+      
+      #trap { Write-Warning $_; $reader.Close(); throw }
+      if($StartOfTail -eq 0) {
+         $StartOfTail = $reader.Length - $buffer.Length
+      } else {
+         $OnlyShowNew = $true
+      }
+
+      #Write-Verbose &quot;Starting Tail: $StartOfTail of $($reader.Length)&quot;
+
+      do { 
+         $pos = $reader.Seek($StartOfTail, &quot;Begin&quot;)
+         #Write-Verbose &quot;Seek: $Pos&quot;
+         do {
+            $count = $reader.Read($buffer, 0, $buffer.Length);
+            #Write-Verbose &quot;Read: $Count&quot;
+            $content += $encoding.GetString($buffer,0,$count).Split($linesep)
+         } while( $count -gt 0 )
+         $StartOfTail -= $buffer.Length
+      # keep going if we don't have enough lines,
+      } while(!$OnlyShowNew -and ($content.Length -lt $lines) -and $StartOfTail -gt 0)
+
+      ## ADJUST OUR OUTPUT ...
+      $end = $reader.Length
+      #Write-Verbose &quot;Ended Tail: $end of $($reader.Length)&quot;
+      
+      if($content) {
+         $output = [string]::Join( &quot;`n&quot;, @($content[-$lines..-1]) )
+         $len = $output.Length
+         $output = $output.TrimEnd(&quot;`n&quot;)
+         $end -= ($len - $output.Length) - 1
+      }
+
+      Write-Output $end
+      if($output.Length -ge 1) {
+         Write-Host $output -NoNewLine
+      }
+      #trap { continue }
+      $reader.Close();
+   }
+}
+@@PROCESS {
+@@   [long]$StartOfTail = tailf 0
+
+   if($continuous) { 
+      $Null = unregister-event &quot;FileChanged&quot; -ErrorAction 0
+      $fsw = new-object system.io.filesystemwatcher
+      $fsw.Path = split-path $Name
+      $fsw.Filter = Split-Path $Name -Leaf
+      $fsw.EnableRaisingEvents = $true
+      $null = Register-ObjectEvent $fsw Changed &quot;FileChanged&quot; -MessageData $Name 
+      while($true) {
+         wait-event FileChanged | % { 
+            [int]$StartOfTail = tailf $StartOfTail -newonly
+            $null = Remove-Event $_.EventIdentifier
+         }
+      }
+      unregister-event &quot;FileChanged&quot;
+   }
+   Write-Host
+}
+#}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

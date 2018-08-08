@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="beefarino">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/3066.ps1">download</a></h3>
+<p>A module that wraps iscsicli.exe to provide basic iSCSI management capabilities</p>
+<pre><code class="language-posh"># Copyright (c) 2011 Code Owls LLC, All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this 
+# software and associated documentation files (the &quot;Software&quot;), to deal in the Software without 
+# restriction, including without limitation the rights to use, copy, modify, merge, publish, 
+# distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the  
+# Software is furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all copies or 
+# substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
+# CONTRACT, TORT OR OTHERWISE, ARISING FROM, # OUT OF OR IN CONNECTION WITH THE SOFTWARE 
+# OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+# 
+# http://www.opensource.org/licenses/mit-license.php
+#  
+# PowerShell module for iSCSI management
+#
+# author:
+#	jim christopher &lt;jimchristopher@gmail.com&gt;
+#
+# notes:
+#
+#Target Mappings:
+#    &lt;Target Lun&gt; is the LUN value the target uses to expose the LUN.
+#                 It must be in the form 0x0123456789abcdef
+#    &lt;OS Bus&gt; is the bus number the OS should use to surface the LUN
+#    &lt;OS Target&gt; is the target number the OS should use to surface the LUN
+#    &lt;OS LUN&gt; is the LUN number the OS should use to surface the LUN
+#
+#CHAP secrets, CHAP passwords and IPSEC preshared keys can be specified as
+#a text string or as a sequence of hexadecimal values. The value specified on
+#the command line is always considered a string unless the first two characters
+#0x in which case it is considered a hexadecimal value.
+#
+#For example 0x12345678 specifies a 4 byte secret
+#
+#All numerical values are assumed decimal unless preceeded by 0x. If
+#preceeded by 0x then value is assumed to be hex
+#
+#iscsicli can also be run in command line mode where iscsicli commands
+#can be entered directly from the console. To enter command line
+#mode, just run iscsicli without any parameters
+
+
+###########################################################
+## flags and enumerations
+
+#Payload Id Type:
+#    ID_IPV4_ADDR is      1 - Id format is 1.2.3.4
+#    ID_FQDN is           2 - Id format is ComputerName
+#    ID_IPV6_ADDR is      5 - Id form is IPv6 Address
+#
+$payloadIPV4	 	= 1;
+$payloadFQDN 		= 2;
+$payloadIPV6		= 5;
+
+#Security Flags:
+#    TunnelMode is          0x00000040
+#    TransportMode is       0x00000020
+#    PFS Enabled is         0x00000010
+#    Aggressive Mode is     0x00000008
+#    Main mode is           0x00000004
+#    IPSEC/IKE Enabled is   0x00000002
+#    Valid Flags is         0x00000001
+#
+$securityTunnelMode			= 0x40;
+$securityTransportMode		= 0x20;
+$securityPFSEnable			= 0x10;
+$securityAggressiveMode		= 0x08;
+$securityMainMode			= 0x04;
+$securityIPSECIKEEnabled	= 0x02;
+$securityValidFlags			= 0x01;
+
+#Login Flags:
+#    ISCSI_LOGIN_FLAG_REQUIRE_IPSEC                0x00000001
+#        IPsec is required for the operation
+#
+#    ISCSI_LOGIN_FLAG_MULTIPATH_ENABLED            0x00000002
+#        Multipathing is enabled for the target on this initiator
+#
+$loginRequireIPSEC			= 0x01;
+$loginMultipathEnabled		= 0x02;
+
+#AuthType:
+#    ISCSI_NO_AUTH_TYPE = 0,
+#        No iSCSI in-band authentication is used
+#
+#    ISCSI_CHAP_AUTH_TYPE = 1,
+#        One way CHAP (Target authenticates initiator is used)
+#
+#    ISCSI_MUTUAL_CHAP_AUTH_TYPE = 2
+#        Mutual CHAP (Target and Initiator authenticate each other is used)
+#
+$authTypeNone		= 0;
+$authTypeChap		= 1;
+$authTypeMutualChap	= 2;
+
+#Target Flags:
+#    ISCSI_TARGET_FLAG_HIDE_STATIC_TARGET            0x00000002
+#        If this flag is set then the target will never be reported unless it
+#        is also discovered dynamically.
+#
+#    ISCSI_TARGET_FLAG_MERGE_TARGET_INFORMATION      0x00000004
+#        If this flag is set then the target information passed will be
+#        merged with any target information already statically configured for
+#        the target
+#
+$targetHideStaticTarget		= 0x02;
+$targetMergeTargetInfo		= 0x04;
+
+###########################################################
+## cmdlets
+
+#iscsicli AddTarget &lt;TargetName&gt; &lt;TargetAlias&gt; &lt;TargetPortalAddress&gt;
+#                           &lt;TargetPortalSocket&gt; &lt;Target flags&gt;
+#                           &lt;Persist&gt; &lt;Login Flags&gt; &lt;Header Digest&gt; &lt;Data Digest&gt; 
+#                           &lt;Max Connections&gt; &lt;DefaultTime2Wait&gt;
+#                           &lt;DefaultTime2Retain&gt; &lt;Username&gt; &lt;Password&gt; &lt;AuthType&gt;
+#                           &lt;Mapping Count&gt; &lt;Target Lun&gt; &lt;OS Bus&gt; &lt;Os Target&gt; 
+#                           &lt;OS Lun&gt; ...
+#
+#iscsicli QAddTarget &lt;TargetName&gt; &lt;TargetPortalAddress&gt;
+#
+function Add-Target
+{
+	[CmdletBinding(SupportsShouldProcess=$true)]
+	param(
+		[Parameter(Mandatory=$true)]
+		[Alias(&quot;Name&quot;)]
+		[string]		
+		# the name of the target
+		$targetName,
+
+		[Parameter(Mandatory=$true)]
+		[Alias(&quot;Address&quot;)]
+		[string]
+		# the IP or DNS address of the target portal
+		$targetPortalAddress
+	)
+	process
+	{
+		&amp; iscsicli qaddtarget $targetName, $targetPortalAddress;
+	}
+}
+
+#iscsicli RemoveTarget &lt;TargetName&gt; 
+#
+#RemovePersistentTarget &lt;Initiator Name&gt; &lt;TargetName&gt;
+#                       &lt;Initiator Port Number&gt;
+#                       &lt;Target Portal Address&gt;
+#                       &lt;Target Portal Socket&gt;
+#
+function Remove-Target
+{
+&lt;#
+	This command will remove a target from the list of persisted targets.
+
+Boot Configuration Known Issues (Windows Server 2003 Boot Initiator)
+The Microsoft iSCSI Software Initiator boot version GUI does not allow you to view which adapter is set to boot. In order 
+
+to determine which adapter the system is set to boot with, you can use the following command:
+ From a command prompt  type “iscsibcg /showibf” to find the MAC address of the boot adapter 
+ Then run the command “ipconfig /all”  
+ Compare the MAC address of the adapter to those listed with ipconfig /all 
+
+MPIO Failover in an iSCSI boot configuration using the Microsoft iSCSI Software Initiator
+
+In Fail Over Only, no load balancing is performed. The primary path functions as the active path and all other paths are 
+
+standby paths. The active path is used for sending all I/O. If the active path fails,  one of the standby paths  becomes 
+
+the active path.   When the  formerly active path is reconnected, it becomes a standby path and  a &quot;failback&quot; does not 
+
+occur.   This behavior is due to Media Sensing is disabled by default in the boot version of the Microsoft iSCSI Software 
+
+Initiator and is by design.  However, the registry key can be changed to enable fail back.  For more information, please 
+
+see
+     
+For more information: 
+239924  How to disable the Media Sensing feature for TCP/IP in Windows
+http://support.microsoft.com/default.aspx?scid=kb;EN-US;239924   
+#&gt;
+	[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='high')]
+	param(
+		[Parameter(Mandatory=$true,ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+		[Alias(&quot;Name&quot;)]
+		[string]
+		# the name of the target to remove
+		$targetName,
+		
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[Alias(&quot;Address&quot;)]
+		[string]
+		# the IP or DNS address of the target portal
+		$targetPortalAddress,
+		
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[Alias('Port')]
+		[int]
+		#the TCP port number of the target portal. Typically this is 3260, which is the well-known port number 
+
+defined for use by iSCSI.
+		$TargetPortalSocket = 3260,
+		
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[Alias( &quot;InitiatorInstanceName&quot; )]
+		[string]
+		#the name of the initiator via which the SendTargets operation is performed. If not specified then the 
+
+initiator used is selected by the iSCSI initiator service.
+		$InitiatorName, 
+
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[string]
+		#is the physical port number on the initiator via which the SendTargets operation is performed. If not 
+
+specified then the kernel mode initiator driver chooses the initiator port used.
+		$InitiatorPort = '*',		
+		
+		[Parameter()]
+		[switch]
+		# specify to remove a persistent connection
+		$persist,
+		
+		[Parameter()]
+		[switch]
+		# specify to bypass standard PowerShell confirmation procedures
+		$force		
+	)
+	
+	process
+	{
+		Write-Verbose &quot;remove-target ...&quot;;
+		Write-Verbose &quot;  TargetName: $targetName&quot;;
+		Write-Verbose &quot;  TargetPortalAddress: $targetPortalAddress&quot;;
+		Write-Verbose &quot;  TargetPortalSocket: $targetPortalSocket&quot;;
+		Write-Verbose &quot;  InitiatorInstanceName: $InitiatorName&quot;;
+		Write-Verbose &quot;  InitiatorPort: $initiatorPort&quot;;
+		Write-Verbose &quot;  Persist: $persist&quot;;
+		Write-Verbose &quot;  Force: $force&quot;;
+
+		if( -not ( $force -or $pscmdlet.ShouldProcess( $targetName, 'Remove iSCSI target' ) ) )
+		{
+			return;
+		}
+		if( $persist -and $InitiatorName )
+		{
+			$iscsi = &quot;iscsicli removepersistenttarget $InitiatorName $targetName $InitiatorPort 
+
+$targetPortalAddress $TargetPortalSocket&quot;
+			Write-Verbose $iscsi;
+			invoke-expression $iscsi
+		}
+		else
+		{
+			$iscsi = &quot;iscsicli removetarget $targetName&quot;;
+			Write-Verbose $iscsi;
+			invoke-expression $iscsi
+		}
+		
+	}
+}
+
+#iscsicli AddTargetPortal &lt;TargetPortalAddress&gt; &lt;TargetPortalSocket&gt; 
+#                         [HBA Name] [Port Number]
+#                         &lt;Security Flags&gt;
+#                         &lt;Login Flags&gt; &lt;Header Digest&gt; &lt;Data Digest&gt; 
+#                         &lt;Max Connections&gt; &lt;DefaultTime2Wait&gt;
+#                        &lt;DefaultTime2Retain&gt; &lt;Username&gt; &lt;Password&gt; &lt;AuthType&gt;
+#
+#iscsicli QAddTargetPortal &lt;TargetPortalAddress&gt;
+#                          [CHAP Username] [CHAP Password]
+#
+function Add-TargetPortal
+{
+&lt;#
+This command will add a target portal to the list of persisted target portals. The iSCSI initiator service will perform a 
+
+SendTargets operation to each target portal in the list whenever the service starts and whenever a full refresh of the 
+
+target list is requested. 
+
+#&gt;
+	#[CmdletBinding(SupportsShouldProcess=$true)]
+	param(
+		[Parameter(Mandatory=$true)]
+		[Alias(&quot;Address&quot;)]
+		[string]
+		# the IP or DNS address of the target portal.
+		$targetPortalAddress,
+		
+		[Parameter()]
+		[string]
+		#Username is the string that should be used as the CHAP username when logging into the target. By 
+
+specifying * for this parameter, the iSCSI initiator service will use the initiator node name as the CHAP username.
+		$username,
+		
+		[Parameter()]
+		[string]
+		#Password is the string that should be used as the target’s CHAP secret when logging into the target. The 
+
+initiator will use this secret to compute a hash value based on the challenge sent by the target. 
+		$password
+	)
+	process
+	{
+		if( $username )
+		{
+			&amp; iscsicli qaddtargetportal $targetPortalAddress $username $password;
+		}
+		else
+		{
+			&amp; iscsicli qaddtargetportal $targetPortalAddress;
+		}
+	}
+	
+}
+
+#iscsicli RemoveTargetPortal &lt;TargetPortalAddress&gt; &lt;TargetPortalSocket&gt; [HBA Name] [Port Number]
+#
+function Remove-TargetPortal
+{
+&lt;#
+This command will remove a target portal from the list of persisted target  portals. The iSCSI initiator service will 
+
+perform a SendTargets operation to each target portal in the list whenever the service starts and whenever a full refresh 
+
+of the target list is requested. Note that the command does not purge the targets discovered via this target portal from 
+
+the list of targets maintained by the service.
+#&gt;
+	[CmdletBinding(SupportsShouldProcess=$true)]
+	param(
+		[Parameter(Mandatory=$true,ValueFromPipeline=$true)]
+		[Alias('Name')]
+		[string]
+		# the IP or DNS address of the target portal.
+		$targetPortalAddress,
+		
+		[Parameter()]
+		[Alias('Port')]
+		[int]
+		#the TCP port number of the target portal. Typically this is 3260, which is the well-known port number 
+
+defined for use by iSCSI.
+		$TargetPortalSocket = 3260,
+
+		[Parameter()]
+		[string]
+		#the name of the initiator via which the SendTargets operation is performed. If not specified then the 
+
+initiator used is selected by the iSCSI initiator service.
+		$InitiatorName = '', 
+
+		[Parameter()]
+		[string]
+		#is the physical port number on the initiator via which the SendTargets operation is performed. If not 
+
+specified then the kernel mode initiator driver chooses the initiator port used.
+		$InitiatorPort = ''
+	)
+	
+	process
+	{
+		&amp; iscsicli removetargetportal $targetPortalAddress $TargetPortalSocket $InitiatorName $InitiatorPort 
+	}
+}
+
+#iscsicli RefreshTargetPortal &lt;TargetPortalAddress&gt; &lt;TargetPortalSocket&gt; [HBA Name] [Port Number]
+#
+function Update-TargetPortal
+{
+&lt;#
+This command will perform a SendTargets operation to the target portal and include the discovered targets into the list of 
+
+targets maintained by the service. It does not add the target portal to the persistent list.
+#&gt;
+
+	[CmdletBinding(SupportsShouldProcess=$true)]
+	param(
+		[Parameter(Mandatory=$true)]
+		[Alias(&quot;Address&quot;)]
+		[string]
+		# the IP or DNS address of the target portal.
+		$targetPortalAddress,
+
+		[Parameter()]
+		[Alias(&quot;Port&quot;)]
+		[int]
+		#the TCP port number of the target portal. Typically this is 3260, which is the well-known port number 
+
+defined for use by iSCSI.
+		$TargetPortalSocket = 3260,
+
+		[Parameter()]
+		[string]
+		#the name of the initiator via which the SendTargets operation is performed. If not specified then the 
+
+initiator used is selected by the iSCSI initiator service.
+		$InitiatorName, 
+
+		[Parameter()]
+		[int]
+		#is the physical port number on the initiator via which the SendTargets operation is performed. If not 
+
+specified then the kernel mode initiator driver chooses the initiator port used.
+		$InitiatorPort		
+	)
+	
+	process
+	{
+		&amp; iscsicli refreshtargetportal $targetPortalAddress $TargetPortalSocket $InitiatorName $InitiatorPort
+	}
+}
+
+#iscsicli ListTargets [ForceUpdate]
+#
+#iscsicli ListPersistentTargets
+#
+function Get-Target
+{
+&lt;#
+	This command will display the list of persistent targets configured for all initiators.
+#&gt;
+	[CmdletBinding(DefaultParameterSetName='Local')]
+	param(
+		[Parameter( ParameterSetName='Persistent' )]
+		[switch]
+		# specify to get persistent targets
+		$persistent, 
+		[Parameter( ParameterSetName='Local' )]
+		[switch]
+		# specify to force refresh of target list during retrieval
+		$force
+	)
+	
+	process
+	{
+		if( $persistent )
+		{
+			$data = &amp; iscsicli ListPersistentTargets | Out-String;
+			
+			$data | Write-Verbose;
+			$data -replace &quot;[`r`n]+&quot;,&quot;=&quot; -split &quot;==&quot; | where { $_ -match ':\s+' } | foreach {			
+				$_ | convertFrom-iSCSIOutput
+#				Write-Verbose &quot;section $_&quot;;
+#				$a = @{};
+#				$_ -split '='  | Select-String '^\s+[\S\s]+:\s+' | foreach{ 
+#						Write-Verbose &quot;item entry $_&quot;;
+#						$k,$v = $_ -split ':',2
+#						$a[$k.trim(' ')] = $v.trim(' ');
+#						
+#						#todo - massage to match remove-target inputs
+#					}		
+#				new-object psobject -Property $a;
+			}
+		}
+		else
+		{
+			if( $force )
+			{
+				$data = &amp; iscsicli ListTargets T
+			}
+			else
+			{
+				$data = &amp; iscsicli ListTargets
+			}
+			
+			$data | Select-String '^\s+\S+:\S+$' | foreach{ $_ -replace '^\s+','' -replace '\s+$','' };		
+		}		
+	}
+
+}
+
+#iscsicli ListTargetPortals
+#
+function Get-TargetPortal
+{
+	[CmdletBinding()]
+	param()
+	process
+	{
+		$data = &amp; iscsicli ListTargetPortals | Out-String;
+		$data | Write-Verbose;
+		$data -replace &quot;[`r`n]+&quot;,&quot;=&quot; -split &quot;==&quot; | where { $_ -match ':\s+' } | foreach {			
+			$_ | convertFrom-iSCSIOutput
+#			Write-Debug &quot;section $_&quot;;
+#			$a = @{};
+#			$_ -split '='  | Select-String '^\s+[\S\s]+:\s+' | foreach{ 
+#					Write-Debug &quot;item entry $_&quot;;
+#					$k,$v = $_ -split ':',2
+#					$a[$k.trim(' ')] = $v.trim(' ');
+#				}		
+#			new-object psobject -Property $a;
+		}
+	}	
+}
+
+#iscsicli TargetInfo &lt;TargetName&gt; [Discovery Mechanism]
+#
+function Get-TargetInfo
+{
+&lt;#
+This command will return information about the target specified by TargetName. The iSCSI initiator service maintains a 
+
+separate set of information about every target organized by each mechanism by which it was discovered. This means that 
+
+each instance of a target can have different information such as target portal groups. Discovery Mechanism is an optional 
+
+parameter and if not specified then only the list of discovery mechanisms for the target are displayed. If Discovery 
+
+Mechanism is specified then information about the target instance discovered by that mechanism is displayed.
+#&gt;
+	[CmdletBinding()]
+	param(
+		[Parameter(Mandatory=$true,ValueFromPipeline=$true)]
+		[string]
+		$targetName, 
+		[Parameter()]
+		[string]
+		$discoveryMechanism 
+	)
+	process
+	{
+	}
+}
+
+#iscsicli LoginTarget &lt;TargetName&gt; &lt;ReportToPNP&gt;
+#                     &lt;TargetPortalAddress&gt; &lt;TargetPortalSocket&gt;
+#                     &lt;InitiatorInstance&gt; &lt;Port number&gt; &lt;Security Flags&gt;
+#                    &lt;Login Flags&gt; &lt;Header Digest&gt; &lt;Data Digest&gt; 
+#                    &lt;Max Connections&gt; &lt;DefaultTime2Wait&gt;
+#                    &lt;DefaultTime2Retain&gt; &lt;Username&gt; &lt;Password&gt; &lt;AuthType&gt; &lt;Key&gt;
+#                    &lt;Mapping Count&gt; &lt;Target Lun&gt; &lt;OS Bus&gt; &lt;Os Target&gt; 
+#                    &lt;OS Lun&gt; ...
+#
+#iscsicli PersistentLoginTarget &lt;TargetName&gt; &lt;ReportToPNP&gt;
+#                     &lt;TargetPortalAddress&gt; &lt;TargetPortalSocket&gt;
+#                    &lt;InitiatorInstance&gt; &lt;Port number&gt; &lt;Security Flags&gt;
+#                    &lt;Login Flags&gt; &lt;Header Digest&gt; &lt;Data Digest&gt; 
+#                    &lt;Max Connections&gt; &lt;DefaultTime2Wait&gt;
+#                    &lt;DefaultTime2Retain&gt; &lt;Username&gt; &lt;Password&gt; &lt;AuthType&gt; &lt;Key&gt;
+#                    &lt;Mapping Count&gt; &lt;Target Lun&gt; &lt;OS Bus&gt; &lt;Os Target&gt; 
+#                    &lt;OS Lun&gt; ...
+#
+#iscsicli QLoginTarget &lt;TargetName&gt;  [CHAP Username] [CHAP Password]
+#
+function Connect-Target
+{
+&lt;#
+This command will login to a target 
+#&gt;
+	
+	#iscsicli persistentlogintarget $t T * * * * * * * * * * * [* * *] * 0
+
+	[CmdletBinding( SupportsShouldProcess=$true )]
+	param(
+		[Parameter(Mandatory=$true,ValueFromPipeline=$true)]
+		[Alias(&quot;Name&quot;)]
+		[string]
+		# the name of the target
+		$targetName,	
+
+		[Parameter()]
+		[string]
+		# Username is the string that should be used as the CHAP username when logging into the target. By 
+
+specifying * for this parameter, the iSCSI initiator service will use the initiator node name as the CHAP username.
+		$username,
+
+		[Parameter()]
+		[string]
+		# Password is the string that should be used as the target’s CHAP secret when logging into the target. The 
+
+initiator will use this secret to compute a hash value based on the challenge sent by the target. 
+		$password,
+		
+		[Parameter()]
+		[switch]
+		# specify to persist the login information upon reboot
+		$persist
+	)
+	process
+	{	
+		if( $username )
+		{
+			$data = &amp; iscsicli qlogintarget $targetName $username $password
+			Write-Verbose &quot;Raw iSCSIcli output: $data&quot;;
+		}
+		else
+		{
+			$data = &amp; iscsicli qlogintarget $targetName
+			Write-Verbose &quot;Raw iSCSIcli output: $data&quot;;
+			$username = '*';
+			$password = '*';
+
+		}
+
+		Write-Verbose &quot;Raw iSCSIcli output: $data&quot;;
+		
+		if( $data -match 'already.+logged' )
+		{
+			$s = get-session | where { $_.targetname -eq $targetName };
+			New-Object psobject -Property @{ SessionId=$s.SessionId; ConnectionId=$s.Connection.ConnectionID 
+
+};
+		}
+		else
+		{
+			#		Session Id is 0xfffffa800f7900a8-0x4000013700000015
+			#		Connection Id is 0xfffffa800f7900a8-0x23
+		
+			( $data | Out-String ) -replace '0x','' -replace &quot;[`r`n]+&quot;,'=' | convertFrom-iSCSIOutput -field ' 
+
+is ';
+		}
+
+		if( $persist )
+		{
+			&amp; iscsicli persistentlogintarget $targetName T * * * * * * * * * * * $username $password * * 0 | 
+
+Out-Null
+		}
+	}
+}
+
+#iscsicli LogoutTarget &lt;SessionId&gt;
+#
+function Disconnect-Session
+{
+&lt;#
+This command will attempt to logout of a target which was logged in via the session specified by SessionId. The iSCSI 
+
+initiator service will not logout of a session if any devices exposed by it are currently in use.  If the command fails 
+
+then consult the system eventlog for additional information about the component that is using the device.
+#&gt;
+	[CmdletBinding( SupportsShouldProcess=$true, ConfirmImpact='high' )]
+	param(
+		[Parameter( Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true )]
+		[string]
+		$sessionId,
+		
+		[Parameter()]
+		[switch]
+		# specify to bypass standard PowerShell confirmation processes
+		$force
+	)
+	process
+	{
+		if( -not( $force -or $pscmdlet.shouldProcess( $sessionId, &quot;Disconnect Session&quot; ) ) )
+		{
+			return;
+		}
+		
+		$data = &amp; iscsicli logouttarget $sessionId | Out-String;				
+		if( $data -notmatch 'success' )
+		{
+			throw $data;
+		}
+	}
+	
+}
+
+
+#iscsicli ListInitiators
+#
+function Get-Initiators
+{
+&lt;#
+This command will display the list of initiator instance names that are running and operating with the iSCSI initiator 
+
+service.
+#&gt;
+	[CmdletBinding()]
+	param()
+	process
+	{
+		&amp; iscsicli listinitiators
+	}
+}
+
+#iscsicli SessionList &lt;Show Session Info&gt;
+#
+function Get-Session
+{
+&lt;#
+This command displays the list of active sessions for all initiators. Note that a session that has no connections is not 
+
+connected to the target and is in a retry state.
+
+Microsoft iSCSI Initiator Version 6.1 Build 7601
+
+Total of 2 sessions
+
+Session Id             : fffffa800f7900a8-400001370000000d
+Initiator Node Name    : iqn.1991-05.com.microsoft:archimedes
+Target Node Name       : (null)
+Target Name            : iqn.2008-08.com.starwindsoftware:127.0.0.1-target1
+ISID                   : 40 00 01 37 00 00
+TSID                   : 27 00
+Number Connections     : 1
+
+    Connections:
+
+        Connection Id     : fffffa800f7900a8-1b
+        Initiator Portal  : 0.0.0.0/58847
+        Target Portal     : 192.168.1.108/3260
+        CID               : 01 00
+
+    Devices:
+        Device Type            : Disk
+        Device Number          : 1
+        Storage Device Type    : 7
+        Partition Number       : 0
+        Friendly Name          : ROCKET RAM DISK 1024 M SCSI Disk Device
+        Device Description     : Disk drive
+        Reported Mappings      : Port 1, Bus 0, Target Id 0, LUN 0
+        Location               : Bus Number 0, Target Id 0, LUN 0
+        Initiator Name         : ROOT\ISCSIPRT\0000_0
+        Target Name            : iqn.2008-08.com.starwindsoftware:127.0.0.1-target1
+        Device Interface Name  : \\?\scsi#disk&amp;ven_rocket&amp;prod_ram_disk_1024_m#1&amp;1c121344&amp;0&amp;000000#{53f56307-b6bf-11d0-9
+4f2-00a0c91efb8b}
+        Legacy Device Name     : \\.\PhysicalDrive1
+        Device Instance        : 0x82c
+        Volume Path Names      :
+                                 E:\
+
+Session Id             : fffffa800f7900a8-400001370000000f
+Initiator Node Name    : iqn.1991-05.com.microsoft:archimedes
+Target Node Name       : (null)
+Target Name            : iqn.2008-08.com.starwindsoftware:127.0.0.1-scratch
+ISID                   : 40 00 01 37 00 00
+TSID                   : 2b 00
+Number Connections     : 1
+
+    Connections:
+
+        Connection Id     : fffffa800f7900a8-1d
+        Initiator Portal  : 0.0.0.0/59359
+        Target Portal     : 192.168.1.106/3260
+        CID               : 01 00
+
+    Devices:
+        Device Type            : Disk
+        Device Number          : 2
+        Storage Device Type    : 7
+        Partition Number       : 0
+        Friendly Name          : ROCKET RAM DISK 256 MB SCSI Disk Device
+        Device Description     : Disk drive
+        Reported Mappings      : Port 1, Bus 0, Target Id 1, LUN 0
+        Location               : Bus Number 0, Target Id 1, LUN 0
+        Initiator Name         : ROOT\ISCSIPRT\0000_0
+        Target Name            : iqn.2008-08.com.starwindsoftware:127.0.0.1-scratch
+        Device Interface Name  : \\?\scsi#disk&amp;ven_rocket&amp;prod_ram_disk_256_mb#1&amp;1c121344&amp;0&amp;000100#{53f56307-b6bf-11d0-9
+4f2-00a0c91efb8b}
+        Legacy Device Name     : \\.\PhysicalDrive2
+        Device Instance        : 0x8ac
+
+#&gt;
+	[CmdletBinding()]
+	param(
+		[Parameter( ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true )]
+		[string]
+		$sessionId = '.*'
+	)
+	process
+	{
+		Write-Verbose &quot;Session ID filter: $sessionId&quot;;
+		$data = ( &amp; iscsicli sessionlist ) | out-string;
+		$data = $data -replace &quot;[`r`n]+&quot;,'='
+		Write-Verbose &quot;raw sessionlist info : $data&quot;;
+		
+		$sessions = $data -split &quot;Session Id\s+:\s+&quot;;
+		$sessions = $sessions | where { $_ -match &quot;Connections:&quot; } | foreach {
+			$session, $data = ( &quot;Session Id : &quot; + $_ ) -split 'Connections:', 2;
+			$connection, $device = $data -split &quot;Devices:&quot;, 2;
+			
+			Write-Verbose &quot;session $session&quot;;
+			Write-Verbose &quot;connection $connection&quot;;
+			Write-Verbose &quot;device $device&quot;;	
+			
+			$session, $connection, $device = $session, $connection, $device | convertFrom-iSCSIOutput;
+			$session | Add-Member -PassThru -MemberType NoteProperty -Name Connection -Value $connection |
+					Add-Member -MemberType NoteProperty -Name Device -Value $device;
+			$session;
+		}
+		
+		if( -not $sessions )
+		{
+			Write-Verbose &quot;no sessions found&quot;
+			return;
+		}
+		
+		$sessions | write-verbose;		
+		$sessions | where { write-verbose &quot;filtering $($_.SessionId) by $sessionId&quot;; $_.SessionId -match 
+
+$sessionId }
+	}
+}
+
+function convertFrom-iSCSIOutput
+{
+	[CmdletBinding()]
+	param(
+		[Parameter(ValueFromPipeline=$true)]
+		[string]
+		$data,
+		
+		[Parameter()]
+		[string]
+		$itemDelimiter = '=',
+		
+		[Parameter()]
+		[string]
+		$fieldSeparator = ':'
+	)
+	
+	process
+	{
+		Write-Debug &quot;convertFrom-iSCSIOutput ...&quot;
+		Write-Debug &quot;  Data: $data&quot;;
+		Write-Debug &quot;  Item Delimiter: $itemdelimiter&quot;;
+		Write-Debug &quot;  Field Separator: $fieldSeparator&quot;;
+		$a = @{};
+		
+		$data -split $itemDelimiter | where { $_ -match &quot;$fieldSeparator\s*&quot; } | foreach {			
+					
+			function add-ToA( $k, $v )
+			{
+				$k = $k -replace ' ','';
+				Write-Debug &quot;item key $k; value $v&quot;;
+			
+				$a[$k] = $v;
+			}
+
+			Write-Debug &quot;item entry $_&quot;;
+			
+			$k,$v = $_ -split &quot;\s*$fieldSeparator\s*&quot;,2;
+			if( $k -match ' and ' )
+			{
+				$k1, $k2 = $k -split ' and ';
+				$v1, $v2 = $v -split '\s+',2;
+				add-ToA $k1 $v1	
+				add-ToA $k2 $v2
+			}
+			else
+			{
+				add-ToA $k $v
+			}
+		}		
+		new-object psobject -Property $a;		
+	}
+}
+
+###########################################################
+## initialization
+
+Export-ModuleMember -Function '*';
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

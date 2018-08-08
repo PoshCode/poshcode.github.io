@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Dmitry Sotnikov">
+    <title>update-powerpackcolumns - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>update-powerpackcolumns</h1>
+<h3><a href="//scripts/504.ps1">download</a></h3>
+<p>This script is designed to work around a PowerPack export issue in PowerGUI 1.5.1 (fixed in subsequent releases): http://dmitrysotnikov.wordpress.com/2008/08/06/script-to-export-column-selection/</p>
+<p>The script goes though the PowerGUI configuration and PowerPack file and updates the file with column selection info from PowerGUI config</p>
+<p>It can illustrate a few tricks on XML processing and working with PowerGUI files</p>
+<pre><code class="language-posh">###################################################################
+# Update Columns in PowerPacks
+###################################################################
+# (c) Dmitry Sotnikov
+# http://dmitrysotnikov.wordpress.com
+###################################################################
+# This script is designed to work around a PowerPack export
+# issue in PowerGUI 1.5.1 (fixed in subsequent releases
+# The script goes though the PowerGUI configuration
+# and PowerPack file and updates the file with column
+# selection info from PowerGUI config
+###################################################################
+
+###################################################################
+# Make sure you set these paths to the old and new pack accordingly
+###################################################################
+$powergui_cfg_path = &quot;$($env:APPDATA)\Quest Software\PowerGUI\quest.powergui.xml&quot;
+$powerpack_path = 'c:\scripts\aliases.powerpack'
+$updated_powerpack_path = 'C:\scripts\new.powerpack'
+
+##################################################
+# First extract column data from PowerGUI config
+##################################################
+
+# load local PowerGUI configuration
+$pg = [xml] (gc $powergui_cfg_path)
+
+# locate column-by-type storage
+$uiviews = $null
+foreach ($c in $pg.configuration.items.container) {
+	if ($c.Name -eq 'UI View') { $uiviews = $c; break; }
+}
+
+# hash-table to store columns by type
+$columns = @{}
+
+if ( $uiviews -ne $null ) {
+	# for each of these types, create a hash table, storing the column names
+	foreach ($c in $uiviews.items.container.items.container) {
+		&quot;Type: $($c.Type)&quot;
+		$properties = @()
+		if ( $c.items.container -ne $null ) {
+			foreach ($col in $c.items.container) {$col.Name; $properties += $col.Name }
+			if ($properties.Length -gt 0) { $columns[$c.Type] = $properties }
+		} elseif ( $c.items.item -ne $null ) {
+			foreach ($col in $c.items.item) {$col.Name; $properties += $col.Name }
+			if ($properties.Length -gt 0) { $columns[$c.Type] = $properties }
+		} 
+	}
+	&quot; === Hash Table === &quot;
+	$columns
+}
+
+##################################################################
+# Now go through the PowerPack and add column data when required
+##################################################################
+
+$pp = [xml] (gc $powerpack_path)
+
+# This function adds column data to a tree node or link
+function AssignTypes {
+	param($segment)
+	if ( $segment -ne $null ) {
+		$segment.returntype
+		if ($segment.items.container.name -notlike &quot;properties*&quot;) {
+			# no properties assigned
+			&quot; --- No columns assigned&quot;
+			if ( ($segment.returntype -ne $null) -and $columns.ContainsKey($segment.returntype) ) {
+				# construct the columns section
+				&quot; --- Found columns by type&quot;
+				$cont = $pp.CreateElement(&quot;container&quot;)
+				$cont.SetAttribute(&quot;id&quot;, [Guid]::NewGuid().ToString())
+				$cont.SetAttribute(&quot;name&quot;, &quot;properties_a807f902-4b43-4b22-86d8-724abc4c3d4a&quot;)
+				$segment[&quot;items&quot;].AppendChild($cont)
+				$subitems = $pp.CreateElement(&quot;items&quot;)
+				$cont.AppendChild($subitems)
+				foreach ($c in $columns[$segment.returntype]) {
+					$item = $pp.CreateElement(&quot;item&quot;)
+					$item.SetAttribute(&quot;id&quot;, [Guid]::NewGuid().ToString())
+					$item.SetAttribute(&quot;name&quot;, $c)
+					$subitems.AppendChild($item)
+				}
+			}
+		} else {
+			&quot; --- Columns already assigned&quot;
+		}
+	}
+}
+
+# This function recurses through the navigation tree 
+function IterateTree {
+	param($segment)
+	if (($segment.Type -like 'Script*') -or ($segment.Type -like 'CmdLet*')) {
+		# found a node, check whether it has columns assigned
+		AssignTypes $segment
+	}
+	if ($segment.items.container -ne $null) {
+		$segment.items.container | ForEach-Object { IterateTree $_ }
+	}
+}
+
+&quot; === Tree === &quot;
+IterateTree $pp.configuration.items.container[0]
+
+&quot; === Links === &quot;
+$pp.configuration.items.container[1].items.container | 
+		where { $_.id -eq '481eccc0-43f8-47b8-9660-f100dff38e14' } | ForEach-Object {
+			# Do both container and item because of possible format variation
+			$_.items.container | ForEach-Object { AssignTypes $_ }	
+			$_.items.item | ForEach-Object { AssignTypes $_ }	
+		}
+
+# Save updated file
+$pp.Save($updated_powerpack_path)
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

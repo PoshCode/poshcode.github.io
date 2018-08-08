@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Kevin">
+    <title>Find-DuplicateSMTP - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Find-DuplicateSMTP</h1>
+<h3><a href="//scripts/1632.ps1">download</a> - <a href="//scripts/1631.md">parent</a></h3>
+<p>This script will query your AD for all users, groups and contacts.  It will then process through each of the SMTP addresses for all objects and count the number of occurances of each address.  The scope expanded as I kept thinking of other interesting questions regarding the SMTP addresses that were in my domain.  Once the script has finished gathering interesting data regarding the SMTP addresses in your domain, it will dump that information out to a spreadsheet (requires Excel), then send the spreadsheet as an email to you.<br />
+http://get-scriptjunkie.blogspot.com/2010/02/find-duplicate-smtp-addresses.html</p>
+<pre><code class="language-posh">#######################################################################
+####        Written By:  Kevin Dunn                                ####
+####        Date:        1/21/2009                                 ####
+####                                                               ####
+####                  FindDuplicateSMTPAddr.ps1                    ####
+####                                                               ####
+####        Requires Quest Active Directory cmdlets                ####
+####        Requires Excel (tested on 2007)                        ####
+#######################################################################
+
+#User defined Variables
+
+$SMTPServer = &quot;127.0.0.1&quot; 
+$SenderAddress = &quot;FromAddress@yourdomain.com&quot;
+$RecipientAddresses = &quot;You@yourdomain.com&quot;
+$Subject = &quot;Duplicate SMTP Address Report&quot;
+$Domain = &quot;yourdomain.com&quot;
+
+#Set this to a literal path i.e. &quot;C:\scripts\&quot; if not running as a .ps1
+#This location is where the spreadsheet will be saved to
+#$ScriptPath = &quot;C:\Scripts\&quot;
+$ScriptPath = ($myInvocation.MyCommand.Path).Replace($myInvocation.MyCommand.Name, &quot;&quot;)
+
+
+if ((Get-PSSnapin &quot;Quest.ActiveRoles.ADManagement&quot; -ErrorAction SilentlyContinue) -eq $null) 
+{
+	Add-PSSnapin &quot;Quest.ActiveRoles.ADManagement&quot; -ErrorVariable Err -ErrorAction SilentlyContinue
+	if ($Err) 
+	{
+		Write-Host &quot;`tError loading Quest.ActiveRoles.ADManagement&quot; -ForeGroundColor Green
+		exit
+	}
+} 
+
+#Gather proxyaddresses information from AD
+Write-Host &quot;`n`tGathering email addresses from Active Directory&quot; -ForeGroundColor Yellow
+$Filter = '(|(&amp;(objectClass=user)(homeMDB=*))(&amp;(mailNickName=*)(objectClass=Contact))(&amp;(mailNickName=*)(objectClass=group)))'
+$MailObjects = get-qadobject -service $Domain -sizeLimit 0 -ldapfilter $Filter -DontUseDefaultIncludedProperties `
+	-IncludedProperties proxyAddresses | Select proxyAddresses, ClassName
+$NumberMailobjects = $MailObjects.count
+Write-Host &quot;`tFound &quot; -noNewline -ForeGroundColor Yellow
+Write-Host &quot;$NumberMailobjects &quot; -noNewLine -ForeGroundColor Green
+Write-Host &quot;mail enabled objects&quot; -ForeGroundColor Yellow
+
+#Count and Write proxyaddresses information to hashtable
+Write-Host &quot;`n`tCounting proxyAddresses Data&quot; -ForeGroundColor Yellow
+$EmailCount = @{}
+$EmailTypeCount = @{}
+$EmailDomainCount = @{}
+$oldPos = $host.UI.RawUI.CursorPosition
+Foreach ($MailObject in $MailObjects){
+	$ObjectType = $MailObject.ClassName
+	$MailObject.ProxyAddresses | Foreach {
+		#Count Type of Addresses
+		$Type = [string]$_.split(&quot;:&quot;)[0]
+		if($EmailTypeCount.ContainsKey($Type) -eq $False)
+		{
+			$EmailTypeCount.Add($Type, 1)
+		}
+		Else
+		{
+			$Count = $EmailTypeCount.Get_Item($Type)
+			$Count++
+			$EmailTypeCount.Set_Item($Type, $Count)
+		}
+		
+		#Count Unique Email Addresses
+		if($EmailCount.ContainsKey($_) -eq $False)
+		{
+			$EmailCount.Add($_, 1)
+		}
+		Else
+		{
+			$Count = $EmailCount.Get_Item($_)
+			$Count++
+			$EmailCount.Set_Item($_, $Count)
+		}
+		
+		#Count Mail domains
+		$Domain = [string]$_.Split(&quot;@&quot;)[1]
+		if($Domain -ne $null)
+		{
+			if($EmailDomainCount.ContainsKey($Domain) -eq $False)
+			{
+				$EmailDomainCount.Add($Domain, 1)
+			}
+			Else
+			{
+				$Count = $EmailDomainCount.Get_Item($Domain)
+				$Count++
+				$EmailDomainCount.Set_Item($Domain, $Count)
+			}
+		}
+	}
+	#Keep the output refresh from eating CPU
+	$UpdateOutPut = $False
+	If ($NumberAddType -lt $EmailTypeCount.Count){$UpdateOutPut = $True}
+	elseIf ($NumberMailDomains -lt $EmailDomainCount.Count){$UpdateOutPut = $True}
+	elseIf (($EmailCount.Count % 100) -eq 0){$UpdateOutPut = $True}
+	
+	If ($UpdateOutPut -eq $True)
+	{
+		$NumberAddType = $EmailTypeCount.Count
+		$NumberAddresses = $EmailCount.Count
+		$NumberMailDomains = $EmailDomainCount.Count
+		$host.UI.RawUI.CursorPosition = $oldPos
+		Write-Host &quot;`tFound &quot; -noNewline -ForeGroundColor Yellow
+		Write-Host &quot;$NumberAddresses &quot; -noNewLine -ForeGroundColor Green
+		Write-Host &quot;unique email addresses&quot; -ForeGroundColor Yellow
+		Write-Host &quot;`tFound &quot; -noNewline -ForeGroundColor Yellow
+		Write-Host &quot;$NumberAddType &quot; -noNewLine -ForeGroundColor Green
+		Write-Host &quot;address types&quot; -ForeGroundColor Yellow
+		Write-Host &quot;`tFound &quot; -noNewline -ForeGroundColor Yellow
+		Write-Host &quot;$NumberMailDomains &quot; -noNewLine -ForeGroundColor Green
+		Write-Host &quot;mail domains`n&quot; -ForeGroundColor Yellow
+	}
+}
+$EmailDomains = $EmailDomainCount.GetEnumerator() | Sort Key
+$EmailTypes = $EmailTypeCount.GetEnumerator() | Sort Key
+
+
+#Filter proxyaddresses data for duplicates
+Write-Host &quot;`n`tFiltering for duplicate email addresses&quot; -ForeGroundColor Yellow
+$Duplicates = $EmailCount.GetEnumerator() | ? {$_.Value -gt 1}
+$Duplicates  = $Duplicates | Sort
+$NumberDuplicates = $Duplicates.Count
+Write-Host &quot;`tFound &quot; -noNewline -ForeGroundColor Yellow
+Write-Host &quot;$NumberDuplicates &quot; -noNewLine -ForeGroundColor Green
+Write-Host &quot;duplicate email addresses`n&quot; -ForeGroundColor Yellow
+
+
+#Retrieve additional information about objects with duplicate proxyaddresses
+Write-Host &quot;`n`tGathering information about the objects with duplicate email addresses&quot; -ForeGroundColor Yellow
+$DupeOutput = @()
+$Count = 0
+$oldPos = $host.UI.RawUI.CursorPosition
+$Duplicates | Foreach {
+	$count++
+	[string]$Email = $_.Key
+	$Filter = &quot;(proxyAddresses=*$Email*)&quot;
+	$ObjectsWithDupes = get-qadobject -service $Domain -ldapFilter $Filter `
+		-DontUseDefaultIncludedProperties -includedProperties extensionAttribute3 | `
+		Select DisplayName, samAccountName, DN, ClassName, extensionAttribute3
+	$ObjectsWithDupes | foreach {
+		$_ | add-member noteproperty -Name &quot;DupeEmailAddress&quot; -Value $Email
+	}
+	$DupeOutput += $ObjectsWithDupes
+	$DupesProcessed = ($DupeOutput | Select DN -Unique).Count
+	$UsersProcessed = ($DupeOutput | ? {$_.Classname -eq &quot;user&quot;} | Select DN -Unique).Count
+	$GroupsProcessed = ($DupeOutput | ? {$_.Classname -eq &quot;group&quot;} | Select DN -Unique).Count
+	$ContactsProcessed = ($DupeOutput | ? {$_.Classname -eq &quot;contact&quot;} | Select DN -Unique).Count
+	$host.UI.RawUI.CursorPosition = $oldPos
+	Write-Host &quot;`tProcessed &quot; -noNewline -ForeGroundColor Yellow
+	Write-Host &quot;$DupesProcessed &quot; -noNewLine -ForeGroundColor Green
+	Write-Host &quot;objects and &quot; -noNewLine -ForeGroundColor Yellow
+	Write-Host &quot;$Count&quot; -noNewLine -ForeGroundColor Green
+	Write-Host &quot; addresses&quot; -ForeGroundColor Yellow
+}
+$DupeCount = $DupeOutput.count
+$DupeOutput = $DupeOutput | Sort displayname, ClassName, DupeEmailAddress
+
+#Open Excel
+Write-Host &quot;`n`tGenerating spreadsheet&quot; -ForeGroundColor Yellow
+$Excel = New-Object -comobject Excel.Application
+$Excel.Visible = $False
+$WB = $Excel.Workbooks.Add(1)
+
+#Create First Worksheet
+$EmailParseData = $WB.Worksheets.Item(1)
+[void]$EmailParseData.Activate()
+$EmailParseData.Name = &quot;SMTP Data&quot;
+
+
+#Make the top row pretty
+[void]$Excel.Cells.Item(2,1).Select()
+$Excel.ActiveWindow.FreezePanes = $True
+[void]$Excel.Range($Excel.Cells.item((1),(1)),$Excel.cells.item((1),(2))).Select()
+$Excel.Selection.Interior.ColorIndex = 48
+[void]$Excel.Selection.Font.Bold
+$Excel.Selection.Font.Size = 12
+$Excel.Selection.HorizontalAlignment = -4108
+[void]$Excel.Range($Excel.Cells.item((1),(4)),$Excel.cells.item((1),(5))).Select()
+$Excel.Selection.Interior.ColorIndex = 48
+[void]$Excel.Selection.Font.Bold
+$Excel.Selection.Font.Size = 12
+$Excel.Selection.HorizontalAlignment = -4108
+$Row = 1
+
+#Populate Top row
+$EmailParseData.Cells.Item($Row,1) = &quot;Domain&quot;
+$Excel.Columns.item(&quot;A:A&quot;).ColumnWidth = 45
+$EmailParseData.Cells.Item($Row,2) = &quot;Number Of Occurances&quot;
+$Excel.Columns.item(&quot;B:B&quot;).ColumnWidth = 23
+$EmailParseData.Cells.Item($Row,4) = &quot;Address Type&quot;
+$Excel.Columns.item(&quot;D:D&quot;).ColumnWidth = 16
+$EmailParseData.Cells.Item($Row,5) = &quot;Number Of Occurances&quot;
+$Excel.Columns.item(&quot;E:E&quot;).ColumnWidth = 23
+$Row = 2
+
+#Write to first worksheet
+Write-Host &quot;`n`tWriting Email Domains&quot; -ForeGroundColor Yellow
+$EmailDomains | Foreach {
+	$EmailParseData.Cells.Item($Row,1) = $_.Key
+	$EmailParseData.Cells.Item($Row,2) = $_.Value
+	$Row++
+}
+
+Write-Host &quot;`n`tWriting Address Types&quot; -ForeGroundColor Yellow
+$Row = 2
+$EmailTypes | Foreach {
+	$EmailParseData.Cells.Item($Row,4) = $_.Key
+	$EmailParseData.Cells.Item($Row,5) = $_.Value
+	$Row++
+}
+
+#Add Second Worksheet
+Write-Host &quot;`n`t`Creating Second Worksheet&quot; -ForeGroundColor Yellow
+$DupeWS = $Excel.Worksheets.Add()
+[void]$DupeWS.Activate()
+$DupeWS.Name = &quot;Duplicate Address Data&quot;
+$Row = 1
+
+#Make the top row pretty
+[void]$Excel.Cells.Item(2,1).Select()
+$Excel.ActiveWindow.FreezePanes = $True
+[void]$Excel.Range($Excel.Cells.item((1),(1)),$Excel.cells.item((1),(6))).Select()
+$Excel.Selection.Interior.ColorIndex = 48
+[void]$Excel.Selection.Font.Bold
+$Excel.Selection.Font.Size = 12
+$Excel.Selection.HorizontalAlignment = -4108
+
+#Populate data in the top row
+$DupeWS.Cells.Item($row,1) = &quot;DisplayName&quot;
+$Excel.Columns.item(&quot;A:A&quot;).ColumnWidth = 35
+
+$DupeWS.Cells.Item($row,2) = &quot;samAccountName&quot;
+$Excel.Columns.item(&quot;B:B&quot;).ColumnWidth = 25
+
+$DupeWS.Cells.Item($row,3) = &quot;DupeEmailAddress&quot;
+$Excel.Columns.item(&quot;C:C&quot;).ColumnWidth = 60
+
+$DupeWS.Cells.Item($row,4) = &quot;ClassName&quot;
+$Excel.Columns.item(&quot;D:D&quot;).ColumnWidth = 20
+
+$DupeWS.Cells.Item($row,5) = &quot;ExtensionAttribute3&quot;
+$Excel.Columns.item(&quot;E:E&quot;).ColumnWidth = 35
+
+$DupeWS.Cells.Item($row,6) = &quot;DN&quot;
+$Excel.Columns.item(&quot;F:F&quot;).ColumnWidth = 90
+
+#Begin writing duplicate email address data
+$row++
+Write-Host &quot;`n`tWriting Duplicate Address Data&quot; -ForeGroundColor Yellow
+$oldPos = $host.UI.RawUI.CursorPosition
+$DupeOutput | Foreach {
+	$DupeWS.Cells.Item($row,1) = $_.Displayname
+	$DupeWS.Cells.Item($row,2) = $_.Samaccountname
+	$DupeWS.Cells.Item($row,3) = $_.DupeEmailAddress
+	$DupeWS.Cells.Item($row,4) = $_.ClassName
+	$DupeWS.Cells.Item($row,5) = $_.extensionAttribute3
+	$DupeWS.Cells.Item($row,6) = $_.DN
+	$row++
+	
+	If (($row % 5) -eq 0)
+	{
+		$host.UI.RawUI.CursorPosition = $oldPos
+		Write-Host &quot;`tOutput &quot; -noNewline -ForeGroundColor Yellow
+		Write-Host &quot;$row &quot; -noNewLine -ForeGroundColor Green
+		Write-Host &quot;lines to Excel`n&quot; -ForeGroundColor Yellow
+	}
+}
+$host.UI.RawUI.CursorPosition = $oldPos
+Write-Host &quot;`tOutput &quot; -noNewline -ForeGroundColor Yellow
+Write-Host &quot;$row &quot; -noNewLine -ForeGroundColor Green
+Write-Host &quot;lines to Excel&quot; -ForeGroundColor Yellow
+
+#Save the spreadsheet and exit Excel
+$Excel.DisplayAlerts = $False
+$saveAs = $ScriptPath + &quot;DupeEmailReport.&quot; + (get-date).dayofyear + &quot;.xls&quot;
+write-host &quot;`tSaving Report to: $saveAS`n`n`n&quot; -ForegroundColor Cyan
+$WB.SaveAs($saveAs, 1)
+$WB.Close()
+$Excel.Quit()
+
+#Create the message
+$Body = &quot;`&lt;BR&gt;&quot; +`
+		&quot;  Mail Enabled Objects Found`t`t $NumberMailobjects &quot; +`
+		&quot;`&lt;BR&gt;&quot; +`
+		&quot;  Unique Email Addresses Found:`t`t $NumberAddresses &quot; + `
+		&quot;`&lt;BR&gt;&quot; + `
+		&quot;  Duplicated Email Addresses:`t`t $NumberDuplicates &quot; + `
+		&quot;`&lt;BR&gt;&lt;BR&gt;&quot; + `
+		&quot;  Mail Objects Affected:`t`t $DupesProcessed &quot; + `
+		&quot;`&lt;BR&gt;&quot; + `
+		&quot;  Users Affected:`t`t $UsersProcessed &quot; + `
+		&quot;`&lt;BR&gt;&quot; + `
+		&quot;  Groups Affected:`t`t $GroupsProcessed &quot; + `
+		&quot;`&lt;BR&gt;&quot; + `
+		&quot;  Contacts Affected:`t`t $ContactsProcessed &quot; + `
+		&quot;`&lt;BR&gt;&lt;BR&gt;&quot; +`
+		&quot;  Number of Address Types:`t`t $NumberAddType &quot; + `
+		&quot;`&lt;BR&gt;&quot; + `
+		&quot;  Number of Mail Domains:`t`t $NumberMailDomains&quot; 
+		
+$Attachment = new-object System.Net.Mail.Attachment($saveAs)
+$objMail = new-object System.Net.Mail.MailMessage
+$objMail.From = $SenderAddress
+$objMail.Sender = $SenderAddress
+$objMail.To.Add($RecipientAddresses)
+$objMail.Subject = $Subject
+$objMail.Body = $Body
+$objMail.IsBodyHTML = $true
+$objMail.Attachments.Add($Attachment)
+
+#Send the message
+$objSMTP = New-Object System.Net.Mail.SmtpClient
+$objSMTP.Host = $SMTPServer
+$objSMTP.UseDefaultCredentials = $true
+
+$objSMTP.Send($objMail)
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

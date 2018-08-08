@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Parul Jain">
+    <title>CIM SMI-S Query Library - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>CIM SMI-S Query Library</h1>
+<h3><a href="//scripts/3355.ps1">download</a></h3>
+<p>The function queries any CIM server, called CIMOM, that supports the CIM-XML interface. It creates an XML message to encapsulate the CIM query, converts the message to byte stream and then sends it using HTTP POST method. The response byte stream is converted back to XML message and name value paris are parsed out. SMI-S is an instance of CIM, and is thus also fully supported.</p>
+<pre><code class="language-posh">function cim-ei {
+&lt;#
+.SYNOPSIS
+    Enumerate Instances of a class on a CIMOM via CIM-XML interface
+
+.DESCRIPTION
+    Primary use case of this function is to gather inventory and performance information from IT
+    infrastructure assets. The inventory information feeds into capacity planning, troubleshooting,
+    managing product life cycle, budgeting, vendor price negotiations and technology strategy in
+    large enterprise environments. The output from this function would typically go into a datawarehouse
+    front ended with a business intelligence platform such as COGNOS, QlikView, Business Objects, etc.
+
+    The function queries any CIM server, called CIMOM, that supports the CIM-XML interface. It
+    creates an XML message to encapsulate the CIM query, converts the message to byte stream and
+    then sends it using HTTP POST method. The response byte stream is converted back to XML message
+    and name value paris are parsed out. SMI-S is an instance of CIM, and is thus also fully supported.
+
+    Tested against SAN devices such as EMC Symmetrix VMAX Fibre Channel Storage Array and Cisco MDS
+    Fibre Channel switch. It can be used to query VMWARE vSphere vCenter, IBM XIV, NetApp Filer, EMC
+    VNX Storage Array, HP Insight Manager, Dell OpenManage, HDS: USP, USPV, VSP, AMS, etc.
+
+.NOTES
+    Author: Parul Jain (paruljain@hotmail.com)
+    Version: 0.1, 14th April, 2012
+    Requires: PowerShell v2 or better
+
+.EXAMPLE
+    cim-ei -Class CIM_ComputerSystem -Device switch1 -user admin -Pass securepass
+
+.EXAMPLE
+    This works with EMC Symmetrix
+    cim-ei -Class CIM_ComputerSystem -Device seserver -user admin -Pass '#1Password' -ns 'root/emc'
+      
+.PARAMETER class
+    Mandatory. Information within CIM is classified into classes. The device documentation (or SNIA
+    documntation in case of SMI-S) should list all the classes supported by the CIMOM. CIM_ComputerSystem
+    class is available universally and is a good place to start testing.
+
+.PARAMETER device
+    Mandatory. IP address or DNS name of the device or CIMOM server if CIMOM runs separately
+
+.PARAMETER user
+    Mandatory. User ID authorized to perform queries. Most hardware vendors have a factory default
+
+.PARAMETER pass
+    Mandatory. Password for the user. Again most hardware vendors have a factory default for servicing the equipment
+
+.PARAMETER port
+    Optional. The TCP port number that the CIMOM is listening to. Default is used if not specified.
+
+.PARAMETER ssl
+    Optional switch. When used function will use HTTPS instead of default HTTP
+
+.PARAMETER ns
+    Optional. CIM namespace to use. Default is root/cimv2. EMC uses root/emc
+
+.PARAMETER msg
+    Optional switch. Returns CIM-XML response message instead of parsed name-value pairs for
+    troubleshooting parsing if needed
+
+.PARAMETER localOnly
+    Optional switch. LocalOnly and Deep (Inheritance) switches work together to define precisely the properties
+    that are to be returned. Properties from the specified class are always returned but properties from
+    subclasses and superclasses of the specified class can be included or excluded as required.
+ 
+.PARAMETER deep
+    Optional switch. LocalOnly and Deep (Inheritance) switches work together to define precisely the properties
+    that are to be returned. Properties from the specified class are always returned but properties from
+    subclasses and superclasses of the specified class can be included or excluded as required.
+
+.PARAMETER classOrigin
+    Optional switch. Specifies whether the name of the class in which the property or method was defined
+    (possibly a superclass of this one) should be included in the response.
+
+.PARAMETER qualifiers
+    Optional switch. Specifies whether or not qualifiers for each instance and property are to be returned.
+#&gt;
+    
+    [CmdletBinding()]
+
+    Param (
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)][String]$Class,
+        [parameter(Mandatory=$true, ValueFromPipeline=$false)][String]$User,
+        [parameter(Mandatory=$true, ValueFromPipeline=$false)][String]$Pass,
+        [parameter(Mandatory=$true, ValueFromPipeline=$false)][String]$Device,
+        [parameter(Mandatory=$false, ValueFromPipeline=$false)][String]$Port = '',
+        [parameter(Mandatory=$false, ValueFromPipeline=$false)][Switch]$ssl,
+        [parameter(Mandatory=$false, ValueFromPipeline=$false)][String]$ns = 'root/cimv2',
+        [parameter(Mandatory=$false, ValueFromPipeline=$false)][Switch]$localOnly,
+        [parameter(Mandatory=$false, ValueFromPipeline=$false)][Switch]$classOrigin,
+        [parameter(Mandatory=$false, ValueFromPipeline=$false)][Switch]$deep,
+        [parameter(Mandatory=$false, ValueFromPipeline=$false)][Switch]$qualifiers,
+        [parameter(Mandatory=$false, ValueFromPipeline=$false)][Switch]$msg
+    ) 
+
+# CIM-XML message template
+$messageText = @'
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot; ?&gt;
+
+&lt;CIM CIMVERSION=&quot;2.0&quot; DTDVERSION=&quot;2.0&quot;&gt;
+
+    &lt;MESSAGE ID=&quot;1000&quot; PROTOCOLVERSION=&quot;1.0&quot;&gt;
+        &lt;SIMPLEREQ&gt;
+            &lt;IMETHODCALL NAME=&quot;EnumerateInstances&quot;&gt;
+            &lt;/IMETHODCALL&gt;
+        &lt;/SIMPLEREQ&gt;
+    &lt;/MESSAGE&gt;
+&lt;/CIM&gt;
+'@
+
+    # Parse the XML text into XMLDocument
+    $message = [xml]($messageText)
+
+    # Transform CIM-XML message based on supplied parameters
+    $nsPathNode = $message.cim.message.SIMPLEREQ.IMETHODCALL.AppendChild($message.CreateElement('LOCALNAMESPACEPATH'))
+    foreach ($path in $ns.split('/')) {
+        $pathElement = $nsPathNode.AppendChild($message.CreateElement('NAMESPACE'))
+        $pathElement.SetAttribute('NAME', $path)
+    }
+    
+    $paramNode = $message.CIM.MESSAGE.SIMPLEREQ.IMETHODCALL
+    $param = $paramNode.AppendChild($message.CreateElement('IPARAMVALUE'))
+    $param.SetAttribute('NAME', 'ClassName')
+    $paramValue = $param.AppendChild($message.CreateElement('CLASSNAME'))
+    $paramValue.SetAttribute('NAME', $class)
+    
+    $param = $paramNode.AppendChild($message.CreateElement('IPARAMVALUE'))
+    $param.SetAttribute('NAME', 'LocalOnly')
+    $paramValue = $param.AppendChild($message.CreateElement('VALUE'))
+    if ($localOnly) { $paramValue.InnerText = 'TRUE' } else { $paramValue.InnerText = 'FALSE' }
+    
+    $param = $paramNode.AppendChild($message.CreateElement('IPARAMVALUE'))
+    $param.SetAttribute('NAME', 'IncludeClassOrigin')
+    $paramValue = $param.AppendChild($message.CreateElement('VALUE'))
+    if ($classOrigin) { $paramValue.InnerText = 'TRUE' } else { $paramValue.InnerText = 'FALSE' }
+    
+    $param = $paramNode.AppendChild($message.CreateElement('IPARAMVALUE'))
+    $param.SetAttribute('NAME', 'DeepInheritance')
+    $paramValue = $param.AppendChild($message.CreateElement('VALUE'))
+    if ($deep) { $paramValue.InnerText = 'TRUE' } else { $paramValue.InnerText = 'FALSE' }
+
+    $param = $paramNode.AppendChild($message.CreateElement('IPARAMVALUE'))
+    $param.SetAttribute('NAME', 'IncludeQualifiers')
+    $paramValue = $param.AppendChild($message.CreateElement('VALUE'))
+    if ($qualifiers) { $paramValue.InnerText = 'TRUE' } else { $paramValue.InnerText = 'FALSE' }
+
+
+    # Do not validate server certificate when using HTTPS
+    # Amazing how easy it is to create a delegated function in PowerShell!
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    
+
+    # Process other parameters and switches
+    $protocol = 'http://'
+    if ($ssl) { $protocol = 'https://' }
+
+    if ($port -eq '' -and !$ssl) { $port = '5988' }
+    if ($port -eq '' -and $ssl) { $port = '5989' }
+     
+    $url = $protocol + $device + &quot;:&quot; + $port
+
+    # Instantiate .Net WebRequest class
+    $req = [System.Net.WebRequest]::Create($url + '/cimom')
+    $req.Method ='POST'
+    
+    # Add headers required by CIMOM
+    $req.ContentType = 'application/xml;charset=&quot;UTF-8&quot;'
+    $req.Headers.Add(&quot;CIMProtocolVersion&quot;, &quot;1.0&quot;)
+    $req.Headers.Add('CIMOperation', 'MethodCall')
+    $req.Headers.Add('CIMMethod', 'EnumerateInstances')
+    $req.Headers.Add('CIMObject', $ns)
+
+    # Encode and attach userID and password
+    $uri = New-Object System.Uri($url)
+    $nc = New-Object System.Net.NetworkCredential($user, $pass)
+    $cc = New-Object System.Net.CredentialCache
+    $cc.add($uri, 'Basic', $nc)
+    $req.Credentials = $cc
+
+    $enc = New-Object System.Text.UTF8Encoding
+    $bytes = $enc.GetBytes($message.OuterXML)
+    $req.ContentLength = $bytes.Length
+    $reqStream = $req.GetRequestStream()
+    $reqStream.Write($bytes, 0, $bytes.Length)
+    $reqStream.Close()
+
+    # Send the request
+    try {
+        $resp = $req.GetResponse()
+    } catch [Net.WebException]  { throw($_.Exception.Message) }
+
+    # Parse the response XML
+    $reader = new-object System.IO.StreamReader($resp.GetResponseStream())
+    $result = [xml]($reader.ReadToEnd())
+    $reader.Close()
+
+    # Create a temporary XML document to help parse out name value pairs
+    # There are several other ways this can be accomplished
+    $xdoc = new-object xml
+    $rootnode = $xdoc.AppendChild($xdoc.CreateElement($class))
+
+    foreach ($instance in @($result.CIM.MESSAGE.SIMPLERSP.IMETHODRESPONSE.IRETURNVALUE.'Value.NamedInstance')) {
+        $node = $rootnode.AppendChild($xDoc.CreateElement('Property'))
+        foreach ($prop in @($instance.instance.property)) {
+            if ($prop.value -ne $null -and $prop.value -ne '') {
+                $node.SetAttribute($prop.Name, $prop.value)
+            }
+        }
+    }
+    
+    # Return CIM-XML response message or parsed out array of name value pairs
+    if ($msg) { $result } else { $xdoc.$class.property }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

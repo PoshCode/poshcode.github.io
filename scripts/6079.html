@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="John Delise">
+    <title>Remove All Java - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Remove All Java</h1>
+<h3><a href="//scripts/6079.ps1">download</a></h3>
+<p>This script will remove all versions of java run-time, both 32-bit and 64-bit if the uninstall files in the bin folder of each version are present. If they are not then a version(s) could be left behind.	We use this when a users system has it's Java Run-time.  When you have multiple versions of Java JRE installed in static mode and need to clear them up to level set and reinstall the new versions.  No system restarts or log offs required.</p>
+<pre><code class="language-posh">
+#use this batch file run both scripts. The scripts must all be in the same folder
+#---------------------------------------------------------------------------------------------------------------------------
+# Remove_All_Java.cmd
+
+@echo off
+CLS
+SETLOCAL
+
+SET INST=%~dp0
+call &quot;%INST%Stop_Tasks.cmd&quot;
+&quot;Powershell.exe&quot; -NoLogo -NoProfile -Windowstyle Normal -Executionpolicy unrestricted  -file  &quot;%INST%Remove_All_Java.ps1&quot;
+&quot;Powershell.exe&quot; -NoLogo -NoProfile -Windowstyle Normal -Executionpolicy unrestricted  -file  &quot;%INST%Remove-RegKey.ps1&quot;
+
+
+
+ENDLOCAL
+GOTO :EOF
+#---------------------------------------------------------------------------------------------------------------------------
+
+# Remove_All_Java.ps1
+
+
+Clear-Host
+
+
+# save the current location so we can restore it later
+$_0 = Get-Location
+
+# Change current location to the first registry key we wish get information from.
+
+set-location 'HKLM:\software\microsoft\windows\currentversion\uninstall'
+$_Uninstall1 = get-childitem -path (Get-location) 
+
+# Change current location to second registry key we wish get information from.
+
+set-location 'HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+$_Uninstall2 = get-childitem -path (Get-location)
+
+# Add the two reg keys to together so we can process all keys.
+$_uninstall3 = $_Uninstall1 + $_Uninstall2
+
+Set-location $_0
+
+
+Foreach($_Key in $_uninstall3){
+	
+	$_Key_Property_Path = $_Key.Name.Replace('HKEY_LOCAL_MACHINE\','HKLM:\')
+	
+
+	If($_Key.ValueCount -eq 0){continue}
+	
+	#$_Key.ValueCount
+	$_Reg_Name 				= $_Key.PSDrive.Name
+	$_Reg_ChildName			= $_Key.PSChildName
+	$_Reg_CurrentLocation	= $_Key.PSDrive.CurrentLocation
+	$_Reg_Value_ToQuery		= $_Key_Property_Path 	
+	$_Reg_PropertiesArray	= get-itemproperty -path    $_Reg_Value_ToQuery
+	
+	
+	If($_Reg_PropertiesArray.DisplayName -eq $NULL) {Continue}
+	If($_Reg_PropertiesArray.DisplayName -eq 'Java Auto Updater') {Continue}
+	
+	If($_Reg_PropertiesArray.DisplayName.Contains('Java')) {
+		If($_Reg_PropertiesArray.DisplayName.Contains('Update')) { #update is removed by the normal uninstall and can't be removed by {GUID}
+			$_DisplayNameStr = $_Reg_PropertiesArray.DisplayName.ToString()
+			Write-host &quot;Removing $_DisplayNameStr&quot;
+			
+			# Get the installation location of the software instance so we can delete the deployment.config file
+			# This will allow the removal to delete all installation folders and not leave any behind.
+			$_InstallPath 		= $_Reg_PropertiesArray.InstallLocation.ToString()
+            If($_InstallPath -eq ''){
+            
+                 $_VersionArray =  $_DisplayNameStr.Split(' ')
+                 $_Version = '1.'+ $_VersionArray[1] + '.0_' + $_VersionArray[3]
+            
+                # Set the Control Panel folder value based on OS Architecture
+                If($Env:PROCESSOR_ARCHITECTURE -eq 'x86' )   {$_installPath = ('C:\Program Files\Java\jre' + $_Version + '\')}
+                If($Env:PROCESSOR_ARCHITECTURE -eq 'AMD64' ) {$_installPath = ('C:\Program Files (x86)\Java\jre' + $_Version + '\')}
+
+
+            
+            }
+			$_InstallPathFQN 	= $_installPath + 'lib\Deployment.config'
+			$_DConfig_Present 	= Test-Path -path $_InstallPathFQN
+			$_DConfig_Present
+			
+			IF($_DConfig_Present){
+			
+				If($_DConfig_Present -ne '') {
+				
+					Remove-Item -Path $_InstallPathFQN -Force
+					
+				}
+			
+			
+			}
+			
+			$_exe 	= 	'Msiexec.exe'
+			$_args 	= 	'/uninstall',
+      	 				&quot;$_Reg_ChildName&quot;,
+						'/passive',
+						'/norestart'
+			
+			&amp; $_exe $_args		| OUT-HOST	
+
+			Write-Host ''
+		}
+	}
+ }
+
+$_InstallPathFQN 	= 'C:\Program Files\Java'
+$_DConfig_Present 	= Test-Path -path $_InstallPathFQN
+$_DConfig_Present
+			
+IF($_DConfig_Present){
+			
+	If($_DConfig_Present -ne '') {
+				
+		Remove-Item -Path $_InstallPathFQN -Force -Recurse
+					
+	}
+			
+			
+}
+
+$_InstallPathFQN 	= 'C:\Program Files (x86)\Java'
+$_DConfig_Present 	= Test-Path -path $_InstallPathFQN
+$_DConfig_Present
+			
+IF($_DConfig_Present){
+			
+	If($_DConfig_Present -ne '') {
+				
+		Remove-Item -Path $_InstallPathFQN -Force -Recurse
+					
+	}
+			
+			
+}
+
+#-----------------------------------------------------------------------------------------------------------------------------------------------------------
+# second script to remove the java control panel applet key, use if the icon for the java applet in control panel does not have java displayed and is blank. reinstall a version of java run-time to get it back.
+# Remove_RegKey.ps1
+
+&lt;#
+.SYNOPSIS
+   Remove a Regkey
+.DESCRIPTION
+   Removes one Regkey and all it's subkeys and values
+.PARAMETER &lt;paramName&gt;
+   None
+.EXAMPLE
+   PowerShell.exe -noprofile -executionpolicy bypass -Nologo  -noexit -File &quot;%INST%Remove-RegKey.ps1&quot;
+   Where %INST% is the batch file variable SET INST=%~dp0, set this before running if from a batch file.
+#&gt;
+Clear-host
+$_REG_DRIVE 	= &quot;HKLM:&quot;
+$_REG_KEY 		= '\SOFTWARE\Classes\CLSID\`{4299124F-F2C3-41b4-9C73-9236B2AD0E8F`}'
+$_Path_Exists	= Test-Path 'HKLM:\SOFTWARE\Classes\CLSID\{4299124F-F2C3-41b4-9C73-9236B2AD0E8F}' 
+IF($_Path_Exists){
+	Write-Host &quot;$_REG_KEY found`n`n&quot; -ForegroundColor BLACK -BackgroundColor YELLOW
+	$_Reg_Result 	= Remove-Item 'HKLM:\SOFTWARE\Classes\CLSID\{4299124F-F2C3-41b4-9C73-9236B2AD0E8F}' -Recurse
+	
+	$_Path_Exists	= Test-Path 'HKLM:\SOFTWARE\Classes\CLSID\{4299124F-F2C3-41b4-9C73-9236B2AD0E8F}' 
+	IF($_Path_Exists){
+	
+		Write-Host &quot;$_REG_KEY found, DELETION FAILED.`n`n&quot; -ForegroundColor RED -BackgroundColor yellow
+	
+	}Else{
+		Write-Host &quot;The Reg Key $_REG_KEY was found, it has been deleted as requested.`n&quot; -ForegroundColor Green -BackgroundColor BLACK
+	}
+}Else{
+Write-Host &quot;The Reg Key $_REG_KEY was not found, no deletion needed.`n`n&quot; -ForegroundColor Green -BackgroundColor BLACK
+}
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

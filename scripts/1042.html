@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="cz9qvh">
+    <title>pslauncher - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>pslauncher</h1>
+<h3><a href="//scripts/1042.ps1">download</a></h3>
+<p>Requires V2</p>
+<pre><code class="language-posh">/*
+ * Compile this program by simply doing:
+ * 
+ * csc.exe PSLauncher.cs
+ * 
+ */
+
+// Requires powershell V2
+
+/*
+ * The Problem:
+ *      .ps1 scripts do not integrate with the shell nicely.  You cannot
+ *      simply associate powershell.exe with .ps1 and have them run when u
+ *      double click them.  Also, the execution of script you click on may
+ *      be blocked by security policies.  Thirdly, some powershell scripts
+ *      require ps to be launched with some command line arguments, to frequently
+ *      run such a script then requires keyboard entry or awkward batch files.
+ * 
+ * The Solution:
+ *      Compile this program, and associate it as the default launcher for .ps1.
+ *      follow the usage details below, and you will be able to launch .ps1 scripts
+ *      from the shell with mouse alone, and as added benafit you get to put
+ *      ps cmd line options in your script, and you can run scripts invisible.
+ * 
+ * USAGE:
+ *      Put the first two characters of your script as &quot;#!&quot;
+ *      Follow that with the full path to powershell.exe (incl fname) or
+ *      if powershell.exe is in the path you can just put #!powershell.exe
+ * 
+ *      The remainder part of that line will be passed to powershell.exe as
+ *      arguments.  For example, -STA.  The filename of the script is also
+ *      passed as &quot;-file %1&quot; along with &quot;-ExecutionPolicy UnRestricted&quot;.
+ * 
+ *      The second line of the file, if it is prefixed by &quot;#-&quot; can contain &quot;meta arguments&quot;
+ *      for powershell.  Currently the only one allowed is &quot;Hidden&quot; which will supress the
+ *      powershell window and discard any output from the script.
+ * 
+ *      If a .ps1 script without these magics #! is encountered, it will be passed
+ *      to powershell.exe as above, if powershell.exe is in the path or default location.
+ * 
+ * Example:
+ *      #!powershell.exe -STA
+ *      #-Hidden
+ *      ...rest of script...
+ * 
+ * 
+ *  or
+ * 
+ * 
+ *      #!C:\WINDOWS\system32\windowspowershell\v1.0\powershell.exe -noexit
+ *      ...rest of a script you don't want to exit when it ends...
+ */
+
+using System;
+using System.Collections.Generic;
+using System.Windows.Forms;
+using System.Diagnostics;
+using System.IO;
+using System.Text.RegularExpressions;
+
+namespace PSLauncher
+{
+    static class PSLauncher
+    {
+        /// &lt;summary&gt;
+        /// The main entry point for the application.
+        /// &lt;/summary&gt;
+        [STAThread]
+        static void Main(string [] args)
+        {
+            if (args.Length != 1)
+            {
+                throw new ArgumentException(&quot;Wrong number of arguments, there must be exactly one.&quot;);
+            }
+            if (!(new Regex(&quot;.ps1$&quot;)).Match(args[0]).Success)
+            {
+                psl_err(&quot;Must have extension of ps1 or powershell.exe will error.&quot;);
+                return;
+            }
+            StreamReader fs;
+            string line_1;
+            string line_2;
+            string exe_path;
+            string cmd_line;
+            string ps_args;
+            Regex r;
+            Match m;
+            bool hidden = false;
+            Process ps_proc;
+
+            try
+            {
+                fs = new StreamReader(args[0]);
+            }
+            catch (FileNotFoundException)
+            {
+                psl_err(&quot;File Not Found.&quot;);
+                return;
+            }
+            catch (FileLoadException)
+            {
+                psl_err(&quot;File found but could not be loaded.&quot;);
+                return;
+            }
+            try
+            {
+                line_1 = fs.ReadLine();
+                line_2 = fs.ReadLine();
+            }
+            catch (IOException)
+            {
+                psl_err(&quot;File may not have enough lines.&quot;);
+                return;
+            }
+            fs.Close();
+            r        = new Regex(@&quot;^#!(.*)powershell\.exe&quot;);
+            exe_path = &quot;&quot;;
+            if ((m = r.Match(line_1)).Success) 
+            {
+                line_1   = r.Replace(line_1, &quot;&quot;);
+                exe_path = m.Groups[1].Value;
+                if (exe_path  != &quot;&quot;)
+                {
+                    if (!File.Exists(exe_path + &quot;powershell.exe&quot;))
+                    {
+                        psl_err(&quot;specified powershell.exe file not exist.&quot;);
+                    }
+                }
+                else
+                {
+                    exe_path = find_powershell();
+                    if (exe_path == &quot;&quot;)
+                    {
+                        psl_err(&quot;powershell.exe is not found.&quot;);
+                        return;
+            }   }   }
+            else
+            {
+                line_1   = &quot;&quot;;
+                exe_path = find_powershell();
+                if (exe_path == &quot;&quot;)
+                {
+                    psl_err(&quot;powershell.exe is not found.&quot;);
+                    return;
+            }   }
+            cmd_line = exe_path + &quot;\\&quot; + &quot;powershell.exe&quot;;
+            ps_args  = line_1 + &quot; -ExecutionPolicy UnRestricted -File \&quot;&quot; + args[0] + &quot;\&quot;&quot;;
+            r        = new Regex(&quot;^#-&quot;);
+            if ((m = r.Match(line_2)).Success)
+            {
+                line_2 = r.Replace(line_2, &quot;&quot;);
+                if ((new Regex(&quot;Hidden&quot;)).Match(line_2).Success)
+                {
+                    hidden = true;
+            }   }
+            ps_proc = new Process();
+
+            if (hidden)
+            {
+                ps_proc.StartInfo.RedirectStandardError  = true;
+                ps_proc.StartInfo.RedirectStandardInput  = true;
+                ps_proc.StartInfo.RedirectStandardOutput = true;
+                ps_proc.StartInfo.CreateNoWindow = true;
+                ps_proc.StartInfo.UseShellExecute = false;
+            }
+            ps_proc.StartInfo.Arguments = ps_args;
+            ps_proc.StartInfo.FileName = cmd_line;
+            ps_proc.Start();
+        }
+        private static void psl_err(string msg)
+        {
+            MessageBox.Show(msg, &quot;PSLauncher Critical Error&quot;, MessageBoxButtons.OK, 
+                MessageBoxIcon.Error);
+        }
+        private static string find_powershell()
+        {
+            string exe_path = &quot;&quot;;
+            foreach (string test_path in
+                        Environment.GetEnvironmentVariable(&quot;Path&quot;).Split(';'))
+            {
+                if (File.Exists(test_path + &quot;\\&quot; + &quot;powershell.exe&quot;))
+                    exe_path = test_path;
+            }
+            if (exe_path == &quot;&quot; &amp;&amp; File.Exists(
+                &quot;C:\\WINDOWS\\system32\\windowspowershell\\v1.0\\powershell.exe&quot;))
+                exe_path = &quot;C:\\WINDOWS\\system32\\windowspowershell\\v1.0\\powershell.exe&quot;;
+
+            return exe_path;
+}   }   }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

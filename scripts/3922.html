@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Paul Wiegmans">
+    <title>Query MagisterWebservice - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Query MagisterWebservice</h1>
+<h3><a href="//scripts/3922.ps1">download</a></h3>
+<p>EN: Send a webquery to Schoolmaster Magister web service and request data
+from the list WISMASLEERLING.
+NL: Doe een webquery naar Magister webservice en haal de lijst WISMASLEERLING op.</p>
+<pre><code class="language-posh">&lt;#
+	.TITLE
+		Haal-WisMasLeerling.ps1
+	.AUTHOR
+		Paul Wiegmans  (p [dot] wiegmans [at] bonhoeffer [dot] nl)
+	.DATE
+		2013-01-30  
+	.DESCRIPTION
+		Send a webquery to Schoolmaster Magister web service and request data 
+		from the list WISMASLEERLING. 
+		Doe een webquery naar Magister webservice en haal de lijst WISMASLEERLING op.
+	.NOTES
+	.LINK
+		http://ict.bonhoeffer.nl
+#&gt;
+
+Import-Module ActiveDirectory
+Set-StrictMode -Version 2
+
+$mijnpad = Split-Path -parent $MyInvocation.MyCommand.Definition
+$mijnbasename = $([System.IO.Path]::GetFileNameWithoutExtension($MyInvocation.MyCommand.Definition))
+
+$logging = $true			# geef uitvoer naar logfile
+$outputting = $true			# geef uitvoer naar console
+$outputVreemdetekens = $true # geef uitvoer naar console indien vreemde tekens opgemerkt
+
+$aantal = 0
+
+$SOAPLayout = &quot;WISMASLEERLINGEN&quot;
+$SOAPusername = &quot;username&quot;
+$SOAPpasswd = &quot;password&quot;
+
+Function Write-Log ($tekst) {
+	&lt;# stuur uitvoer naar een logfile en naar console #&gt;
+	$logtekst = (&quot;{0:0###}: {1}&quot; -f ($aantal, $tekst))
+	if ($outputting) {	
+		Write-Host $logtekst
+	}
+	if ($Logging) {
+		#$logtekst | Out-File &quot;$mijnpad\$mijnbasename.log&quot; -Append 
+	}
+}
+
+function Doe-Webquery ([string]$Url, [System.Text.Encoding]$encoding = [System.Text.Encoding]::UTF7) {
+	# .SYNOPSIS
+	#	Voert een SOAP webquery uit
+	# .DESCRIPTION
+	#	Voert een SOAP webquery uit.
+	#	Retourneert het resultaat van de qebquery in een array met string
+	# .PARAMETER Url
+	#	De URL van de webquery
+	# .PARAMETER ENcoding
+	#	De [system.text.encoding] encoding van de webquery
+	# .EXAMPLE
+	#	$lines = Doe-Webquery &quot;https://bonhoeffer.swp.nl:8800/doc?Bladibla...&quot;
+	# .NOTES
+	# 	Auteur: Paul Wiegmans
+	#	Datum:	30 mrt 2012
+	
+	$request = [System.Net.WebRequest]::Create($Url)
+	try {
+		$response = $request.GetResponse()
+	}
+	catch [Net.WebException] {
+    	Write-Host $_.Exception.ToString()
+		exit
+	}
+
+	$requestStream = $response.GetResponseStream()
+	# We must read the Magister webquery in UTF7 to preserve the accents!
+	$readStream = new-object System.IO.StreamReader( $requestStream, $Encoding )
+
+	$result = $readStream.ReadToEnd() -split &quot;`n&quot;  # convert to array of strings
+
+	$readStream.Close()
+	$response.Close()
+	return $result
+}
+
+Function Ophalen-Magister () {
+	&lt;# Haal leerlinglijst op van Magister via SOAP #&gt;
+	# kale URL is https://bonhoeffer.swp.nl:8800/doc?Function=GetData&amp;Library=Data&amp;SessionToken=adfeeder%3Belo.33&amp;Layout=Basistest&amp;Parameters=leerjaar%3D1213&amp;Type=CSV
+	$SOAPUrl = &quot;https://bonhoeffer.swp.nl:8800/doc?Function=GetData&quot;`
+		+&quot;&amp;Library=Data&amp;SessionToken=$SOAPusername%3B$SOAPpasswd&amp;Layout=$SOAPlayout&quot;`
+		+&quot;&amp;Parameters=leerjaar%3D1213&amp;Type=CSV&quot;
+	$iso88591 = [System.Text.Encoding]::GetEncoding(&quot;ISO-8859-1&quot;)
+	$UTF7 = [System.Text.Encoding]::UTF7
+	$data = Doe-Webquery $SOAPUrl	$UTF7
+    
+    if ($data -is [string]) {
+        if (($data.contains(&quot;Fout&quot;)) -or ($data.contains('ResultMessage'))) {
+            # haal opnieuw met andere encoding zodat foutmelding zichtbaar wordt.
+			$data = Doe-Webquery $SOAPUrl $iso88591 
+			Write-Log $SOAPUrl
+            Throw &quot;Webquery retourneert fout (1): $data&quot;
+        }
+    }                 
+        
+	if ($data[0] -is [string]) {
+        if ($data[0].contains(&quot;Fout_nummer&quot;) ) {
+            Write-Log $SOAPUrl
+    		Throw &quot;Webquery retourneert fout (2): $data&quot;
+        }            
+	}
+	return  ($data | Out-String) -replace &quot;`r`r&quot;,&quot;`r&quot;
+}
+
+function VerwijderVreemdeTekens($n) {
+	&lt;# vervangt alle niet-alfabettekens door gelijkende alfabettekens #&gt;
+	$VervangTabel = @(`
+	&quot;ñn&quot;,&quot;êe&quot;,&quot;ëe&quot;,&quot;èe&quot;,&quot;ée&quot;,&quot;áa&quot;,&quot;äa&quot;,&quot;öo&quot;,&quot;óo&quot;,&quot;ïi&quot;,&quot;úu&quot;,&quot;ûu&quot;,&quot;çc&quot;,&quot;ŠS&quot;,&quot;šs&quot;,&quot;šs&quot;,&quot;ýy&quot;,&quot;-&quot;,&quot;'&quot;)
+	# 'Moûrik' Ibánez' 'Šromofský' 
+	foreach ($letter in $VervangTabel) {
+		$n = $n -replace $letter[0], $letter[1]
+	}
+	return $n
+}
+
+Function VertaalTekens ($n) {
+	&lt;# VertaalTekens vervangt alle vreemde tekens uit webquery naar de juiste tekens, 
+		voor speciaal geval Šromofský . Dit doet een eerst conversie van vreemde tekens 
+		uit de data in ANSI-codering naar herkenbare vreemde tekens, zodat deze later 
+		vervangen, door romeinse tekens. Leer de code door uitvoer &quot;onvertaald.txt&quot; 
+		te zien in hexeditor XVI32.
+	#&gt;
+	return $n -replace [char]138, &quot;Š&quot; -replace [char]0x9a, &quot;š&quot;
+}
+
+
+# --------------------------------------------------------------------
+# ---                           M A I N                            ---
+# --------------------------------------------------------------------
+	
+Write-Host &quot; &quot;
+Write-Log &quot;Start --- &quot;
+
+	# resultaat bestaat uit regels tekst gescheiden door 0D, 0D, 0A 
+	# dit is gelijk aan `r `r `n 
+
+$onvertaald = Ophalen-magister
+$onvertaald | Out-File &quot;$mijnpad\onvertaald.txt&quot;
+
+$csv = vertaaltekens $onvertaald | ConvertFrom-Csv -Delimiter &quot;;&quot;  # maak array met records
+$csv | Export-CSV -Path &quot;$mijnpad\wismasleerling.csv&quot; -Encoding UTF8 -NoTypeInformation
+Write-Log (&quot;Gegevens in webquery: {0}&quot; -f $csv.count)
+if (($csv.Count -lt 1490) -or ($csv.Count -ge 1570)) {
+	throw &quot;Webquery geeft onwaarschijnlijk aantal resultaten. Uitvoering stopt.&quot;
+}
+$csv | Out-GridView; exit
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

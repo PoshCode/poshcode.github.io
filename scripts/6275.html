@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="darkscrypt">
+    <title>Set Outlook Signatures - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set Outlook Signatures</h1>
+<h3><a href="//scripts/6275.ps1">download</a></h3>
+<p>This is a script I wrote to automatically update email signatures. Reference this script in group policy.</p>
+<pre><code class="language-posh">param ([Switch]$force = $false)
+$SignatureEnforcing = $true
+$AppData=(Get-Item env:appdata).value
+$SigPath = '\Microsoft\Signatures'
+$SignatureName = 'Siggy Standard' 
+$DomainName = 'siggy.com' 
+$SigSource = &quot;\\siggy1\Signatures\$SignatureName&quot; 
+$LocalLogFile = &quot;C:\Siggy\Siggy\siggy_&quot; + $ENV:Username + &quot;.txt&quot;
+$LocalSignaturePath = $AppData+$SigPath
+$RemoteSignaturePathFull = $SigSource+'\'+$SignatureName+'.docx'
+$CompanyRegPath = &quot;HKCU:\Siggy\&quot;
+$SignatureRegPath = $CompanyRegPath+'\'+$SignatureName
+$SiggyVersion = &quot;1.80.4&quot;
+$SiggySystemLog = [System.Collections.ArrayList]@()
+$UserName = $env:username
+$Filter = &quot;(&amp;(objectCategory=User)(samAccountName=$UserName))&quot;
+$Searcher = New-Object System.DirectoryServices.DirectorySearcher
+$Searcher.Filter = $Filter
+$ADUserPath = $Searcher.FindOne()
+$ADUser = $ADUserPath.GetDirectoryEntry()
+$ADDisplayName = $ADUser.DisplayName
+$ADEmailAddress = $ADUser.mail
+$ADTitle = $ADUser.title
+$ADDescription = $ADUser.description
+$ADTelePhoneNumber = $ADUser.TelephoneNumber
+$ADFax = $ADUser.facsimileTelephoneNumber
+$ADMobile = $ADUser.mobile
+$ADStreetAddress = $ADUser.streetaddress
+$ADCity = $ADUser.l
+$ADPOBox = $ADUser.postofficebox
+$ADCustomAttribute1 = $ADUser.extensionAttribute1
+$ADModify = $ADUser.whenChanged
+$ADFirst = $ADUser.givenName
+$ADLast = $ADUser.sn
+$ADInitials = $ADUser.Initials
+$ADPostal = $ADUser.postalcode
+$ADDepartment = $ADUser.physicalDeliveryOfficeName
+$ADState = $ADUser.st
+$ADSignatureQuote = $ADUser.signatureQuote
+$ADProfessionalCredentials = $ADUser.professionalCredentials
+function Check-LocalLogging{
+	if (!(Test-Path -path &quot;C:\Siggy\Siggy&quot;)) {
+		New-Item &quot;C:\Siggy\Siggy&quot; -Type Directory
+	}
+}
+function Local-Log($message){
+	Check-LocalLogging
+	$stream = New-Object System.IO.StreamWriter $LocalLogFile, &quot;Append&quot;
+	$output = &quot;[&quot; + (Get-Date).toString() + &quot;]: &quot; + $message
+	$stream.WriteLine($output)
+	$stream.close()
+}
+function Write-Log($message){
+	Local-Log($message)
+	if($SiggySystemLog.count -eq 0){
+		$LocalScopedUser = $ENV:username
+		$SiggySystemLog.Add(&quot;---------------------------&quot;) | Out-Null
+		Local-Log(&quot;---------------------------&quot;)
+		$SiggySystemLog.Add(&quot;Starting Siggy $SiggyVersion &quot;) | Out-Null
+		Local-Log(&quot;Starting Siggy $SiggyVersion &quot;) 
+		$SiggySystemLog.Add,(&quot;Siggy Evaluating $LocalScopedUser for signature&quot;) | Out-Null
+		Local-Log(&quot;Siggy Evaluating $LocalScopedUser for signature&quot;) 
+	}
+	$output = &quot;[&quot; + (Get-Date).toString() + &quot;]: &quot; + $message
+	Write-Host($output)
+	$SiggySystemLog.Add($output) | Out-Null
+}
+function Finalize-Log{
+	$LogFile = &quot;\\SC1\Reporting\Siggy\$ENV:COMPUTERNAME.txt&quot; 
+	$stream = New-Object System.IO.StreamWriter $LogFile, &quot;Append&quot;
+	foreach($message in $SiggySystemLog){
+		Write-Output $message
+		$stream.WriteLine($message)
+	}
+	$stream.close()
+}
+function Check-ValidMAPIAddress{
+	$UserName = $env:username
+	$Filter = &quot;(&amp;(objectCategory=User)(samAccountName=$UserName))&quot;
+	$Searcher = New-Object System.DirectoryServices.DirectorySearcher
+	$Searcher.Filter = $Filter
+	$ADUserPath = $Searcher.FindOne()
+	$ADUser = $ADUserPath.GetDirectoryEntry()
+	if(!$ADUser.mail -or $ADuser.mail -notmatch &quot;yourdomain.com&quot;){
+		return $false
+	}else{
+		return $true
+	}
+}
+function Check-ValidCompanyRegistry{
+	#Return True if Valid, False if Invalid
+	$Validations = $true
+	if (Test-Path $SignatureRegPath) {
+		Write-Log('Company Registry Valid')
+	}else{
+		New-Item -path &quot;HKCU:\&quot; -name &quot;Siggy&quot;
+		New-Item -path $CompanyRegPath -name $SignatureName
+		Write-Log('Company Registry Not Found.')
+		$Validations = $false
+	}
+
+	if (Test-Path $SignatureRegPath'\Outlook Signature Settings') {
+		Write-Log('Outlook Registry Settings Exist')
+	}else{
+		New-Item -path $SignatureRegPath -name &quot;Outlook Signature Settings&quot;
+		Write-Log('Outlook Signature Settings Not Found.')
+		$Validations = $false
+	}
+	return $Validations
+}
+function Synchronize-AD{
+	Write-Log(&quot;Synchronizing Active Directory.&quot;)
+	$ValidateProperties = [System.Collections.ArrayList]@()
+	$ValidateProperties.Add(&quot;ADDisplayName&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADTitle&quot;)  | Out-Null
+	$ValidateProperties.Add(&quot;ADEmailAddress&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADFirst&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADLast&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADInitials&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADPostal&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADState&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADDepartment&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADStreetAddress&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADCity&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADTelephoneNumber&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADMobile&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADFax&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;SiggyVersion&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADSignatureQuote&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADProfessionalCredentials&quot;) | Out-Null
+	$key = Get-Item -Path $SignatureRegPath'\Outlook Signature Settings'
+	foreach ($prop in $ValidateProperties){
+		$CurrentValue = (Get-Variable $prop).Value
+		if($key.GetValue($prop) -ne (Get-Variable $prop).Value){
+			Write-Log(&quot;Updating Registry Item: $prop to $CurrentValue&quot;)
+			Set-ItemProperty $SignatureRegPath'\Outlook Signature Settings' -Name $prop -Value $CurrentValue
+		}
+	}	
+}
+function Check-ADSync{
+	#Returns False if Desynchronized, and True if Synchronized
+	Write-Log(&quot;Checking AD Properties against Registry&quot;)
+	$synchronized = $true 
+	if((Check-ValidCompanyRegistry) -eq $false){
+		$synchronized = $false
+	}
+	$ValidateProperties = [System.Collections.ArrayList]@()
+	$ValidateProperties.Add(&quot;ADDisplayName&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADTitle&quot;)  | Out-Null
+	$ValidateProperties.Add(&quot;ADEmailAddress&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADFirst&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADLast&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADInitials&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADPostal&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADState&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADDepartment&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADStreetAddress&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADCity&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADTelephoneNumber&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADMobile&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADFax&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;SiggyVersion&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADSignatureQuote&quot;) | Out-Null
+	$ValidateProperties.Add(&quot;ADProfessionalCredentials&quot;) | Out-Null
+	$key = Get-Item -Path $SignatureRegPath'\Outlook Signature Settings'
+	foreach ($prop in $ValidateProperties){
+		$CurrentValue = (Get-Variable $prop).Value
+		if($key.GetValue($prop) -ne (Get-Variable $prop).Value){
+			$synchronized = $false
+			Write-Log(&quot;$prop is ne to $CurrentValue, setting synchronization status to false&quot;)
+		}
+	}
+	if($synchronized){
+		Write-Log &quot;Active Directory information is Synchronized to local cache&quot;
+	}
+	return $synchronized
+	
+	
+}
+function Check-SignatureSync{
+	
+	$LocalSignatureVersion = (Get-ItemProperty $SignatureRegPath'\Outlook Signature Settings').SignatureVersion
+	$MasterSignatureVersion = (gci $RemoteSignaturePathFull).LastWriteTime.toString()
+	if (!(Test-Path -path $LocalSignaturePath)) {
+		New-Item $LocalSignaturePath -Type Directory
+	}
+	Copy-Item &quot;$SigSource\*&quot; $LocalSignaturePath -Recurse -Force
+	if ($MasterSignatureVersion -eq $LocalSignatureVersion){
+		Write-Log(&quot;Local Signature Version Matches Master Signature&quot;)
+		return $true
+	}else{
+		Write-Log(&quot;Local Signature Mismatch.&quot;)
+		Set-ItemProperty $SignatureRegPath'\Outlook Signature Settings' -name SignatureVersion -Value $MasterSignatureVersion
+		return $false
+	}
+}
+Function Get-OutlookProcess(){
+	$process = Get-Process &quot;Outlook&quot; -ErrorAction SilentlyContinue
+	if ($process -ne $null){
+		$Application = [Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application') 
+		return $Application
+	}else{
+		Return $null
+	}
+}
+Function WaitFor-Outlook(){
+	$Application = $null
+	while($true){
+		if($force){
+			Write-Log(&quot;Bypassing Outlook-Wait: Force Mode detected.&quot;)
+			break
+		}
+		$Application = Get-OutlookProcess
+		if($Application -ne $null){
+			$profname = $Application.Application.DefaultProfileName
+				Write-Log(&quot;Outlook Process Detected&quot;)
+			if($profname -ne $null){
+				Write-Log(&quot;Default Outlook Profile Detected&quot;)
+				break
+			}
+		}
+		Write-Log(&quot;No Outlook Profile Detected&quot;)
+		start-sleep -s 120
+	}
+	Write-Log(&quot;Outlook Profile Detected&quot;)
+}
+function EndProgram{
+	param([string]$Reason)
+	Write-Log(&quot;Gracefully Ending Program: $Reason&quot;)
+	Finalize-Log
+}
+function Set-OutlookDefaults{
+	WaitFor-Outlook
+	$MSWord = New-Object -com word.application
+	$EmailOptions = $MSWord.EmailOptions
+	$EmailSignature = $EmailOptions.EmailSignature
+	$EmailSignatureEntries = $EmailSignature.EmailSignatureEntries
+	if ($SignatureEnforcing -eq $false)
+	{
+		if ($EmailSignature.NewMessageSignature -eq &quot;(none)&quot;)
+		{
+			Write-Log(&quot;New Message Signature Not Detected. Setting $SignatureName as Default.&quot;)
+			$EmailSignature.NewMessageSignature = $SignatureName
+		}
+		if ($EmailSignature.ReplyMessageSignature -eq &quot;(none)&quot;)
+		{
+			Write-Log(&quot;Reply Signature Not Detected. Setting $SignatureName as Default Reply.&quot;)
+			$EmailSignature.ReplyMessageSignature = $SignatureName
+		}
+	}
+	else
+	{
+		Write-Log (&quot;SignatureEnforcing is `$true&quot;)
+		Write-Log(&quot;Forcing $SignatureName as Default.&quot;)
+		$EmailSignature.NewMessageSignature = $SignatureName
+		Write-Log(&quot;Forcing $SignatureName as Default Reply.&quot;)
+		$EmailSignature.ReplyMessageSignature = $SignatureName
+	}
+	$MSWord.Quit()
+}
+function Launch-Payload{
+
+    Write-Log('Payload Triggered.')
+	$Doctor = $false
+	$ReplaceAll = 2
+	$FindContinue = 1
+	$MatchCase = $False
+	$MatchWholeWord = $True
+	$MatchWildcards = $False
+	$MatchSoundsLike = $False
+	$MatchAllWordForms = $False
+	$Forward = $True
+	$Wrap = $FindContinue
+	$Format = $False
+	
+	#Insert variables from Active Directory to rtf signature-file
+	$MSWord = New-Object -com word.application
+	$fullPath = $LocalSignaturePath+'\'+$SignatureName+'.docx'
+	$MSWord.Documents.Open($fullPath)
+	
+	#Begin Find and Replace
+	#Check if Doctor
+	if($ADDisplayName.ToString().substring(0,3) -match &quot;Dr.&quot;){
+		Write-Log &quot;Display Name contains DR. In the first three characters. Switching to Doctor Mode.&quot;
+		$Doctor = $true
+	}
+	
+	#User Name 
+	$FindText = &quot;DisplayName&quot; 
+    $ReplaceText = $ADDisplayName.ToString() 
+
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)	
+
+	#Title		
+	$FindText = &quot;Title&quot;
+	$ReplaceText = $ADTitle.ToString()
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	
+	#Email	
+	$FindText = &quot;harbmail&quot;
+	$ReplaceText = $ADEmailAddress.ToString()
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	
+	#FirstName
+	$FindText = &quot;FirstName&quot;
+	$ReplaceText = $ADFirst.ToString()
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	
+	#LastName
+	$FindText = &quot;LastName&quot;
+	$Unclean = $ADLast.ToString()
+	$ReplaceText = $Unclean -replace &quot;Dr. &quot;, &quot;&quot;
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	
+	#Middle Initials
+    If ($ADInitials -ne '') { 
+	   	$FindText = &quot;MiddleInitial&quot;
+	   	$ReplaceText = $ADInitials.ToString()
+	}
+	Else {
+		$FindText = &quot;MiddleInitial. &quot;
+	   	$ReplaceText = &quot;&quot;.ToString()
+	}
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+   	
+	
+	#Postal
+	$FindText = &quot;Postal&quot;
+	$ReplaceText = $ADPostal.ToString()
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	
+	#State
+	$FindText = &quot;State&quot;
+	$ReplaceText = $ADState.ToString()
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+
+	#Department
+	$FindText = &quot;Department&quot;
+	$ReplaceText = $ADDepartment.ToString()
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	
+	#Description
+    If ($ADDescription -ne '') { 
+	   	$FindText = &quot;Description&quot;
+	   	$ReplaceText = $ADDescription.ToString()
+	}
+	Else {
+		$FindText = &quot; | Description &quot;
+	   	$ReplaceText = &quot;&quot;.ToString()
+	}
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+   	
+	#Professional Credentials (Job titles)
+    If ($ADProfessionalCredentials -ne '') { 
+	   	$FindText = &quot;ProfessionalCredentials&quot;
+	   	$ReplaceText = $ADProfessionalCredentials.ToString()
+	}
+	Else {
+		$FindText = &quot;, ProfessionalCredentials&quot;
+	   	$ReplaceText = &quot;&quot;.ToString()
+	}
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	#Street Address
+	If ($ADStreetAddress -ne '') { 
+        $FindText = &quot;StreetAddress&quot;
+	    $ReplaceText = $ADStreetAddress.ToString()
+    }
+    Else {
+	    $FindText = &quot;StreetAddress&quot;
+	    $ReplaceText = $DefaultAddress
+    }
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+		
+	#PostofficeBox
+	If ($ADPOBox -ne '') { 
+        $FindText = &quot;PostofficeBox&quot;
+        $ReplaceText = $ADPOBox.ToString()
+    }
+    Else {
+	    $FindText = &quot;PostofficeBox&quot;
+	    $ReplaceText = $DefaultPOBox 
+    }
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+
+	#City
+	If ($ADCity -ne '') { 
+	    $FindText = &quot;City&quot;
+        $ReplaceText = $ADCity.ToString()
+    }
+    Else {
+	    $FindText = &quot;City&quot;
+	    $ReplaceText = $DefaultCity 
+    }
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	
+	#Telephone
+	If ($ADTelephoneNumber -ne &quot;&quot;) { 
+		$FindText = &quot;TelephoneNumber&quot;
+		$Number = $ADTelephoneNumber.ToString() -replace &quot;-&quot;, &quot;.&quot;
+		$ReplaceText = $Number
+    }
+	Else {
+		$FindText = &quot;Office TelephoneNumber&quot;
+	    $ReplaceText = &quot;&quot;.ToString()
+ 	}
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+	
+	#Mobile
+	If ($ADMobile -ne &quot;&quot;) { 
+		$FindText = &quot;MobileNumber&quot;
+		$Number = $ADMobile.ToString() -replace &quot;-&quot;, &quot;.&quot;
+		$ReplaceText = $Number
+    }
+	Else {
+		$FindText = &quot;| Cell MobileNumber&quot;
+	    $ReplaceText = &quot;&quot;.ToString()
+ 	}
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+
+	#Fax
+    If ($ADFax -ne '') { 
+    	$FindText = &quot;FaxNumber&quot;
+		$Number = $ADFax.ToString() -replace &quot;-&quot;, &quot;.&quot;
+        $ReplaceText = $Number 
+    }
+    Else {
+	    $FindText = &quot;| Fax FaxNumber&quot;
+        $ReplaceText = &quot;&quot;.ToString() 
+    }
+	$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+
+	#END: Find And Replace
+    #Save new message signature 
+    Write-Log('Saving Signatures')
+	#Save HTML
+	$saveFormat = [Enum]::Parse([Microsoft.Office.Interop.Word.WdSaveFormat], &quot;wdFormatHTML&quot;);
+	$path = $LocalSignaturePath+'\'+$SignatureName+&quot;.htm&quot;
+	$MSWord.ActiveDocument.saveas([ref]$path, [ref]$saveFormat)
+    
+    #Save RTF 
+	$saveFormat = [Enum]::Parse([Microsoft.Office.Interop.Word.WdSaveFormat], &quot;wdFormatRTF&quot;);
+	$path = $LocalSignaturePath+'\'+$SignatureName+&quot;.rtf&quot;
+	$MSWord.ActiveDocument.SaveAs([ref] $path, [ref]$saveFormat)
+	
+	#Save TXT    
+    $saveFormat = [Enum]::Parse([Microsoft.Office.Interop.Word.WdSaveFormat], &quot;wdFormatText&quot;);
+	$path = $LocalSignaturePath+'\'+$SignatureName+&quot;.txt&quot;
+	$MSWord.ActiveDocument.SaveAs([ref] $path, [ref]$SaveFormat)
+	$MSWord.ActiveDocument.Close()
+	$MSWord.Quit()
+	Write-Log('Signature Saved...')
+
+} #End Payload
+function Launch-Missile{
+	WaitFor-Outlook
+	Launch-Payload
+}
+Function Main{
+	$payload = $false
+	if($force){
+		Write-Log(&quot;Force Mode!&quot;)
+		$payload = $true
+	}else{
+		Write-Log(&quot;Initiating 3 Minute Sleep before continuing.&quot;)
+		Start-Sleep -s 180
+	}
+	if((Check-ValidMapiAddress) -eq $false){
+		EndProgram -Reason &quot;Invalid MAPI Address for &quot; + $ENV:Username
+	}
+	if((Check-ADSync) -eq $false){
+		Write-Log(&quot;Active Directory is Not Synchronized. Missile Armed.&quot;)
+		$payload = $true
+	}
+	if((Check-SignatureSync) -eq $false){
+		Write-Log(&quot;Local Signature is Not Synchronized. Missile Armed.&quot;)
+		$payload = $true
+	}
+	if($payload -eq $true){
+		Write-Host &quot;Launching Missile.&quot;
+		Launch-Missile
+		Set-OutlookDefaults
+		Synchronize-AD
+		EndProgram -Reason &quot;Missile Launched&quot;
+	}else{
+		EndProgram -Reason &quot;Signature modification not needed. All Settings are Clear&quot;
+	}
+}
+Main
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

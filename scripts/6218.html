@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Colin Squier">
+    <title>Enable BitLocker - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Enable BitLocker</h1>
+<h3><a href="//scripts/6218.ps1">download</a></h3>
+<p>Enables BitLocker on the OS drive. If BitLocker has already been enabled, extracts the recovery key if there is one present.</p>
+<pre><code class="language-posh">$BitlockerStatus = (Get-BitLockerVolume -MountPoint $env:SystemDrive).ProtectionStatus
+$RecoveryKeyPath = &quot;\\&lt;servername&gt;\USER\users\&lt;username&gt;&quot;
+$RecoveryKeyFilePath = &quot;Z:&quot;
+
+if ($BitlockerStatus -eq &quot;On&quot;)
+{
+    Write-Host &quot;BitLocker already enabled on $env:SystemDrive&quot;
+    #Save recovery key to text file
+    $BitLocker = ((Get-BitLockerVolume -MountPoint $env:SystemDrive).KeyProtector | Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' })
+    if ($BitLocker.KeyProtectorType -eq &quot;RecoveryPassword&quot;)
+    {
+        $BitLockerId = $Bitlocker.KeyProtectorId
+        $BitlockerId = ($BitLockerId -replace '[{}]','')
+        $RecoveryKeyFileName = &quot;BitLocker Recovery Key &quot; + $BitLockerId + &quot; &quot; + $env:COMPUTERNAME + &quot;.txt&quot;
+        $RecoveryKeyDrive = (Get-PSDrive -PSProvider FileSystem)
+        if (($RecoveryKeyDrive | Where-Object { $_.Name -eq &quot;Z&quot; }).Name -ne &quot;Z&quot;)
+        {
+            New-PSDrive -Name &quot;Z&quot; -PSProvider FileSystem -Root $RecoveryKeyPath
+        }
+
+        if (!(Test-Path $RecoveryKeyFilename))
+        {
+            New-Item -Path Z: -ItemType File -Name $RecoveryKeyFileName
+        }
+        $RecoveryKey = $BitLocker.RecoveryPassword
+        $RecoveryFileContent = @&quot;
+BitLocker Drive Encryption recovery key 
+
+To verify that this is the correct recovery key, compare the start of the following identifier with the identifier value displayed on your PC.
+
+Identifier:
+
+    $BitLockerId
+
+If the above identifier matches the one displayed by your PC, then use the following key to unlock your drive.
+
+Recovery Key:
+
+    $RecoveryKey
+
+If the above identifier doesn't match the one displayed by your PC, then this isn't the right key to unlock your drive.
+Try another recovery key, or refer to http://go.microsoft.com/fwlink/?LinkID=260589 for additional assistance.
+&quot;@
+        $RecoveryKeyFileName = (Join-Path Z: -ChildPath $RecoveryKeyFileName)
+        $RecoveryFileContent | Out-File $RecoveryKeyFileName -Encoding UTF8
+        (Get-Content $RecoveryKeyFileName | Out-String) -replace &quot;`n&quot;, &quot;`r`n&quot; | Out-File $RecoveryKeyFileName -Encoding UTF8
+        if (($RecoveryKeyDrive | Where-Object { $_.Name -eq &quot;Z&quot; }).Name -eq &quot;Z&quot;)
+        {
+            Remove-PSDrive -Name &quot;Z&quot;
+        }
+    }
+}
+else
+{
+    Write-Host &quot;Enabling BitLocker encryption on $env:SystemDrive, this will take some time.&quot;
+    $RecoveryKeyDrive = (Get-PSDrive -PSProvider FileSystem)
+    if (($RecoveryKeyDrive | Where-Object { $_.Name -eq &quot;Z&quot; }).Name -ne &quot;Z&quot;)
+    {
+        New-PSDrive -Name &quot;Z&quot; -PSProvider FileSystem -Root $RecoveryKeyPath
+    }
+    Enable-BitLocker -EncryptionMethod Aes128 -RecoveryKeyPath $RecoveryKeyFilePath -RecoveryKeyProtector -MountPoint $env:SystemDrive -SkipHardwareTest
+
+    $BitLocker = ((Get-BitLockerVolume -MountPoint $env:SystemDrive).KeyProtector | Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' })
+    $BitLockerId = $Bitlocker.KeyProtectorId
+    $BitlockerId = ($BitLockerId -replace '[{}]','')
+    $RecoveryKeyFileName = &quot;BitLocker Recovery Key &quot; + $BitLockerId + &quot;.txt&quot;
+    $File = (Join-Path $RecoveryKeyFilePath -ChildPath $RecoveryKeyFileName)
+
+    if(Test-Path $File)
+    {
+        $RecoveryKeyFileName = &quot;Bitlocker Recovery Key &quot; + $BitLockerId + &quot; &quot; + $env:COMPUTERNAME + &quot;.txt&quot;
+        Rename-Item -Path $File -NewName $RecoveryKeyFileName
+        [System.IO.FileInfo]$RecoveryKeyFile = (Get-ChildItem -Path $RecoveryKeyFilePath -Name $RecoveryKeyFileName)
+    }
+
+    Do
+    {
+        Start-Sleep -Seconds 30
+        Get-BitLockerVolume | Select MountPoint,VolumeStatus,EncryptionPercentage,ProtectionStatus
+    } While (((Get-BitLockerVolume).EncryptionPercentage) -lt 100)
+
+    $BitLocker = ((Get-BitLockerVolume -MountPoint $env:SystemDrive).KeyProtector | Where-Object { $_.KeyProtectorType -eq 'Tpm' })
+    if ($BitLocker.KeyProtectorType -eq &quot;Tpm&quot;)
+    {
+        Get-BitLockerVolume | Add-BitLockerKeyProtector -TpmProtector
+    }
+
+    if (($RecoveryKeyDrive | Where-Object { $_.Name -eq &quot;Z&quot; }).Name -eq &quot;Z&quot;)
+    {
+        Remove-PSDrive -Name &quot;Z&quot;
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

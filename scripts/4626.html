@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="evetsleep">
+    <title>Search ExTrackingLogs - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Search ExTrackingLogs</h1>
+<h3><a href="//scripts/4626.ps1">download</a></h3>
+<p>Search Exchange tracking logs using jobs and remoting.</p>
+<pre><code class="language-posh">#Requires -version 3
+ 
+function Start-TransportLogSearch
+{
+        &lt;#
+        .Synopsis
+        Searches one or more Exchange transport logs and sends the output to XML.
+       
+        .DESCRIPTION
+        Creates a PowerShell job for each Exchange transport server to be searched and
+        that job searches based onteh parameters defined in the search.  
+       
+        The output is exported as XML to the path defined.  By default only 4 jobs
+        run at a time.  As jobs complete additional jobs are submitted.
+               
+        .PARAMETER ComputerName
+        One or more computer names (Exchange transort servers) to search.
+               
+        .PARAMETER Start
+        The start time of the search
+               
+        .PARAMETER End
+        The end time of the search
+               
+        .PARAMETER Sender
+        Return results where the sender matches this address
+               
+        .PARAMETER Recipient
+        Return results for e-mail addressed to the recipient provided.
+               
+        .PARAMETER EventId
+        The eventId of the tracking event to match.
+               
+        .PARAMETER Threshold
+        How many transport jobs to spawn at one time.
+       
+        .PARAMETER Path
+        Where to create the resulting XML files.  The default is the current working directory.
+               
+        .EXAMPLE
+        Start-TransportLogSearch -ComputerName server01a,server01b,server01c -Start (get-date &quot;08/01/2013 00:00&quot;) -end (get-date 08/02/2013 &quot;00:00&quot;) -EventId RECEIVE -Sender 'bill@microsoft.com'
+       
+        This starts 3 PowerShell jobs that run in parallel that searches for all mail with the
+        eventId of RECEIVE that was submitted by Mr. Gates 08/01/2013 through 08/02/2013.
+               
+        .EXAMPLE
+        $start     = (get-date).addDays(-3)
+        $end       = (get-date)
+        $recipient = 'john_smith@contoso.com'
+        $path      = 'c:\Temp\ExchangeLogs'
+        Get-TransportServer | Start-TransportLogSearch -start $start -end $end -recipient $recipient -Path $path
+       
+        This starts a transport log search against all transport servers in the Exchange organization for mail addressed to
+        john_smith@contoso.com that has been submitted over the past 3 days.  Each job that is spawned will generate an XML
+        file that will be deposited in c:\Temp\ExchangeLogs that can be processed later.
+        #&gt;
+    [CmdletBinding()]
+    Param
+    (
+        [Parameter(Mandatory=$true,
+                ValueFromPipelineByPropertyName=$true,
+                                ValueFromPipeline=$true,       
+                Position=0)]
+        [Alias('Identity')]
+        [String[]]$ComputerName,
+ 
+        [Parameter(Mandatory=$false,
+                                ValueFromPipelineByPropertyName=$false,
+                                Position=1)]
+        [datetime]$Start = $(get-date).addHours(-1),
+ 
+        [Parameter(Mandatory=$false,
+                                ValueFromPipelineByPropertyName=$false,
+                                Position=2)]
+        [datetime]$End = $(Get-Date),
+ 
+        [Parameter(Mandatory=$false,
+                                ValueFromPipelineByPropertyName=$false,
+                                Position=3)]
+        [String]$Sender = $null,
+ 
+        [Parameter(Mandatory=$false,
+                                ValueFromPipelineByPropertyName=$false,
+                                Position=4)]
+        [String]$Recipient = $Null,
+ 
+        [Parameter(Mandatory=$false,
+                                ValueFromPipelineByPropertyName=$false,
+                                Position=5)]
+                        [ValidateSet(&quot;BADMAIL&quot;,&quot;DEFER&quot;,&quot;DELIVER&quot;,&quot;DSN&quot;,&quot;EXPAND&quot;,&quot;FAIL&quot;,&quot;PROCESS&quot;,&quot;RECEIVE&quot;,&quot;RESOLVE&quot;,&quot;SEND&quot;,&quot;TRANSFER&quot;)]
+        [String]$EventId = 'RECEIVE',
+ 
+        [Parameter(Mandatory=$false,
+                                ValueFromPipelineByPropertyName=$false,
+                                Position=6)]
+        [int]$Threshold = 4,
+ 
+        [Parameter(Mandatory=$false,
+                                ValueFromPipelineByPropertyName=$false,
+                                Position=6)]
+        [String]$Path = (Get-Location).Path
+    )
+ 
+    Begin
+    {
+        #Code to run within the job.
+        $openScriptBlock = {
+            param($serverName,$start,$End,$Sender,$Recipient,$EventId)
+                       
+                        Function Connect-ExchangeServer
+                        {
+                                [CmdletBinding()]
+                                [OutputType([PSObject])]
+                                Param
+                                (
+                                #Computer name to connect to.
+                                [Parameter(Mandatory=$true,
+                                        ValueFromPipelineByPropertyName=$false,
+                                        Position=0)]
+                                        [Alias('Identity')]
+                                $ComputerName,
+                               
+                                #Computer name to connect to.
+                                [Parameter(Mandatory=$false,
+                                        ValueFromPipelineByPropertyName=$false,
+                                        Position=1)]
+                                [String[]]$Commands    
+                                )
+ 
+                            $sessionParam = @{
+                                ConfigurationName = 'Microsoft.Exchange'
+                                ConnectionUri     = &quot;http://$ComputerName/PowerShell/&quot;
+                                Authentication    = 'Kerberos'
+                                ErrorAction       = 'STOP'
+                                }      
+ 
+                                Try
+                                {
+                                        $psSession = New-PSSession @sessionParam               
+                                }
+                                # Catch specific types of exceptions thrown by one of those commands
+                                Catch
+                                {
+                                        Write-Warning -Message (&quot;[{0}]There was an error creating the PSSession: {1}&quot; -f $ComputerName,$_.exception.message)
+                                        return
+                                }      
+ 
+ 
+                                $sessionImport = @{
+                                        Session             = $psSession
+                                        AllowClobber        = $true
+                                        ErrorAction         = 'STOP'
+                                        }      
+                               
+                                if ($Commands)
+                                {
+                                        $Commands += 'Set-ADServerSettings'
+                                        $sessionImport.Add('CommandName',$Commands)
+                                }
+ 
+                                Try
+                                {
+                                        Import-Module (Import-PSSession @sessionImport) -Global -DisableNameChecking
+                                }
+                                # Catch specific types of exceptions thrown by one of those commands
+                                Catch
+                                {
+                                        Write-Warning -Message (&quot;[{0}]Could not complete import: {1}&quot; -f $ComputerName,$_.exception.message)
+                                        return
+                                }
+ 
+                        } #END Connect-ExchangeServer
+ 
+ 
+            Connect-ExchangeServer -ComputerName $serverName -commands Get-MessageTrackingLog                  
+                       
+            #Parameters to pass to Get-MessageTrackingLog
+            $splat = @{
+                Server     = $serverName
+                Start      = $start
+                End        = $end
+                EventId    = $EventId
+                ResultSize = 'Unlimited'
+                }
+           
+            #If a sender is specified, add that as a parameter.                  
+            if($Sender)
+            {
+                $splat.Add('Sender',$Sender)
+            }
+ 
+            #Same thing as a recipient.
+            if($Recipient)
+            {
+                $splat.Add('Recipient',$Recipient)
+            }
+ 
+            #Get the data.
+            Get-MessageTrackingLog @splat
+            }
+ 
+        #Keep track of batches
+        $batch = 0
+ 
+        #BatchTime
+        [string]$batchTime = get-date -Format hhmmss
+    } #END BEGIN
+ 
+    Process
+    {
+        #Go through each computer\identity and query the logs.
+        foreach ($computer in $ComputerName)
+        {
+            #Check to see if there are any running jobs.  If so wait until the count of
+            #running jobes is below the threshold before continuing.
+            while ( $(Get-Job -State Running).count -ge $Threshold )
+            {
+                Write-Verbose -Message &quot;There are $threshold jobs running.  Sleeping.&quot;
+                Start-Sleep -Seconds 5
+            }
+ 
+            #Check to see if there are any completed jobs.  If so export them and clean up.
+            if( $(Get-Job -State Completed) )
+            {
+                foreach ($job in $(Get-Job -State Completed))
+                {
+                    #Build the file name for the XML file that we'll generate.
+                    $timeStamp = Get-Date -Format hhmmss
+                    $jobName = $job.Name
+                    $XMLPath = Join-Path $path &quot;Batch-$timeStamp-$jobName.xml&quot;
+ 
+                    try
+                    {
+                        #Get the results of the job and store them as an XML file.
+                        Receive-Job -Wait -AutoRemoveJob -id $job.Id -ErrorAction Stop | Export-Clixml -Path $XMLPath -Force -ErrorAction Stop
+                    }
+                    catch
+                    {
+                        Write-Warning -Message $(&quot;{0} : {1}&quot; -f $computer,$_.exception.message)
+                        continue
+                    }
+ 
+                    #Keeps memory usage optimal.
+                    Write-Verbose -Message &quot;Taking out the garbage&quot;
+                    [GC]::Collect()
+                }
+            }
+ 
+            #Start a new job.
+            Write-Verbose -Message $(&quot;Processing: {0}&quot; -f $computer)
+            Start-Job -Name $computer -ScriptBlock $openScriptBlock -ArgumentList $computer,$Start,$End,$Sender,$Recipient,$EventId | Out-Null
+        } #END foreach computer
+ 
+    } #END PROCESS
+    End
+    {
+        #Wait until all running jobs are done and then continue.
+        Write-Verbose &quot;Waiting for jobs to finish&quot;
+        Get-Job | Wait-Job | out-null
+ 
+        Write-Verbose -Message &quot;Cleaning up remaining jobs.&quot;
+        foreach ($job in $(Get-Job -State Completed))
+        {
+            $timeStamp = Get-Date -Format hhmmss
+            $jobName = $job.Name
+            $XMLPath = Join-Path $path &quot;Batch-$timeStamp-$jobName.xml&quot;
+           
+            try
+            {
+                Receive-Job -Wait -AutoRemoveJob -id $job.Id -ErrorAction Stop | Export-Clixml -Path $XMLPath -Force -ErrorAction Stop
+            }
+            catch
+            {
+                Write-Warning -Message $(&quot;{0} : {1}&quot; -f $computer,$_.exception.message)
+                continue
+            }
+            Write-Verbose -Message &quot;Taking out the garbage&quot;
+            [GC]::Collect()
+        }
+        Write-Verbose -Message &quot;XML files written to $path&quot;
+    }
+} #END Start-TransportLogSearch
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

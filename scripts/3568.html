@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jules_74">
+    <title>Get-NestedGroups v2 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-NestedGroups v2</h1>
+<h3><a href="//scripts/3568.ps1">download</a> - <a href="//scripts/3567.md">parent</a></h3>
+<p>Rewrite of http://poshcode.org/3460.
+Accepts pipeline input. Function returns a multidimensional array when used with pipeline input.
+Input must be as either type String or an Active Directory User object.
+Returns Active Directory Group objects of the groups the user is a member of.</p>
+<pre><code class="language-posh">Function Global:Get-NestedGroups {
+	&lt;#
+		.SYNOPSIS
+			Enumerate all AD group memberships of an account (including nested membership).
+		.DESCRIPTION
+			This script will return the AD group objects for each group the user is a member of.
+		.PARAMETER UserName
+			The username whose group memberships to find.
+		.EXAMPLE
+			Get-NestedGroups johndoe | Out-GridView
+			Get-NestedGroups johndoe, janedoe | % { $_ | Out-GridView }
+			Get-ADUser -Filter &quot;cn -like 'john*'&quot; | % { Get-NestedGroups $_ | Sort-Object Name | Out-GridView -Title &quot;Groupmembership for $($_)&quot; }
+			&quot;johndoe&quot;,&quot;janedoe&quot; | % { Get-NestedGroups $_ | Sort-Object Name | Export-CSV Groupmembership-$($_.Name).csv -Delimiter &quot;;&quot; }
+			&quot;johndoe&quot;,&quot;janedoe&quot; | Get-NestedGroups | % { Sort-Object Name | Out-GridView }
+		.NOTES
+			ScriptName : Get-NestedGroups
+			Created By : Gilbert van Griensven
+			Date Coded : 06/17/2012
+			Updated    : 08/11/2012
+
+			The script iterates through all nested groups and skips circular nested groups.
+		.LINK
+	#&gt;
+	[CmdletBinding(SupportsShouldProcess=$True)]
+	Param (
+		[Parameter(Mandatory=$True,ValueFromPipeline=$True,HelpMessage=&quot;Please enter a username&quot;)] $UserName
+	)
+	Begin {
+		$PipelineInput = -not $PSBoundParameters.ContainsKey(&quot;UserName&quot;)
+		Write-Verbose &quot;Looking for ActiveDirectory module&quot;
+		$Script:ADModuleUnload = $False
+		If (!(Get-Module ActiveDirectory)) {
+			Write-Verbose &quot;ActiveDirectory module not loaded - checking availability&quot;
+			If (Get-Module -ListAvailable | ? {$_.Name -eq &quot;ActiveDirectory&quot;}) {
+				Write-Verbose &quot;ActiveDirectory module is available - loading module&quot;
+				Import-Module ActiveDirectory
+			} Else {
+				Write-Verbose &quot;ActiveDirectory Module is not available&quot;
+				$Script:ADModuleUnload = $True
+			}
+		} Else {
+			Write-Verbose &quot;ActiveDirectory Module is already loaded&quot;
+			$Script:ADModuleUnload = $True
+		}
+		Function GetNestedGroups {
+			Get-ADGroup $_ -Properties MemberOf | Select-Object -ExpandProperty MemberOf | % {
+				If (!(($Script:GroupMembership | Select-Object -ExpandProperty DistinguishedName) -contains (Get-ADGroup $_).DistinguishedName)) {
+					$Script:GroupMembership += (Get-ADGroup $_)
+					GetNestedGroups $_
+				}
+			}
+		}
+		Function GetDirectGroups {
+			$InputType = $_.GetType().Name
+			If (($InputType -ne &quot;ADUser&quot;) -and ($InputType -ne &quot;String&quot;)) {
+				Write-Error &quot;Invalid input type `'$($_.GetType().FullName)`'&quot; -Category InvalidType -TargetObject $_
+				Break
+			}
+			If ($InputType -eq &quot;String&quot;) {
+				Try {
+					Write-Verbose &quot;Querying Active Directory for user `'$($_)`'&quot;
+					$UserObject = Get-ADUser $_
+				}
+				Catch {
+					Write-Verbose &quot;$_&quot;
+					Write-Error $_ -Category ObjectNotFound -TargetObject $_
+					Break
+				}
+			} Else { $UserObject = $_ }
+			$Script:GroupMembership = @()
+			$Script:GroupMembership += (Get-ADGroup &quot;Domain Users&quot;)
+			Get-ADUser $UserObject -Properties MemberOf | Select-Object -ExpandProperty MemberOf | % {
+				$Script:GroupMembership += (Get-ADGroup $_)
+			}
+			$Script:GroupMembership | ForEach-Object {GetNestedGroups $_}
+		}
+	}
+	Process {
+		If ($PipelineInput) {
+			GetDirectGroups $_
+			, $Script:GroupMembership
+		} Else {
+			$UserName | ForEach-Object {
+				GetDirectGroups $_
+				$Script:GroupMembership
+			}
+		}
+	}
+	End {
+		If (!($Script:ADModuleUnload)) {
+			Write-Verbose &quot;Removing module ActiveDirectory&quot;
+			Remove-Module ActiveDirectory -ErrorAction SilentlyContinue
+		}
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

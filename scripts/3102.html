@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Adam liquorish">
+    <title>Appscanner v0.10 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Appscanner v0.10</h1>
+<h3><a href="//scripts/3102.ps1">download</a></h3>
+<p>File Access scanner for ACL and Applocker policy.  Scan a particular file/folder for write/execute access for ACL and Applocker based on the rights of a supplied user.  Can be used to test the success of an applocker policy.  Or to simulate what access a particular user would have. Scripts will also show direct membership and inherited membership for a user.  Output is a table formatted in html.  The following user types can be used; domain,local and domain cached.  The domain cached can only be used when you are logged in as the cached user.  Access Denied Exception errors may be produced when attempting to scan a folder that the particular user doesnt have access to(  Errors are not fatal and will not effect the script outcome).</p>
+<pre><code class="language-posh">#######################
+
+#Appscanner V0.10
+#Author Adam Liquorish
+
+#Creation Date 08/11/11
+
+#Change log:
+
+#    14/11/11 Removed unrequired step
+
+#    02/12/11 Created input choice for domain.local,cached rather than auto determine
+
+#    02/12/11 Added all supported filetypes for applockers &quot;.bat&quot;,&quot;.cmd&quot;,&quot;.dll&quot;,&quot;.exe&quot;,&quot;.js&quot;,&quot;.msi&quot;,&quot;.msp&quot;,&quot;ocx&quot;,&quot;.psq&quot;,&quot;.vbs&quot;
+
+#    09/12/11 Implemented try/catch to capture file not found or access denied errors for outputting files
+
+#
+
+#Syntax
+
+#appscanner -path &lt;path&gt; -user &lt;user&gt; -applockerpolicy &lt;local/path&gt; -outputpath &lt;path&gt; -userstatus &lt;domain,local,cached&gt; -logdirectory &lt;path&gt;
+
+#    
+
+#Example
+
+#appscanner -path &quot;C:\Program Files&quot; -user &quot;adam&quot; -applockerpolicy &quot;local&quot; -outputpath &quot;c:\temp\output.html&quot; -userstatus &quot;local&quot; -logdirectory &quot;c:\temp\&quot;
+
+#######################
+
+  
+
+######Define Parameters
+
+param(
+
+[Parameter(Mandatory=$true,
+
+    HelpMessage=&quot;Enter Path to be processed.&quot;)]
+
+    [ValidateNotNullOrEmpty()]
+
+    [string]$path,
+
+[Parameter(Mandatory=$true,
+
+    HelpMessage=&quot;Enter User to be processed, as either builtin\&lt;user&gt; or &lt;domain&gt;\&lt;user&gt;.&quot;)]
+
+    [ValidateNotNullOrEmpty()]
+
+    [string]$user=$(Read-Host -prompt &quot;User&quot;),
+
+#Uncomment when in production version.
+
+[Parameter(Mandatory=$true,
+
+    HelpMessage=&quot;Enter Applocker XML to be utilised ie c:\applocker.xml, or type local to use effective policy for workstation&quot;)]
+
+    [ValidateNotNullOrEmpty()]
+
+    [string]$applockerpolicy=$(Read-Host -prompt &quot;Path to applocker policy xml file, or type local to use effective policy for workstation&quot;),
+
+[Parameter(Mandatory=$true,
+
+    HelpMessage=&quot;Enter Path for ouput ie c:\Temp\output.html.&quot;)]
+
+    [ValidateNotNullOrEmpty()]
+
+    [string]$outputpath=$(Read-Host -prompt &quot;Path for Output&quot;),
+
+[Parameter(Mandatory=$true,
+
+    HelpMessage=&quot;Is the user a Domain/Local/Cached User.[Domain,Local,Cached]&quot;)]
+
+    [ValidateNotNullOrEmpty()]
+
+    [ValidateSet(&quot;Domain&quot;,&quot;Local&quot;,&quot;Cached&quot;)]
+
+    [string]$UserStatus=$(Read-Host -prompt &quot;Is the user a Domain/Local/Cached User.[Domain,Local,Cached]&quot;),
+
+[Parameter(Mandatory=$true,
+
+    HelpMessage=&quot;Enter Log Directory for ouput ie c:\Temp\&quot;)]
+
+    [ValidateNotNullOrEmpty()]
+
+    [string]$logdirectory=$(Read-Host -prompt &quot;Log Directory&quot;)
+
+)
+
+######END DEFINE PARAMETERS   
+
+######Define Logger
+
+$logfilename=&quot;$(get-date -format yyyy-MM-dd-hh-mm-ss).txt&quot; 
+
+$logfile=$logdirectory+$logfilename
+
+if ($host.name -match 'ise')
+
+{
+
+    write-host &quot;Warning: Running in Windows Powershell ISE, Transcript logging will not be running&quot; -foregroundcolor red
+
+    $null
+
+}
+
+else
+
+{
+
+    write-host &quot;Running in Powershell Console, Transcript logging will now start&quot; -foregroundcolor blue
+
+    try{
+
+        start-transcript -path $logfile
+
+    }
+
+    #catch for if path not found
+
+    catch [System.IO.DirectoryNotFoundException]{
+
+        write-host &quot;Critical: Parent Path to save $logfile not found.&quot; -foregroundcolor red
+
+        read-host &quot;Press enter to exit&quot;
+
+    }
+
+    #catch for path access denied
+
+    catch [System.Management.Automation.RuntimeException]{
+
+        write-host &quot;Critical: Write access to $logfile is denied unable to save log file.&quot; -foregroundcolor red
+
+        read-host &quot;Press enter key to exit&quot;
+
+    }
+
+}
+
+###### END Logger
+
+######Define Variables
+
+$ticksymbol=[char]10004
+
+$errorsymbol=[char]10008
+
+$asterisksymbol=[char]10033
+
+$dict=@{}
+
+$t=$null
+
+$hashtable=$null
+
+$u=$null
+
+$Pathvalid=test-path $path
+
+$Pathvalidpolicy=test-path $applockerpolicy
+
+$direct=$null
+
+$inherited=$null
+
+
+
+######END DEFINE VARIABLEs
+
+
+
+######Define HTML Output
+
+$a=&quot;&lt;style&gt;&quot;
+
+$a=$a +&quot;TABLE{border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse;}&quot;
+
+$a=$a +&quot;TH{border-width: 1px;padding: 0px;border-style: solid;border-color: black;background-color:thistle}&quot;
+
+$a=$a +&quot;TD{border-width: 1px;padding: 0px;border-style: solid;border-color: black;}&quot;
+
+$a=$a +&quot;&lt;/style&gt;&quot;
+
+$header= &quot;&lt;h1&gt;List of Processed Files&lt;/h1&gt;&quot;
+
+######END DEFINE HTML OUTPUT
+
+######Testing Privileges
+
+#$currentprincipal=new-object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+
+#&amp; {
+
+#    if ($currentprincipal.isinrole( [Security.principal.windowsbuiltinrole]::Administrator))
+
+#    {
+
+#        write-host &quot;$ticksymbol Running with administrative privilages&quot; -foregroundcolor blue
+
+#    }
+
+#    else
+
+#    {
+
+#        write-host &quot;$errorsymbol Script is currently not running with administrative privileges, please run as admin&quot; -foregroundcolor red
+
+#        read-host &quot;Press enter to exit&quot; -foregroundcolor red
+
+#        exit
+
+#    }
+
+#  }
+
+######END TESTING PRIV
+
+######Importing Required Modules
+
+try
+
+{
+
+    if((get-wmiobject -cl win32_operatingsystem).version -gt &quot;6&quot;)
+
+    {
+
+        write-host &quot;$ticksymbol Win Vista or higher detected, Importing Applocker Module&quot; -foregroundcolor blue
+
+        if((get-module -listavailable|foreach-object {$_.name}) -contains &quot;applocker&quot;)
+
+        {
+
+            import-module applocker
+
+            write-host &quot;Successfully imported applocker module&quot; -foregroundcolor blue
+
+        }
+
+        else
+
+        {
+
+            write-host &quot;Critical: Applocker module cannot be found try logging in as administrator&quot; -foregroundcolor red
+
+            read-host &quot;Press enter to quit&quot;
+
+            exit
+
+        }
+
+    }
+
+    else
+
+    {
+
+        &quot;Critical: $errorsymbol Exiting....An operating system lower that Windows Vista has been detected.  Script can only be run on Vista or higher.&quot;
+
+        read-host &quot;Press Enter key to exit&quot;
+
+        Exit
+
+    }
+
+}
+
+catch
+
+{
+
+    write-host &quot;Critical: Error encountered loading applocker module&quot; -foregroundcolor red
+
+    read-host &quot;Press Enter key to exit&quot;
+
+    Exit
+
+}
+
+
+
+
+
+######END IMPORT MODULES
+
+
+
+
+
+######MAIN
+
+
+
+if ($Pathvalid -eq &quot;True&quot;)
+
+#If Path Valid
+
+    {
+
+    if ($applockerpolicy -eq &quot;local&quot;)
+
+    #Output effective local applied applocker policy
+
+    {
+
+        #Determine whether an applocker policy is in effect on workstation
+
+        if((get-applockerpolicy -effective -xml ) -like &quot;*Rule*&quot;)
+
+        {
+
+            write-host &quot;$ticksymbol A valid Applocker Policy is currently applied to this workstation&quot; -foregroundcolor blue
+
+            write-host &quot;Warning: A path is required to save local applied applocker policy for usage&quot; -foregroundcolor red
+
+            $applockerpolicy=read-host &quot;Enter path, ie c:\temp\applockerpolicy.xml&quot; 
+
+            write-host &quot;$asterisksymbol Effective applied Applocker Policy for this workstation has been selected, policy will be output to $applockerpolicy&quot; -foregroundcolor blue
+
+            #Effective Applocker policy output
+
+            try{
+
+                get-applockerpolicy -effective -xml &gt;$applockerpolicy
+
+            }
+
+            #catch for if path not found
+
+            catch [System.IO.DirectoryNotFoundException]{
+
+                write-host &quot;Critical: Parent Path to save $applockerpolicy not found.&quot; -foregroundcolor red
+
+                read-host &quot;Press enter to exit&quot;
+
+            }
+
+            #catch for path access denied
+
+            catch [System.Management.Automation.RuntimeException]{
+
+                write-host &quot;Critical: Write access to $applockerpolicy is denied unable to export policy.&quot; -foregroundcolor red
+
+                read-host &quot;Press enter key to exit&quot;
+
+            }
+
+        }
+
+        else
+
+        {
+
+            write-host &quot;Critical: $errorsymbol Exiting....An applocker policy has not been applied to this workstation&quot; -foregroundcolor red
+
+            read-host &quot;Press Enter key to exit&quot;
+
+            exit
+
+        }
+
+        
+
+    }
+
+    elseif ($Pathvalidpolicy -eq &quot;True&quot;)
+
+    {
+
+         write-host &quot;$ticksymbol Valid XML file supplied for Applocker Policy&quot; -foregroundcolor blue
+
+    }
+
+    else
+
+    {
+
+        write-host &quot;Critical: $errorsymbol Exiting....Invalid path for applocker policy xml file, File Doesn't exist!&quot; -foreground red
+
+        read-host &quot;Press Enter key to exit&quot;
+
+        exit
+
+    }  
+
+    #Stage 1 Find group membership for user
+
+    $starttime=get-date
+
+    &quot;Stage 1 of 7, Enumerating Groups User is a member of, including inherited groups&quot;
+
+    #Load .Net Assembler
+
+    add-type -AssemblyName System.DirectoryServices.AccountManagement
+
+    $domain = (Get-wmiobject Win32_ComputerSystem).Domain
+
+    $ping=new-object system.net.networkinformation.ping
+
+    
+
+    #Function for finding group membership for only local or domain not a cached user!!! 
+
+    function groupfind  
+
+    {
+
+        #Create objects to filter based on group name and ContextType--Domain or Machine
+
+        $principal = new-object System.DirectoryServices.AccountManagement.PrincipalContext $ctype,$domain
+
+        $idtype = [System.DirectoryServices.AccountManagement.IdentityType]::SamAccountName
+
+        $groupPrincipal = [System.DirectoryServices.AccountManagement.UserPrincipal]::FindByIdentity($principal, $idtype, $user)
+
+        #Recursively find what groups the user is a member of
+
+        #Also assigns groups found to a global variable called groupout
+
+        set-variable -name groupout -value $groupprincipal.GetAuthorizationGroups() -scope global
+
+    }
+
+    #END FUNCTION
+
+    
+
+    #Determine if workstation is part of a domain or just local.
+
+    If($userstatus -eq &quot;Domain&quot;)
+
+    {
+
+        try {
+
+            $domainName = [System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain() | select -ExpandProperty Name
+
+            $isDomain = $domainName -match $domain
+
+            $domain =$domainname
+
+            write-host &quot;Workstation is part of a domain&quot; -foregroundcolor blue
+
+            #Determine if domain controller is contactable if not contactable treat workstation as local and use local account information
+
+            if ($ping.send(([System.DirectoryServices.ActiveDirectory.Domain]::GetComputerDomain()).pdcroleowner.name).status -eq &quot;Success&quot;)
+
+            {
+
+                $ctype = [System.DirectoryServices.AccountManagement.ContextType]::Domain
+
+                write-host &quot;Successfully contacted Domain controller, using Domain account information.&quot; -foregroundcolor blue
+
+                #calls function groupfind
+
+                groupfind
+
+            }
+
+            else
+
+            {
+
+                write-host &quot;Critical: Domain Controller not contactable!&quot; -foregroundcolor red
+
+                read-host &quot;Press Enter key to exit&quot;
+
+                exit
+
+            }
+
+        }
+
+        catch {
+
+            write-host &quot;Critical: Computer is not part of a domain&quot; -foregroundcolor red
+
+            read-host &quot;Press Enter key to exit&quot;
+
+            exit
+
+        }
+
+    }
+
+    elseif($userstatus -eq &quot;Local&quot;)
+
+    {
+
+    #Build list of local users
+
+    $computername=&quot;$env:computername&quot;
+
+    $computer=[ADSI]&quot;WinNT://$computername,computer&quot;
+
+    $localuserlist=$computer.psbase.children|where-object {$_.psbase.schemaclassname -eq 'user'}
+
+    $localuserlistfilt=foreach($useritem in $localuserlist){$useritem.name}
+
+        #Check queried user against list to see whether user is local
+
+        if($localuserlistfilt -contains $user)
+
+        {
+
+            write-host &quot;Verified user is a part of local SAM database&quot; -foregroundcolor blue
+
+            $domain=(Get-wmiobject Win32_ComputerSystem).Name
+
+            $ctype = [System.DirectoryServices.AccountManagement.ContextType]::Machine
+
+            #Calls function groupfind
+
+            groupfind
+
+        }
+
+        else
+
+        {
+
+            write-host &quot;Critical: User is not a local user&quot; -foregroundcolor red
+
+            read-host &quot;Press Enter key to exit&quot;
+
+            exit
+
+        }
+
+    }
+
+    elseif($userstatus -eq &quot;Cached&quot;)
+
+    {
+
+        try {
+
+        #Build list of local users
+
+        $computername=&quot;$env:computername&quot;
+
+        $computer=[ADSI]&quot;WinNT://$computername,computer&quot;
+
+        $localuserlist=$computer.psbase.children|where-object {$_.psbase.schemaclassname -eq 'user'}
+
+        $localuserlistfilt=foreach($useritem in $localuserlist){$useritem.name}
+
+            #Check queried user against list to see whether user is local
+
+            if($localuserlistfilt -contains $user)
+
+            {
+
+                write-host &quot;Critical: User is a part of local SAM database, therefore user is not cached.&quot; -foregroundcolor red
+
+                read-host &quot;Press Enter key to exit&quot;
+
+                exit
+
+            }
+
+            else
+
+            {
+
+                #Check queried user matches logged on user&quot;
+
+               if((gwmi win32_computersystem).username -like &quot;*$user&quot;)
+
+                {
+
+                    write-host &quot;Verified user is a cached user&quot; -foregroundcolor blue
+
+                    $groupout=[system.security.principal.windowsidentity]::getcurrent().groups|foreach-object {$_.translate([system.security.principal.ntaccount])}
+
+                }
+
+                else
+
+                {
+
+                    write-host &quot;Critical: Logged on user doesn't match queried user, therefore User is not a cached user&quot; -foregroundcolor red
+
+                    read-host &quot;Press Enter key to exit&quot;
+
+                    exit
+
+                }
+
+            }                    
+
+        }
+
+        catch {
+
+            write-host &quot;Critical: User is not cached&quot; -foregroundcolor red
+
+            read-host &quot;Press Enter key to exit&quot;
+
+            exit
+
+        }
+
+    }
+
+    else
+
+    {
+
+        write-host &quot;Critical: Please use Local,Domain or Cached&quot; -foregroundcolor red
+
+        read-host &quot;Press Enter key to exit&quot;
+
+        exit
+
+    }
+
+    
+
+
+
+    
+
+    &quot;Stage 1 of 7, Finished Scanning Group Membership&quot;
+
+    &quot;Stage 1 of 7, Outputting Group Membership hierarchy&quot;
+
+    #Add user to variable
+
+    $groupfilter=@($user)
+
+    #Filter group properties down to name string
+
+    $groupfilter+=foreach($groupname in $groupout){$groupname.name}
+
+    #Determine direct membership
+
+    $domaincut=$domain -match &quot;\w+[A-Za-z0-9-]+&quot;
+
+    $domaincutvalue=$matches.values
+
+    $query=&quot;ASSOCIATORS OF {Win32_Account.Name='$user',Domain='$domaincutvalue'} WHERE ResultRole=GroupComponent ResultClass=Win32_Account&quot;
+
+    $directmembership=get-wmiobject -query $query
+
+    $directmembershipresults=foreach($directmember in $directmembership){$directmember.name}
+
+    $directmembershipresultsfiltered=$directmembershipresults|select-object -unique
+
+    
+
+    &quot;#####################################################&quot;
+
+    write-host &quot;#Green is for the username,&quot; -foregroundcolor darkgreen -nonewline; write-host &quot;Red is for direct group membership,&quot; -foregroundcolor red -nonewline; write-host &quot;Blue is for the inherited group membership&quot; -foregroundcolor blue
+
+    &quot;#User $user group structure looks like the following;&quot;
+
+    foreach ($group in $groupfilter){
+
+        if($directmembershipresultsfiltered -contains $group){
+
+            $direct+=@($group)}
+
+        elseif($group -eq $user){
+
+            $null}
+
+        else{$inherited+=@($group)}
+
+      }
+
+    #Display user
+
+    write-host &quot;-$user&quot; -foregroundcolor darkgreen
+
+    #Display direct membership
+
+    foreach($member in $direct){
+
+        write-host &quot;-&gt;$member&quot; -foregroundcolor red
+
+        }
+
+    foreach($member in $inherited){
+
+        write-host &quot;--&gt;$member&quot; -foregroundcolor blue
+
+        }
+
+    &quot;#####################################################&quot;
+
+    &quot;Stage 1 of 7 Complete&quot;
+
+    #End Stage 1
+
+    
+
+    #Stage 2 Recurse found items to variable
+
+    $count=0
+
+    &quot;Stage 2 of 7 $path is populating a variable &quot;
+
+    Get-Childitem $path -recurse -outvariable objects|where-object{write-progress &quot;Stage 2 of 7 Recursing items to variable, Examining $($_.fullname)....&quot; &quot;Found  $count items&quot;;&quot;$($_.fullname)&quot;}|foreach-object {$count++}
+
+    &quot;Stage 2 of 7 $path has been populated into a variable&quot;
+
+    #End Stage 2
+
+    
+
+    #Stage 3 FILTERACL
+
+    &quot;Stage 3 of 7 Processing ACL on files to index&quot;
+
+     $max=$objects.length
+
+     #filter variable
+
+     $filteracl ={$groupfilter -like $_.IdentityReference.value.split(&quot;\&quot;)[1] -and ($_.FileSystemRights -band 131241 -or $_.FileSystemRights -band 278)}
+
+     #Filter and add to new property
+
+     foreach ($i in $objects)
+
+       {
+
+            $dict[$i.fullname]=@{user=&quot;&quot;;Permission=&quot;&quot;} 
+
+            $t++
+
+            $i.GetAccessControl().Access |Where $filteracl|foreach {$dict.($i.Fullname).User+=($_.IdentityReference,&quot;,&quot;);$dict.($i.Fullname).Permission=$_.FileSystemRights} 
+
+            Write-Progress -activity &quot;Stage 3 of 7 Processing File Permissions to index&quot; -status &quot;$t of $max&quot; -PercentComplete (($t/$objects.count)*100) -CurrentOperation $i.fullname 
+
+       }
+
+    
+
+    &quot;Stage 3 of 7 Complete&quot;
+
+    #END STAGE 3
+
+    
+
+    #Stage 4 Remove Duplicate identities
+
+    &quot;Stage 4 of 7 Removing duplicate identities&quot;
+
+    #Zeroise write-progress counter
+
+    $t=$null
+
+    #Remove duplicate identities due to listing of inherited groups in ACL
+
+      foreach ($i in $objects)
+
+    {
+
+        $t++
+
+        $identarray=$dict[$i.fullname].user;$dict[$i.fullname].user=$null;$splitidentarray=$identarray -split &quot;,&quot;;$uniqueidentarray=$splitidentarray|sort-object -unique;$uniqueidentarray -join &quot;,&quot;|foreach {$dict.($i.fullname).User+=($_)}
+
+        Write-Progress -activity &quot;Stage 4 of 7 Removing Username/Group Duplicates&quot; -status &quot;$t of $max&quot; -PercentComplete (($t/$objects.count)*100) -CurrentOperation $i.fullname 
+
+    }
+
+    &quot;Stage 4 of 7 Complete&quot;
+
+    #END STAGE 4
+
+
+
+    #Stage 5 APPLOCKER
+
+    &quot;Stage 5 of 7 Processing Applocker policy on files&quot;
+
+    #Applocker file extensions list
+
+    $Applockerfileextlist=&quot;.bat&quot;,&quot;.cmd&quot;,&quot;.dll&quot;,&quot;.exe&quot;,&quot;.js&quot;,&quot;.msi&quot;,&quot;.msp&quot;,&quot;ocx&quot;,&quot;.psq&quot;,&quot;.vbs&quot;
+
+    $userpol=$objects|where {$Applockerfileextlist -contains $_.Extension}|convert-path|test-applockerpolicy $applockerpolicy -User $user
+
+    $userobjpol = $userpol|select-object PolicyDecision,FilePath,MatchingRule
+
+    $userobjpolcount=0
+
+    $userobjpol|foreach {
+
+        $userobjpolcount++
+
+        $dict[$_.FilePath] += @{ PolicyDecision = $_.PolicyDecision;MatchingRule= $_.MatchingRule}
+
+        Write-progress -activity &quot;Stage 5 of 7 Processing AppLockers results:&quot; -status &quot;$userobjpolcount of $($userobjpol.count)&quot; -PercentComplete (($userobjpolcount/$userobjpol.count)*100) -CurrentOperation $_
+
+    }
+
+    &quot;Stage 5 of 7 Complete&quot;
+
+    #END STAGE 5
+
+
+
+    #Stage 6
+
+    &quot;Stage 6 0f 7 Preparing format of results for html Report&quot;
+
+    $max2=$dict.count
+
+    $hashtable=foreach($j in $dict.keys){
+
+        $u++
+
+        New-Object -TypeName PSObject -Property @{Path=$j
+
+        User=$dict.$j.user
+
+        Permission=$dict.$j.Permission
+
+        MatchingRule=$dict.$j.MatchingRule
+
+        PolicyDecision=$dict.$j.PolicyDecision
+
+    }
+
+    Write-Progress -activity &quot;Stage 6 of 7 Processing Dictionary to properties&quot; -status &quot;$u of $max2&quot; -PercentComplete (($u/$max2)*100) -CurrentOperation $_}
+
+    &quot;Stage 6 of 7 Complete, $u files scanned of $max for Applocker scan&quot;
+
+    #END STAGE 6
+
+    #####END MAIN 
+
+    #####RESULTS
+
+    #OUTPUT RESULTS TO FILE
+
+    &quot;Stage 7 of 7 Outputting to file $outputpath&quot;
+
+    try{
+
+        $hashtable|sort-object Path|ConvertTo-Html -head $header -title &quot;ACL List&quot; -body $a|Set-Content $outputpath
+
+    }
+
+    #catch for if path not found
+
+    catch [System.IO.DirectoryNotFoundException]{
+
+        write-host &quot;Critical: Parent Path to save $outputpath not found.&quot; -foregroundcolor red
+
+        read-host &quot;Press enter to exit&quot;
+
+    }
+
+    #catch for path access denied
+
+    catch [System.Management.Automation.RuntimeException]{
+
+        write-host &quot;Critical: Write access to $outputpath is denied unable to export results.&quot; -foregroundcolor red
+
+        read-host &quot;Press enter key to exit&quot;
+
+    }
+
+    #Display results
+
+    $endtime=get-date
+
+    $totaltime=$endtime-$starttime
+
+    $totaltimehours=$totaltime.hours
+
+    $totaltimeminutes=$totaltime.minutes
+
+    $outputsize=get-item &quot;$outputpath&quot;|foreach {echo($_.length/1mb).tostring(&quot;0.00 MB&quot;)}
+
+    &quot;Stage 7 of 7, Scanned $max files of $path is complete in $totaltimehours hours and $totaltimeminutes minutes, $outputpath is $outputsize.&quot;
+
+    #####END RESULTS
+
+    #####Zeroise variables and unrequired files
+
+    #Stop Logging
+
+    if ($host.name -match 'ise')
+
+    {
+
+        $null
+
+    }
+
+    else
+
+    {
+
+        &quot;Running Log output to $logfile&quot;
+
+        stop-transcript &gt;$null
+
+    }
+
+    #Prompt delete applocker policy
+
+    $delete=read-host -prompt &quot;Would you like the Applocker policy file $applockerpolicy deleted,YES/NO&quot;
+
+    if($delete -eq &quot;yes&quot;)
+
+    {
+
+        del $applockerpolicy
+
+    }
+
+    else
+
+    {
+
+        write-host &quot;Warning: $asterisksymbol You chose not to delete file $applockerpolicy, Application will now exit.....&quot; -foregroundcolor red
+
+        read-host &quot;Press Enter key to exit&quot;
+
+    }
+
+}
+
+    
+
+#If Path invalid
+
+else
+
+{
+
+    write-host &quot;Critical: $errorsymbol Exiting...Invalid path supplied for processing&quot; -foregroundcolor red
+
+    read-host &quot;Press Enter key to exit&quot;
+
+    exit
+
+}
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

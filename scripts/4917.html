@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DollarUnderscore">
+    <title>Add-ADGroupPropertyPermi - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Add-ADGroupPropertyPermi</h1>
+<h3><a href="//scripts/4917.ps1">download</a></h3>
+<p>This function sets the access rights on properties of AD-groups. Used to delegate access on one group to another. In my case used to delegate the accessgroup of a shared mailbox in Office 365 to another group which contains the owners. This enables them to control the members of the access group through a powershell form.</p>
+<p>This function needs more work, test it before using it for something else than setting the &quot;Write members&quot; access on a group. And don't test code in production ;-)</p>
+<p>See this blogpost for more details:
+http://dollarunderscore.azurewebsites.net/?p=1541</p>
+<p>and this:
+http://dollarunderscore.azurewebsites.net/?p=1391</p>
+<pre><code class="language-posh">function Add-ADGroupPropertyPermission
+{
+    &lt;#
+    .SYNOPSIS
+    This function is used for setting access rights on properties on Active Directory Groups.
+    Use this code with caution! It has not been tested on a lot of objects/properties/access rights!
+
+    .DESCRIPTION
+    This function changes the ACLs on AD-Groups to enable granular delegation of them to other groups.
+
+    Use this code with caution! It has not been tested on a lot of objects/properties/access rights!
+
+    .EXAMPLE
+    Add-ADGroupPropertyPermission -ADObject TheGroupSomeoneWantsAccessTo -MasterObject TheGroupWhoWillGainAccess -AccessRight WriteProperty -AccessRule Allow -Property Member -ActiveDirectoryServer MyDomain
+
+    .PARAMETER ADObject
+    Specify the identity of the group you want to delegate to the other group.
+
+    .PARAMETER MasterObject
+    Specify the identity of the group who should gain access to the specified property.
+
+    .PARAMETER AccessRight
+    Specify what access should be added, for example WriteProperty.
+
+    .PARAMETER AccessRule
+    Set this to Allow or Deny.
+
+    .PARAMETER Property
+    Specify which property this should be applied for.
+
+    .PARAMETER ActiveDirectoryServer
+    Specify domain or domain controller where the search for the groups will take place.
+
+    #&gt;
+
+    [cmdletbinding()]
+    param (
+           [Parameter(Mandatory=$True)]
+           $ADObject,
+           [Parameter(Mandatory=$True)]
+           $MasterObject,
+           [Parameter(Mandatory=$True)]
+           $AccessRight,
+           [Parameter(Mandatory=$True)]
+           [ValidateSet(&quot;Allow&quot;,&quot;Deny&quot;)]
+           $AccessRule,
+           [Parameter(Mandatory=$True)]
+           $Property,
+           $ActiveDirectoryServer = $(Get-ADDomain | select -ExpandProperty DNSRoot))
+
+    # Load the AD objects
+    try {
+        $TheAccessGroup = Get-ADGroup -Identity $ADObject -Server $ActiveDirectoryServer -ErrorAction Stop
+    }
+    catch {
+        Write-Error &quot;Failed to get the object with identity $ADObject. The error was: $($Error[0]).&quot;
+        return
+    }
+
+    try {
+        $TheOwnerGroup = Get-ADGroup -Identity $MasterObject -Server $ActiveDirectoryServer -ErrorAction Stop
+    }
+    catch {
+        Write-Error &quot;Failed to get the object with identity $MasterObject. The error was: $($Error[0]).&quot;
+        return
+    }
+
+    # Create SID-objects
+    try {
+        $AccessGroupSid = New-Object System.Security.Principal.SecurityIdentifier ($TheAccessGroup).SID -ErrorAction Stop
+    }
+    catch {
+        Write-Error &quot;Failed to resolve the sid of $ADObject. The error was: $($Error[0]).&quot;
+        return
+    }
+
+    try {
+        $OwnerGroupSid = New-Object System.Security.Principal.SecurityIdentifier ($TheOwnerGroup).SID -ErrorAction Stop
+    }
+    catch {
+        Write-Error &quot;Failed to resolve the sid of $MasterObject. The error was: $($Error[0]).&quot;
+        return
+    }
+
+    # Create the ACL object
+    try {
+        $AccessGroupACL = Get-Acl -Path &quot;AD:\$($TheAccessGroup.DistinguishedName)&quot; -ErrorAction Stop
+    }
+    catch {
+        Write-Error &quot;Failed to get the ACL of $($TheAccessGroup.DistinguishedName). The error was: $($Error[0]).&quot;
+        return
+    }
+
+    #Get a reference to the RootDSE of the current domain
+    $rootdse = Get-ADRootDSE
+
+    #Create a hashtable to store the GUID value of each schema class and attribute
+    $guidmap = @{}
+    Get-ADObject -SearchBase ($rootdse.SchemaNamingContext) -LDAPFilter &quot;(schemaidguid=*)&quot; -Properties lDAPDisplayName,schemaIDGUID | % {$guidmap[$_.lDAPDisplayName]=[System.GUID]$_.schemaIDGUID}
+
+    #Create a hashtable to store the GUID value of each extended right in the forest
+    $extendedrightsmap = @{}
+    Get-ADObject -SearchBase ($rootdse.ConfigurationNamingContext) -LDAPFilter &quot;(&amp;(objectclass=controlAccessRight)(rightsguid=*))&quot; -Properties displayName,rightsGuid | % {$extendedrightsmap[$_.displayName]=[System.GUID]$_.rightsGuid}
+
+    # Create the new rule
+    # $AccessGroupACL.AddAccessRule((New-Object System.DirectoryServices.ActiveDirectoryAccessRule $OwnerGroupSid,$extendedrightsmap[&quot;Group Membership&quot;],&quot;Allow&quot;,&quot;Descendents&quot;,$guidmap[&quot;user&quot;]))
+    
+    # Allow time to create the object
+    $AccessGroupACL.AddAccessRule((New-Object System.DirectoryServices.ActiveDirectoryAccessRule $OwnerGroupSid,$AccessRight,$AccessRule,$guidmap[&quot;$Property&quot;])) | Out-Null
+
+    # Set the ACL
+    try {
+        Set-Acl -AclObject $AccessGroupACL -Path &quot;AD:\$($TheAccessGroup.DistinguishedName)&quot; -ErrorAction Stop
+    }
+    catch {
+        Write-Error &quot;Failed to set the ACL on $($TheAccessGroup.DistinguishedName). The error was: $($Error[0]).&quot;
+        return
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

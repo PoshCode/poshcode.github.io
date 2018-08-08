@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Kenneth C Mazie">
+    <title>FixInvalidVMs.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>FixInvalidVMs.ps1</h1>
+<h3><a href="//scripts/2549.ps1">download</a></h3>
+<p>This script cycle through an entire VMware Virtual Center instance and identify any virtual machines that are &quot;invald&quot; or &quot;inaccessible&quot;.  This typically occurs as a result of a host crash.  Running VMs are left with lock files in place making them unusable.  The script is internally documented and has lots of status available.  Use at your own risk</p>
+<pre><code class="language-posh">
+#======================================================================================
+#              File Name : FixInvalidVMs.ps1
+#        Original Author : Kenneth C. Mazie 
+#            Description : Resets all &quot;invald&quot; or &quot;inaccessible&quot; virtual machines
+#                        : 
+#                  Notes : Will cycle through an entire Virtual Center instance and 
+#                        :   identify any virtual machines that are &quot;invald&quot; or
+#                        :   &quot;inaccessible&quot; as a result of a host crash where running
+#                        :   VMs were left with lock files in place.  The script must 
+#                        :   have PUTTY installed and configured.  A local status echo
+#                        :   as well as a date and time stamped log file is written
+#                        :   in the folder that this script is executed from if the 
+#                        :   options are set below.
+#                Process : VMs that are processed are removed from inventory, then
+#                        :   the ESX host is connected to and the associated lock files
+#                        :   are deleted. ONLY files named &quot;.lckxxxxxxx&quot; are deleted, and
+#                        :   ONLY in the specific folder and datastore that the target
+#                        :   VM resides in. The VM is then re-registered in Virtual 
+#                        :   Center and moved back into the original folder it came
+#                        :   from.
+#                        : 
+#               Testing  : The only way I found to simulate invalid VMs is to rename 
+#                        :   the VM folder on the datastore and then restart the ESX host.  
+#                        :
+#               Warnings : The script connects to an ESX host and performs delete 
+#                        :   operations on hidden lock files.  You were warned.
+#                        :   NOTE: all harmfull operations are commented out by default
+#                        :   via the &quot;LIVEOPS&quot; variable.  This script was written for
+#                        :   and tested in my environment, yours may require significant
+#                        :   changes to the script to function properly.
+#                        :  
+$LiveOps = $False    #--[ Change to $True to enable all destructive operations ]-- 
+#                        :  
+#                  Legal : Script provided &quot;AS IS&quot; without warranties or guarantees of any
+#                        :   kind.  USE AT YOUR OWN RISK.  Public domain, no rights reserved.
+#                        :   Please keep this header in tact if at all possible.
+#                        : 
+#                Credits : Code snippets and/or ideas came from many sources including but 
+#                        :   not limited to the following:
+#                        : Kevin Markwardt: http://www.kevinmarkwardt.com/script.php?id=15
+#                        : LucD: http://communities.vmware.com/thread/213290
+#                        : Anders Mikkelsen: http://www.amikkelsen.com/?p=357
+#                        : 
+#                  Legal : Script provided &quot;AS IS&quot; without warranties or guarantees of any
+#                        :   kind.  USE AT YOUR OWN RISK.  Public domain, no rights reserved.
+#                        : 
+#         Last Update by : Kenneth C. Mazie 
+#        Version History : v1.0 - 03-04-11 - Original 
+#         Change History : v1.1 - 00-00-00 - 
+#                        :
+#=======================================================================================
+
+#--[ Clear the screen, disable error notification ]--
+Clear-Host 
+$ErrorActionPreference = &quot;SilentlyContinue&quot;
+
+#--[ Load the VMWare snapin if not already ]--
+$out = Get-PSSnapin | Where-Object {$_.Name -like &quot;vmware.vimautomation.core&quot;}
+if ($out -eq $null){Add-PSSnapin vmware.vimautomation.core}
+
+#--[ Connect to the Virtual Center server ]--
+Connect-VIServer -Server &lt;YOUR-VC-SERVER&gt; -User &lt;VC-USER&gt; -Password &lt;PASSWORD&gt; | out-null
+
+#--[ Get Current Script Path ]--
+$ScriptPath = Split-Path -parent $MyInvocation.MyCommand.Definition
+
+#--[ Set status / logging options ]--
+$StatEcho = $True  #--[ True to echo to screen ]--
+$StatLog = $True   #--[ True to write a log file ]--
+
+#--[ Get VM Folder Function ]--
+filter Get-FolderPath {
+    $_ | Get-View | % {
+        $row = &quot;&quot; | select Name, Path
+        $row.Name = $_.Name
+ 
+        $current = Get-View $_.Parent
+        #$path = $_.Name # Uncomment out this line if you do want the VM Name to appear at the end of the path
+        $path = &quot;&quot;
+        do {
+            $parent = $current
+            if($parent.Name -ne &quot;vm&quot;){$path = $parent.Name + &quot;\&quot; + $path}
+            $current = Get-View $current.Parent
+        } while ($current.Parent -ne $null)
+        $row.Path = $path
+        $row
+    }
+}
+
+function BldPuttyCmd ($x)
+{
+#--[ The linked commands that PUTTY executes ]--
+#--[ This is called from 2 places.  Alter the commands to change what is done by PUTTY  ]--
+#--[ As written it runs 2 chained Linux commends that will CD into the target VM folder ]--
+#--[ and delete higgen lock files.                                                      ]--
+return &quot;`&quot;cd $x &amp;&amp; rm â€“rf .lck*`&quot;&quot;
+}
+
+#--[ Initialize Variables ]--
+$Target = &quot;&quot;
+$Plink = &quot;`&quot;C:\Program Files (x86)\PuTTY\plink.exe`&quot;&quot;              #--[ Complete path to PUTTY ]--
+$PuttyUsername = &quot;root&quot;                                            #--[ Set to your ESX host username ]--
+$PuttyHostname = &quot;192.168.1.1&quot;                                     #--[ Set to the hostname/Ip of an appropriate ESX host ]--
+$PuttyPassword = &quot;PASSWORD&quot;                                        #--[ Set to your ESX host user password ]--
+$PuttyLogon = $PuttyUsername +&quot;@&quot;+ $PuttyHostname
+$PuttyCommand = BldPuttyCmd &quot;&lt;FullPathToVMX&gt;&quot;                      #--[ Inserts temporary text into the PUTTY command string ]--
+
+#--[ Initailize Status Log ]--
+If ($StatEcho -eq $True){
+Write-Host &quot;Starting run...&quot;
+Write-Host &quot;============================================&quot;
+Write-Host &quot;ESX Logon = $PuttyUsername&quot;
+Write-Host &quot;ESX Host = $PuttyHostname&quot; 
+Write-Host &quot;Putty executable path = $Plink&quot;
+Write-Host &quot;Putty command = $PuttyCommand&quot;
+Write-Host &quot;Script executed from: `&quot;$ScriptPath`&quot;&quot;
+Write-Host &quot;============================================&quot;}
+If ($StatLog -eq $True){
+$LogFile = $ScriptPath+&quot;\LogFile-{0:dd-MM-yyyy_HHmm}.log&quot; -f (Get-Date)  
+add-content $LogFile &quot;Starting run...&quot;
+add-content $LogFile &quot;============================================&quot;
+add-content $LogFile &quot;ESX Logon = $PuttyUsername&quot;
+add-content $LogFile &quot;ESX Host = $PuttyHostname&quot; 
+add-content $LogFile &quot;Putty executable path = $Plink&quot;
+add-content $LogFile &quot;Putty command = $PuttyCommand&quot;
+Add-Content $LogFile &quot;Script executed from: `&quot;$ScriptPath`&quot;&quot;
+add-content $LogFile &quot;============================================&quot;}
+
+#--[ Do It ]--
+$Invalid = Get-View -ViewType VirtualMachine | Where {-not $_.Config.Template} | Where{$_.Runtime.ConnectionState -eq â€œinvalidâ€ -or $_.Runtime.ConnectionState -eq â€œinaccessibleâ€} | sort Name
+foreach ($vm in $Invalid){
+   If ($StatLog -eq $True){add-content $LogFile &quot;--------------------------------------------&quot;}
+   If ($StatEcho -eq $True){Write-Host &quot;--------------------------------------------&quot;}
+   
+   #--[ Gather Target Info ]--
+   $Target = get-vm $vm.name 
+   $TargetDataCenter = Get-Datacenter -VM $Target
+   $TargetView = $Target | Get-View
+   $TargetESXHost = $Target.host.name
+   $TargetCluster = Get-Cluster -VM $Target
+   $Datastores = Get-Datastore | select Name, Id
+   $TargetDatastore = ($Datastores | where {$_.ID -match (($TargetView.Datastore | Select -First 1) | Select Value).Value} | Select Name).Name
+   $TargetVCFolder = ($Target | Get-Folderpath).Path.Split(&quot;\&quot;)
+   $VmxFullPath = &quot;/vmfs/volumes/&quot;+$TargetDatastore+&quot;/&quot;+$vm.name+&quot;/&quot;
+   $TargetESX = Get-VMHost $TargetESXhost | Get-View
+   $TargetResourcePool = Get-VMHost $TargetESXHost | Get-ResourcePool | Get-View
+   $TargetFolder = Get-View (Get-Datacenter -Name $TargetDatacenter | Get-Folder -Name &quot;vm&quot;).id
+   $vmx = &quot;[$TargetDatastore] &quot;+$Target+&quot;/&quot;+$Target+&quot;.vmx&quot;
+
+   If ($StatEcho -eq $True){
+   Write-Host &quot;Identified $Target as INVALID or INACCESSIBLE&quot;
+   Write-Host &quot;ESX Host = &quot; $TargetESXhost
+   Write-Host &quot;DataCenter = $TargetDataCenter&quot;
+   Write-Host &quot;Cluster = &quot; $TargetCluster
+   Write-Host &quot;vCenter Folder = &quot; $TargetVCFolder[1]  
+   Write-Host &quot;Datastore = &quot;$TargetDatastore 
+   Write-Host Full path to virtual disk = $VmxFullPath}
+   If ($StatLog -eq $True){
+   add-content $LogFile &quot;Identified $Target as INVALID or INACCESSIBLE&quot; 
+   add-content $LogFile &quot;ESX Host = $TargetESXhost&quot;
+   add-content $LogFile &quot;DataCenter = $TargetDataCenter&quot;
+   add-content $LogFile &quot;Cluster = $TargetCluster&quot;
+   add-content $LogFile &quot;vCenter Folder = $TargetVCFolder[1]&quot;
+   add-content $LogFile &quot;Datastore = [$TargetDatastore]&quot;
+   Add-Content $LogFile &quot;Full path to virtual disk = $VmxFullPath&quot;}
+      		  
+   #--[ Remove the VM from inventory ]-- 
+   If ($LiveOps -eq $True){
+      If ($StatEcho -eq $True){write-host &quot;Removing $Target from vCenter inventory...&quot;}
+      If ($StatLog -eq $True){add-content $LogFile &quot;Removing $Target from vCenter inventory...&quot;}
+      Get-vm -Name $Target | remove-vm -Confirm:$false 
+   }else{	     
+      If ($StatEcho -eq $True){write-host `t&quot;LiveOps disabled: Simulating Removing $Target from vCenter inventory...&quot;}
+      If ($StatLog -eq $True){add-content $LogFile `t&quot;LiveOps disabled: Simulating Removing $Target from vCenter inventory...&quot;}
+	  Get-vm -Name $Target | remove-vm -Confirm:$false -WhatIf 
+   }
+   #--[ Delete lock files ]--  
+   $PuttyCommand = BldPuttyCmd $VmxFullPath #--[ Regenerate the PUTTY comand line ]--
+   If ($LiveOps -eq $True){
+      If ($StatEcho -eq $True){write-host &quot;Invoking PUTTY, Deleting all `&quot;.lck`&quot; files in folder...&quot;}
+      If ($StatLog -eq $True){add-content $LogFile &quot;Invoking PUTTY, Deleting all `&quot;.lck`&quot; files in folder...&quot;}
+	  Start-Process $plink -ArgumentList &quot;$PuttyLogon&quot;,&quot;-pw $PuttyPassword&quot;,&quot;$PuttyCommand&quot; | Out-Null 
+   }else{
+	  If ($StatEcho -eq $True){write-host `t&quot;LiveOps disabled: &quot; $plink -ArgumentList &quot;$PuttyLogon&quot;,&quot;-pw $PuttyPassword&quot;,&quot;$PuttyCommand&quot;}
+      If ($StatLog -eq $True){add-content $LogFile `t&quot;LiveOps disabled: &quot; $plink -ArgumentList &quot;$PuttyLogon&quot;,&quot;-pw $PuttyPassword&quot;,&quot;$PuttyCommand&quot;}
+   }
+   
+   #--[ Re-register the target VM ]--
+   If ($LiveOps -eq $True){
+      if((Get-VM $Target -ea SilentlyContinue) -eq $null){  #--[ Check if VM is already registered ]-- 
+	     If ($StatEcho -eq $True){Write-Host &quot;Registering $Target into Virtual Center...&quot;}
+	     If ($StatLog -eq $True){add-content $LogFile &quot;Registering $Target into Virtual Center...&quot;}
+		 $Task1 = $TargetFolder.RegisterVM_Task($vmx,$Target,$FALSE,$TargetResourcePool.MoRef,$TargetESX.MoRef)
+         #--[ Wait untill VM is registered ]--
+         $Task2 = Get-View $Task1
+         while($Task1.info.state -eq &quot;running&quot; -or $Task1.info.state -eq &quot;queued&quot;){
+            $Task2 = Get-View $Task1
+            }
+         #--[ Test the return code of the RegisterVM_Task for error state ]--
+         if($Task1.info.error -eq $null){		 
+		    #--[ No error ]--
+		 }else{ 
+		    #--[ error ]--
+            If ($StatEcho -eq $True){Write-Host &quot;Registration of $Target errored out!!!  Something went wrong!!!&quot;}
+ 	        If ($StatLog -eq $True){add-content $LogFile &quot;Registration of $Target errored out!!!  Something went wrong!!!&quot;}
+		    # break  #--[ Optional break ]--
+		 }
+      }else{
+	     If ($StatEcho -eq $True){Write-Host &quot;$Target VM Already Registered!!!  Something went wrong!!!&quot;}
+ 	     If ($StatLog -eq $True){add-content $LogFile &quot;$Target VM Already Registered!!!  Something went wrong!!!&quot;}
+	     # break  #--[ Optional break ]--
+	  }
+	}else{
+	   If ($StatEcho -eq $True){
+	   write-host `t&quot;LiveOps disabled: Registration bypassed&quot;}
+       write-host `t&quot;Command line would have been: `&quot;TargetFolder.RegisterVM_Task  `&quot; $vmx,$Target,FALSE,$TargetResourcePool.name ,$TargetESX.name&quot; 
+	   If ($StatLog -eq $True){add-content $LogFile `t&quot;LiveOps disabled: Registration bypassed&quot;}
+    }
+
+   #--[ Move the VM to the proper folder ]--	
+   If ($LiveOps -eq $True){
+      If ($StatEcho -eq $True){write-host &quot;Moving $Target back into proper folder...&quot;}
+      If ($StatLog -eq $True){add-content $LogFile &quot;Moving $Target back into proper folder...&quot; }
+	  move-vm -VM $(get-vm $Target) -Destination $(Get-Folder -Name $TargetVCFolder[1] -Location $(Get-Datacenter $TargetDataCenter))
+   }else{
+      If ($StatEcho -eq $True){write-host &quot;LiveOps disabled: Folder Move bypassed&quot;}
+      If ($StatLog -eq $True){add-content $LogFile &quot;LiveOps disabled: Folder Move bypassed&quot;}
+	  move-vm -VM $(get-vm $Target) -Destination $(Get-Folder -Name $TargetVCFolder[1] -Location $(Get-Datacenter $TargetDataCenter)) -WhatIf
+   }
+
+   #--[ Optional VM Power On ]--	
+   if ((get-vm -name $Target).PowerState -eq &quot;PoweredOff&quot;){
+      If ($LiveOps -eq $True){
+         If ($StatEcho -eq $True){Write-Host &quot;Powering on $Target...&quot;}
+         If ($StatLog -eq $True){add-content $LogFile &quot;Powering on $Target...&quot;}
+	     Start-VM -VM $Target -Confirm:$false -RunAsync
+     }else{
+         If ($StatEcho -eq $True){write-host `t&quot;LiveOps disabled: Power On bypassed&quot;}
+         If ($StatLog -eq $True){add-content $LogFile `t&quot;LiveOps disabled: Power On bypassed&quot;}
+	     Start-VM -VM $Target -whatif
+     }
+   }
+}
+If ($StatLog -eq $True){add-content $LogFile &quot;============================================&quot;
+add-content $LogFile &quot;Completed...&quot;}
+If ($StatEcho -eq $True){Write-Host  &quot;============================================&quot;
+write-host &quot;Completed...&quot;}
+$fullpath = $null
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

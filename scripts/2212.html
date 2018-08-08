@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Lee Holmes">
+    <title>Search-WmiNamespace.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Search-WmiNamespace.ps1</h1>
+<h3><a href="//scripts/2212.ps1">download</a></h3>
+<p>From Windows PowerShell Cookbook (O'Reilly) by Lee Holmes</p>
+<pre><code class="language-posh">##############################################################################
+##
+## Search-WmiNamespace
+##
+## From Windows PowerShell Cookbook (O'Reilly)
+## by Lee Holmes (http://www.leeholmes.com/guide)
+##
+##############################################################################
+
+&lt;#
+
+.SYNOPSIS
+
+Search the WMI classes installed on the system for the provided match text.
+
+.EXAMPLE
+
+Search-WmiNamespace Registry
+Searches WMI for any classes or descriptions that mention &quot;Registry&quot;
+
+.EXAMPLE
+
+Search-WmiNamespace Process ClassName,PropertyName
+Searchs WMI for any classes or properties that mention &quot;Process&quot;
+
+.EXAMPLE
+
+Search-WmiNamespace CPU -Detailed
+Searches WMI for any class names, descriptions, or properties that mention
+&quot;CPU&quot;
+
+#&gt;
+
+param(
+    ## The pattern to search for
+    [Parameter(Mandatory = $true)]
+    [string] $Pattern,
+
+    ## Switch parameter to look for class names, descriptions, or properties
+    [switch] $Detailed,
+
+    ## Switch parameter to look for class names, descriptions, properties, and
+    ## property description.
+    [switch] $Full,
+
+    ## Custom match options.
+    ## Supports any or all of the following match options:
+    ## ClassName, ClassDescription, PropertyName, PropertyDescription
+    [string[]] $MatchOptions = (&quot;ClassName&quot;,&quot;ClassDescription&quot;)
+)
+
+Set-StrictMode -Off
+
+## Helper function to create a new object that represents
+## a Wmi match from this script
+function New-WmiMatch
+{
+    param( $matchType, $className, $propertyName, $line )
+
+    $wmiMatch = New-Object PsObject -Property @{
+        MatchType = $matchType;
+        ClassName = $className;
+        PropertyName = $propertyName;
+        Line = $line
+    }
+
+    $wmiMatch
+}
+
+## If they've specified the -detailed or -full options, update
+## the match options to provide them an appropriate amount of detail
+if($detailed)
+{
+    $matchOptions = &quot;ClassName&quot;,&quot;ClassDescription&quot;,&quot;PropertyName&quot;
+}
+
+if($full)
+{
+    $matchOptions =
+        &quot;ClassName&quot;,&quot;ClassDescription&quot;,&quot;PropertyName&quot;,&quot;PropertyDescription&quot;
+}
+
+## Verify that they specified only valid match options
+foreach($matchOption in $matchOptions)
+{
+    $fullMatchOptions =
+        &quot;ClassName&quot;,&quot;ClassDescription&quot;,&quot;PropertyName&quot;,&quot;PropertyDescription&quot;
+
+    if($fullMatchOptions -notcontains $matchOption)
+    {
+        $error = &quot;Cannot convert value {0} to a match option. &quot; +
+            &quot;Specify one of the following values and try again. &quot; +
+            &quot;The possible values are &quot;&quot;{1}&quot;&quot;.&quot;
+        $ofs = &quot;, &quot;
+        throw ($error -f $matchOption, ([string] $fullMatchOptions))
+    }
+}
+
+## Go through all of the available classes on the computer
+foreach($class in Get-WmiObject -List -Rec)
+{
+    ## Provide explicit get options, so that we get back descriptios
+    ## as well
+    $managementOptions = New-Object System.Management.ObjectGetOptions
+    $managementOptions.UseAmendedQualifiers = $true
+    $managementClass =
+        New-Object Management.ManagementClass $class.Name,$managementOptions
+
+    ## If they want us to match on class names, check if their text
+    ## matches the class name
+    if($matchOptions -contains &quot;ClassName&quot;)
+    {
+        if($managementClass.Name -match $pattern)
+        {
+            New-WmiMatch &quot;ClassName&quot; `
+                $managementClass.Name $null $managementClass.__PATH
+        }
+    }
+
+    ## If they want us to match on class descriptions, check if their text
+    ## matches the class description
+    if($matchOptions -contains &quot;ClassDescription&quot;)
+    {
+        $description =
+            $managementClass.Qualifiers |
+                foreach { if($_.Name -eq &quot;Description&quot;) { $_.Value } }
+        if($description -match $pattern)
+        {
+            New-WmiMatch &quot;ClassDescription&quot; `
+                $managementClass.Name $null $description
+        }
+    }
+
+    ## Go through the properties of the class
+    foreach($property in $managementClass.Properties)
+    {
+        ## If they want us to match on property names, check if their text
+        ## matches the property name
+        if($matchOptions -contains &quot;PropertyName&quot;)
+        {
+            if($property.Name -match $pattern)
+            {
+                New-WmiMatch &quot;PropertyName&quot; `
+                    $managementClass.Name $property.Name $property.Name
+            }
+        }
+
+        ## If they want us to match on property descriptions, check if
+        ## their text matches the property name
+        if($matchOptions -contains &quot;PropertyDescription&quot;)
+        {
+            $propertyDescription =
+                $property.Qualifiers |
+                    foreach { if($_.Name -eq &quot;Description&quot;) { $_.Value } }
+            if($propertyDescription -match $pattern)
+            {
+                New-WmiMatch &quot;PropertyDescription&quot; `
+                    $managementClass.Name $property.Name $propertyDescription
+            }
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

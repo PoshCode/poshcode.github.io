@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Richard Gagg">
+    <title>Remove local profiles - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Remove local profiles</h1>
+<h3><a href="//scripts/4026.ps1">download</a></h3>
+<p>Remove local profiles from Windows 7 or above.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+   This is a powershell script form to remove a users local profile from a workstation and
+   and gives the option to remove the users profile fromt he network.
+.DESCRIPTION
+   This script askes for a machine name.
+   It displays all of the roaming profiles on that machine.
+   The administrator selects the profile to be removed from the machine.
+   The administrator selects whether the network profile is to be removed as well.
+   The administrator clicks the delete button and the script removes the local profile
+   and the network profile if the option was seleteced.
+.NOTES
+   This script must be run as with adminstrator credentials.
+   Created: 08/03/13
+#&gt;
+
+CLS
+
+Import-Module ActiveDirectory
+
+# Define Variables
+$global:Workstation = &quot;&quot;
+
+
+function CheckCredentials
+{
+	# Check Credentials
+	$Credential = ([Security.Principal.WindowsIdentity]::GetCurrent()).Name
+	$CredentialTest = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] &quot;Administrator&quot;)
+	if($CredentialTest -eq $false)
+	{
+		[System.Windows.Forms.MessageBox]::Show(&quot;You are not an Administrator.`n`nPlease run the script with `nAdministrator credentials.&quot; , &quot;Not an Administrator!&quot; , 0)
+		$objForm.Close()
+	}
+}
+
+function TestWMIConnection
+{
+	# Test WMI Connection and update label
+	if(!(Get-WmiObject -class &quot;Win32_Process&quot; -namespace &quot;root\cimv2&quot; -ComputerName $Workstation -ErrorAction SilentlyContinue))
+	{
+		$WMIConnectionLabel.ForeColor = &quot;Red&quot;
+		$WMIConnectionLabel.Text = &quot;WMI Connection to device is DOWN.&quot;
+	}
+	else
+	{
+		$WMIConnectionLabel.ForeColor = &quot;Green&quot;
+		$WMIConnectionLabel.Text = &quot;WMI Connection to device is OK.&quot;
+	}
+}
+
+function GetLocalProfiles
+{
+		$ProfilesFoundListBox.Items.Clear()
+		$ProfileDetailsRichTextBox.Text = &quot;&quot;
+		$Profiles = &quot;&quot;
+		
+		$Profiles = @(Get-WmiObject -Class Win32_UserProfile -ComputerName $Workstation -ErrorAction SilentlyContinue | ?{$_.Status -eq &quot;2&quot;})
+		# Profile Status values are (0, 1, 2, 4, 8) where a value of zero denotes unset or default
+		# and 1 = Temporary, 2 = Roaming, 4 = Mandatory and 8 = Corrupted.
+		
+		foreach($Profile in $Profiles)
+		{
+			$objSID = New-Object System.Security.Principal.SecurityIdentifier($Profile.sid)
+			$objUser = $objSID.Translate([System.Security.Principal.NTAccount])
+			$Profilename = $objUser.value.split(&quot;\&quot;)[1]
+			$ProfilesFoundListBox.Items.Add($Profilename.ToUpper())
+			$objForm.Update()
+		}
+}
+
+function GetProfileDetails
+{
+	# Get AD Account Info
+	$ADInfo = &quot;&quot;
+	$LocalProfile = &quot;&quot;
+	
+	$ADUserID = Get-ADUser -Identity $ProfilesFoundListBox.SelectedItem -Properties *
+	
+	$ProfileInfo = &quot;Active Directory Details:&quot;
+	$ProfileInfo = $ProfileInfo + &quot;`nName    : &quot; + $ADUserID.displayNamePrintable
+	$ProfileInfo = $ProfileInfo + &quot;`nOffice  : &quot; + $ADUserID.Office
+	$ProfileInfo = $ProfileInfo + &quot;`nStaff ID: &quot; + $ADUserID.EmployeeID
+	$ProfileInfo = $ProfileInfo + &quot;`nProfile : &quot; + $ADUserID.ProfilePath
+	
+	# Get Local Profile Info
+	$LocalProfile = Get-WmiObject -Class Win32_UserProfile -ComputerName $Workstation -ErrorAction SilentlyContinue | ?{$_.LocalPath -like &quot;*&quot; + $ProfilesFoundListBox.SelectedItem}
+	try
+	{
+		$LastDownloadTime = $LocalProfile.ConvertToDateTime($LocalProfile.LastDownloadTime).ToShortDateString()
+	}
+	catch
+	{
+		$LastDownloadTime = &quot;Never Downloaded&quot;
+	}
+	$LastUsedTime = $LocalProfile.ConvertToDateTime($LocalProfile.LastUseTime).ToShortDateString()
+	
+	$ProfileInfo = $ProfileInfo + &quot;`n`nLocal Profile Details:&quot;
+	$ProfileInfo = $ProfileInfo + &quot;`nProfile Path  : &quot; + $LocalProfile.LocalPath
+	$ProfileInfo = $ProfileInfo + &quot;`nLast Download : &quot; + $LastDownloadTime
+	$ProfileInfo = $ProfileInfo + &quot;`nLast Used     : &quot; + $LastUsedTime
+	$ProfileInfo = $ProfileInfo + &quot;`nIs Loaded     : &quot; + $LocalProfile.Loaded
+	
+	$ProfileDetailsRichTextBox.Text = $ProfileInfo
+	
+	if($LocalProfile.Loaded -eq $true)
+	{
+		[System.Windows.Forms.MessageBox]::Show(&quot;The selected profile is currently loaded.`nThe profile will need to be logged off.&quot;, &quot;Profile Loaded&quot; , 0)
+	}
+	
+}
+
+function DeleteLocalProfile
+{
+	$ConfirmDelete = [System.Windows.Forms.MessageBox]::Show(&quot;CONFIRM`n`nDelete local profile :   &quot; + $ProfilesFoundListBox.SelectedItem + &quot;`nFrom Workstation  :   &quot; + $Workstation.ToUpper() , &quot;Local Profile Delete&quot; , 4)
+	if ($ConfirmDelete -eq &quot;YES&quot;)
+	{
+		Get-WmiObject -Class Win32_UserProfile -ComputerName $Workstation -ErrorAction SilentlyContinue | ?{$_.LocalPath -like &quot;*&quot; + $ProfilesFoundListBox.SelectedItem} | Remove-WmiObject
+		[System.Windows.Forms.MessageBox]::Show(&quot;Profile &quot;+ $ProfilesFoundListBox.SelectedItem + &quot; has been deleted from &quot; + $Workstation + &quot;.&quot;, &quot;Profile Deleted&quot; , 0)
+	}
+}
+
+function DeleteNetworkProfile
+{
+	$ADUserID = Get-ADUser -Identity $ProfilesFoundListBox.SelectedItem -Properties *
+	$ConfirmDelete = [System.Windows.Forms.MessageBox]::Show(&quot;CONFIRM`n`nDelete network profile :  &quot; + $ADUserID.displayNamePrintable + &quot;`nPath :  &quot; + $ADUserID.ProfilePath , &quot;Network Profile Delete&quot; , 4)
+	if ($ConfirmDelete -eq &quot;YES&quot;)
+	{
+		$NetProfile = $ADUserID.ProfilePath
+		$NetProfile = [string]::Join('\', $NetProfile.Split('\')[0..$($NetProfile.Split('\').Length-2)])
+		Remove-Item $NetProfile -Recurse -Force
+		[System.Windows.Forms.MessageBox]::Show(&quot;Network profile has been deleted.`n&quot; + &quot;Path :  &quot; + $NetProfile , &quot;Profile Deleted&quot; , 0)
+	}
+	else
+	{
+		$objForm.Close()
+	}
+}
+
+Function BuildForm
+{
+	[void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Drawing&quot;) 
+	[void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;) 
+	[void] [System.Windows.Forms.Application]::EnableVisualStyles()
+	
+	$objForm = New-Object System.Windows.Forms.Form 
+	$objForm.Text = &quot;Remove Profile Tool&quot;
+	$objForm.Icon = [system.drawing.icon]::ExtractAssociatedIcon($PsHome + &quot;\powershell.exe&quot;)
+	$objForm.Size = New-Object System.Drawing.Size(550,500) 
+	$objForm.StartPosition = &quot;CenterScreen&quot;
+	$objForm.AutoSize = $True
+	$objForm.AutoSizeMode = &quot;GrowOnly&quot; # GrowAndShrink or GrowOnly
+	$objForm.AutoScroll = $True
+	$objForm.MinimizeBox = $true
+	$objForm.MaximizeBox = $False
+	$objForm.WindowState = &quot;Normal&quot; # Maximized, Minimized, Normal
+	$objForm.SizeGripStyle = &quot;Hide&quot; # Auto, Hide, Show
+	$objForm.ShowInTaskbar = $true
+	$objForm.Topmost = $True
+	$objFormFont1 = New-Object System.Drawing.Font(&quot;Arial&quot;,24,[System.Drawing.FontStyle]::Regular)          # Form title font
+	$objFormFont2 = New-Object System.Drawing.Font(&quot;Arial&quot;,10,[System.Drawing.FontStyle]::Regular)          # Form font
+	$objFormFont3 = New-Object System.Drawing.Font(&quot;Consolas&quot;,10,[System.Drawing.FontStyle]::Regular)       # Fixed width font
+#	$objFormFont3 = New-Object System.Drawing.Font(&quot;Lucida Console&quot;,10,[System.Drawing.FontStyle]::Regular) # Second fixed width font
+
+	# Font styles are: Regular, Bold, Italic, Underline, Strikeout
+	$objForm.Font = $objFormFont2 # Applies font to whole form
+	
+	$objForm.KeyPreview = $True
+#	$objForm.Add_KeyDown({if ($_.KeyCode -eq &quot;Enter&quot;){$x=$objTextBox.Text;$objForm.Close()}})
+	$objForm.Add_KeyDown({if ($_.KeyCode -eq &quot;Escape&quot;){$objForm.Close()}})
+	
+	# Form Objects
+	# Check Credentials
+	CheckCredentials
+	
+	#Form Title
+	$FormTitleLabel = New-Object System.Windows.Forms.Label
+	$FormTitleLabel.Location = New-Object System.Drawing.Size(10,10)
+	$FormTitleLabel.Autosize = $true # = New-Object System.Drawing.Size(650,40)
+	$FormTitleLabel.Font = $objFormFont1
+	$FormTitleLabel.Text = &quot;Profile Removal Tool&quot;
+	$objForm.Controls.Add($FormTitleLabel)
+	
+	
+	#Get Workstation Name
+	$GetWorkstationNameLabel = New-Object System.Windows.Forms.Label
+	$GetWorkstationNameLabel.Location = New-Object System.Drawing.Size(10,70)
+	$GetWorkstationNameLabel.Size = New-Object System.Drawing.Size(140,20)
+	$GetWorkstationNameLabel.Text = &quot;Enter Machine Name&quot;
+	$objForm.Controls.Add($GetWorkstationNameLabel)
+	
+	$GetWorkstationNameTextBox = New-Object System.Windows.Forms.TextBox
+	$GetWorkstationNameTextBox.Location = New-Object System.Drawing.Size(155,69) # Count as (160,70) -1 to align text box
+	$GetWorkstationNameTextBox.Size = New-Object System.Drawing.Size(140,20)
+	$objForm.Controls.Add($GetWorkstationNameTextBox)
+	
+	$GetWorkstationNameButton = New-Object System.Windows.Forms.Button
+	$GetWorkstationNameButton.Location = New-Object System.Drawing.Size(305,69) # Count as (305,70) -1 to align button
+	$GetWorkstationNameButton.Size = New-Object System.Drawing.Size(75,23)
+	$GetWorkstationNameButton.Text = &quot;OK&quot;
+	$GetWorkstationNameButton.Add_Click(
+	{
+		$Workstation = $GetWorkstationNameTextBox.Text.ToUpper()
+		
+		# Update profiles found label
+		$ProfilesFoundLabel.Text = &quot;Profiles found on &quot; + $Workstation
+		$objForm.Controls.Add($ProfilesFoundLabel)
+		
+		# Test WMI Connection
+		TestWMIConnection
+		
+		# Get local profiles
+		GetLocalProfiles		
+	})
+	$objForm.Controls.Add($GetWorkstationNameButton)
+	
+	#WMI Connection Status
+	$WMIConnectionLabel = New-Object System.Windows.Forms.Label
+	$WMIConnectionLabel.Location = New-Object System.Drawing.Size(10,115)
+	$WMIConnectionLabel.Size = New-Object System.Drawing.Size(280,20)
+	$WMIConnectionLabel.Text = &quot;WMI Connection to device is...&quot;
+	$objForm.Controls.Add($WMIConnectionLabel)
+	
+	# Found Profiles
+	$ProfilesFoundLabel = New-Object System.Windows.Forms.Label
+	$ProfilesFoundLabel.Location = New-Object System.Drawing.Size(10,150)
+	$ProfilesFoundLabel.Size = New-Object System.Drawing.Size(280,20)
+	$ProfilesFoundLabel.Text = &quot;Profiles found on...&quot;
+	$objForm.Controls.Add($ProfilesFoundLabel)
+
+	$ProfilesFoundListBox = New-Object System.Windows.Forms.ListBox
+	$ProfilesFoundListBox.Location = New-Object System.Drawing.Size(10,180)
+	$ProfilesFoundListBox.Size = New-Object System.Drawing.Size(280,200)
+	$ProfilesFoundListBox.Text = &quot;Found Profiles&quot;
+	$ProfilesFoundListBox.Add_Click(
+	{
+		GetProfileDetails
+	})
+	$objForm.Controls.Add($ProfilesFoundListBox)
+	
+	# Profile Details
+	$ProfileDetailsLabel = New-Object System.Windows.Forms.Label
+	$ProfileDetailsLabel.Location = New-Object System.Drawing.Size(305,150)
+	$ProfileDetailsLabel.Size = New-Object System.Drawing.Size(280,20)
+	$ProfileDetailsLabel.Text = &quot;Profile Details&quot;
+	$objForm.Controls.Add($ProfileDetailsLabel)
+
+	$ProfileDetailsRichTextBox = New-Object System.Windows.Forms.RichTextBox
+	$ProfileDetailsRichTextBox.Location = New-Object System.Drawing.Size(305,180)
+	$ProfileDetailsRichTextBox.Size = New-Object System.Drawing.Size(280,200)
+	$ProfileDetailsRichTextBox.Font = $objFormFont3
+	$ProfileDetailsRichTextBox.ForeColor = &quot;DarkGreen&quot;
+	$objForm.Controls.Add($ProfileDetailsRichTextBox)
+	
+	# Delete network profile checkbox
+	$DeleteNetProfileCheckBox = New-Object System.Windows.Forms.CheckBox
+	$DeleteNetProfileCheckBox.Location = New-Object System.Drawing.Size(10,390) 
+	$DeleteNetProfileCheckBox.Size = New-Object System.Drawing.Size(280,20) 
+	$DeleteNetProfileCheckBox.Text = &quot;Include Network Profile in Delete&quot;
+	$DeleteNetProfileCheckBox.ForeColor = &quot;Red&quot;
+	$objForm.Controls.Add($DeleteNetProfileCheckBox) 
+	
+	# Delete button
+	$DeleteButton = New-Object System.Windows.Forms.Button
+	$DeleteButton.Location = New-Object System.Drawing.Size(10,430)
+	$DeleteButton.Size = New-Object System.Drawing.Size(135,23)
+	$DeleteButton.Text = &quot;Delete&quot;
+	$DeleteButton.BackColor = &quot;Red&quot;
+	$DeleteButton.Forecolor = &quot;White&quot;
+	$DeleteButton.Add_Click(
+	{
+		DeleteLocalProfile
+		
+		if($DeleteNetProfileCheckBox.Checked)
+		{
+			DeleteNetworkProfile
+		}
+		
+		# Update profile info
+		GetLocalProfiles
+
+	})
+	$objForm.Controls.Add($DeleteButton)
+	
+	$ExitButton = New-Object System.Windows.Forms.Button
+	$ExitButton.Location = New-Object System.Drawing.Size(155,430)
+	$ExitButton.Size = New-Object System.Drawing.Size(135,23)
+	$ExitButton.Text = &quot;Exit&quot;
+	$ExitButton.Add_Click({$objForm.Close()})
+	$objForm.Controls.Add($ExitButton)
+	
+	# Status Line
+	$StatusLineLabel = New-Object System.Windows.Forms.Label
+	$StatusLineLabel.Location = New-Object System.Drawing.Size(415,430) 
+	$StatusLineLabel.Size = New-Object System.Drawing.Size(180,40) 
+	$StatusLineLabel.Text = &quot;Version       : 2.02&quot;
+	$objForm.Controls.Add($StatusLineLabel) 
+
+	# Show Form
+	$objForm.Add_Shown({$objForm.Activate()})
+	[void] $objForm.ShowDialog()
+} # End Function
+
+
+# Application Start
+BuildForm
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

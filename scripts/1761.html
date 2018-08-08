@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>finddupe.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>finddupe.ps1</h1>
+<h3><a href="//scripts/1761.ps1">download</a> - <a href="//scripts/1760.md">parent</a></h3>
+<p>Find duplicates in <directorys> and all sub-directories. Usage: finddupe.ps1 &lt;directory/file #1&gt; &lt;directory/file #2&gt; ... &lt;directory/file #N&gt; [-delete] [-noprompt] ; -delete will prompt to delete duplicates. -delete and -noprompt will delete duplicates without prompting. The first file in a duplicate pair will not be deleted ever.</p>
+<pre><code class="language-posh">function Get-MD5([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
+
+{
+  	$stream = $null;
+  	$cryptoServiceProvider = [System.Security.Cryptography.MD5CryptoServiceProvider];
+  	$hashAlgorithm = new-object $cryptoServiceProvider
+  	$stream = $file.OpenRead();
+  	$hashByteArray = $hashAlgorithm.ComputeHash($stream);
+  	$stream.Close();
+
+  	## We have to be sure that we close the file stream if any exceptions are thrown.
+
+  	trap
+  	{
+   		if ($stream -ne $null)
+    		{
+			$stream.Close();
+		}
+  		break;
+	}	
+
+ 	foreach ($byte in $hashByteArray) { if ($byte -lt 16) {$result += “0{0:X}” -f $byte } else { $result += “{0:X}” -f $byte }}
+	return [string]$result;
+}
+
+write-host &quot;Usage: finddupe.ps1 &lt;directory/file #1&gt; &lt;directory/file #2&gt; ... &lt;directory/file #N&gt; [-delete] [-noprompt]&quot;
+
+$matches = 0     # initialize number of matches for summary.
+
+$files=$null
+
+$del = $false # delete duplicates
+
+$noprompt = $false  # delete without prompting toggle
+
+for ($i=0;$i -ne $args.count; $i++) 
+{ 
+	if ($args[$i] -eq &quot;-delete&quot;) 
+	{
+		$del=$true;continue
+	} 
+	else 
+	{ 
+		if ($args[$i] -eq &quot;-noprompt&quot;) 
+		{ 
+			$noprompt=$true;continue
+		} 
+		else 
+		{ 
+			$files+=(dir $args[$i] -recurse | ? {$_.psiscontainer -ne $true})
+		} 
+	} 
+}
+
+if ($files -eq $null) {write-host &quot;No files found.&quot; -f red; exit}
+
+for ($i=0;$i -ne $files.count; $i++)  # Cycle thru all files
+{
+	if ($files[$i] -eq $null) {continue}
+	$md5 = $null
+	$filecheck = $files[$i]
+	$files[$i] = $null	
+	for ($c=0;$c -ne $files.count; $c++)
+	{
+		if ($files[$c] -eq $null) {continue}
+#		write-host &quot;Comparing $filecheck and $($files[$c])     `r&quot; -nonewline
+	
+		if ($filecheck.length -eq $files[$c].length)
+		{
+			#write-host &quot;Comparing MD5 of $($filecheck.fullname) and $($files[$c].fullname)     `r&quot; -nonewline	
+
+			if ($md5 -eq $null) {$md5 = (get-md5 $filecheck)}
+
+			if ($md5 -eq (get-md5 $files[$c]))
+			{
+				
+				write-host &quot;Size and MD5 match: &quot; -fore red -nonewline
+				&quot;{0} and {1}&quot; -f $filecheck.fullname, $files[$c].fullname
+				$matches++
+				
+				if ($del -eq $true)
+				{
+					if ($noprompt -eq $true)
+					{
+						del $files[$c].fullname;write-host &quot;$($files[$c].fullname) deleted.&quot; -f Red
+					}
+					else
+					{
+						del $files[$c].fullname -confirm
+					}
+				}
+	
+				$files[$c] = $null
+			}
+		}
+	}
+}
+write-host &quot;&quot;
+write-host &quot;Number of Files checked: $($files.count).&quot;	# Display useful info; files checked and matches found.
+write-host &quot;Number of matches found: $($matches).&quot;
+write-host &quot;&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

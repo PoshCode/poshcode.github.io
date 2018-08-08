@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>Backup-DatabaseObject - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Backup-DatabaseObject</h1>
+<h3><a href="//scripts/3367.ps1">download</a></h3>
+<p>The Backup-DatabaseObject function backs up a database object definition by scripting out the object to a .sql text file.</p>
+<pre><code class="language-posh">add-type -AssemblyName &quot;Microsoft.SqlServer.ConnectionInfo, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot;
+add-type -AssemblyName &quot;Microsoft.SqlServer.Smo, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot;
+add-type -AssemblyName &quot;Microsoft.SqlServer.SMOExtended, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot;
+add-type -AssemblyName &quot;Microsoft.SqlServer.SqlEnum, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot;
+add-type -AssemblyName &quot;Microsoft.SqlServer.Management.Sdk.Sfc, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot;
+
+
+#######################
+&lt;#
+.SYNOPSIS
+Backs up a database object definition.
+.DESCRIPTION
+The Backup-DatabaseObject function backs up a database object definition by scripting out the object to a .sql text file.
+.EXAMPLE
+Backup-DatabaseObject -ServerInstance Z002 -Database AdventureWorks -Schema HumanResources -Name vEmployee -Path &quot;C:\Users\Public&quot;
+This command backups up the vEmployee view to a .sql file.
+.NOTES 
+Version History 
+v1.0   - Chad Miller - Initial release 
+#&gt;
+function Backup-DatabaseObject
+{
+    [CmdletBinding()]
+    param(
+    [Parameter(Mandatory=$true)]
+    [ValidateNotNullorEmpty()]
+    [string]$ServerInstance,
+    [Parameter(Mandatory=$true)]
+    [ValidateNotNullorEmpty()]
+    [string]$Database,
+    [Parameter(Mandatory=$true)]
+    [ValidateNotNullorEmpty()]
+    [string]$Schema,
+    #Database Object Name
+    [Parameter(Mandatory=$true)]
+    [ValidateNotNullorEmpty()]
+    [string]$Name,
+    [Parameter(Mandatory=$true)]
+    [ValidateNotNullorEmpty()]
+    [string]$Path
+    )
+    
+    $server = new-object Microsoft.SqlServer.Management.Smo.Server($ServerInstance)
+    $db = $server.Databases[$Database]
+
+    #Create a UrnCollection. URNs are used by SMO as unique identifiers of objects. You can think of URN like primary keys
+    #The URN format is similar to XPath
+    $urns = new-object Microsoft.SqlServer.Management.Smo.UrnCollection
+
+    #Get a list of database object which match the schema and object name specified
+    #New up an URN object and add the URN to the urns collection
+    $db.enumobjects() | where {$_.schema -eq $Schema -and  $_.name -eq $Name } |
+        foreach {$urn = new-object Microsoft.SqlServer.Management.Sdk.Sfc.Urn($_.Urn);
+                 $urns.Add($urn) }
+
+    if ($urns.Count -gt 0) {
+        
+        #Create a scripter object with a connection to the server object created above
+        $scripter = new-object Microsoft.SqlServer.Management.Smo.Scripter($server)
+        
+        #Set some scripting option properties
+        $scripter.options.ScriptBatchTerminator = $true
+        $scripter.options.FileName = &quot;$Path\BEFORE_$Schema.$Name.sql&quot;
+        $scripter.options.ToFileOnly = $true
+        $scripter.options.Permissions = $true
+        $scripter.options.DriAll = $true
+        $scripter.options.Triggers = $true
+        $scripter.options.Indexes = $true
+        $scripter.Options.IncludeHeaders = $true
+        
+        #Script the collection of URNs
+        $scripter.Script($urns)
+        
+    }
+    else {
+        write-warning &quot;Object $Schema.$Name Not Found!&quot;
+    }
+
+} #Backup-DatabaseObject
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

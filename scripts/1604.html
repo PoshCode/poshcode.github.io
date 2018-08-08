@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Thell">
+    <title>LoadModuleConfig - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>LoadModuleConfig</h1>
+<h3><a href="//scripts/1604.ps1">download</a> - <a href="//scripts/1603.md">parent</a></h3>
+<p>Module aware local user configuration settings generator, loader, and exporter setup that invokes during module import.  Unlike a module's PrivateData this was created for storing user/project settings that wouldn't change with module versions (like default param values the user would get tired of passing).  And instead of doing xml creation and parsing manually it makes use of import/export CliXml.</p>
+<pre><code class="language-posh">################################################################################
+## Script Name:     LoadModuleConfig
+## Created On:      01/21/2010
+## Author:          Thell Fowler
+## File:            LoadModuleConfig.ps1
+## Usage:           Called from the NestedModules value from a module manifest.
+## Version:         1.0.1.0
+## Purpose:         Provides automated loading of local configuration data.
+##
+## Requirements:    PowerShell Version 2
+## Last Updated:    01/23/2010
+## History:
+##					1.0.1.0 01/21/2010 - TBF - Made Add-Member calls forceful.
+##					1.0.0.0 01/21/2010 - TBF - Initial implementation.
+##
+##
+################################################################################
+
+&lt;#
+	To make use of this script use new-modulemanifest to create a manifest named
+	the with the same name as the manifest you are loading data for but with an
+	extension of 'config.psd1'
+	
+	Enter LoadModuleConfig.ps1 in the NestedModules field.
+	
+	After creating the manifest open it in your editor and edit the PrivateData
+	field to include hashes for LocalUser and Settings.  After the Settings key
+	add values as you see fit.
+	
+	Here is an example, as used in the FuncGuard module.
+	
+	# Private data to pass to the module specified in ModuleToProcess
+	PrivateData = @{
+		&quot;LocalUser&quot; = @{
+			&quot;Settings&quot;=@{
+				&quot;ActiveConfiguration&quot; = &quot;PSUnit&quot;
+				&quot;Configurations&quot;=@{
+					&quot;PSUnit&quot; =@{
+						&quot;Name&quot;=&quot;PSUnit&quot;;
+						&quot;Path&quot;=$(join-path -Path $Env:Temp -ChildPath &quot;FuncGuard.PSUnit&quot;);
+						&quot;Prefix&quot;=&quot;PSUNIT&quot;
+					}
+				}
+			}
+		}
+	}
+	
+	After loading the module a global variable will be available with a name
+	convention of $($ModuleName)Settings and the values can be accessed using
+	normal hash retrieval.
+	
+	$config = $FuncGuardSettings[&quot;Configurations&quot;].$($FuncGuardSettings[&quot;ActiveConfiguration&quot;])
+	$Path = $config.Path
+
+#&gt;
+
+#requires -version 2.0
+Set-StrictMode -Version 2
+
+$Module = $ExecutionContext.SessionState.Module
+if (! $Module) {
+	throw ( New-Object System.Management.Automation.SessionStateException `
+		&quot;An active module was not found!  LoadModuleConfig must be run from a module manifest's NestedModules field.&quot;)
+}
+$ModuleName = $Module.Name.Replace(&quot;.config&quot;,$null)
+
+$AppData = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
+$ModuleConfigPath = join-path -Path $AppData `
+	-ChildPath &quot;WindowsPowerShell\Modules\$ModuleName\$ModuleName.config.xml&quot;
+
+$configurations = $null
+if ( Test-Path $ModuleConfigPath -PathType Leaf ) {
+	$configurations = Import-Clixml -Path $ModuleConfigPath
+} else {
+	# Generate new default config file.
+	$configurations = $Module.PrivateData.LocalUser.Settings
+	$configurations.add(&quot;InitializeConfigurations&quot;, $true)
+	Export-Clixml -InputObject $configurations -Path $ModuleConfigPath
+}
+
+if ($configurations) {
+	Add-Member -InputObject $configurations -Name ModuleName -MemberType NoteProperty -force `
+		-Value $ModuleName
+
+	Add-Member -InputObject $configurations -Name Export -MemberType ScriptMethod -force `
+		-Value {
+			$AppData = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::LocalApplicationData)
+			$ModuleConfigPath = join-path -Path $AppData `
+				-ChildPath &quot;WindowsPowerShell\Modules\$ModuleName\$($this.ModuleName).config.xml&quot;
+			Export-Clixml -InputObject $this -Path $ModuleConfigPath
+		}
+
+	Set-Variable -Name &quot;$($ModuleName)Settings&quot; -Value $($configurations) -Scope Global `
+	-Description &quot;$($ModuleName) module configuration settings.&quot;
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

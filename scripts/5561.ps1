@@ -1,0 +1,62 @@
+Param(
+    [Parameter(Mandatory=$true)][string]$SiteAddress,
+    [Parameter(Mandatory=$true)][string]$WinDomain,
+    [Parameter(Mandatory=$true)][string]$DomainController,
+    [string]$RestrictAccessToGroup
+)
+
+function Generate-Password() {
+    $String = -join ([Char[]]'abcdefghijklmnpqrstuvwxyABCDEFGHIJKLMNPQRSTUVWXYZ123456789' | Get-Random -count 12)
+    return $String
+}
+
+$PrincipalName = "HTTP/$($SiteAddress)@$($Domain.ToUpper())"
+$KeyTab = "$($SiteAddress).keytab"
+$PlainTextPassword = Generate-Password
+$Password = ConvertTo-SecureString -String $PlainTextPassword -AsPlainText -Force
+
+Write-Host "Username: $($SiteAddress)"
+Write-Host "Password: $($PlainTextPassword)"
+Write-Host "Principal name: $($PrincipalName)"
+
+New-ADUser -UserPrincipalName $PrincipalName -Name $SiteAddress -Enabled $true -AccountPassword $Password -PasswordNeverExpires $true
+
+Write-Host Password: $PlainTextPassword
+
+ktpass /princ "$($PrincipalName)" /mapuser "$($SiteAddress)@$($Domain)" /out "C:\$($KeyTab)" /pass "$($PlainTextPassword)" /ptype KRB5_NT_PRINCIPAL
+
+$Parts = @()
+Foreach($Part in $Domain.Split(".")) {
+    $Parts += "DC=$($Part)"
+}
+
+$AuthLDAPURL = "ldap://$($DomainController)/$($Parts -join ",")?sAMAccountName"
+
+if($RestrictAccessToGroup) {
+    $Require = "ldap-group $((Get-ADGroup $RestrictAccessToGroup).DistinguishedName)"
+} else {
+    $Require = "valid-user"
+}
+Write-Host "---------------------------"
+Write-Host "httpd.conf:"
+Write-Host @"
+<Location /krb>
+    AuthName "$($SiteAddress)"
+    AuthType Kerberos
+    KrbServiceName $($PrincipalName)
+    Krb5Keytab /etc/httpd/$($KeyTab)
+    KrbMethodNegotiate on
+    KrbMethodK5Passwd on
+    KrbVerifyKDC off
+    KrbLocalUserMapping on
+    AuthLDAPBindDN $($SiteAddress)@$($Domain)
+    AuthLDAPBindPassword $($PlainTextPassword)
+    AuthLDAPURL $AuthLDAPURL
+    Require $($Require)
+</Location>
+"@
+Write-Host "---------------------------"
+Write-Host "Move $($KeyTab) to /etc/httpd"
+Write-Host "yum install mod_ldap mod_auth_kerb"
+Write-Host "setsebool -P httpd_can_connect_ldap 1"
+

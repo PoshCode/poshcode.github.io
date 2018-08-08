@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Accounts">
+    <title>Connect-AccessDB - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Connect-AccessDB</h1>
+<h3><a href="//scripts/4015.ps1">download</a> - <a href="//scripts/1277.md">parent</a></h3>
+<p>A set of functions I've been working on to allow easy use of Access DBs with PowerShell.  A work in progress, but thought they were at a point where others might find them useful.</p>
+<pre><code class="language-posh"># Functions for connecting to and working with Access databases
+# Matt Wilson
+# May 2009
+
+function Connect-AccessDB ($global:dbFilePath) {
+	
+	# Test to ensure valid path to database file was supplied
+	if (-not (Test-Path $dbFilePath)) {
+		Write-Error &quot;Invalid Access database path specified. Please supply full absolute path to database file!&quot;
+	}
+	
+	# TO-DO: Add check to ensure file is either MDB or ACCDB
+	
+	# Create a new ADO DB connection COM object, which will give us useful methods &amp; properties such as &quot;Execute&quot;!
+	$global:AccessConnection = New-Object -ComObject ADODB.Connection
+	
+	# Actually open the database so we can start working with its contents
+	# Access 00-03 (MDB) format has a different connection string than 2007
+	if ((Split-Path $dbFilePath -Leaf) -match [regex]&quot;\.mdb$&quot;) {
+		Write-Host &quot;Access 2000-2003 format (MDB) detected!  Using Microsoft.Jet.OLEDB.4.0.&quot;
+		$AccessConnection.Open(&quot;Provider = Microsoft.Jet.OLEDB.4.0; Data Source= $dbFilePath&quot;)
+	}
+	
+	# Here's the check for if 2007 connection is necessary
+	if ((Split-Path $dbFilePath -Leaf) -match [regex]&quot;\.accdb$&quot;) {
+		Write-Host &quot;Access 2007 format (ACCDB) detected!  Using Microsoft.Ace.OLEDB.12.0.&quot;
+		$AccessConnection.Open(&quot;Provider = Microsoft.Ace.OLEDB.12.0; Persist Security Info = False; Data Source= $dbFilePath&quot;)
+	} 
+	
+	
+}
+
+function Open-AccessRecordSet ($global:SqlQuery) {
+
+	# Ensure SQL query isn't null
+	if ($SqlQuery.length -lt 1) {
+		Throw &quot;Please supply a SQL query for the recordset selection!&quot;
+	}
+	
+	# Variables used for the connection itself.  Leave alone unless you know what you're doing.
+	$adOpenStatic = 3
+	$adLockOptimistic = 3
+	
+	# Create the recordset object using the ADO DB COM object
+	$global:AccessRecordSet = New-Object -ComObject ADODB.Recordset
+	
+	# Finally, go and get some records from the DB!
+	$AccessRecordSet.Open($SqlQuery, $AccessConnection, $adOpenStatic, $adLockOptimistic)	
+}
+
+function Get-AccessRecordSetStructure {
+	# TO-DO: Should probably test to ensure valid $accessRecordSet exists &amp; has records
+	
+	# Cycle through the fields in the recordset, but only pull out the properties we care about
+	Write-Output $AccessRecordSet.Fields | Select-Object Name,Attributes,DefinedSize,type
+}
+	
+function Convert-AccessRecordSetToPSObject {
+	# TO-DO: Should probably test to ensure valid $accessRecordSet exists &amp; has records
+	
+	# Get an array of field names which we will later use to create custom PoSh object names
+	$fields = Get-AccessRecordSetStructure
+	
+	# Move to the very first record in the RecordSet before cycling through each one
+	$AccessRecordSet.MoveFirst()
+		
+	# Cycle through each RECORD in the set and create that record to an object
+	do {
+		# Create a SINGLE blank object we can use in a minute to add properties/values to
+		$record = New-Object System.Object
+		
+		# For every FIELD in the DB, lookup the CURRENT value of that field and add a new PoSh object property with that name and value
+		foreach ($field in $fields) {
+			$fieldName = $field.Name   # This makes working with the name a LOT easier in Write-Host, etc.
+			#Write-Host &quot;Working with field: $fieldName&quot;
+			#Write-Host &quot;Preparing to set value to: $($AccessRecordset.Fields.Item($fieldName).Value)&quot;
+			$record | Add-Member -type NoteProperty -name $fieldName -value $AccessRecordSet.Fields.Item($fieldName).Value
+		}
+		# Output the custom object we just created
+		Write-Output $record
+		
+		# Tell the recordset to advance forward one before doing this again with another object
+		$AccessRecordset.MoveNext()
+		
+	} until ($AccessRecordset.EOF -eq $True)
+
+}
+
+function Execute-AccessSQLStatement ($query) {
+	$AccessConnection.Execute($query)
+}
+
+function Convert-AccessTypeCode ([string]$typeCode) {
+	
+	# Build some lookup tables for our Access type codes so we can convert values pretty easily
+	$labelLookupHash = @{&quot;AutoNumber&quot;=&quot;3&quot;; &quot;Text&quot;=&quot;202&quot;; &quot;Memo&quot;=&quot;203&quot;; &quot;Date/Time&quot;=&quot;7&quot;; &quot;Currency&quot;=&quot;6&quot;; &quot;Yes/No&quot;=&quot;11&quot;; &quot;OLE Object&quot;=&quot;205&quot;; &quot;Byte&quot;=&quot;17&quot;; &quot;Integer&quot;=&quot;2&quot;; &quot;Long Integer&quot;=&quot;3&quot;; &quot;Single&quot;=&quot;4&quot;; &quot;Double&quot;=&quot;5&quot;}
+	$codeLookupHash =  @{&quot;3&quot;=&quot;AutoNumber&quot;; &quot;202&quot;=&quot;Text&quot;; &quot;203&quot;=&quot;Memo&quot;; &quot;7&quot;=&quot;Date/Time&quot;; &quot;6&quot;=&quot;Currency&quot;; &quot;11&quot;=&quot;Yes/No&quot;; &quot;205&quot;=&quot;OLE Object&quot;; &quot;17&quot;=&quot;Byte&quot;; &quot;2&quot;=&quot;Integer&quot;; &quot;3&quot;=&quot;Long Integer&quot;; &quot;4&quot;=&quot;Single&quot;; &quot;5&quot;=&quot;Double&quot;}
+	
+	# Convert a value depending on what type of data was supplied
+	if ($typeCode -match [regex]&quot;^\d{1,3}$&quot;) {
+		$valueFound = $codeLookupHash.$typeCode
+		if ($valueFound) {
+			Write-Output $valueFound
+		} else { Write-Output &quot;Unknown&quot; }
+	} else {
+		$valueFound = $labelLookupHash.$typeCode
+		if ($valueFound) {
+			Write-Output $valueFound
+		} else { Write-Output &quot;Unknown&quot; }
+	}
+
+}
+
+function Close-AccessRecordSet {
+	$AccessRecordSet.Close()
+}
+
+function Disconnect-AccessDB {
+	$AccessConnection.Close()
+}
+
+
+# Connect-AccessDB &quot;C:\fso\ConfigurationMaintenance.accdb&quot;
+# Open-AccessRecordSet &quot;SELECT * FROM printers&quot;
+# $printersDB = Convert-AccessRecordSetToPSObject | Select-Object caption,driverName | Format-Table -AutoSize; $printersDB
+# Close-AccessRecordSet
+# Disconnect-AccessDB
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

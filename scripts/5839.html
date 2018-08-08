@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="redyey">
+    <title>ComputerQueryTool - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ComputerQueryTool</h1>
+<h3><a href="//scripts/5839.ps1">download</a></h3>
+<p>Tool for helpdesk to query computers and get information about the computer and the computers owner/user. Can be compiled into .exe with built in credentials with Powerhsell Studio</p>
+<pre><code class="language-posh">
+function OnApplicationLoad
+{
+	#TODO: Add custom code to validate application load
+	#TODO: Add Snapins here
+	Import-Module ActiveDirectory
+	return $true #return true for success or false for failure
+	
+}
+
+function OnApplicationExit
+{
+	#TODO: Add custom code clean up on application exit
+}
+
+$textbox1_TextChanged = {
+	#TODO: Place custom script here
+}
+
+$handler_btnQuery_Click = {
+	$btnQuery.Text = &quot;Processing...&quot;
+	$btnQuery.Enabled = $false
+	$stringBuilder3 = New-Object System.Text.StringBuilder
+	$text3 = &quot;Querying remote computers. This can take a while, please wait...&quot;
+	$stringBuilder3.AppendLine($text3)
+	$stringBuilder3.AppendLine(&quot;&quot;)
+	$textboxResults.Text = $stringBuilder3.ToString()
+	
+	function Get-UserInformation
+	{
+		Param
+		(
+			# -Identity, usually samaccountname etc.
+			[Parameter(Mandatory = $true,
+					   ValueFromPipelineByPropertyName = $true,
+					   Position = 0)]
+			$identity
+		)
+		
+		Begin
+		{
+			
+		}
+		
+		Process
+		{
+			$ManagedUserList = @()
+			try
+			{
+				$ADUserData.managedobjects | ForEach-Object -process {
+					$objManagedUserObject = New-Object System.Object
+					$QueryUser = Get-ADUser -Identity &quot;$($txtUserName.Text)&quot; -Properties Name, PasswordExpired, LockedOut, Enabled, LastBadPasswordAttempt | Select-Object -Property Name, PasswordExpired, LockedOut, Enabled, LastBadPasswordAttempt
+					
+					$Firstname = $QueryUser.Name.Split(&quot; &quot;)[1]
+					$Surname = $QueryUser.Name.Split(&quot; &quot;)[0]
+					$Username = $Firstname + &quot; &quot; + $Surname
+				}
+			}
+			catch
+			{
+				Write-Output &quot;No such user found in Active Directory&quot;
+			}
+		}
+		
+		End
+		{
+			return $ManagedUserList
+		}
+	}
+	
+	function Get-UserComputers
+	{
+		Param
+		(
+			# -Identity, usually samaccountname etc.
+			[Parameter(Mandatory = $true,
+					   ValueFromPipelineByPropertyName = $true,
+					   Position = 0)]
+			$identity
+		)
+		
+		Begin
+		{
+			try
+			{
+				$ADUserData = Get-ADUser -Identity $identity -Properties managedobjects
+			}
+			catch
+			{
+				$text = Write-Output &quot;Error retrieving data from AD&quot;
+				#break
+			}
+			
+		}
+		Process
+		{
+			
+			$ManagedObjectsList = @()
+			$ADUserData.managedobjects | foreach -process {
+				$objManagedObject = New-Object System.Object
+				
+				#Reset Error Variable
+				$Error = &quot;&quot;
+				
+				#Clean the output
+				$_ = (($_ -replace ('^CN\=', '')) -replace (',.*', ''))
+				
+				#Add the computers name to a list.
+				if ($_ -like &quot;*&quot; -and $($_.length) -lt 16)
+				{
+					#Check if PC is available in AD
+					try
+					{
+						$PC = Get-ADComputer -Identity $_ -Properties Operatingsystem, Enabled, IPV6Address, IPV4Address, LockedOut, LastBadPasswordAttempt | Select-Object -Property Operatingsystem, Enabled, IPV6Address, IPV4Address, LockedOut, LastBadPasswordAttempt
+					}
+					catch
+					{
+						Write-Output &quot;No such object found in Active Directory.&quot;
+						Write-Output &quot;&quot;
+						Write-Output &quot;Errorstack: $_&quot;
+						Write-Output &quot;&quot;
+						Write-Output &quot;&quot;
+						$Status = &quot;Error&quot;
+					}
+					if ($Status -ne &quot;Error&quot;)
+					{
+						# Get information about the user being queried about
+						try
+						{
+							$User = Get-ADUser -Identity &quot;$($txtUserName.Text)&quot; -Properties Name, PasswordExpired, LockedOut, Enabled, LastBadPasswordAttempt | Select-Object -Property Name, PasswordExpired, LockedOut, Enabled, LastBadPasswordAttempt
+						}
+						catch
+						{
+							Write-Output &quot;No such user found in Active Directory&quot;
+						}
+						
+						$objManagedObject | Add-Member -Type NoteProperty -Name Computername -Value &quot;$_ `n&quot;
+						
+						if ((Test-Connection -Count 1 -ComputerName $_ -Quiet))
+						{
+							$IP = Test-Connection -Count 1 -ComputerName $_
+							try
+							{
+								Function Get-LastLogon
+								{
+&lt;#
+
+.SYNOPSIS
+	This function will list the last user logged on or logged in.
+
+.DESCRIPTION
+	This function will list the last user logged on or logged in.  It will detect if the user is currently logged on
+	via WMI or the Registry, depending on what version of Windows is running on the target.  There is some &quot;guess&quot; work
+	to determine what Domain the user truly belongs to if run against Vista NON SP1 and below, since the function
+	is using the profile name initially to detect the user name.  It then compares the profile name and the Security
+	Entries (ACE-SDDL) to see if they are equal to determine Domain and if the profile is loaded via the Registry.
+
+.PARAMETER ComputerName
+	A single Computer or an array of computer names.  The default is localhost ($env:COMPUTERNAME).
+
+.PARAMETER FilterSID
+	Filters a single SID from the results.  For use if there is a service account commonly used.
+	
+.PARAMETER WQLFilter
+	Default WQLFilter defined for the Win32_UserProfile query, it is best to leave this alone, unless you know what
+	you are doing.
+	Default Value = &quot;NOT SID = 'S-1-5-18' AND NOT SID = 'S-1-5-19' AND NOT SID = 'S-1-5-20'&quot;
+	
+.EXAMPLE
+	$Servers = Get-Content &quot;C:\ServerList.txt&quot;
+	Get-LastLogon -ComputerName $Servers
+
+	This example will return the last logon information from all the servers in the C:\ServerList.txt file.
+
+	Computer          : SVR01
+	User              : WILHITE\BRIAN
+	SID               : S-1-5-21-012345678-0123456789-012345678-012345
+	Time              : 9/20/2012 1:07:58 PM
+	CurrentlyLoggedOn : False
+
+	Computer          : SVR02
+	User              : WILIHTE\BRIAN
+	SID               : S-1-5-21-012345678-0123456789-012345678-012345
+	Time              : 9/20/2012 12:46:48 PM
+	CurrentlyLoggedOn : True
+	
+.EXAMPLE
+	Get-LastLogon -ComputerName svr01, svr02 -FilterSID S-1-5-21-012345678-0123456789-012345678-012345
+
+	This example will return the last logon information from all the servers in the C:\ServerList.txt file.
+
+	Computer          : SVR01
+	User              : WILHITE\ADMIN
+	SID               : S-1-5-21-012345678-0123456789-012345678-543210
+	Time              : 9/20/2012 1:07:58 PM
+	CurrentlyLoggedOn : False
+
+	Computer          : SVR02
+	User              : WILIHTE\ADMIN
+	SID               : S-1-5-21-012345678-0123456789-012345678-543210
+	Time              : 9/20/2012 12:46:48 PM
+	CurrentlyLoggedOn : True
+
+.LINK
+	http://msdn.microsoft.com/en-us/library/windows/desktop/ee886409(v=vs.85).aspx
+	http://msdn.microsoft.com/en-us/library/system.security.principal.securityidentifier.aspx
+
+.NOTES
+	Author:	 Brian C. Wilhite
+	Email:	 bwilhite1@carolina.rr.com
+	Date: 	 &quot;09/20/2012&quot;
+	Updates: Added FilterSID Parameter
+	         Cleaned Up Code, defined fewer variables when creating PSObjects
+	ToDo:    Clean up the UserSID Translation, to continue even if the SID is local
+#&gt;
+									
+									[CmdletBinding()]
+									param (
+										[Parameter(Position = 0, ValueFromPipeline = $true)]
+										[Alias(&quot;CN&quot;, &quot;Computer&quot;)]
+										[String[]]$ComputerName = &quot;$env:COMPUTERNAME&quot;,
+										[String]$FilterSID,
+										[String]$WQLFilter = &quot;NOT SID = 'S-1-5-18' AND NOT SID = 'S-1-5-19' AND NOT SID = 'S-1-5-20'&quot;
+									)
+									
+									Begin
+									{
+										#Adjusting ErrorActionPreference to stop on all errors
+										$TempErrAct = $ErrorActionPreference
+										$ErrorActionPreference = &quot;Stop&quot;
+										#Exclude Local System, Local Service &amp; Network Service
+									}#End Begin Script Block
+									
+									Process
+									{
+										Foreach ($Computer in $ComputerName)
+										{
+											$Computer = $Computer.ToUpper().Trim()
+											Try
+											{
+												#Querying Windows version to determine how to proceed.
+												$Win32OS = Get-WmiObject -Class Win32_OperatingSystem -ComputerName $Computer
+												$Build = $Win32OS.BuildNumber
+												
+												#Win32_UserProfile exist on Windows Vista and above
+												If ($Build -ge 6001)
+												{
+													If ($FilterSID)
+													{
+														$WQLFilter = $WQLFilter + &quot; AND NOT SID = `'$FilterSID`'&quot;
+													}#End If ($FilterSID)
+													$Win32User = Get-WmiObject -Class Win32_UserProfile -Filter $WQLFilter -ComputerName $Computer
+													$LastUser = $Win32User | Sort-Object -Property LastUseTime -Descending | Select-Object -First 1
+													$Loaded = $LastUser.Loaded
+													$Script:Time = ([WMI]'').ConvertToDateTime($LastUser.LastUseTime)
+													
+													#Convert SID to Account for friendly display
+													$Script:UserSID = New-Object System.Security.Principal.SecurityIdentifier($LastUser.SID)
+													$User = $Script:UserSID.Translate([System.Security.Principal.NTAccount])
+												}#End If ($Build -ge 6001)
+												
+												If ($Build -le 6000)
+												{
+													If ($Build -eq 2195)
+													{
+														$SysDrv = $Win32OS.SystemDirectory.ToCharArray()[0] + &quot;:&quot;
+													}#End If ($Build -eq 2195)
+													Else
+													{
+														$SysDrv = $Win32OS.SystemDrive
+													}#End Else
+													$SysDrv = $SysDrv.Replace(&quot;:&quot;, &quot;$&quot;)
+													$Script:ProfLoc = &quot;\\$Computer\$SysDrv\Documents and Settings&quot;
+													$Profiles = Get-ChildItem -Path $Script:ProfLoc
+													$Script:NTUserDatLog = $Profiles | ForEach-Object -Process { $_.GetFiles(&quot;ntuser.dat.LOG&quot;) }
+													
+													#Function to grab last profile data, used for allowing -FilterSID to function properly.
+													function GetLastProfData ($InstanceNumber)
+													{
+														$Script:LastProf = ($Script:NTUserDatLog | Sort-Object -Property LastWriteTime -Descending)[$InstanceNumber]
+														$Script:UserName = $Script:LastProf.DirectoryName.Replace(&quot;$Script:ProfLoc&quot;, &quot;&quot;).Trim(&quot;\&quot;).ToUpper()
+														$Script:Time = $Script:LastProf.LastAccessTime
+														
+														#Getting the SID of the user from the file ACE to compare
+														$Script:Sddl = $Script:LastProf.GetAccessControl().Sddl
+														$Script:Sddl = $Script:Sddl.split(&quot;(&quot;) | Select-String -Pattern &quot;[0-9]\)$&quot; | Select-Object -First 1
+														#Formatting SID, assuming the 6th entry will be the users SID.
+														$Script:Sddl = $Script:Sddl.ToString().Split(&quot;;&quot;)[5].Trim(&quot;)&quot;)
+														
+														#Convert Account to SID to detect if profile is loaded via the remote registry
+														$Script:TranSID = New-Object System.Security.Principal.NTAccount($Script:UserName)
+														$Script:UserSID = $Script:TranSID.Translate([System.Security.Principal.SecurityIdentifier])
+													}#End function GetLastProfData
+													GetLastProfData -InstanceNumber 0
+													
+													#If the FilterSID equals the UserSID, rerun GetLastProfData and select the next instance
+													If ($Script:UserSID -eq $FilterSID)
+													{
+														GetLastProfData -InstanceNumber 1
+													}#End If ($Script:UserSID -eq $FilterSID)
+													
+													#If the detected SID via Sddl matches the UserSID, then connect to the registry to detect currently loggedon.
+													If ($Script:Sddl -eq $Script:UserSID)
+													{
+														$Reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey([Microsoft.Win32.RegistryHive]&quot;Users&quot;, $Computer)
+														$Loaded = $Reg.GetSubKeyNames() -contains $Script:UserSID.Value
+														#Convert SID to Account for friendly display
+														$Script:UserSID = New-Object System.Security.Principal.SecurityIdentifier($Script:UserSID)
+														$User = $Script:UserSID.Translate([System.Security.Principal.NTAccount])
+													}#End If ($Script:Sddl -eq $Script:UserSID)
+													Else
+													{
+														$User = $Script:UserName
+														$Loaded = &quot;Unknown&quot;
+													}#End Else
+													
+												}#End If ($Build -le 6000)
+												
+												#Creating Custom PSObject For Output
+												New-Object -TypeName PSObject -Property @{
+													Computer = $Computer
+													User = $User
+													SID = $Script:UserSID
+													Time = $Script:Time
+													CurrentlyLoggedOn = $Loaded
+												} | Select-Object Computer, User, SID, Time, CurrentlyLoggedOn
+												
+											}#End Try
+											
+											Catch
+											{
+												If ($_.Exception.Message -Like &quot;*Some or all identity references could not be translated*&quot;)
+												{
+													Write-Warning &quot;Unable to Translate $Script:UserSID, try filtering the SID `nby using the -FilterSID parameter.&quot;
+													Write-Warning &quot;It may be that $Script:UserSID is local to $Computer, Unable to translate remote SID&quot;
+												}
+												Else
+												{
+													Write-Warning $_
+												}
+											}#End Catch
+											
+										}#End Foreach ($Computer in $ComputerName)
+										
+									}#End Process
+									
+									End
+									{
+										#Resetting ErrorActionPref
+										$ErrorActionPreference = $TempErrAct
+									}#End End
+									
+								}# End Function Get-LastLogon
+								# Filter out built in system acccounts SID when compiling code with system account credentials
+								$Lastlogon = Get-LastLogon -ComputerName $_ -FilterSID S-1-5-21-1547161642-1844823847-682003330-143460
+								$Lastlogondate = $LastLogon.Time.Year.ToString() + &quot;-&quot; + $LastLogon.Time.Month.ToString() + &quot;-&quot; + $LastLogon.Time.Day.ToString() + &quot; &quot; + $LastLogon.Time.Hour.ToString() + &quot;:&quot; + $LastLogon.Time.Minute.ToString()
+								$DaysSinceLastLogon = New-TimeSpan -Start $Lastlogon.time -End (Get-Date) | Select-Object -ExpandProperty Days
+							}
+							catch
+							{
+								$Lastlogondate = $null
+							}
+							
+							try
+							{
+								$PCModel = Get-WmiObject Win32_ComputerSystem -Property Model -ComputerName $_ | Select-Object -ExpandProperty Model
+							}
+							catch
+							{
+								$PCModel = $Null
+							}
+							
+							$objManagedObject | Add-Member -Type NoteProperty -Name Connection -Value &quot;Connected `t `n&quot;
+							
+							if ($Lastlogon -eq $null)
+							{
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'User Last Logon Date' -Value &quot;Access Denied `t `n&quot;
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'Last Logged On User' -Value &quot;Access Denied `t `n&quot;
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'Currently Logged On' -Value &quot;Access Denied `t `n&quot;
+							}
+							else
+							{
+								try
+								{
+									$UserName = $Null
+									$UserName = $Lastlogon.User.Value.Split(&quot;\&quot;)
+									$Fullname = Get-ADUser -Identity $Username[1] -Properties Name | Select-Object -ExpandProperty Name
+									$Firstname = $Fullname.Split(&quot; &quot;)[1]
+									$Surname = $Fullname.Split(&quot; &quot;)[0]
+									$NewUsername = $Firstname + &quot; &quot; + $Surname
+									$Lastlogondate = $LastLogon.Time.Year.ToString() + &quot;-&quot; + $LastLogon.Time.Month.ToString() + &quot;-&quot; + $LastLogon.Time.Day.ToString() + &quot; &quot; + $LastLogon.Time.Hour.ToString() + &quot;:&quot; + $LastLogon.Time.Minute.ToString()
+								}
+								catch
+								{
+									$NewUsername = $null
+									$Username = $Null
+									$Lastlogondate = $null
+								}
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'User Last Logged On' -Value &quot;Username: $($Username[1]) `t Real name: $NewUsername `n&quot;
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'User Last Logon Date' -Value &quot;$LastLogonDate `t `n&quot;
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'User Currently Logged On' -Value &quot;$($Lastlogon.CurrentlyLoggedOn) `t `n&quot;
+
+								
+								if ($Lastlogon.CurrentlyLoggedOn -eq $true)
+								{
+									$Lastlogondate = $LastLogon.Time.Year.ToString() + &quot;-&quot; + $LastLogon.Time.Month.ToString() + &quot;-&quot; + $LastLogon.Time.Day.ToString() + &quot; &quot; + $LastLogon.Time.Hour.ToString() + &quot;:&quot; + $LastLogon.Time.Minute.ToString()
+									$DaysSinceLastLogon = New-TimeSpan -Start $Lastlogon.time -End (Get-Date) | Select-Object -ExpandProperty Days
+									$HoursSinceLastLogon = New-TimeSpan -Start $Lastlogon.time -End (Get-Date) | Select-Object -ExpandProperty Hours
+									$MinutesSinceLastLogon = New-TimeSpan -Start $Lastlogon.time -End (Get-Date) | Select-Object -ExpandProperty Minutes
+									$Logonduration = &quot;$NewUsername has been logged on for $DaysSinceLastLogon days, $HoursSinceLastLogon hours and $MinutesSinceLastLogon minutes&quot;
+									$objManagedObject | Add-Member -Type NoteProperty -Name 'User Logon Duration' -Value &quot;$Logonduration `t `n&quot;
+									
+								}
+								else
+								{
+									$Logonduration = $null
+									$objManagedObject | Add-Member -Type NoteProperty -Name 'User Currently Logged Duration' -Value &quot;$Logonduration `t `n&quot;
+								}
+							}
+							
+							if ($User.LastBadPasswordAttempt -ne $null)
+							{
+								$LastBadPassword = $User.LastBadPasswordAttempt.Year.ToString() + &quot;-&quot; + $User.LastBadPasswordAttempt.Month.ToString() + &quot;-&quot; + $User.LastBadpasswordattempt.Day.ToString() + &quot; &quot; + $User.LastBadPasswordAttempt.Hour.ToString() + &quot;:&quot; + $User.LastBadPasswordAttempt.Minute.ToString()
+								$DaysSinceLastBadPassword = New-TimeSpan -Start $User.lastbadpasswordattempt -End (Get-Date) | Select-Object -ExpandProperty Days
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'User Last Bad Password Attempt' -Value &quot;$Lastbadpassword `t($DaysSinceLastBadPassword days ago) `t `n&quot;
+							}
+							else
+							{
+								$LastBadPassword = &quot;No last bad password entry was found&quot;
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'User Last Bad Password Attempt' -Value &quot;$Lastbadpassword `t `n&quot;
+								
+							}
+							
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'User Password Expired' -Value &quot;$($User.PasswordExpired) `t `n&quot;
+							
+							if ($Lastlogon.User.value -ne $null)
+							{
+								$UserName = $Lastlogon.User.Value.Split(&quot;\&quot;)
+								$PasswordExpires = Get-ADUser -Identity $Username[1] -Properties PasswordLastSet, PasswordNeverExpires, PasswordExpired | Select-Object -Property PasswordLastSet, PasswordNeverExpires, PasswordExpired
+								if ($PasswordExpires.PasswordNeverExpires -eq $false)
+								{
+									$DaysLapsed = New-Timespan -Start $PasswordExpires.PasswordLastSet -End (Get-Date)
+									$Days = $DaysLapsed.Days
+									$TotalDaysLapsed = 90 - $Days
+									$PasswordExpirationDate = (Get-Date).AddDays($TotalDaysLapsed).ToShortDateString()
+									$objManagedObject | Add-Member -Type NoteProperty -Name 'User Password Expires At' -Value &quot;$PasswordExpirationDate `t (expires in $TotalDaysLapsed days) `t `n&quot;
+								}
+								else
+								{
+									$PasswordExpirationDate = $Null
+									$objManagedObject | Add-Member -Type NoteProperty -Name 'User Password Expires At' -Value &quot;$PasswordExpirationDate `t `n&quot;
+								}
+							}
+							else
+							{
+								$PasswordExpirationDate = $Null
+								$objManagedObject | Add-Member -Type NoteProperty -Name 'User Password Expires At' -Value &quot;$PasswordExpirationDate `t `n&quot;
+							}
+							
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'User Locked Out' -Value &quot;$($User.LockedOut) `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'User Enabled' -Value &quot;$($User.Enabled) `t `n `n&quot;
+							
+							# Get IP from WMI
+							try
+							{
+								$IPV4 = $null
+								$IPV6 = $null
+								$IPAddresses = Get-WmiObject -class Win32_NetworkAdapterConfiguration -ComputerName $_ | Where-Object { $_.DHCPEnabled -eq $True -and $_.DNSDomain -eq &quot;btworld.net&quot; }
+								$IPS = $IPAddresses | Select-Object -ExpandProperty IPAddress
+								$IPV4 = $IPS[0]
+								$IPV6 = $IPS[1]
+							}
+							catch
+							{
+								$IPV4 = $null
+								$IPV6 = $null
+							}
+							
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'IPV6 Address From WMI' -Value &quot;$IPV6 `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'IPV6 Address From ICMP' -Value &quot;$($IP.IPV6Address.IPAddressToString) `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'IPV6 Address From AD' -Value &quot;$($PC.IPv6Address) `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'IPV4 Address From WMI' -Value &quot;$IPV4 `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'IPV4 Address From ICMP' -Value &quot;$($IP.IPV4Address.IPAddressToString) `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'IPV4 Address From AD' -Value &quot;$($PC.IPv4Address) `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'PC Model' -Value &quot;$PCModel `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'PC Operating System' -Value &quot;$($PC.Operatingsystem) `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'PC Locked Out' -Value &quot;$($PC.LockedOut) `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'PC Enabled' -Value &quot;$($PC.Enabled) `t `n&quot;
+							$objManagedObject | Add-Member -Type NoteProperty -Name 'PC Last Bad Password Attempt' -Value &quot;$($PC.LastBadPasswordAttempt) `t `n&quot;
+						}
+						else
+						{
+							$objManagedObject | Add-Member -Type NoteProperty -Name Connection -Value &quot;Unreachable `n `n `n `n&quot;
+						}
+						$ManagedObjectsList += $objManagedObject
+					}
+					else
+					{
+					}
+				}
+			}
+		}
+		End
+		{
+			return $ManagedObjectsList
+		}
+	}
+	#save the current cursor
+	$cursor = $formManagedComputerQuery.Cursor
+	#change to wait cursor
+	$formManagedComputerQuery.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+	
+	# &quot;Gathering system information for {0}&quot; -f $txtComputerName.Text.toUpper() Format-Table -Wrap -HideTableHeaders -AutoSize
+	$stringBuilder = New-Object System.Text.StringBuilder
+	$stringBuilder.AppendLine($text)
+	try
+	{
+		# Get the users real name and reverse the order so it shows Firstname and then Surname
+		$Username = Get-ADUser -Identity &quot;$($txtUserName.Text)&quot; -Properties Name | Select-Object -ExpandProperty Name
+		$Firstname = $Username.Split(&quot; &quot;)[1]
+		$Surname = $Username.Split(&quot; &quot;)[0]
+		$Username = $Firstname + &quot; &quot; + $Surname
+	}
+	catch
+	{
+		Write-Output &quot;Could not find the users name&quot;
+	}
+	
+	if ($UserName -ne $null)
+	{
+		$text = &quot;Computer(s) managed by {0} ({1}) {2}&quot; -f $txtUserName.Text.toUpper(), $Username, (Get-Date -Format g)
+	}
+	else
+	{
+		$text = &quot;Computer(s) managed by {0} {1}&quot; -f $txtUserName.Text.toUpper(), (Get-Date -Format g)
+	}
+	
+	$stringBuilder.AppendLine($text)
+	$stringBuilder.AppendLine(&quot;&quot;)
+	$stringBuilder.AppendLine(&quot;User information is based on the user currently logged in or on the user who was the last one to logon to the computer.&quot;)
+	
+	if ($chkOS.Checked)
+	{
+		#$stringBuilder.AppendLine(&quot;Computername&quot;)
+		#$stringBuilder.Append(&quot;*&quot; * 50)
+		$text = &quot;&quot;
+		$text = (Get-UserComputers -identity &quot;$($txtUserName.Text)&quot;) | Format-List | Out-String -Width 250
+		$stringBuilder.AppendLine($text)
+	}
+	
+	#write data to the pipeline
+	$textboxResults.Text = $stringBuilder.ToString()
+	
+	#restore the cursor
+	$formManagedComputerQuery.Cursor = $cursor
+	
+	$btnQuery.Text = &quot;Query&quot;
+	$btnQuery.Enabled = $true
+}
+
+
+
+$lblPrompt_Click = {
+	#TODO: Place custom script here
+	
+}
+
+$labelPrerequisitesRemoteS_Click = {
+	#TODO: Place custom script here
+}
+
+$label264bitOperatingSyste_Click = {
+	#TODO: Place custom script here
+	
+}
+
+$textboxResults_TextChanged = {
+	#TODO: Place custom script here
+	
+}
+
+$handler_btnPrerequisiteCheck_Click = {
+	#TODO: Place custom script here
+	
+	$buttonPrerequisiteCheck.Text = &quot;Processing...&quot;
+	$buttonPrerequisiteCheck.Enabled = $false
+	$stringBuilder2 = New-Object System.Text.StringBuilder
+	
+	$AvailableModules = Get-Module -ListAvailable | Where-Object { $_.name -like &quot;ActiveDirectory&quot; } | Select-Object -ExpandProperty Name
+	
+	$PSVersion = $PSVersionTable.PSVersion.major.tostring()
+	$LoadedModule = Get-Module ActiveDirectory | Select-Object -ExpandProperty Description
+	$OS = Get-WmiObject Win32_OperatingSystem | Select-Object -Property Caption, OSArchitecture
+	$RSATHotfix = Get-WmiObject -Class &quot;win32_quickfixengineering&quot; | Select-Object -Property &quot;HotfixID&quot; | Where-Object { $_.hotfixid -eq &quot;KB958830&quot; }
+	if ($RSATHotfix.hotfixid -eq &quot;KB958830&quot; -or $PSVersion -gt 2)
+	{
+		$RSAT = &quot;Pass&quot;
+	}
+	else
+	{
+		$RSAT = &quot;Fail&quot;
+	}
+	
+	if ($OS.Caption -like &quot;Microsoft Windows Server 2003*&quot; -or $OS.Caption -like &quot;Microsoft Windows Server 2008*&quot; -or $OS.Caption -like &quot;Microsoft Windows Server 2012*&quot; -or $OS.Caption -like &quot;Microsoft Windows 7*&quot; -or $OS.Caption -like &quot;Microsoft Windows 8*&quot; -and $OS.OSArchitecture -eq &quot;64-bit&quot;)
+	{
+		$OSStatus = &quot;Pass&quot;
+	}
+	else
+	{
+		$OSStatus = &quot;Fail&quot;
+	}
+	if ($LoadedModule -eq &quot;Active Directory Module&quot;)
+	{
+		$ModuleLoaded = &quot;Pass&quot;
+	}
+	elseif ($AvailableModules -eq &quot;ActiveDirectory&quot; -and $PSVersion -gt 2)
+	{
+		$ModuleLoaded = &quot;Pass&quot;
+	}
+	else
+	{
+		$ModuleLoaded = &quot;Fail&quot;
+	}
+	
+	if ($PSVersion -like 1)
+	{
+		$PSVersion = &quot;Fail&quot;
+	}
+	else
+	{
+		$PSVersion = &quot;Pass&quot;
+	}
+	
+	$stringBuilder2.AppendLine(&quot;Supported Powershell Version: $PSVersion&quot;)
+	$stringBuilder2.AppendLine(&quot;Supported Operating System: $OSStatus&quot;)
+	$stringBuilder2.AppendLine(&quot;Remote Server Administration Tools Installed: $RSAT&quot;)
+	$stringBuilder2.AppendLine(&quot;Active Directory Module Loaded: $Moduleloaded&quot;)
+	$stringBuilder2.AppendLine(&quot;&quot;)
+	$textbox1.Text = $stringBuilder2.ToString()
+	
+	if ($RSAT -eq &quot;Pass&quot; -and $ModuleLoaded -eq &quot;Fail&quot; -and $OS.caption -like &quot;Microsoft Windows 7*&quot; -or $OS.Caption -like &quot;Microsoft Windows 8*&quot;)
+	{
+		$buttonInstallPrerequisites.Visible = $False
+		$buttonEnableADModule.Visible = $True
+	}
+	elseif ($RSAT -eq &quot;Fail&quot; -and $ModuleLoaded -eq &quot;Fail&quot; -and $OS.caption -like &quot;Microsoft Windows 7*&quot; -or $OS.Caption -like &quot;Microsoft Windows 8*&quot;)
+	{
+		$buttonEnableADModule.Visible = $False
+		$buttonInstallPrerequisites.Visible = $True
+	}
+	$buttonPrerequisiteCheck.Text = &quot;Prerequisite Check&quot;
+	$buttonPrerequisiteCheck.Enabled = $True
+}
+
+$txtUserName_TextChanged = {
+	#TODO: Place custom script here
+	
+}
+
+$buttonInstallPrerequisites_Click = {
+	#TODO: Place custom script here
+	
+}
+
+$handler_buttonInstallPrerequisites_Click = {
+	#TODO: Place custom script here
+	&lt;#
+
+Date: 13-Feb-2012 ; 19:51
+Author: Aman Dhally
+Email: amandhally@gmail.com
+www: www.amandhally.net/blog
+blog: http://newdelhipowershellusergroup.blogspot.com/
+
+More Info about this script : http://newdelhipowershellusergroup.blogspot.in/2012/02/automate-server-administration-tools.html 
+This is only to Enable &quot;Active Directory Powershell Module&quot;
+
+Version : 1
+
+				/^(o.o)^\ 
+				
+Remote Administration server tool : http://www.microsoft.com/download/en/details.aspx?id=7887 | for x86 Select Windows6.1-KB958830-x86-RefreshPkg.msu 				
+
+#&gt;
+	
+	## You can download Hostfix from the above link
+	
+	$OS = Get-WmiObject Win32_OperatingSystem | Select-Object -Property Caption, OSArchitecture
+	$RSATHotfixWin7 = Get-WmiObject -Class &quot;win32_quickfixengineering&quot; | Select-Object -Property &quot;HotfixID&quot; | Where-Object { $_.hotfixid -eq &quot;KB958830&quot; }
+	$RSATHotfixWin81 = Get-WmiObject -Class &quot;win32_quickfixengineering&quot; | Select-Object -Property &quot;HotfixID&quot; | Where-Object { $_.hotfixid -eq &quot;KB2693643&quot; }
+	$RSATHotfixWin8 = Get-WmiObject -Class &quot;win32_quickfixengineering&quot; | Select-Object -Property &quot;HotfixID&quot; | Where-Object { $_.hotfixid -eq &quot;KB2693643&quot; }
+	
+	if ($OS.caption -like &quot;Microsoft Windows 7&quot; -and $RSATHotfixWin7 -eq $null -and $OS.OSArchitecture -like &quot;64-bit&quot;)
+	{
+		$Hotfix = &quot;Windows6.1-KB958830-x64-RefreshPkg.msu&quot;
+		$HotfixSource = &quot;\\semjgroup2\manager$\Program_Drivers_SP\Program\Microsoft\AD Admin tools\Windows 7 admin tools\$hotfix&quot;
+		
+		$HotfixDestination = &quot;C:\Windows\Temp&quot;
+		$Testpath = Test-path -path &quot;\\semjgroup2\manager$\Program_Drivers_SP\Program\Microsoft\AD Admin tools\Windows 7 admin tools\$hotfix&quot;
+		$Tool = Test-Path &quot;C:\Windows\Temp\Tools&quot;
+		if ($Tool -eq $false)
+		{
+			Write-Output &quot;Download folder not found. Creating folder at C:\Windows\Temp\Tools\&quot;
+			New-Item -Name &quot;Tools&quot; -Path $HotfixDestination -ItemType Directory
+		}
+		else
+		{
+			Write-Output &quot;Download directory found. Copying RSAT from network drive, please wait...&quot;
+		}
+		
+		
+		if ($Testpath -eq $True)
+		{
+			Copy-Item $HotfixSource -Destination &quot;$HotfixDestination\Tools&quot;
+		}
+		$TransferStatus = Test-Path &quot;$HotfixDestination\Tools\$Hotfix&quot;
+		if ($TransferStatus -eq $True)
+		{
+			Write-Output &quot;File $Hotfix has been copied to $HotfixDestination\Tools\ Sucessfully. Initiating installation.&quot;
+		}
+		else
+		{
+			Write-Output &quot;Failed to transfer file to $Hotfixdestination\Tools\. Please install the application manually&quot;
+		}
+	}
+	elseif ($OS.caption -like &quot;Microsoft Windows 8.1*&quot; -and $RSATHotfixWin81 -eq $null -and $OS.OSArchitecture -like &quot;64-bit&quot;)
+	{
+		$Hotfix = &quot;Windows8.1-KB2693643-x64.msu&quot;
+		$HotfixSource = &quot;\\semjgroup2\manager$\Program_Drivers_SP\Program\Microsoft\AD Admin tools\Windows81 admin tools\$Hotfix&quot;
+		
+		$HotfixDestination = &quot;C:\Windows\Temp&quot;
+		$Testpath = Test-path -path &quot;\\semjgroup2\manager$\Program_Drivers_SP\Program\Microsoft\AD Admin tools\Windows 7 admin tools\$hotfix&quot;
+		$Tool = Test-Path &quot;C:\Windows\Temp\Tools&quot;
+		if ($Tool -eq $false)
+		{
+			Write-Output &quot;Download folder not found. Creating folder at C:\Windows\Temp\Tools\&quot;
+			New-Item -Name &quot;Tools&quot; -Path $HotfixDestination -ItemType Directory
+		}
+		else
+		{
+			Write-Output &quot;Download directory found. Copying RSAT from network drive, please wait...&quot;
+		}
+		
+		
+		if ($Testpath -eq $True)
+		{
+			Copy-Item $HotfixSource -Destination &quot;$HotfixDestination\Tools&quot;
+		}
+		$TransferStatus = Test-Path &quot;$HotfixDestination\Tools\$Hotfix&quot;
+		if ($TransferStatus -eq $True)
+		{
+			Write-Output &quot;File $Hotfix has been copied to $HotfixDestination\Tools\ Sucessfully. Initiating installation.&quot;
+		}
+		else
+		{
+			Write-Output &quot;Failed to transfer file to $Hotfixdestination\Tools\. Please install the application manually&quot;
+		}
+	}
+	elseif ($OS.caption -like &quot;Microsoft Windows 8*&quot; -and $RSATHotfixWin8 -eq $null -and $OS.Architecture -like &quot;64-bit&quot;)
+	{
+		$Hotfix = &quot;Windows6.2-KB2693643-x64.msu&quot;
+		$HotfixSource = &quot;\\semjgroup2\manager$\Program_Drivers_SP\Program\Microsoft\AD Admin tools\Windows 8 admin tools\$hotfix&quot;
+		
+		$HotfixDestination = &quot;C:\Windows\Temp&quot;
+		$Testpath = Test-path -path &quot;\\semjgroup2\manager$\Program_Drivers_SP\Program\Microsoft\AD Admin tools\Windows 7 admin tools\$hotfix&quot;
+		$Tool = Test-Path &quot;C:\Windows\Temp\Tools&quot;
+		if ($Tool -eq $false)
+		{
+			Write-Output &quot;Download folder not found. Creating folder at C:\Windows\Temp\Tools\&quot;
+			New-Item -Name &quot;Tools&quot; -Path $HotfixDestination -ItemType Directory
+		}
+		else
+		{
+			Write-Output &quot;Download directory found. Copying RSAT from network drive, please wait...&quot;
+		}
+		
+		
+		if ($Testpath -eq $True)
+		{
+			Copy-Item $HotfixSource -Destination &quot;$HotfixDestination\Tools&quot;
+		}
+		$TransferStatus = Test-Path &quot;$HotfixDestination\Tools\$Hotfix&quot;
+		if ($TransferStatus -eq $True)
+		{
+			Write-Output &quot;File $Hotfix has been copied to $HotfixDestination\Tools\ Sucessfully. Initiating installation.&quot;
+		}
+		else
+		{
+			Write-Output &quot;Failed to transfer file to $Hotfixdestination\Tools\. Please install the application manually&quot;
+		}
+	}
+	
+	Write-Output &quot;Installing Remote Server Administration Tools......Accept the license agreement and begin installation. Script will continue when installation is completed.&quot;
+	&amp; wusa.exe &quot;$HotfixDestination\Tools\$Hotfix&quot;
+	Start-Sleep -Seconds 15
+	$X = 0
+	do
+	{
+		try
+		{
+			$Installation = Get-Process &quot;wusa&quot;
+			if ($Installation -ne $Null)
+			{
+				Write-Output &quot;Still installing update please wait...&quot;
+				Start-Sleep -Seconds 15
+				$X = 0
+			}
+			elseif ($Installation -eq $Null)
+			{
+				$X = 1
+			}
+		}
+		catch
+		{
+			$Installation = $Null
+		}
+	}
+	until ($X -eq 1)
+	
+	
+	Write-Output &quot;HotFix Installed. Attempting to enable the Active Directory Module for Windows Powershell&quot;
+	&amp; dism.exe /Online /Enable-Feature /FeatureName:RemoteServerAdministrationTools  /FeatureName:RemoteServerAdministrationTools-Roles /FeatureName:RemoteServerAdministrationTools-Roles-AD  /FeatureName:RemoteServerAdministrationTools-Roles-AD-Powershell
+	
+	do
+	{
+		try
+		{
+			$Activation = Get-Process dism -ErrorAction -silentlycontinue
+			if ($Activation -ne $Null)
+			{
+				Write-Output &quot;Still activating Windows features please wait...&quot;
+				Start-Sleep -Seconds 15
+			}
+			else
+			{
+			}
+		}
+		catch
+		{
+			$Activation = $Null
+		}
+	}
+	until ($Activation -eq $Null)
+	
+	Write-Output &quot;Installation completed. Attempting to load the module now.&quot;
+	Import-Module ActiveDirectory
+	Start-Sleep -Seconds 10
+	$Module = Get-Module ActiveDirectory | Select-Object -ExpandProperty Description
+	if ($Module -eq &quot;Active Directory Module&quot;)
+	{
+		Write-Output &quot;Module was successfully installed and loaded&quot;
+	}
+	else
+	{
+		Write-Output &quot;Module was not installed successfully and has not been loaded&quot;
+	}
+}
+
+$buttonEnableADModule_Click = {
+	#TODO: Place custom script here
+}
+
+$handler_buttonEnableADModule_Click = {
+	#TODO: Place custom script here
+	&amp; dism.exe /Online /Enable-Feature /FeatureName:RemoteServerAdministrationTools  /FeatureName:RemoteServerAdministrationTools-Roles /FeatureName:RemoteServerAdministrationTools-Roles-AD  /FeatureName:RemoteServerAdministrationTools-Roles-AD-Powershell
+	
+	do
+	{
+		try
+		{
+			$Activation = Get-Process dism -ErrorAction -silentlycontinue
+			if ($Activation -ne $Null)
+			{
+				Write-Output &quot;Still activating Windows features please wait...&quot;
+				Start-Sleep -Seconds 15
+			}
+			else
+			{
+			}
+		}
+		catch
+		{
+			$Activation = $Null
+		}
+	}
+	until ($Activation -eq $Null)
+	
+	Write-Output &quot;Installation completed. Attempting to load the module now.&quot;
+	Start-Sleep -Seconds 5
+	Import-Module ActiveDirectory
+	Start-Sleep -Seconds 10
+	$Module = Get-Module ActiveDirectory | Select-Object -ExpandProperty Description
+	if ($Module -eq &quot;Active Directory Module&quot;)
+	{
+		Write-Output &quot;Module was successfully installed and loaded&quot;
+	}
+	else
+	{
+		Write-Output &quot;Module was not installed successfully and has not been loaded&quot;
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

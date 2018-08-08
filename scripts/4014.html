@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Kenneth C Mazie">
+    <title>ESX host NTP Settings - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ESX host NTP Settings</h1>
+<h3><a href="//scripts/4014.ps1">download</a> - <a href="//scripts/4012.md">parent</a></h3>
+<p>This script will synchronize the NTP settings across all ESX hosts in all clusters in a specified Virtual Center instance.</p>
+<pre><code class="language-posh">&lt;#======================================================================================
+         File Name : ESX-NTP.ps1
+   Original Author : Kenneth C. Mazie
+                   :
+       Description : This is a VMware PowerCLI script for synchronizing NTP settings across
+                   : all ESX hosts in a Virtual Center instance.  It grabs all ESX hosts and
+                   : cycles through them setting the same NTP settings on each.  It then
+                   : starts the service and sets it to start automatically.
+                   :
+                   : The individual commands were found on a blog post from Anders Mikkelson.
+                   : I simply combined them into a functioning script so credit goes to him.
+                   : See http://www.amikkelsen.com/?p=458 for the original posting.
+                   :
+                   : Tested on ESXi 5.1 and 5.0
+                   :
+                   : Be sure to edit all sections to suit your needs before executing.  
+                   :
+                   : As written the script will prompt for a Virtual Center instance to process
+                   : and a user/password to connect as.  It also prompts for the ESX host user ID.
+                   : Hard code these if the prompts become annoying.
+                   :
+             Notes : Requires VMware PowerShell PowerCLI extentions.
+                   :
+          Warnings : 
+                   :  
+                   :
+    Last Update by : Kenneth C. Mazie (kcmjr AT kcmjr.com to report issues)
+   Version History : v1.0 - 03-13-12 - Original
+    Change History : v1.1 - 03-13-12 - Corrected 2 typos 
+                   :
+=======================================================================================#&gt;
+
+clear-host
+$out = Get-PSSnapin | Where-Object {$_.Name -like &quot;vmware.vimautomation.core&quot;};if ($out -eq $null) {Add-PSSnapin vmware.vimautomation.core}
+
+$vSphere = read-host &quot;Process Which vSphere Instance?&quot;
+$vUser = read-host &quot;vSphere User ID?&quot;
+$vPass = &quot;&quot;
+$eUser = read-host &quot;ESX User ID?&quot;
+$ePass = &quot;password&quot;
+$NTPServers = (&quot;time.nist.gov&quot;,&quot;time-nw.nist.gov&quot;,&quot;us.pool.ntp.org&quot;)    #--[ Change these to whatever NTP servers you use ]--
+
+if ($vSphere -eq $null){break} 
+Disconnect-VIServer -confirm:$false
+Connect-VIServer -Server $vSphere -User $vUser #-Password $vPass
+
+$ESXhosts = get-vmhost
+
+foreach ($ESX in $ESXHosts)  
+  {
+Write-Host &quot;Target = $ESX&quot;
+
+Connect-VIServer -Server $ESX -User $eUser #-Password $ePass
+  
+$NTPList = Get-VMHostNtpServer -VMHost $ESX
+Remove-VMHostNtpServer -VMHost $ESX -NtpServer $NTPList -Confirm:$false 
+
+Add-VMHostNtpServer -VMHost $ESX -NtpServer $NTPServers -Confirm:$false
+  
+Set-VMHostService -HostService (Get-VMHostservice -VMHost (Get-VMHost $ESXhost) | Where-Object {$_.key -eq &quot;ntpd&quot;}) -Policy &quot;Automatic&quot; 
+
+Get-VmhostFirewallException -VMHost $ESX -Name &quot;NTP Client&quot; | Set-VMHostFirewallException -enabled:$true  
+
+$ntpd = Get-VMHostService -VMHost $ESX | where {$_.Key -eq 'ntpd'}
+Restart-VMHostService $ntpd -Confirm:$false 
+
+Disconnect-viserver -server $ESX -confirm:$false
+  
+  }
+
+Write-Host &quot;--- COMPLETED ---&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

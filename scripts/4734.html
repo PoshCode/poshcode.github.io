@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>connection speed monitor - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>connection speed monitor</h1>
+<h3><a href="//scripts/4734.ps1">download</a></h3>
+<p>some improvements (select adapter at script startup, opacity customization and etc.)</p>
+<pre><code class="language-posh">#requires -version 2.0
+function Set-Opacity([Object]$obj) {
+  $ops.Checked = $false
+  $frmMain.Opacity = [Single]('.' + ($obj.Text)[0])
+  $obj.Checked = $true
+}
+
+function frmMain_Show {
+  [void][Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;)
+  [Windows.Forms.Application]::EnableVisualStyles()
+  
+  $ico = [Drawing.Icon]::ExtractAssociatedIcon(($PSHome + '\powershell.exe'))
+  $fnt = New-Object Drawing.Font(&quot;Tahoma&quot;, 10, [Drawing.FontStyle]::Bold)
+  $scr = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+  
+  $ins = (New-Object Diagnostics.PerformanceCounterCategory(&quot;Network Interface&quot;)).GetInstanceNames()
+  
+  $frmMain = New-Object Windows.Forms.Form
+  $lvCards = New-Object Windows.Forms.ListView
+  $lblLbl1 = New-Object Windows.Forms.Label
+  $lblLbl2 = New-Object Windows.Forms.Label
+  $lblLbl3 = New-Object Windows.Forms.Label
+  $mnuIcon = New-Object Windows.Forms.ContextMenuStrip
+  $mnuCard = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuOpac = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuOp50 = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuOp60 = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuOp70 = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuOp80 = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuOp90 = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuNull = New-Object Windows.Forms.ToolStripSeparator
+  $mnuExit = New-Object Windows.Forms.ToolStripMenuItem
+  $niPopup = New-Object Windows.Forms.NotifyIcon
+  $tmrTick = New-Object Windows.Forms.Timer
+  #
+  #common
+  #
+  $lblLbl2, $lblLbl3 | % {
+    $_.Font = $fnt
+    $_.Size = New-Object Drawing.Size(170, 19)
+  }
+  $mnuIcon.Items.AddRange(@($mnuCard, $mnuOpac, $mnuNull, $mnuExit))
+  #
+  #lvCards
+  #
+  $lvCards.Dock = [Windows.Forms.DockStyle]::Fill
+  $lvCards.FullRowSelect = $true
+  $ins | % {[void]$lvCards.Items.Add($_)}
+  $lvCards.MultiSelect = $false
+  $lvCards.Sorting = [Windows.Forms.SortOrder]::Ascending
+  $lvCards.TileSize = New-Object Drawing.Size(190, 17)
+  $lvCards.View = [Windows.Forms.View]::Tile
+  $lvCards.Add_Click({
+    for ($i = 0; $i -lt $lvCards.Items.Count; $i++) {
+      if ($lvCards.Items[$i].Selected) {
+        $card = $lvCards.Items[$i].Text
+      }
+    }
+    $rec = New-Object Diagnostics.PerformanceCounter(&quot;Network Interface&quot;, &quot;Bytes Received/Sec&quot;, $card)
+    $sen = New-Object Diagnostics.PerformanceCounter(&quot;Network Interface&quot;, &quot;Bytes Sent/Sec&quot;, $card)
+
+    $lblLbl1.Text = $(if ($card.Length -gt 25) {-join ($card[0..25] + &quot;...&quot;)} else {$card})
+    $lvCards.Visible = $false
+    $tmrTick.Start()
+  })
+  #
+  #lblLbl1
+  #
+  $lblLbl1.BackColor = [Drawing.Color]::FromArgb(113, 12, 230)
+  $lblLbl1.BorderStyle = [Windows.Forms.BorderStyle]::Fixed3D
+  $lblLbl1.Dock = [Windows.Forms.DockStyle]::Top
+  $lblLbl1.ForeColor = [Drawing.Color]::White
+  $lblLbl1.Height = 17
+  $lblLbl1.Text = &quot;Choose Adapter&quot;
+  #
+  #lblLbl2
+  #
+  $lblLbl2.ForeColor = [Drawing.Color]::Blue
+  $lblLbl2.Location = New-Object Drawing.Point(7, 17)
+  $lblLbl2.Text = &quot;Received: 0,00 Kb/s&quot;
+  #
+  #lblLbl3
+  #
+  $lblLbl3.ForeColor = [Drawing.Color]::Crimson
+  $lblLbl3.Location = New-Object Drawing.Point(7, 35)
+  $lblLbl3.Text = &quot;Sent: 0,00 Kb/s&quot;
+  #
+  #mnuCard
+  #
+  $mnuCard.Text = &quot;&amp;Choose Adapter&quot;
+  $mnuCard.Add_Click({
+    $tmrTick.Stop()
+    $lblLbl1.Text = &quot;Choose Adapter&quot;
+    $lvCards.Visible = $true
+  })
+  #
+  #mnuOpac
+  #
+  $mnuOpac.DropDownItems.AddRange(@($mnuOp50, $mnuOp60, $mnuOp70, $mnuOp80, $mnuOp90))
+  $mnuOpac.Text = &quot;&amp;Opacity&quot;
+  #
+  #mnuOp50
+  #
+  $mnuOp50.Text = &quot;50%&quot;
+  $mnuOp50.Add_Click({Set-Opacity $mnuOp50;$ops = $mnuOp50})
+  #
+  #mnuOp60
+  #
+  $mnuOp60.Text = &quot;60%&quot;
+  $mnuOp60.Add_Click({Set-Opacity $mnuOp60;$ops = $mnuOp60})
+  #
+  #mnuOp70
+  #
+  $ops = $mnuOp70
+  $mnuOp70.Checked = $true
+  $mnuOp70.Text = &quot;70%&quot;
+  $mnuOp70.Add_Click({Set-Opacity $mnuOp70;$ops = $mnuOp70})
+  #
+  #mnuOp80
+  #
+  $mnuOp80.Text = &quot;80%&quot;
+  $mnuOp80.Add_Click({Set-Opacity $mnuOp80;$ops = $mnuOp80})
+  #
+  #mnuOp90
+  #
+  $mnuOp90.Text = &quot;90%&quot;
+  $mnuOp90.Add_Click({Set-Opacity $mnuOp90;$ops = $mnuOp90})
+  #
+  #mnuExit
+  #
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click({
+    $tmrTick.Enabled = $false
+    $niPopup.Visible = $false
+    $frmMain.Close()
+  })
+  #
+  #niPopup
+  #
+  $niPopup.ContextMenuStrip = $mnuIcon
+  $niPopup.Icon = $ico
+  $niPopup.Text = &quot;NetSpeed Monitor&quot;
+  $niPopup.Visible = $true
+  #
+  #tmrTick
+  #
+  $tmrTick.Enabled = $true
+  $tmrTick.Interval = 1000
+  $tmrTick.Stop()
+  $tmrTick.Add_Tick({
+    try {
+      $lblLbl2.Text = ('Received: {0:f2} Kb/s' -f ([Math]::Floor($rec.NextValue()) / 1024))
+      $lblLbl3.Text = ('Sent: {0:f2} Kb/s' -f ([Math]::Floor($sen.NextValue()) / 1024))
+    }
+    catch {}
+  })
+  #
+  #frmMain
+  #
+  $frmMain.ClientSize = New-Object Drawing.Size(200, 57)
+  $frmMain.Controls.AddRange(@($lvCards, $lblLbl1, $lblLbl2, $lblLbl3))
+  $frmMain.FormBorderStyle = [Windows.Forms.FormBorderStyle]::None
+  $frmmain.Icon = $ico
+  $frmMain.Location = New-Object Drawing.Point(($scr.Width - 205), ($scr.Height - 62))
+  $frmMain.Opacity = .7
+  $frmMain.ShowInTaskbar = $false
+  $frmMain.StartPosition = [Windows.Forms.FormStartPosition]::Manual
+  $frmMain.Text = &quot;NetSpeed Monitor&quot;
+  $frmMain.TopMost = $true
+  
+  [void]$frmMain.ShowDialog()
+}
+
+frmMain_Show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

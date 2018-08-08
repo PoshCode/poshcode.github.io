@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Glenn Matthys">
+    <title>Apache-Kerberos.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Apache-Kerberos.ps1</h1>
+<h3><a href="//scripts/5561.ps1">download</a></h3>
+<pre><code class="language-posh">Param(
+    [Parameter(Mandatory=$true)][string]$SiteAddress,
+    [Parameter(Mandatory=$true)][string]$WinDomain,
+    [Parameter(Mandatory=$true)][string]$DomainController,
+    [string]$RestrictAccessToGroup
+)
+
+function Generate-Password() {
+    $String = -join ([Char[]]'abcdefghijklmnpqrstuvwxyABCDEFGHIJKLMNPQRSTUVWXYZ123456789' | Get-Random -count 12)
+    return $String
+}
+
+$PrincipalName = &quot;HTTP/$($SiteAddress)@$($Domain.ToUpper())&quot;
+$KeyTab = &quot;$($SiteAddress).keytab&quot;
+$PlainTextPassword = Generate-Password
+$Password = ConvertTo-SecureString -String $PlainTextPassword -AsPlainText -Force
+
+Write-Host &quot;Username: $($SiteAddress)&quot;
+Write-Host &quot;Password: $($PlainTextPassword)&quot;
+Write-Host &quot;Principal name: $($PrincipalName)&quot;
+
+New-ADUser -UserPrincipalName $PrincipalName -Name $SiteAddress -Enabled $true -AccountPassword $Password -PasswordNeverExpires $true
+
+Write-Host Password: $PlainTextPassword
+
+ktpass /princ &quot;$($PrincipalName)&quot; /mapuser &quot;$($SiteAddress)@$($Domain)&quot; /out &quot;C:\$($KeyTab)&quot; /pass &quot;$($PlainTextPassword)&quot; /ptype KRB5_NT_PRINCIPAL
+
+$Parts = @()
+Foreach($Part in $Domain.Split(&quot;.&quot;)) {
+    $Parts += &quot;DC=$($Part)&quot;
+}
+
+$AuthLDAPURL = &quot;ldap://$($DomainController)/$($Parts -join &quot;,&quot;)?sAMAccountName&quot;
+
+if($RestrictAccessToGroup) {
+    $Require = &quot;ldap-group $((Get-ADGroup $RestrictAccessToGroup).DistinguishedName)&quot;
+} else {
+    $Require = &quot;valid-user&quot;
+}
+Write-Host &quot;---------------------------&quot;
+Write-Host &quot;httpd.conf:&quot;
+Write-Host @&quot;
+&lt;Location /krb&gt;
+    AuthName &quot;$($SiteAddress)&quot;
+    AuthType Kerberos
+    KrbServiceName $($PrincipalName)
+    Krb5Keytab /etc/httpd/$($KeyTab)
+    KrbMethodNegotiate on
+    KrbMethodK5Passwd on
+    KrbVerifyKDC off
+    KrbLocalUserMapping on
+    AuthLDAPBindDN $($SiteAddress)@$($Domain)
+    AuthLDAPBindPassword $($PlainTextPassword)
+    AuthLDAPURL $AuthLDAPURL
+    Require $($Require)
+&lt;/Location&gt;
+&quot;@
+Write-Host &quot;---------------------------&quot;
+Write-Host &quot;Move $($KeyTab) to /etc/httpd&quot;
+Write-Host &quot;yum install mod_ldap mod_auth_kerb&quot;
+Write-Host &quot;setsebool -P httpd_can_connect_ldap 1&quot;
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

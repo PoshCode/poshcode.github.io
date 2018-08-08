@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>Findup - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Findup</h1>
+<h3><a href="//scripts/3360.cs">download</a> - <a href="//scripts/3359.md">parent</a></h3>
+<p>Findup - Find duplicates C# version. Compares files sizes and SHA512 hashes to identify duplicates. New regex Include/Exclude feature. Should be compiled with Visual Studio 11 (beta as of now), as older Visual Studio C# compilers seem to have a bug that causes crashes on long file names.</p>
+<pre><code class="language-csharp">using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+using System.Security.Cryptography;
+using System.Runtime.InteropServices;
+using Microsoft.Win32;
+using System.IO;
+using System.Text.RegularExpressions;
+
+
+
+namespace Findup
+{
+    public class FileLengthComparer : IComparer&lt;FileInfo&gt;
+    {
+        public int Compare(FileInfo x, FileInfo y)
+        {
+            return (x.Length.CompareTo(y.Length));
+        }
+    }
+    
+    class Findup
+    {
+        public static Dictionary&lt;string, List&lt;string&gt;&gt; optionspaths = new Dictionary&lt;string, List&lt;string&gt;&gt;
+            { {&quot;/x&quot;, new List&lt;string&gt;()},{&quot;/i&quot;,new List&lt;string&gt;()},{&quot;/xf&quot;,new List&lt;string&gt;()},{&quot;/if&quot;,new List&lt;string&gt;()},
+            {&quot;/xd&quot;,new List&lt;string&gt;()},{&quot;/id&quot;,new List&lt;string&gt;()},{&quot;/paths&quot;,new List&lt;string&gt;()} };
+        public static Dictionary&lt;string, List&lt;Regex&gt;&gt; optionsregex = new Dictionary&lt;string, List&lt;Regex&gt;&gt;
+            { {&quot;/xr&quot;, new List&lt;Regex&gt;()},{&quot;/ir&quot;,new List&lt;Regex&gt;()},{&quot;/xfr&quot;,new List&lt;Regex&gt;()},{&quot;/ifr&quot;,new List&lt;Regex&gt;()},
+            {&quot;/xdr&quot;,new List&lt;Regex&gt;()},{&quot;/idr&quot;,new List&lt;Regex&gt;()} };        
+        public static Dictionary&lt;string, Boolean&gt; optionsbools = new Dictionary&lt;string, bool&gt; { { &quot;/recurse&quot;, false }, { &quot;/noerr&quot;, false }, {&quot;/delete&quot;,false}, {&quot;/xj&quot;, false}};
+        public static long numOfDupes, dupeBytes, bytesrecovered, deletedfiles = 0;  // number of duplicate files found, bytes in duplicates, bytes recovered from deleting dupes, number of deleted dupes.
+        public static long errors = 0;
+        public static string delconfirm;        
+
+        public static void Main(string[] args)
+        {
+            DateTime startTime = DateTime.Now;
+            Console.WriteLine(&quot;Findup.exe v2.0 - By James Gentile - JamesRaymondGentile@gmail.com - 2012.&quot;);
+            Console.WriteLine(&quot;Findup.exe matches sizes, then SHA512 hashes to identify duplicate files.&quot;);
+            Console.WriteLine(&quot; &quot;);                        
+            string optionskey = &quot;/paths&quot;;        
+            List&lt;FileInfo&gt; files = new List&lt;FileInfo&gt;();            
+            int i = 0;            
+
+            for (i = 0; i &lt; args.Length; i++)
+            {
+                string argitem = args[i].ToLower();
+
+                if ((System.String.Compare(argitem, &quot;/help&quot;, true) == 0) || (System.String.Compare(argitem, &quot;/h&quot;, true) == 0))
+                {
+                    Console.WriteLine(&quot;Usage:    findup.exe &lt;file/directory #1..#N&gt; [/recurse] [/noerr] [/x /i /xd /id /xf /if + [r]] &lt;files/directories/regex&gt; [/delete]&quot;);
+                    Console.WriteLine(&quot; &quot;);
+                    Console.WriteLine(&quot;Options:  /help     - displays this help message.&quot;);
+                    Console.WriteLine(&quot;          /recurse  - recurses through subdirectories when directories or file specifications (e.g. *.txt) are specified.&quot;);                    
+                    Console.WriteLine(&quot;          /noerr    - discards error messages.&quot;);
+                    Console.WriteLine(&quot;          /delete   - delete each duplicate file with confirmation.&quot;);                    
+                    Console.WriteLine(&quot;          /x        - eXcludes if full file path starts with (or RegEx matches if -xr) one of the items following this switch until another switch is used.&quot;);
+                    Console.WriteLine(&quot;          /i        - include if full file path starts with (or Regex matches if -ir) one of the items following this switch until another switch is used.&quot;);
+                    Console.WriteLine(&quot;          /xd       - eXcludes all directories - minus drive/files - (using RegEx if /xdr) including subdirs following this switch until another switch is used.&quot;);
+                    Console.WriteLine(&quot;          /id       - Include only directories - minus drive/files - (using RegEx if /idr) including subdirs following this switch until another switch is used.&quot;);
+                    Console.WriteLine(&quot;          /xf       - eXcludes all files - minus drive/directories - (using RegEx if /xfr) following this switch until another switch is used.&quot;);
+                    Console.WriteLine(&quot;          /if       - Include only files - minus drive/directories - (using RegEx if /ifr) following this switch until another switch is used.&quot;);
+                    Console.WriteLine(&quot;          [r]       - Use regex for include/exclude by appending an 'r' to the option, e.g. -ir, -ifr, -idr, -xr, -xfr, -xdr.&quot;);
+                    Console.WriteLine(&quot;          /paths    - not needed unless you want to specify files/dirs after an include/exclude without using another non-exclude/non-include option.&quot;);
+                    Console.WriteLine(&quot;          /xj       - Exclude File and Directory Junctions.&quot;);
+                    Console.WriteLine(&quot; &quot;);
+                    Console.WriteLine(&quot;Examples: findup.exe c:\\finances /recurse /noerr /delete&quot;);
+                    Console.WriteLine(&quot;                     - Find dupes in c:\\finance.&quot;);
+                    Console.WriteLine(&quot;                     - recurse all subdirs of c:\\finance.&quot;);
+                    Console.WriteLine(&quot;                     - suppress error messages.&quot;);
+                    Console.WriteLine(&quot;                     - deletes duplicates after consent is given.&quot;);                    
+                    Console.WriteLine(&quot;          findup.exe c:\\users\\alice\\plan.txt d:\\data /recurse /x d:\\data\\webpics&quot;);
+                    Console.WriteLine(&quot;                     - Find dupes in c:\\users\\alice\\plan.txt, d:\\data&quot;);
+                    Console.WriteLine(&quot;                     - recurse subdirs in d:\\data.&quot;);
+                    Console.WriteLine(&quot;                     - exclude any files in d:\\data\\webpics and subdirs.&quot;);
+                    Console.WriteLine(&quot;          findup.exe c:\\data *.txt c:\\reports\\quarter.doc /xfr \&quot;(jim)\&quot;&quot;);
+                    Console.WriteLine(&quot;                     - Find dupes in c:\\data, *.txt in current directory and c:\\reports\\quarter.doc&quot;);
+                    Console.WriteLine(&quot;                     - exclude any file with 'jim' in the name as specified by the Regex item \&quot;(jim)\&quot;&quot;);
+                    Console.WriteLine(&quot;          findup.exe c:\\data *.txt c:\\reports\\*quarter.doc /xr \&quot;[bf]\&quot; /ir \&quot;(smith)\&quot;&quot;);
+                    Console.WriteLine(&quot;                     - Find dupes in c:\\data, *.txt in current directory and c:\\reports\\*quarter.doc&quot;);
+                    Console.WriteLine(&quot;                     - Include only files with 'smith' and exclude any file with letters b or f in the path name as specified by the Regex items \&quot;[bf]\&quot;,\&quot;(smith)\&quot;&quot;);
+                    Console.WriteLine(&quot;Note:     Exclude takes precedence over Include.&quot;);
+                    return;
+                }
+                if (optionsbools.ContainsKey(argitem))
+                {
+                    optionsbools[argitem] = true;
+                    optionskey = &quot;/paths&quot;;
+                    continue;
+                }                
+                if (optionspaths.ContainsKey(argitem) || optionsregex.ContainsKey(argitem))
+                {
+                    optionskey = argitem;
+                    continue;
+                }                
+                if (optionspaths.ContainsKey(optionskey))                
+                    optionspaths[optionskey].Add(args[i]);                                    
+                else 
+                {
+                    try {
+                        Regex rgx = new Regex(args[i], RegexOptions.Compiled);
+                        optionsregex[optionskey].Add(rgx);
+                    }
+                    catch (Exception e) {WriteErr(&quot;Regex compilation failed: &quot; + e.Message);}
+                }
+            }
+            if (optionspaths[&quot;/paths&quot;].Count == 0)
+            {
+                WriteErr(&quot;No files, file specifications, or directories specified. Try findup.exe -help. Assuming current directory.&quot;);
+                optionspaths[&quot;/paths&quot;].Add(&quot;.&quot;);
+            }
+            Console.Write(&quot;Getting file info and sorting file list...&quot;);
+            getFiles(optionspaths[&quot;/paths&quot;], &quot;*.*&quot;, optionsbools[&quot;/recurse&quot;], files);
+                         
+            if (files.Count &lt; 2)
+            {
+                WriteErr(&quot;\nFindup.exe needs at least 2 files to compare. Try findup.exe -help&quot;);
+                Console.WriteLine(&quot;\n&quot;);
+                return;
+            }
+
+            files.Sort(new FileLengthComparer());
+            Console.WriteLine(&quot;Completed!&quot;);
+            
+            Console.Write(&quot;Building dictionary of file sizes, SHA512 hashes and full paths...&quot;);
+
+            var SizeHashFile = new Dictionary&lt;long, Dictionary&lt;string,List&lt;FileInfo&gt;&gt;&gt;();
+
+            long filesize = 0;
+            for (i = 0; i &lt; (files.Count - 1); i++)
+            {
+                if (files[i].Length != files[i + 1].Length) continue;
+                
+                var breakout = false;
+
+                while (true)
+                {
+                    filesize = (files[i].Length);
+                    try
+                    {                        
+                        var _SHA512 = SHA512.Create();
+                        using (var fstream = File.OpenRead(files[i].FullName))
+                        {                    
+                            _SHA512.ComputeHash(fstream);
+                        }
+                        
+                        string SHA512string = Hash2String(_SHA512.Hash);
+
+                        if (!SizeHashFile.ContainsKey(filesize))                        
+                            SizeHashFile.Add(filesize, new Dictionary&lt;string,List&lt;FileInfo&gt;&gt;());                                             
+                        if (!SizeHashFile[filesize].ContainsKey(SHA512string))                            
+                        {
+                            SizeHashFile[filesize][SHA512string] = new List&lt;FileInfo&gt;() {};
+                        }
+                        SizeHashFile[filesize][SHA512string].Add(files[i]);
+                    }
+                    catch (Exception e) { WriteErr(&quot;Hash error: &quot; + e.Message); }
+                    
+                    if (breakout == true) {break;}
+                    i++;
+                    if (i == (files.Count - 1)) { breakout = true; continue; }
+                    breakout = (files[i].Length != files[i + 1].Length);
+                }
+
+                if (SizeHashFile.ContainsKey(filesize))
+                {
+                    foreach (var HG in SizeHashFile[filesize])
+                    {
+                        if (HG.Value.Count &gt; 1)
+                        {
+                            Console.WriteLine(&quot;{0:N0} Duplicate files. {1:N0} Bytes each. {2:N0} Bytes total : &quot;, HG.Value.Count, filesize, filesize * HG.Value.Count);
+                            foreach (var finfo in HG.Value)
+                            {
+                                Console.WriteLine(finfo.FullName);
+                                numOfDupes++;
+                                dupeBytes += finfo.Length;
+                                if (optionsbools[&quot;/delete&quot;])
+                                    if (DeleteDupe(finfo)) { bytesrecovered += finfo.Length; deletedfiles++; }
+                            }
+                        }
+                    }
+                }
+            }            
+
+            Console.WriteLine(&quot;\n &quot;);
+            Console.WriteLine(&quot;Files checked      : {0:N0}&quot;, files.Count);              // display statistics and return to OS.
+            Console.WriteLine(&quot;Duplicate files    : {0:N0}&quot;, numOfDupes);
+            Console.WriteLine(&quot;Duplicate bytes    : {0:N0}&quot;, dupeBytes);
+            Console.WriteLine(&quot;Deleted duplicates : {0:N0}&quot;, deletedfiles);
+            Console.WriteLine(&quot;Bytes recovered    : {0:N0}&quot;, bytesrecovered);
+            Console.WriteLine(&quot;Errors             : {0:N0}&quot;, errors);
+            Console.WriteLine(&quot;Execution time     : &quot; + (DateTime.Now - startTime));
+        }               
+
+        private static void WriteErr(string Str)
+        {
+            errors++;
+            if (!optionsbools[&quot;/noerr&quot;])
+                Console.WriteLine(Str);
+        }
+        private static string Hash2String(Byte[] hasharray)
+        {
+            string SHA512string = &quot;&quot;;
+            foreach (var c in hasharray)
+            {
+                SHA512string += String.Format(&quot;{0:x2}&quot;, c);
+            }
+            return SHA512string;
+        }
+
+        private static Boolean DeleteDupe(FileInfo Filenfo)
+        {
+            Console.Write(&quot;Delete this file &lt;y/N&gt; &lt;ENTER&gt;?&quot;);
+            delconfirm = Console.ReadLine();
+            if ((delconfirm[0] == 'Y') || (delconfirm[0] == 'y'))
+            {
+                try
+                {                    
+                    Filenfo.Delete();
+                    Console.WriteLine(&quot;File Successfully deleted.&quot;);                                        
+                    return true;
+                }
+                catch (Exception e) { Console.WriteLine(&quot;File could not be deleted: &quot; + e.Message); }
+            }
+            return false;
+        }
+
+
+        private static Boolean CheckNames(string fullname)
+        {
+            var filePart = Path.GetFileName(fullname);                                                              // get file name only (e.g. &quot;d:\temp\data.txt&quot; -&gt; &quot;data.txt&quot;)
+            var dirPart = Path.GetDirectoryName(fullname).Substring(fullname.IndexOf(Path.VolumeSeparatorChar)+2);  // remove drive &amp; file  (e.g. &quot;d:\temp\data.txt&quot; -&gt; &quot;temp&quot;)
+
+            if (CheckNamesWorker(fullname, &quot;/x&quot;, &quot;/xr&quot;, true))
+                return false;
+            if (CheckNamesWorker(filePart, &quot;/xf&quot;, &quot;/xfr&quot;, true))           
+                return false;
+            if (CheckNamesWorker(dirPart, &quot;/xd&quot;, &quot;/xdr&quot;, true))            
+                return false;            
+            if (CheckNamesWorker(fullname, &quot;/i&quot;, &quot;/ir&quot;, false))
+                return false;
+            if (CheckNamesWorker(filePart, &quot;/if&quot;, &quot;/ifr&quot;, false))
+                return false;
+            if (CheckNamesWorker(dirPart, &quot;/id&quot;, &quot;/idr&quot;, false))
+                return false;
+            return true;
+        }
+        
+        private static Boolean CheckNamesWorker(string filestr, string pathskey, string rgxkey, Boolean CheckType)
+        {            
+            foreach (var filepath in optionspaths[pathskey])
+            {
+                if (filestr.ToLower().StartsWith(filepath) == CheckType)
+                    return true;                    
+            }           
+            foreach (var rgx in optionsregex[rgxkey])
+            {
+                if (rgx.IsMatch(filestr) == CheckType)
+                    return true;
+            }            
+            return false;
+        }        
+                
+        private static void getFiles(List&lt;string&gt; pathRec, string searchPattern, Boolean recursiveFlag, List&lt;FileInfo&gt; returnList)
+        {
+            foreach (string d in pathRec) { getFiles(d, searchPattern, recursiveFlag, returnList); }         
+        }
+
+        private static void getFiles(string[] pathRec, string searchPattern, Boolean recursiveFlag, List&lt;FileInfo&gt; returnList)
+        {
+            foreach (string d in pathRec) { getFiles(d, searchPattern, recursiveFlag, returnList); }            
+        }
+
+        private static void getFiles(string pathRec, string searchPattern, Boolean recursiveFlag, List&lt;FileInfo&gt; returnList)
+        {
+
+            string dirPart;
+            string filePart;
+
+            if (File.Exists(pathRec))
+            {
+                try
+                {
+                    FileInfo addf = (new FileInfo(pathRec));
+                    if (((addf.Attributes &amp; FileAttributes.ReparsePoint) == 0) || !optionsbools[&quot;/xj&quot;])
+                        if (CheckNames(addf.FullName))                        
+                            returnList.Add(addf);
+                }
+                catch (Exception e) { WriteErr(&quot;Add file error: &quot; + e.Message); }                
+            }
+            else if (Directory.Exists(pathRec))
+            {
+                try
+                {
+                    DirectoryInfo Dir = new DirectoryInfo(pathRec);
+                    if (((Dir.Attributes &amp; FileAttributes.ReparsePoint) == 0) || !optionsbools[&quot;/xj&quot;])
+                        foreach (FileInfo addf in (Dir.GetFiles(searchPattern)))
+                        {                        
+                            if (((addf.Attributes &amp; FileAttributes.ReparsePoint) == 0) || !optionsbools[&quot;/xj&quot;])
+                                if (CheckNames(addf.FullName))                        
+                                    returnList.Add(addf);
+                        }
+                }
+                catch (Exception e) { WriteErr(&quot;Add files from Directory error: &quot; + e.Message); }
+
+                if (recursiveFlag)
+                {
+                    try { getFiles((Directory.GetDirectories(pathRec)), searchPattern, recursiveFlag, returnList); }
+                    catch (Exception e) { WriteErr(&quot;Add Directory error: &quot; + e.Message); }
+                }                
+            }
+            else
+            {
+                try
+                {
+                    filePart = Path.GetFileName(pathRec);
+                    dirPart = Path.GetDirectoryName(pathRec);
+                }
+                catch (Exception e)
+                {
+                    WriteErr(&quot;Parse error on: &quot; + pathRec);
+                    WriteErr(@&quot;Make sure you don't end a directory with a \ when using quotes. The console arg parser doesn't accept that.&quot;);
+                    WriteErr(&quot;Exception: &quot; + e.Message);
+                    return;
+                }
+
+                if (filePart.IndexOfAny(new char[] {'?','*'}) &gt;= 0)
+                {
+                    if ((dirPart == null) || (dirPart == &quot;&quot;))
+                        dirPart = Directory.GetCurrentDirectory();
+                    if (Directory.Exists(dirPart))
+                    {
+                        getFiles(dirPart, filePart, recursiveFlag, returnList);
+                        return;
+                    }
+                }
+                WriteErr(&quot;Invalid file path, directory path, file specification, or program option specified: &quot; + pathRec);                                                        
+            }            
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

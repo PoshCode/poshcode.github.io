@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DBAWithABeard">
+    <title>VLFs to Excel Formatted - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>VLFs to Excel Formatted</h1>
+<h3><a href="//scripts/5484.ps1">download</a></h3>
+<p>This script iterates through a list of servers and writes to Excel
+some information about each database log file. It will alter the
+colour of the cell depending on the paramters you set at the top of the
+script</p>
+<pre><code class="language-posh">&lt;#
+.NOTES 
+Name: Number of VLFs
+Author: Rob Sewell http://sqldbawithabeard.com
+Requires: 
+Version History: 
+.Synopsis
+Number of VLFs and AUtogrowth for every database log file
+.DESCRIPTION
+This script iterates through a list of servers and writes to Excel
+some information about each database log file. It will alter the 
+colour of the cell depending on the paramters you set at the top of the
+script
+.EXAMPLE
+Define the location of the servers on Line 30
+
+$Servers = Get-Content &quot;PATHTOSERVERSFILE.txt&quot;
+
+or (alter locations to fit)
+$Query = &quot;SELECT Name FROM dbo.databases&quot;
+$Servers = Invoke-Sqlcmd -ServerInstance MANAGEMENTSERVER -Database DBADATABASE -Query $query
+
+Define the parameters on line 30 &amp; 31
+.NOTES
+
+This script WILL STOP ALL Excel processes
+#&gt;
+
+#Set the variables
+$Servers = Get-Content 'PATHTO\sqlservers.txt'
+$TooMany = 25 #How many VLFs is too many
+$wayTooMany = 50   #How many VLFs is WAY too many
+
+# Create a .com object for Excel
+$xl = new-object -comobject excel.application
+$xl.Visible = $true # Set this to False when you run in production
+
+
+$wb = $xl.Workbooks.Add() # Add a workbook
+$ws = $wb.Worksheets.Item(1) # Add a worksheet 
+$cells=$ws.Cells
+$Row = 3
+$Col = 2
+$Date = Get-Date
+$Title = 'Results of Script to show VLFs and File Growth run on ' + $Date
+$cells.item(2,2)=&quot;Server&quot;
+$cells.item(2,2).font.size=16
+$cells.item(2,3)=&quot;Database&quot;
+$cells.item(2,3).font.size=16
+$cells.item(2,4)=&quot;No. of VLFs&quot;
+$cells.item(2,4).font.size=16
+$cells.item(2,5)=&quot;Growth&quot;
+$cells.item(2,5).font.size=16
+$cells.item(2,6)=&quot;Growth Type&quot;
+$cells.item(2,6).font.size=16
+$cells.item(2,7)=&quot;Size&quot;
+$cells.item(2,7).font.size=16
+$cells.item(2,8)=&quot;Used Space&quot;
+$cells.item(2,8).font.size=16
+$cells.item(2,9)=&quot;Name&quot;
+$cells.item(2,9).font.size=16
+$cells.item(2,10)=&quot;File Name&quot;
+$cells.item(2,10).font.size=16
+
+foreach ($Server in $Servers)
+{  
+	$srv = New-Object Microsoft.SqlServer.Management.Smo.Server $Server
+	foreach ($db in $srv.Databases|Where-Object {$_.isAccessible -eq $True})
+	{
+		$Col = 2
+		$Row++
+		$VLF = $DB.ExecuteWithResults(&quot;DBCC LOGINFO&quot;).Tables[0].Rows.Count
+		$logFile = $db.LogFiles | Select Growth,GrowthType,Size, UsedSpace,Name,FileName
+		$Name = $DB.name
+		$cells.item($row,$col)=$Server
+		$col++
+		$cells.item($row,$col)=$Name
+		$col++
+		if($VLF -gt $TooMany) 
+		{
+			$cells.item($row,$col).Interior.ColorIndex = 6 # Yellow
+		}
+		if($VLF -gt $WayTooMany)
+		{
+			$cells.item($row,$col).Interior.ColorIndex = 3 # Red
+		}
+		$cells.item($row,$col)=$VLF
+		$cells.item($row,$col).HorizontalAlignment = 3 #center
+		$col++
+		$cells.item($row,$col)=$logFile.Growth
+		$cells.item($row,$col).HorizontalAlignment = 4 #right
+		$col++
+		$Type = $logFile.GrowthType.ToString()
+		if($Type -eq 'Percent')
+		{
+			$cells.item($row,$col).Interior.ColorIndex = 3 #Red
+		}
+		$cells.item($row,$col)=$Type
+		$cells.item($row,$col).HorizontalAlignment = 4 #right
+		$col++
+		$cells.item($row,$col)=($logFile.Size)
+		$cells.item($row,$col).HorizontalAlignment = 3 #center
+		$col++
+		$cells.item($row,$col)=($logFile.UsedSpace)
+		$cells.item($row,$col).HorizontalAlignment = 3 #center
+		$col++
+		$cells.item($row,$col)=$logFile.Name
+		$col++
+		$cells.item($row,$col)=$logFile.FileName
+	}
+	$Row++
+}
+$ws.UsedRange.EntireColumn.AutoFit()
+$cells.item(1,2)=$Title 
+$cells.item(1,2).font.size=24
+$cells.item(1,2).font.bold=$True
+$cells.item(1,2).font.underline=$True
+$Date = Get-Date -f ddMMyy
+$filename = 'VLF' + $Date
+$wb.Saveas(&quot;C:\temp\$filename.xlsx&quot;)
+$xl.quit()
+Stop-Process -Name EXCEL
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

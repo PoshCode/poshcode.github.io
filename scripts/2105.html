@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Start-Presentation - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Start-Presentation</h1>
+<h3><a href="//scripts/2105.ps1">download</a> - <a href="//scripts/2100.md">parent</a></h3>
+<p>My current (WPF 4 compatible) PowerBoots-based Presentation Module.  <em>REQUIRES</em> &quot;PresentationFrame.xaml&quot;:http://poshcode.org/get/2104 and, of course, &quot;PowerBoots&quot;:http://boots.codeplex.com</p>
+<p>This isn't really ready to be shared, but I always tell people if you wait until after you have time to clean it up, you'll never share it -- so since I'm unlikely to actually finish cleaning this up any time soon -- here it is.  &quot;See the screenshots for an example&quot;:http://HuddledMasses.org/images/PowerBoots/PowerBoots%2dPresentation.png</p>
+<pre><code class="language-posh">if(-not(get-command New-System.Windows.Window -EA 0)){  Import-Module PowerBoots  }
+Add-BootsTemplate $PSScriptRoot\PresentationFrame.xaml
+
+$name = [System.Windows.Navigation.JournalEntry]::NameProperty
+[double]$global:zoomLevel = 1
+$SlideCount = 0
+
+function Start-Zoom {
+PARAM(
+   [Parameter(Position=0)]
+   $Zoom = 0
+,
+   [Parameter(ValueFromPipeline=$true)]
+   $Root = $($global:Frame)
+,
+   [Parameter()]
+   $Window = $presentationTitle
+)
+$null =  Invoke-BootsWindow $Window {
+   Param($Window,$Root)
+   if(!$Root.RenderTransform.Children) {
+      $Root.RenderTransform = TransformGroup {
+         ScaleTransform -ScaleX $zoomLevel -ScaleY $zoomLevel
+         TranslateTransform
+      }
+
+      $BootsWindow.Add_MouseDown( {
+         if($zoomLevel -ne 1) {
+            trap { Write-Host $( $_ | fl * | out-string ) }
+            $global:MouseDownPoint = [System.Windows.Input.Mouse]::GetPosition($BootsWindow)
+            $this.CaptureMouse()
+         }
+      } )
+      $BootsWindow.Add_MouseUp( { 
+         if($zoomLevel -ne 1) {
+            trap { Write-Host $( $_ | fl * | out-string ) }
+            $this.ReleaseMouseCapture()
+         }
+      } )
+      $BootsWindow.Add_MouseMove( {
+         if($zoomLevel -ne 1) {
+            trap { Write-Host $( $_ | fl * | out-string ) }
+            if($_.LeftButton -eq &quot;Pressed&quot;) {
+               $newPos = [System.Windows.Input.Mouse]::GetPosition($BootsWindow)
+
+               $this.Content.RenderTransform.Children[1].SetValue( 
+                  [System.Windows.Media.TranslateTransform]::XProperty, 
+                  $this.Content.RenderTransform.Children[1].Value.OffsetX + ($newPos.X - $MouseDownPoint.X) )
+
+               $this.Content.RenderTransform.Children[1].SetValue( 
+                  [System.Windows.Media.TranslateTransform]::YProperty, 
+                  $this.Content.RenderTransform.Children[1].Value.OffsetY + ($newPos.Y - $MouseDownPoint.Y) )
+
+               $global:MouseDownPoint = $newPos;
+            }
+         }
+      } )
+   }
+} $Root
+}
+
+function Set-Zoom {
+PARAM(
+   [Parameter(Position=0)]
+   $Zoom = 0
+,
+   [Parameter()]
+   $Root = $global:Frame
+,
+   [Parameter()]
+   $Window = $presentationTitle
+)
+   if($Zoom -gt 0) {
+      $global:zoomLevel *= (1+($Zoom/10))
+   } elseif($Zoom -lt 0) {
+      $global:zoomLevel /= (1+($Zoom/-10))
+   } else {
+      $global:zoomLevel = 1.0
+   }
+   
+$null = Invoke-BootsWindow $Window {
+   Param($Window,$Root)
+   $Root.RenderTransform.Children[0].SetValue( 
+      [System.Windows.Media.ScaleTransform]::ScaleXProperty, $zoomLevel )
+
+   $Root.RenderTransform.Children[0].SetValue( 
+      [System.Windows.Media.ScaleTransform]::ScaleYProperty, $zoomLevel )
+
+   ## Note that we have to account for rounding errors ;)
+   if([Math]::Round($zoomLevel, 10) -eq 1.0 ) {
+      $Root.NavigationUIVisibility = &quot;Visible&quot;
+      
+      $Root.RenderTransform.Children[1].SetValue( 
+         [System.Windows.Media.TranslateTransform]::XProperty, 0.0 )
+
+      $Root.RenderTransform.Children[1].SetValue( 
+         [System.Windows.Media.TranslateTransform]::YProperty, 0.0 )      
+   } else {
+      $Root.NavigationUIVisibility = &quot;Hidden&quot;
+   }
+} $Root
+}
+
+function Show-Url {
+[CmdletBinding()]
+PARAM(
+   [Parameter(Position=0, ValueFromPipeline=$true)]
+   [Uri]$Content
+,
+   [Parameter()]
+   $Window = $presentationTitle
+)
+Invoke-BootsWindow $Window {
+   $global:Frame.Navigate( $Content )
+}
+}
+New-Alias Navigate Show-Url  # backwards compat
+
+function Add-Slide {
+#.Synopsis
+#  Add a slide to the presentation
+#.Description
+#  Add any .net object as a slide to a presentation, wrapping it in a Page to set the title.
+[CmdletBinding(DefaultParameterSetName=&quot;Script&quot;)]
+PARAM(
+   [Parameter(Position=0,ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Name&quot;)]
+   [String]$Title   = &quot;Slide $SlideCount&quot;
+,  [Parameter(Position=1, ValueFromPipeline=$true, Mandatory=$true)]
+   $Content
+,  [Parameter()]
+   $Window = $presentationTitle
+)
+PROCESS {
+   $SlideCount++
+   Invoke-BootsWindow $Window {
+      Param($Frame, $Content, $Title)
+      $Frame.Content = Page -Content $Content -Title $Title
+   } $global:Frame $Content $Title
+}
+}
+
+function Add-TextSlide {
+#.Synopsis
+#  Add a text slide to the presentation
+#.Description
+#  Add a textual slide to the presentation with a header and several points
+[CmdletBinding()]
+PARAM(
+   [Parameter(Position=0)]
+   $Title   = &quot;Slide $SlideCount&quot;
+,  [Parameter(Position=1, ValueFromPipeline=$true)]
+   [string[]]$Content = @(&quot;Several bullet points&quot;, &quot;Which are equally important&quot;)
+,  [Parameter()]
+   $Window = $presentationTitle
+)
+BEGIN   { [string[]]$global:Points = @() }
+PROCESS { [string[]]$global:Points += $Content }
+END {
+   Add-Slide -Title $Title -Window $Window -Content {
+      StackPanel -Margin 10 {
+         grid {
+            TextBlock $Title  -FontSize 85 -FontFamily Impact -Foreground White -Effect { BlurEffect -Radius 15 } -TextAlign Center
+            TextBlock $Title  -FontSize 85 -FontFamily Impact -Foreground $global:TitleBrush -TextAlign Center
+         }
+         write-host &quot;Points: $Points&quot;
+         $Points | % { 
+            TextBlock $_ -FontSize 64 -FontWeight Bold -Foreground &quot;White&quot; -TextWrapping Wrap -Effect { DropShadowEffect -BlurRadius 15 }
+         }
+      }
+   }.GetNewClosure()
+}
+}
+
+function Add-TitleSlide {
+#.Synopsis
+#  Add a text slide to the presentation
+#.Description
+#  Add a textual slide to the presentation with a header and several points
+[CmdletBinding()]
+PARAM(
+   [Parameter(Position=0)]
+   $Title
+,   [Parameter()]
+   $Window = $presentationTitle
+)
+BEGIN   { [string[]]$Points = @() }
+PROCESS { [string[]]$Points += $Content }
+END {
+   Add-Slide -Title $Title -Window $Window -Content {
+      Grid {
+         TextBlock $Title `
+            -FontSize 125 -FontFamily Impact -Foreground White `
+            -VerticalAlignment Center -TextAlignment Center    `
+            -HorizontalAlignment Stretch -TextWrapping Wrap    `
+            -Effect { BlurEffect -Radius 20 }
+         TextBlock $Title `
+            -FontSize 125 -FontFamily Impact -Foreground White `
+            -VerticalAlignment Center -TextAlignment Center    `
+            -HorizontalAlignment Stretch -TextWrapping Wrap    `
+            -Effect { BlurEffect -Radius 20 }
+         TextBlock $Title `
+            -FontSize 125 -FontFamily Impact -Foreground $global:TitleBrush `
+            -VerticalAlignment Center -TextAlignment Center    `
+            -HorizontalAlignment Stretch -TextWrapping Wrap    `
+            -Effect {DropShadowEffect -Color White -Radius 15}
+      }
+   }
+}
+}
+
+function Remove-Slide {
+#.Synopsis 
+#  Removes the specified slide from the deck (history)
+#.Description
+#  Takes an index or name, and removes that slide, except that you CANNOT remove the last slide.
+PARAM(
+   [Parameter(ParameterSetName=&quot;ByIndex&quot;, Mandatory=$true, Position=0)]
+   [int]$index
+,  [Parameter(ParameterSetName=&quot;ByTitle&quot;,  Mandatory=$true, Position=0)]
+   [Alias(&quot;Name&quot;)]
+   [string]$Title
+,  [Parameter()]
+   $Window = $presentationTitle
+) 
+   $null = Invoke-BootsWindow $Window {
+      # Figure out where we are now, because we'll need to come back
+      $global:currentSlide = @($global:Frame.BackStack.GetEnumerator()).Count
+      # Activate the slide they want to delete ...
+      [int]$removable = Set-Slide @PsBoundParameters -passthru
+   }
+   # Separate Invoke's are required for the window to register what's going on?
+   $global:removable = $true
+   $null = Invoke-BootsWindow $Window {
+      if($global:Frame.CanGoForward) {
+         $global:Frame.GoForward()
+      } else {
+         $global:removable = $false
+         Write-Host &quot;Sorry, you can't remove the last slide in the deck.&quot; -Fore Red
+      }
+   }
+   if($global:removable) {
+      # Separate Invoke's are required for the window to register what's going on?
+      Invoke-BootsWindow $Window {
+         $null = $global:Frame.RemoveBackEntry()
+         Set-Slide $currentSlide
+      }
+   }
+}
+
+function Show-Slide {
+#.Synopsis
+#  Set the active slide in a deck
+#.Description
+#  Sets the active slide by index or name (title)
+[CmdletBinding(DefaultParameterSetName=&quot;ByIndex&quot;)]
+PARAM(
+   [Parameter(ParameterSetName=&quot;ByIndex&quot;, Mandatory=$true, Position=0)]
+   [int]$index
+,  [Parameter(ParameterSetName=&quot;ByTitle&quot;,  Mandatory=$true, Position=0)]
+   [Alias(&quot;Name&quot;)]
+   [string]$Title
+,  [Parameter()]
+   $Window = $presentationTitle
+,  [Parameter()]
+   [Switch]$Passthru
+) 
+switch($PSCmdlet.ParameterSetName) {
+   &quot;ByIndex&quot; {
+      $null = Invoke-BootsWindow $Window {
+         # Figure out where we are now...
+         [int]$global:current = @($global:Frame.BackStack.GetEnumerator()).Count
+         # Then go where we need to
+         for(;$current -lt $index -and $global:Frame.CanGoForward ;$global:current++) {
+            $global:Frame.GoForward()
+         }
+         for(;$current -gt $index -and $global:Frame.CanGoBack ;$global:current--) {
+            $global:Frame.GoBack()
+         }
+      }
+      if($Passthru) { return $global:current }
+   }
+   &quot;ByTitle&quot; {
+      [int]$global:result = -1
+      [int]$global:current = -1
+      $null = Invoke-BootsWindow $Window {
+         # Figure out where we are now...
+         $global:current = @($global:Frame.BackStack.GetEnumerator()).Count
+         # Start with backward history ('cause it's more likely)
+         [int]$i = 0;
+         foreach($page in $global:Frame.BackStack) {
+            if($page.Name -eq $Title) {
+               $global:result = $current - $i - 1
+               for(;$i -gt $0 -and $global:Frame.CanGoBack;$i--) {
+                  $global:Frame.GoBack()
+               }
+               break;
+            }
+            $i++
+         }
+         # Failing that, try forward history
+         [int]$i = 0;
+         foreach($page in $global:Frame.ForwardStack) {
+            if($page.Name -eq $Title) {
+               $global:result = $current + $i + 1
+               for(;$i -gt $0 -and $global:Frame.CanGoForward ;$i--) {
+                  $global:Frame.GoForward()
+               }
+               break;
+            }
+            $i++
+         }
+      }
+      if($Passthru) {
+         if($global:result -ge 0) {
+            return $global:result
+         } else {
+            return $global:current
+         }
+      }
+   }
+}
+}
+New-Alias Set-Slide Show-Slide # backwards compat
+
+function Move-NextSlide {
+#.Synopsis
+#  Navigates to the next slide (if there is another)
+PARAM(
+   [Parameter()]
+   $Window = $presentationTitle
+,
+   [Parameter()]
+   [Switch]$Passthru
+) 
+   $DidGo = Invoke-BootsWindow $Window {
+      Write-Output $global:Frame.CanGoForward
+      if($global:Frame.CanGoForward) {
+         $global:Frame.GoForward()
+      }
+   }
+   if($Passthru){ $DidGo }
+}
+New-Alias Next-Slide Move-NextSlide # backwards compat
+
+function Move-PreviousSlide {
+#.Synopsis
+#  Navigates to the previous slide (if there is another)
+PARAM(   
+   [Parameter()]
+   $Window = $presentationTitle
+,
+   [Parameter()]
+   [Switch]$Passthru
+) 
+   $DidGo = Invoke-BootsWindow $Window {
+      Write-Output $global:Frame.CanGoForward
+      if($global:Frame.CanGoBack) {
+         $global:Frame.GoBack()
+      }
+   }
+   if($Passthru){ $DidGo }
+}
+New-Alias Prev-Slide Move-PreviousSlide
+New-Alias Previous-Slide Move-PreviousSlide # backwards compat
+
+function Start-Presentation {
+#.Synopsis
+#  Start a presentation window
+#.Description
+#  This is the kick-off function you have to call to create the presentation window
+PARAM(
+   $PresentationTitle = &quot;PowerShell Presentation&quot;
+,  $BackgroundImagePath = $(Get-ItemProperty &quot;HKCU:\Control Panel\Desktop&quot; | Select -Expand Wallpaper | Get-ChildItem)
+)
+
+   $BackgroundImagePath = Convert-Path (Resolve-Path $BackgroundImagePath)
+   $global:PresentationTitle = $PresentationTitle
+   ## Finally, make the slide window
+   Boots -Title $PresentationTitle `
+         -Height $([System.Windows.SystemParameters]::PrimaryScreenHeight) `
+         -Width $([System.Windows.SystemParameters]::PrimaryScreenWidth)   `
+   { 
+      $global:TitleBrush = LinearGradientBrush -Start &quot;0.5,0&quot; -End &quot;0.5,1&quot; {
+         GradientStop -Color &quot;#FF084670&quot; -Offset 0
+         GradientStop -Color &quot;#FF084670&quot; -Offset 0.6
+         GradientStop -Color &quot;#FF000000&quot; -Offset 0.6
+      }
+      $global:Frame = Frame -Content {
+         Page -Title &quot;Welcome&quot; {
+            Grid {
+               TextBlock $PresentationTitle `
+                  -FontSize 125 -FontFamily Impact -Foreground White `
+                  -VerticalAlignment Center -TextAlignment Center    `
+                  -HorizontalAlignment Stretch -TextWrapping Wrap    `
+                  -Effect { BlurEffect -Radius 30 }
+               TextBlock $PresentationTitle `
+                  -FontSize 125 -FontFamily Impact -Foreground White `
+                  -VerticalAlignment Center -TextAlignment Center    `
+                  -HorizontalAlignment Stretch -TextWrapping Wrap    `
+                  -Effect { BlurEffect -Radius 30 }
+            
+               TextBlock $PresentationTitle `
+                     -FontSize 125 -FontFamily Impact -Foreground $global:TitleBrush `
+                     -VerticalAlignment Center -TextAlignment Center  `
+                     -HorizontalAlignment Stretch -TextWrapping Wrap  `
+            }
+         }
+      }
+      #Start-Zoom -Root $global:Frame
+      $global:Frame
+   } -Async -Popup -On_SourceInitialized { 
+        if(Test-Path $BackgroundImagePath) {
+           $this.Background = ImageBrush -ImageSource $BackgroundImagePath
+        }
+      $this.WindowState = &quot;Maximized&quot;
+   } -On_KeyDown {
+      trap { Write-Host $( $_ | fl * | Out-String ) }
+      switch -regex ($_.Key) {
+         &quot;Escape&quot; { 
+            Set-Zoom 0; break;
+         }
+         &quot;OemPlus|Add&quot; { 
+            Set-Zoom +1; break;
+         }
+         &quot;OemMinus|Subtract&quot; {
+            Set-Zoom -1; break;
+         }
+         &quot;MediaNextTrack|BrowserForward|Right&quot; {
+            Next-Slide; break;
+         }
+         &quot;MediaPreviousTrack|BrowserBack|Left&quot; {
+            Previous-Slide; break;
+         }
+      }
+   } -On_MouseWheel {
+      if($_.Delta -gt 0 ) {
+         Set-Zoom +1
+      } else {
+         Set-Zoom -1
+      }
+      
+   }
+   
+   # -WindowStyle None -AllowsTransparency $true
+
+}
+
+function Test-Presentation {
+   Start-Presentation &quot;PowerShell for Developers&quot;
+   
+   Add-TextSlide &quot;Overview&quot; &quot;What is PowerShell?&quot;, &quot;How can it help me?&quot;, &quot;Should I code for it?&quot;, &quot;How do I ...&quot;
+   Add-TextSlide &quot;What is PowerShell?&quot; &quot;A .Net Console&quot;,&quot;A new .Net Language&quot;,&quot;An admin scripting tool&quot;,&quot;An app automation engine&quot;, &quot;All of the above&quot;
+   ls ~\Pictures\Comix | Add-Slide
+
+   Set-Slide 0
+   
+   ## The simple, automatic, force-my-hand slide timer.
+   ## One slide, every 20 seconds:
+   ## go forward and check if we can go forward again
+   while( Move-NextSlide -Passthru ) {
+      # note that we have to sleep outside the invoke... 
+      # otherwise the window can't update
+      sleep 20
+   }
+   
+}
+
+Export-ModuleMember -Function * -Alias *
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

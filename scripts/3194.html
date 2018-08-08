@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="dolmer">
+    <title>Invoke-Sql.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-Sql.ps1</h1>
+<h3><a href="//scripts/3194.ps1">download</a> - <a href="//scripts/2484.md">parent</a></h3>
+<p>Wrapper script for executing a T-SQL call and optionally returning a delimited file. Informational/Error messages are written to the Application EventLog. Purpose of script is run T-SQL commands from external scheduler (UniCenter, AutoSys, etc.), log messages to EventLog and return success/failed status.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Runs a T-SQL Query and optional outputs results to a delimited file.
+.DESCRIPTION
+Invoke-Sql script will run a T-SQL query or stored procedure and optionally outputs a delimited file.
+.EXAMPLE
+PowerShell.exe -File &quot;C:\Scripts\Invoke-Sql.ps1&quot; -ServerInstance &quot;Z003\sqlprod2&quot; -Database orders -Query &quot;EXEC usp_accounts '12445678'&quot;
+This example connects to Z003\sqlprod2.Orders and executes a stored procedure which does not return a result set
+.EXAMPLE
+PowerShell.exe -File &quot;C:\Scripts\Invoke-Sql.ps1&quot; -ServerInstance &quot;Z003\sqlprod2&quot; -Database orders -Query &quot;SELECT * FROM dbo.accounts&quot; -FilePath &quot;C:\Scripts\accounts.txt&quot; -Delimiter &quot;,&quot;
+This example connects to Z003\sqlprod2.Orders and selects the records from the accounts tables, the data is outputed to a CSV file
+.NOTES
+Version History
+v1.0   - Chad Miller - 12/14/2010 - Initial release
+IMPORTANT!!! The EventLog source which is set to the application needs to be registered with 
+the Event log:
+New-EventLog -LogName Application -Source  $Application
+#&gt;
+param(
+#ServerInstance is Mandatory!
+[Parameter(Position=0, Mandatory=$false)] [string]$ServerInstance,
+#Database is Mandatory!
+[Parameter(Position=1, Mandatory=$false)] [string]$Database,
+#Query is Mandatory!
+[Parameter(Position=2, Mandatory=$false)] [string]$Query,
+[Parameter(Position=3, Mandatory=$false)] [string]$Application=&quot;Invoke-Sql.ps1&quot;,
+[Parameter(Position=4, Mandatory=$false)] [string]$FilePath,
+[Parameter(Position=7, Mandatory=$false)] [string]$Delimiter=&quot;|&quot;,
+#If UserName isn't supplied a trusted connection will be used
+[Parameter(Position=5, Mandatory=$false)] [string]$UserName,
+[Parameter(Position=6, Mandatory=$false)] [string]$Password,
+[Parameter(Position=8, Mandatory=$false)] [Int32]$QueryTimeout=600,
+[Parameter(Position=9, Mandatory=$false)] [Int32]$ConnectionTimeout=15
+)
+
+
+#This must be run as administrator on Windows 2008 and higher!
+New-EventLog -LogName Application -Source $Application -EA SilentlyContinue
+$Error.Clear()
+
+#######################
+function Invoke-SqlCmd2
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] [string]$ServerInstance,
+    [Parameter(Position=1, Mandatory=$true)] [string]$Database,
+    [Parameter(Position=2, Mandatory=$true)] [string]$Query,
+    [Parameter(Position=3, Mandatory=$false)] [string]$UserName,
+    [Parameter(Position=4, Mandatory=$false)] [string]$Password,
+    [Parameter(Position=5, Mandatory=$false)] [Int32]$QueryTimeout,
+    [Parameter(Position=6, Mandatory=$false)] [Int32]$ConnectionTimeout
+    )
+
+    try {
+        if ($Username)
+        { $ConnectionString = &quot;Server={0};Database={1};User ID={2};Password={3};Trusted_Connection=False;Connect Timeout={4}&quot; -f $ServerInstance,$Database,$Username,$Password,$ConnectionTimeout }
+        else
+        { $ConnectionString = &quot;Server={0};Database={1};Integrated Security=True;Connect Timeout={2}&quot; -f $ServerInstance,$Database,$ConnectionTimeout }
+        $conn=new-object System.Data.SqlClient.SQLConnection
+        $conn.ConnectionString=$ConnectionString
+        $conn.Open()
+        $cmd=new-object system.Data.SqlClient.SqlCommand($Query,$conn)
+        $cmd.CommandTimeout=$QueryTimeout
+        $ds=New-Object system.Data.DataSet
+        $da=New-Object system.Data.SqlClient.SqlDataAdapter($cmd)
+        [void]$da.fill($ds)
+        Write-Output ($ds.Tables[0])
+    }
+    finally {
+        $conn.Dispose()
+    }
+
+} #Invoke-SqlCmd2
+
+#######################
+#       MAIN          #
+#######################
+if ($PSBoundParameters.Count -eq 0)
+{
+ get-help $myInvocation.MyCommand.Path -full
+ break
+}
+
+try {
+    $msg = $null
+    $msg += &quot;Application/Job Name: $Application`n&quot; 
+    $msg += &quot;Query: $Query`n&quot;
+    $msg += &quot;ServerInstance: $ServerInstance`n&quot;
+    $msg += &quot;Database: $Database`n&quot;
+    $msg += &quot;FilePath: $FilePath`n&quot;
+    
+    Write-EventLog -LogName Application -Source &quot;$Application&quot; -EntryType Information -EventId 12345 -Message &quot;Starting`n$msg&quot;
+    $dt = Invoke-SqlCmd2 -ServerInstance $ServerInstance -Database $Database -Query $Query -UserName $UserName -Password $Password -QueryTimeOut $QueryTimeOut -ConnectionTimeout $ConnectionTimeout
+    if ($FilePath)
+    { 
+        if ($dt)
+        { $dt | export-csv -Delimiter $Delimiter -Path $FilePath -NoTypeInformation }
+        else #Query Returned No Output!
+        {Write-EventLog -LogName Application -Source &quot;$Application&quot; -EntryType Warning -EventId 12345 -Message &quot;NoOutput`n$msg&quot; } 
+    }
+
+    Write-EventLog -LogName Application -Source &quot;$Application&quot; -EntryType Information -EventId 12345 -Message &quot;Completed`n$msg&quot;
+}
+catch {
+    $Exception = &quot;{0}, {1}&quot; -f  $_.Exception.GetType().FullName,$( $_.Exception.Message -replace &quot;'&quot; )
+    Write-EventLog -LogName Application -Source &quot;$Application&quot; -EntryType Error -EventId 12345 -Message &quot;Error`n$msg`n$Exception&quot;
+    throw
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

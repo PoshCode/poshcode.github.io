@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Show-ConsoleMenu - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Show-ConsoleMenu</h1>
+<h3><a href="//scripts/2900.ps1">download</a></h3>
+<p>Shows a vertical &quot;menu&quot; in the console and allows you to pick numeric items from it.</p>
+<pre><code class="language-posh">function Show-ConsoleMenu {
+#.Synopsis
+#  Displays a menu in the console and returns the selection
+#.Description
+#  Displays a numbered list in the console, accepts a typed number from the user, and returns it.
+#.Example
+#  ls | Show-ConsoleMenu -Title &quot;Please pick a file to delete:&quot; -Passthru | rm -whatif
+#
+#  Description
+#  -----------
+#  Creates a menu showing a line for every file, and outputs the selected file.
+#.Example
+#  if(Test-Path $Profile) {
+#     switch(Show-ConsoleMenu &quot;Profile exists:&quot; &quot;Delete it!&quot;,&quot;Rename it with 01&quot;,&quot;Abort&quot; -Debug) {
+#        0 { rm $Profile -whatif }
+#        1 { mv $Profile [IO.Path]::ChangeExtension($Profile,&quot;01.ps1&quot;) }
+#        2 { return }
+#     }
+#  }
+#
+#  Description
+#  -----------
+#  Shows how to use the return value without the Passthru switch.
+#  This example would check if you have a profile, and if you do, would offer you the choice of removing or renaming it.
+param(
+   # The items to be chosen from
+   [Parameter(ValueFromPipeline=$true,Position=2)]
+   [Alias(&quot;InputObject&quot;)]
+   [PSObject[]]$Choices,
+   # A caption to display before the choices
+   [Parameter(Position=1)]
+   [Alias(&quot;Title&quot;)]
+   [string]$Caption,
+   # A scriptblock expression for formatting the Choices.
+   [Parameter(Position=3)]
+   [ScriptBlock]$Expression=({$_}),
+   # A prompt to display after the choices
+   [Alias(&quot;Footer&quot;)]
+   [string]$Prompt,
+   # How much to indent the &quot;center&quot; of the selection menu (Defaults to 8)
+   [int]$indentLeft=8,
+   # If set, Show-ConsoleMenu returns the selected value from $choices, otherwise it returns the index (which is usually easier to use in a switch statement)
+   [Switch]$Passthru,
+   # If set, this function works with my New-BufferBox script by using Out-Buffer ( http://poshcode.org/2899 )
+   [Switch]$UseBufferBox,
+   # If set, allows multiple selection (Press Enter to stop selecting more)
+   [Switch]$MultiSelect
+)
+begin {
+   $allchoices = New-Object System.Collections.Generic.List[PSObject]
+}
+process {
+   if($choices) {
+      $allchoices.AddRange($choices)
+   }
+}
+end {
+   $Format = &quot;{0:D1}&quot;; $Digits = 1
+   if($allchoices.Count -gt 10) {
+      $Digits = $allchoices.Count.ToString().Length
+      $Format = &quot;{0:D${Digits}}&quot; 
+   }
+   
+   # Make a hashtable with keys
+   for($i=0; $i -lt $allchoices.Count; $i++) {
+      $allchoices[$i] = Add-Member -Input $allchoices[$i] -Type NoteProperty -Name ConsoleMenuKey -Value $($format -f $i) -Passthru
+   }
+
+   Write-Debug &quot;There are $($allChoices.Count) choices, so we'll use $Digits digits&quot;
+   # output the menu to the screen
+   $menu = $allchoices | Format-Table -HideTableHeader @{E=&quot;ConsoleMenuKey&quot;;A=&quot;Right&quot;;W=$indentLeft}, @{E=$Expression;A=&quot;Left&quot;} -Force | Out-String
+   $menu = $menu.TrimEnd() + &quot;`n&quot; 
+
+   if($UseBufferBox) {
+      Out-Buffer (&quot;`n&quot; + (&quot; &quot; * ($indentLeft/2)) + $Caption + &quot;`n&quot;)  -ForegroundColor $Host.PrivateData.VerboseForegroundColor  -BackgroundColor $Host.PrivateData.VerboseBackgroundColor
+      Out-Buffer $menu
+   } else {
+      Write-Host (&quot;`n&quot; + (&quot; &quot; * ($indentLeft/2)) + $Caption + &quot;`n&quot;)  -ForegroundColor $Host.PrivateData.VerboseForegroundColor  -BackgroundColor $Host.PrivateData.VerboseBackgroundColor
+      Write-Host $menu
+   }
+   
+   do {
+      if($Prompt) {
+         if($UseBufferBox) {
+            Out-Buffer $Prompt -ForegroundColor $Host.PrivateData.VerboseForegroundColor  -BackgroundColor $Host.PrivateData.VerboseBackgroundColor
+         } else {
+            Write-Host $Prompt -ForegroundColor $Host.PrivateData.VerboseForegroundColor  -BackgroundColor $Host.PrivateData.VerboseBackgroundColor
+         }
+      }      
+      # get a choice from the user
+      [string]$PreviousKeys=&quot;&quot;
+      do { 
+         $Key = $Host.UI.RawUI.ReadKey(&quot;IncludeKeyDown,NoEcho&quot;).Character
+         try { 
+            [int][string]$choice = &quot;${PreviousKeys}${Key}&quot; 
+            $PreviousKeys = &quot;${PreviousKeys}${Key}&quot;
+         } catch { 
+            ## The &quot;?&quot; causes us to re-show the menu. Useful for long multi-selects, which might scroll off.
+            if(63 -eq [int][char]$Key) {
+               if($UseBufferBox) {
+                  Out-Buffer $menu
+               } else {
+                  Write-Host $menu
+               }
+            } elseif(13,27,0 -notcontains [int][char]$Key) {
+               $warning = &quot;You must type only numeric characters (hit Esc to exit)&quot;
+               if($UseBufferBox) {
+                  Out-Buffer $warning -ForegroundColor $Host.PrivateData.WarningForegroundColor -BackgroundColor $Host.PrivateData.WarningBackgroundColor
+               } else {
+                  Write-Warning $warning
+               }
+            }
+         }
+      } while( $PreviousKeys.Length -lt $Digits -and (13,27 -notcontains [int][char]$Key))
+
+      if($PreviousKeys.Length -and $allchoices.Count -gt ([int]$PreviousKeys)) {
+         if($Passthru) { 
+            $allchoices[([int]$PreviousKeys)] 
+         } else { 
+            $choice
+         }
+      }
+   } while($key -ne [char]13 -and $MultiSelect)
+}}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

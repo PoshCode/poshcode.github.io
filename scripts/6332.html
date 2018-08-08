@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="thecuriousgeek">
+    <title>App-V publish 4 Citrix - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>App-V publish 4 Citrix</h1>
+<h3><a href="//scripts/6332.ps1">download</a></h3>
+<p>Generic script for Citrix PVS and App-V to publish apps without the need for a management and database server for App-V.  Generic script doesn't need to be updated for every change or app so the image wont have to be opened and sealed every time.  The published app in the XenApp console passes the necessary information for each new published app, making it easy to add apps on the fly and not have to modify the PVS image.  This script should be not necessary if you have XenApp 7.8 or higher.</p>
+<pre><code class="language-posh">###################################################################
+##  Description:  Generic script for publishing and launching App-V
+##  packages in Citrix published app is calls the script and passes
+##  it the name of the package and the name of the EXE to launch.  
+##  App-V packages should be saved in a DFS structure that uses the
+##  name of the app as the folder.
+##
+##  This script is provided as is and may be freely used and 
+##  distributed so long as proper credit is maintained.
+##
+##  Written by: thegeek@thecuriousgeek.org
+##  Website:  http://thecuriousgeek.org
+##  Date Modified:  05-01-2016
+###################################################################
+
+
+param(
+	[string]$appName,
+	[string]$exeName
+)
+
+# Window message to the user so they don't think nothing is happening
+Write-Host &quot;`n`n                        Your application is loading...&quot;
+
+Import-Module AppvClient
+# Try and get package to see if it's loaded
+$package = Get-AppVClientPackage -Name $appName
+
+# If the package isn't already loaded, load it
+If ( !$package ) {
+	Try {
+		# Add and publish package.  Make sure to update with your own path
+		$package = Add-AppVClientPackage \\PathToApp-VPackageStorage\$appName\$appName.appv
+		Publish-AppVClientPackage $appName -Global | Out-Null
+		$didComplete = $true
+	} Catch {
+		# If it didn't complete, popup an error message to the user with details
+		$errorMessage = &quot;Error Item: $_.Exception.ItemName `n`nError Message: $_.Exception.Message&quot;
+		$didComplete = $false
+		$wshell = New-Object -ComObject Wscript.Shell
+		$wshell.Popup($errorMessage,0,&quot;Error loading application&quot;,0x0)
+	}
+} else {
+	# Package is already loaded
+	$didComplete = $true
+}
+
+# In order to know when the app has launched, we'll check the number of window titles
+# This is the count before we try to start the app
+$windowTitleCount = (get-process | where {$_.MainWindowTitle}).Count
+
+If ($didComplete) { 
+	# Get the local package directory as set in App-V Config, used for building path to EXE
+	# Powershell can't expand regular environment variables so have to use CMD to echo it back
+	$cmdExpand = &quot;cmd /c echo $( (Get-AppVClientConfiguration | where {$_.Name -eq 'PackageInstallationRoot'}).Value )&quot;
+	$packageRoot = Invoke-Expression $cmdExpand
+	$packagePath = &quot;$packageRoot\$($package.PackageId)\$($package.VersionId)\Root\VFS&quot;
+	# Pull in deployment config because it contains the path to all executables.  Make sure to update with your own path
+	[XML]$packageConfig = Get-Content &quot;PathToApp-VPackageStorage\$appName\$($appName)_DeploymentConfig.xml&quot;
+	$packageApps = $packageConfig.DeploymentConfiguration.UserConfiguration.Applications.Application.Id
+	# Loop through each app/exe listed in the config and find the one that contains the $appExe passed to the script
+	ForEach ($app in $packageApps) {
+		If ($app -match $exeName) {
+			$appPath = $app
+			break
+		}
+	}
+	# Get rid of the special characters App-V uses to reference variables in it's application path so we can create the real path
+	$appPath = $appPath -replace &quot;(\[|\{|\}|\])&quot;,&quot;&quot;  #previous regex  [^0-9a-zA-Z\\\s\.]
+	$fullPath = &quot;$packagePath\$appPath&quot;
+	Start $fullPath
+	
+	# Check number of window titles again and keep looping until the count is greater than the starting one we took earlier
+	$currentTitleCount = (get-process | where {$_.MainWindowTitle}).Count
+	While ($windowTitleCount -ge $currentTitleCount) {
+		$currentTitleCount = (get-process | where {$_.MainWindowTitle}).Count
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Francisco">
+    <title>Cisco-Inventory.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Cisco-Inventory.ps1</h1>
+<h3><a href="//scripts/5800.ps1">download</a> - <a href="//scripts/2550.md">parent</a></h3>
+<p>As written it will poll Cisco routers and switches and if the snmp OID's match it will pull out model, serial, and IOS version.  The resulting spreadsheet contains IP, host name, serial, model, IOS version, and rack location.  The script is heavily documented internally.  See the script for more info.</p>
+<pre><code class="language-posh">#==================================================================================================
+#              File Name : CiscoInventory.ps1
+#        Original Author : Kenneth C. Mazie (kcmjr)
+#            Description : As written it will poll Cisco routers and switches and if the snmp OID's
+#                        :  match it will pull out model, serial, and IOS version.  The resulting 
+#                        :  spreadsheet contains IP, host name, serial, model, IOS version, and
+#                        :  rack location.
+#
+#                  Notes : Normal operation is with no command line options. 
+#                        :  This PowerShell script was cobbled together from various sources around 
+#                        :  the Internet. It was inspired by an article by David Davis over at ZDNet
+#                        :  but came about because I had yet to find a PowerShell script to do what
+#                        :  it does in any of my searches.  
+#                        :
+#                        : The script requires net-snmp tools. The script will first attempt to 
+#                        :  ping a target, then process it if the ping succeeds. Our devices use a 
+#                        :  standard naming convention of 12 characters. The script parses the host 
+#                        :  name and determines the location of the device by what it finds in 
+#                        :  character position 2 and 3 so you may want to remove that section or 
+#                        :  edit it for your needs.
+#                        :
+#                        : The script creates an excel spreadsheet and saves it as a date &amp; time 
+#                        :  stamped file on the root of C:, so you need Excel installed.  Target 
+#                        :  systems are read from a file named &quot;devices.txt&quot; that should reside in
+#                        :  the same folder as the script and contain a list of target IP addresses,
+#                        :  one per line.
+#                        :
+#               Warnings : None
+#                        :
+#                  Legal : Script provided &quot;AS IS&quot; without warranties or guarantees of any
+#                        :  kind.  USE AT YOUR OWN RISK.  Public domain, no rights reserved.
+#                        :  Please keep this header in tact if at all possible.
+#                        : 
+#                Credits : Code snippets and/or ideas came from many sources including but 
+#                        : 
+#         Last Update by : Kenneth C. Mazie 
+#        Version History : v1.0 - 06-24-10 - Original 
+#         Change History : v1.1 - 
+#
+#=======================================================================================
+
+Clear-Host
+
+#--[ Global presets ]----------------------------------
+$Invocation = (Get-Variable MyInvocation -Scope 0).Value
+#$ScriptPath = Split-Path $Invocation.MyCommand.Path
+$strExe = &quot;f:\usr\bin\snmpget.exe&quot;    #--[ Set the location of the net-snmp tools bin folder ]---------
+$strCommunity = &quot;Public&quot;              #--[ set your community string ]---------
+
+#--[ Assorted Excel presets settings ]----------------------------------
+$xlAutomatic = -4105     # 
+$xlBottom = -4107        # Text alignment bottom
+$xlCenter = -4108        # Text alignment center
+$xlContext = -5002       # Text alignment
+$xlContinuous = 1        # 
+$xlDiagonalDown = 5      # Cell line position
+$xlDiagonalUp = 6        # Cell line position
+$xlEdgeBottom = 9        # Cell line position
+$xlEdgeLeft = 7          # Cell line position
+$xlEdgeRight = 10        # Cell line position
+$xlEdgeTop = 8           # Cell line position
+$xlInsideHorizontal = 12 # Cell line position
+$xlInsideVertical = 11   # Cell line position
+$xlDash = -4115          # Dashed line
+$xlDashDot = 4           # Alternating dashes and dots
+$xlDashDotDot = 5        # Dash followed by two dots
+$xlDot = -4118           # Dotted line
+$xlDouble = -4119        # Double line
+$xlNone = -4142          # No line
+$xlSlantDashDot = 13     # Slanted dashes.
+$xlThick = 4             # Thick line
+$xlThin = 2              # Thin line
+$sortCol = 5             # what column to place sort code in
+
+#--[ Create Spreadsheet ]-------------------------------
+$Excel = New-Object -comobject Excel.Application
+$Excel.Visible = $True
+$Excel = $Excel.Workbooks.Add(1)
+$WorkSheet = $Excel.Worksheets.Item(1)
+$WorkSheet.Cells.Item(1,1) = &quot;Target IP&quot;
+$WorkSheet.Cells.Item(1,2) = &quot;Hostname&quot;
+$WorkSheet.Cells.Item(1,3) = &quot;Model #&quot;
+$WorkSheet.Cells.Item(1,4) = &quot;Serial #&quot;
+$WorkSheet.Cells.Item(1,5) = &quot;IOS Ver&quot;
+$WorkSheet.Cells.Item(1,6) = &quot;Location&quot;
+$Workbook = $WorkSheet.UsedRange
+$WorkBook.Interior.ColorIndex = 8
+$WorkBook.Font.ColorIndex = 11
+$WorkBook.Font.Bold = $True
+$WorkBook.EntireColumn.AutoFit()
+
+#--[ Formatting ]----------------------------
+$Col = 1
+while ($Col -le 6){
+	$Edge = 7
+	while ($Edge -le 10){
+		$WorkSheet.Cells.Item(1,$Col).Borders.Item($Edge).LineStyle = 1
+		#$WorkSheet.Cells.Item(1,$Col).Borders.Item($Edge).Weight = 4   #--[ uncomment to make borders bold ]---------
+		$Edge++
+	}
+	$Col++
+}
+
+#$arrDevices = @(&quot;192.168.10.2&quot;,&quot;192.168.10.252&quot;)
+$arrDevices = Get-Content ($ScriptPath + &quot;\devicelist.txt&quot;)
+
+$intRow = 1
+$count = 0
+
+# NOTE: Cisco MIB for chassis serial # = mib-2.47.1.1.1.1.11.1001
+# NOTE: Cisco MIB for chassis model # = mib-2.47.1.1.1.1.13.1001
+# NOTE: Cisco MIB for IOS Ver = mib-2.47.1.1.1.1.13.1001
+# NOTE: Cisco MIB for hostname = sysName.0
+
+#--[ populate spreadsheet with data ]------------------
+foreach ($strTarget in $arrDevices){ #--[ Cycle through targets ]--------
+   $intRow = $intRow + 1 
+   $WorkSheet.Cells.Item($intRow,1) = $strTarget #--[ Place Target IP in current row, column A ]----------
+   Write-Host &quot;Processing..... &quot; $strTarget
+   if (test-connection $strTarget) {
+		if ($count = 5) {$count = 0}
+		
+		$strSerial = iex &quot;cmd.exe /c `&quot;$strExe -v 1 -c $strCommunity $strTarget mib-2.47.1.1.1.1.11.1001`&quot;&quot;
+		$strModel = iex &quot;cmd.exe /c `&quot;$strExe -v 1 -c $strCommunity $strTarget mib-2.47.1.1.1.1.13.1001`&quot;&quot;
+		$strIOS = iex &quot;cmd.exe /c `&quot;$strExe -v 1 -c $strCommunity $strTarget mib-2.47.1.1.1.1.9.1001`&quot;&quot;
+		$strHostName = iex &quot;cmd.exe /c `&quot;$strExe -v 1 -c $strCommunity $strTarget sysName.0`&quot;&quot;
+		
+		#--[ If we get back a model place it in current row, column C ]----------
+		if ($strModel.Length -gt 1) {$WorkSheet.Cells.Item($intRow,3) = ($strModel.Split('&quot;'))[1]} 
+		
+		#--[ If we get back a serial # place it in current row, column D ]----------
+		if ($strSerial.Length -gt 1) {$WorkSheet.Cells.Item($intRow,4) = ($strSerial.Split('&quot;'))[1]}
+		
+		#--[ If we get back an IOS version place it in current row, column E ]----------
+		if ($strIOS.Length -gt 1) {$WorkSheet.Cells.Item($intRow,5) = ($strIOS.Split('&quot;'))[1]}
+		
+		#--[ If we get back a hostname place it in current row, column B ]----------
+		if ($strHostname.Length -gt 1) {
+		$strHostName = ($strHostName.Split(' '))[3]
+		$WorkSheet.Cells.Item($intRow,2) = $strHostName 
+		switch($strHostName.substring(1,2)) {
+		   &quot;00&quot; { $errorcode = 'Rack 00' }
+		   &quot;01&quot; { $errorcode = 'Rack 01' }
+		   &quot;02&quot; { $errorcode = 'Rack 02' }
+		   &quot;03&quot; { $errorcode = 'Rack 03' }
+		   &quot;04&quot; { $errorcode = 'Rack 04' }
+		   &quot;05&quot; { $errorcode = 'Rack 05' }
+		   &quot;06&quot; { $errorcode = 'Rack 06' }
+		   &quot;07&quot; { $errorcode = 'Rack 07' }
+		   &quot;08&quot; { $errorcode = 'Rack 08' }
+		   &quot;09&quot; { $errorcode = 'Rack 09' }
+		   &quot;10&quot; { $errorcode = 'Rack 10' }
+		   &quot;11&quot; { $errorcode = 'Rack 11' }
+		   &quot;12&quot; { $errorcode = 'Rack 12' }
+		   &quot;13&quot; { $errorcode = 'Rack 13' }
+		   &quot;14&quot; { $errorcode = 'Rack 14' }
+           default { $errorcode = 'Unknown' }
+        }  
+        $WorkSheet.Cells.Item($intRow,6) = $errorcode #--[ Place location in current row, column F ]----------
+	  }
+   } 
+else
+{
+   $WorkSheet.Cells.Item($intRow,2) = &quot;Unreachable&quot;       #--[ Place model # in current row, column B ]----------
+		}
+		
+	$count = $count + 1
+	if ($count =5) {$WorkBook.EntireColumn.AutoFit()}
+}
+
+	$WorkBook.EntireColumn.AutoFit() #--[ Adjust column width across used columns ]---------
+	$WorkSheet.Cells.Item($intRow + 2, 1) = &quot;DONE&quot; 
+	$strFilename = &quot;c:\CiscoInventory-{0:dd-MM-yyyy_HHmm}.xls&quot; -f (Get-Date)  #--[ Places a date stamped spreadsheet in the root of C: ]------
+	$Excel.SaveAs($StrFilename)
+	Write-Host (&quot;Output saved to &quot; + $strFilename)
+	Write-Host &quot;Done...&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

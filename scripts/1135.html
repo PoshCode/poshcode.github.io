@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Heath Stewart">
+    <title>Feeds Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Feeds Module</h1>
+<h3><a href="//scripts/1135.ps1">download</a></h3>
+<p>A script module that allows you to sync feeds using the Microsoft Feeds Manager automation API, as well as mark items read for all or specific folders.</p>
+<pre><code class="language-posh">#Requires -Version 2.0
+
+DATA loc {
+	# en-US
+	convertfrom-stringdata @'
+		RootName = (Root)
+		FolderCaption = Folder: {0}
+		FeedCaption = Feed: {0}
+		MarkReadStatus = Marking all items read
+		DownloadStatus = Downloading all items
+		AsyncDownloadStatus = Beginning download of all items
+'@
+}
+
+# Import localized data (default is en-US above).
+import-localizeddata -bindingVariable loc -errorAction SilentlyContinue
+
+filter Recurse-Feeds { $_.Subfolders | Recurse-Feeds; $_.Feeds }
+filter Recurse-Folders { $_.Subfolders | Recurse-Folders; $_ }
+
+# Filter to write progress based on the number of feed items
+filter Write-FeedProgress
+{
+	param(
+        [scriptblock] $Script = $(throw &quot;`$Script required.&quot;),
+        [string] $Activity = $(throw &quot;`$Activity required.&quot;),
+        [MarshalByRefObject] $Folder = $(throw &quot;`$Folder required.&quot;),
+        [switch] $WithProgress
+    )
+	begin
+	{
+		$total = $Folder.TotalItemCount
+		$count = 0
+	}
+	process
+	{
+        try
+        {
+		  &amp; $Script
+        }
+        finally
+        {
+            # Always report progress
+    		if ($WithProgress)
+    		{
+    			$count += $_.ItemCount;
+    			$percent = $count / $total * 100
+
+    			$path = $_.Parent.Path
+    			if ($path -eq &quot;&quot;) { $path = $loc.RootName }
+
+    			write-progress -activity $activity -status ($loc.FolderCaption -f $path) `
+    				-current ($loc.FeedCaption -f $_.Name) -percent $percent
+    		}
+        }
+	}
+}
+
+# Mark all feed items as read
+function MarkRead-Feeds
+{
+&lt;#
+.Synopsis
+    Marks all feeds in the root or given folder as read.
+.Description
+    Marks all the feeds in Internet Explorer 7.0 or newer as read. If no folder
+    is provided then this marks all feeds under the root folder.
+.Parameter Folder
+	The name of the folder under which all items are marked read.
+.Parameter WithProgress
+	Show a progress bar and activity details.
+.Example
+    markread-feeds &quot;Microsoft Feeds&quot; -withprogress
+	Marks all items as read under &quot;Microsoft Feeds&quot; with progress.
+#&gt;
+    [CmdletBinding()]
+	param(
+        [Parameter(Position = 0)]
+        [string] $Folder = $null,
+        
+        [Parameter()]
+		[switch] $WithProgress
+    )
+
+	$rss = new-object -com Microsoft.FeedsManager
+	$root = $rss.GetFolder($Folder)
+	$root | recurse-feeds | write-feedprogress -script { $_.MarkAllItemsRead() } `
+		-activity $loc.MarkReadStatus -folder $root -withprogress:$WithProgress
+}
+
+# Download all new feed items
+function Download-Feeds
+{
+&lt;#
+.Synopsis
+    Downloads (synchronizes) all feeds in the root or given folder.
+.Description
+    Forces the synchronization of all feeds in Internet Explorer 7.0 or newer.
+    If no folder is provided then this downloads all feeds under the root
+    folder.
+.Parameter Folder
+	The name of the folder under which all items are marked read.
+.Parameter Asynchronous
+	Return immediately and download all items in a separate thread.
+.Parameter WithProgress
+	Show a progress bar and activity details.
+.Example
+    download-feeds &quot;Microsoft Feeds&quot; -withprogress
+	Downloads all items under the &quot;Microsoft Feeds&quot; folder with progress.
+#&gt;
+    [CmdletBinding()]
+	param(
+        [Parameter(Position = 0)]
+        [string] $Folder = $null,
+        
+        [Parameter()]
+		[switch] $Asynchronous,
+        
+        [Parameter()]
+		[switch] $WithProgress
+    )
+
+	if ($Asynchronous)
+	{
+		$activity = $loc.AsyncDownloadStatus
+		$script = { $_.AsyncDownload() }
+	}
+	else
+	{
+		$activity = $loc.DownloadStatus
+		$script = { $_.Download() }
+	}
+
+	$rss = new-object -com Microsoft.FeedsManager
+	$root = $rss.GetFolder($Folder)
+	$root | recurse-feeds | write-feedprogress -script $script `
+		-activity $activity -folder $root -withprogress:$WithProgress
+}
+
+# Export everything for use into the current session.
+export-modulemember -function &quot;markread-feeds&quot;, &quot;download-feeds&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

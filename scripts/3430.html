@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="George Mauer">
+    <title>Download-FreeReflector.p - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Download-FreeReflector.p</h1>
+<h3><a href="//scripts/3430.ps1">download</a> - <a href="//scripts/3429.md">parent</a></h3>
+<p>Reflector is no longer free. Except it kind of is. This script will download it for you. Booya!</p>
+<pre><code class="language-posh">#Thanks http://27.am/posts/how-to-download-net-reflector-6-for-free
+
+add-type @'
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Net;
+using System.Reflection;
+
+namespace LookingGlass
+{
+    public class RedGateDownloader
+
+        public static void Download()
+        {
+            QueryDownloadUrl(&quot;http://reflector.red-gate.com/Reflector.version&quot;);
+        }
+
+        static void QueryDownloadUrl(string versionUrl)
+        {
+            Console.WriteLine(&quot;Phase 1: Getting download URL...&quot;);
+
+            HttpWebRequest request = GetHttpWebRequest(versionUrl);
+            string downloadUrl = null;
+            string data;
+
+            using (WebResponse response = request.GetResponse())
+            {
+                data = ReadResponse(response);
+
+                foreach (string line in data.Split('\n'))
+                {
+                    if (line.StartsWith(&quot;http&quot;, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // If this version number stops working, search for other known .NET Reflector version numbers; Red Gates own forums mention a few
+                        downloadUrl = line.Trim('\r').Replace(&quot;{Client}&quot;, &quot;Reflector&quot;).Replace(&quot;{Version}&quot;, &quot;6.1.0.11&quot;);
+                        break;
+                    }
+                }
+            }
+
+            if (downloadUrl == null)
+            {
+                Console.WriteLine(&quot;Failed to find download URL. Returned data was:&quot;);
+                Console.WriteLine(data);
+                Console.ReadLine();
+            }
+            else
+            {
+                Console.WriteLine(&quot;Launching download process... for &quot;+downloadUrl);
+                Process.Start(Process.GetCurrentProcess().MainModule.FileName, downloadUrl);
+                Console.WriteLine(&quot;Phase 1 complete.&quot;);
+
+                Download(downloadUrl);
+            }
+        }
+
+        static void Download(string downloadUrl)
+        {
+            Console.WriteLine(&quot;Phase 2: Downloading...&quot;);
+
+            HttpWebRequest request = GetHttpWebRequest(downloadUrl);
+            string path;
+
+            using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+            {
+                path = GetDownloadFilename(response);
+
+                if (response.StatusCode == HttpStatusCode.OK &amp;&amp; !string.IsNullOrEmpty(path))
+                {
+                    Console.WriteLine(&quot;Saving to {0}...&quot;, path);
+                    SaveResponse(response, path);
+                    Console.WriteLine(&quot;Done!&quot;);
+                }
+                else
+                {
+                    Console.WriteLine(&quot;Download failed; server returned status code {0}. Returned data was:&quot;, response.StatusCode);
+                    Console.WriteLine(ReadResponse(response));
+                    Console.ReadLine();
+                }
+            }
+        }
+
+        static HttpWebRequest GetHttpWebRequest(string url)
+        {
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            request.Headers.Add(&quot;Cache-Control: no-cache, no-store, max-age=0&quot;);
+            // Emulate the manner in which the headers are handled
+            FieldInfo usesProxySemantics = typeof(ServicePoint).GetField(&quot;m_ProxyServicePoint&quot;, BindingFlags.NonPublic | BindingFlags.Instance);
+            usesProxySemantics.SetValue(request.ServicePoint, true);
+            return request;
+        }
+
+        static string GetDownloadFilename(HttpWebResponse response)
+        {
+            string contentDisposition = response.Headers[&quot;content-disposition&quot;];
+
+            if (string.IsNullOrEmpty(contentDisposition))
+                return null;
+
+            string filenameField = &quot;filename=&quot;;
+            int index = contentDisposition.IndexOf(filenameField, StringComparison.CurrentCultureIgnoreCase);
+
+            if (index &lt; 0)
+                return null;
+
+            return contentDisposition.Substring(index + filenameField.Length).Trim('&quot;');
+        }
+
+        static string ReadResponse(WebResponse response)
+        {
+            using (Stream netStream = response.GetResponseStream())
+            {
+                using (StreamReader reader = new StreamReader(netStream))
+                {
+                    return reader.ReadToEnd();
+                }
+            }
+        }
+
+        static void SaveResponse(WebResponse response, string path)
+        {
+            byte[] buffer = new byte[4 * 1024];
+            int bytesRead;
+
+            using (Stream netStream = response.GetResponseStream())
+            {
+                if (File.Exists(path))
+                    File.Delete(path);
+
+                using (FileStream fileStream = File.Create(path))
+                {
+                    while ((bytesRead = netStream.Read(buffer, 0, buffer.Length)) &gt; 0)
+                    {
+                        Console.Write(&quot;.&quot;);
+                        fileStream.Write(buffer, 0, bytesRead);
+                    }
+                }
+            }
+
+            Console.WriteLine();
+        }
+    }
+}
+'@
+
+[LookingGlass.RedGateDownloader]::Download()
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

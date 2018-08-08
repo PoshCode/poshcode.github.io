@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Lee Holmes">
+    <title>Invoke-Inline - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-Inline</h1>
+<h3><a href="//scripts/68.ps1">download</a></h3>
+<p>This is Lee Holmes' INvoke-Inline, with some minor modifications by Joel Bennett to allow it to use #include statements, and to return collections.</p>
+<pre><code class="language-posh">################################################################################ 
+## Invoke-Inline.ps1 (originally from Lee Holmes)
+## Library support for inline C# 
+## 
+## Modified by Joel Bennett to accept include statements, and return collections
+##
+## Usage 
+##  1) Define just the body of a C# method, and store it in a string.  &quot;Here 
+##     strings&quot; work great for this.  The code can be simple: 
+## 
+##     $codeToRun = &quot;Console.WriteLine(Math.Sqrt(337));&quot; 
+## 
+##     or more complex, using result.Add(): 
+## 
+##     $codeToRun = @&quot; 
+##         string firstArg = (string) ((System.Collections.ArrayList) arg)[0]; 
+##         int secondArg = (int) ((System.Collections.ArrayList) arg)[1]; 
+## 
+##         Console.WriteLine(&quot;Hello {0} {1}&quot;, firstArg, secondArg ); 
+##      
+##         result.Add(secondArg * 3); 
+##     &quot;@ 
+## 
+##  2) If you must pass arguments, you should make them strongly-typed, 
+##	   so that PowerShell doesn't wrap it as a PsObject. 
+## 
+##  3) Invoke the inline code, optionally retrieving the return value.  You can 
+##     set the return values in your inline code by assigning it to the 
+##     &quot;return&quot; collection as shown above. 
+## 
+##     $result = Invoke-Inline $usingStatements, $codeToRun $arguments 
+##     $result = Invoke-Inline  $codeToRun $arguments 
+## 
+## 
+##     If your code is simple enough, you can even do this entirely inline: 
+## 
+##     Invoke-Inline &quot;Console.WriteLine(Math.Pow(337,2));&quot; 
+##   
+################################################################################ 
+param(
+    [string[]] $code, 
+    [object[]] $arguments,
+    [string[]] $reference = @()
+    )
+
+## Stores a cache of generated inline objects.  If this library is dot-sourced 
+## from a script, these objects go away when the script exits. 
+if(-not (Test-Path Variable:\inlineCode.Cache))
+{
+    ${GLOBAL:inlineCode.Cache} = @{}
+}
+
+$using = $null;
+$source = $null;
+if($code.length -eq 1) {
+	$source = $code[0]
+} elseif($code.Length -eq 2){
+	$using = $code[0]
+	$source = $code[1]
+} else {
+	Write-Error &quot;You have to pass some code, or this won't do anything ...&quot;
+}
+
+## un-nesting magic (why do I need this?)
+$params = @()
+foreach($arg in $arguments) { $params += $arg }
+$arguments = $params
+
+## The main function to execute inline C#.   
+## Pass the argument to the function as a strongly-typed variable.  They will  
+## be available from C# code as the Object variable, &quot;arg&quot;. 
+## Any values assigned to the &quot;returnValue&quot; object by the C# code will be  
+## returned to MSH as a return value. 
+
+function main
+{
+    ## See if the code has already been compiled and cached 
+    $cachedObject = ${inlineCode.Cache}[$source] 
+	Write-Verbose &quot;Type: $($arguments[0].GetType())&quot;
+
+    ## The code has not been compiled or cached 
+    if($cachedObject -eq $null)
+    {
+        $codeToCompile = 
+@&quot;
+    using System;
+	using System.Collections.Generic;
+	$using
+
+    public class InlineRunner 
+    { 
+        public List&lt;object&gt; Invoke(Object[] args) 
+        { 
+            List&lt;object&gt; result = new List&lt;object&gt;(); 
+
+            $source 
+
+            if( result.Count &gt; 0 ) {
+				return result;
+			} else {
+				return null;
+			}
+        } 
+    } 
+&quot;@
+		Write-Verbose $codeToCompile
+
+        ## Obtains an ICodeCompiler from a CodeDomProvider class. 
+        $provider = New-Object Microsoft.CSharp.CSharpCodeProvider 
+
+        ## Get the location for System.Management.Automation DLL 
+        $dllName = [PsObject].Assembly.Location
+
+        ## Configure the compiler parameters 
+        $compilerParameters = New-Object System.CodeDom.Compiler.CompilerParameters 
+
+        $assemblies = @(&quot;System.dll&quot;, $dllName) 
+        $compilerParameters.ReferencedAssemblies.AddRange($assemblies) 
+        $compilerParameters.ReferencedAssemblies.AddRange($reference)
+        $compilerParameters.IncludeDebugInformation = $true 
+        $compilerParameters.GenerateInMemory = $true 
+
+        ## Invokes compilation.  
+        $compilerResults =
+            $provider.CompileAssemblyFromSource($compilerParameters, $codeToCompile) 
+
+        ## Write any errors if generated.         
+        if($compilerResults.Errors.Count -gt 0) 
+        { 
+            $errorLines = &quot;&quot; 
+            foreach($error in $compilerResults.Errors) 
+            { 
+                $errorLines += &quot;`n`t&quot; + $error.Line + &quot;:`t&quot; + $error.ErrorText 
+            } 
+            Write-Error $errorLines 
+        } 
+        ## There were no errors.  Store the resulting object in the object 
+        ## cache. 
+        else 
+        { 
+            ${inlineCode.Cache}[$source] = 
+                $compilerResults.CompiledAssembly.CreateInstance(&quot;InlineRunner&quot;) 
+        } 
+
+        $cachedObject = ${inlineCode.Cache}[$source] 
+   } 
+
+   Write-Verbose &quot;Argument $arguments`n`n$cachedObject&quot;
+   ## Finally invoke the C# code 
+   if($cachedObject -ne $null)
+   { 
+       return $cachedObject.Invoke($arguments)
+   } 
+}
+. Main
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

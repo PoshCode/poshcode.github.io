@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="tojo2000">
+    <title>Get-LocalGroups - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-LocalGroups</h1>
+<h3><a href="//scripts/1268.ps1">download</a> - <a href="//scripts/1267.md">parent</a></h3>
+<p>I import this as a module because it depends on the other two functions.  You could easily dot-source it as well.  Requires v2 CTP3 or higher to get the help documentation to work.</p>
+<pre><code class="language-posh">function Add-NoteProperty {
+  &lt;#
+.Synopsis
+  Adds a NoteProperty member to an object.
+.Description
+  This function makes adding a property a lot easier than Add-Member, assuming
+  you want to add a NoteProperty, which I find is true about 90% of the time.
+.Parameter object
+  The object to add the property to.
+.Parameter name
+  The name of the new property.
+.Parameter value
+  The object to add as the property.
+.Example
+  # Create a new custom object and add some properties.
+  PS&gt; $custom_obj = New-Object PSObject
+  PS&gt; Add-NoteProperty $custom_obj Name 'Custom'
+  PS&gt; Add-NoteProperty $custom_obj Value 42
+.Example
+  # Add a NoteProperty by passing the object to be modified down the pipeline.
+  PS&gt; $bunch_of_objects | Add-NoteProperty -name 'meaning_of_life' -value 42
+.Notes
+  NAME:      Add-NoteProperty
+  AUTHOR:    Tim Johnson &lt;tojo2000@tojo200.com&gt;
+  FILE:      LocalGroups.psm1
+#&gt;
+  param([Parameter(Mandatory = $true,
+  ValueFromPipeline = $true,
+  Position = 0)]
+  $object,
+  [Parameter(Mandatory = $true,
+  Position = 1)]
+  [string]$name,
+  [Parameter(Mandatory = $true,
+  Position = 2)]
+  $value)
+
+  BEGIN{}
+
+  PROCESS{
+    $object | Add-Member -MemberType NoteProperty `
+    -Name $name `
+    -Value $value
+  }
+
+  END{}
+}
+
+
+function Get-COMProperty{
+&lt;#
+.Synopsis
+  Gets a property of a __ComObject object.
+.Description
+  This function calls the InvokeMember static method of the class to get 
+  properties that aren't directly exposed to PowerShell, such as local group
+  members found by calling Members() on a DirectoryServices group object.
+.Parameter com_object
+  The object to retrieve the property from.
+.Parameter property_name
+  The name of the property.
+.Example
+  # Get the names of all members of a group.
+  PS&gt; [adsi]$computer = 'WinNT://servername'
+  PS&gt; $groups = $groups = $computer.psbase.children |
+  &gt;&gt;    ?{$_.psbase.schemaclassname -eq 'group'}
+  PS&gt; $groups[0].Members() | %{Get-COMProperty $_ 'Name'}
+.Notes
+  NAME:      Get-COMProperty
+  AUTHOR:    Tim Johnson &lt;tojo2000@tojo200.com&gt;
+  FILE:      LocalGroups.psm1
+#&gt;
+  param([Parameter(Mandatory = $true,
+  Position = 0)]
+  $com_object,
+  [Parameter(Mandatory = $true,
+  Position = 1)]
+  [string]$property_name)
+
+  [string]$property = $com_object.GetType().InvokeMember($property_name, 
+  'GetProperty', 
+  $null, 
+  $com_object, 
+  $null)
+  Write-Output $property
+}
+
+
+function Get-LocalGroups{
+&lt;#
+.Synopsis
+  Gets a list of objects with information about local groups and their members.
+.Description
+  This function returns a list of custom PSObjects that are a list of local
+  groups on a computer.  Each object has a property called Members that is a
+  list of PSObjects representing each member, with Name, Domain, and ADSPath.
+.Parameter computername
+  The object to retrieve the property from.
+.Example
+  # Get a list of groups from a server.
+  PS&gt; Get-LocalGroups servername
+.Notes
+  NAME:      Get-LocalGroups
+  AUTHOR:    Tim Johnson &lt;tojo2000@tojo200.com&gt;
+  FILE:      LocalGroups.psm1
+#&gt;
+  param([Parameter(Mandatory = $true,
+  ValueFromPipeline = $true)]
+  [string]$computername = $env:computername)
+
+  BEGIN{}
+
+  PROCESS{
+    $output = @()
+    [adsi]$computer = &quot;WinNT://$computername&quot;
+    $groups = $computer.psbase.children |
+    ?{$_.psbase.schemaclassname -eq 'group'}
+
+    foreach ($group in $groups) {
+      $members = @()
+      $grp_obj = New-Object PSObject
+      Add-NoteProperty $grp_obj 'Name' $group.Name.ToString()
+      Add-NoteProperty $grp_obj 'aDSPath' $group.aDSPath.ToString()
+
+      foreach ($user in $group.Members()){
+        $usr_obj = New-Object PSObject
+        Add-NoteProperty $usr_obj 'aDSPath' (Get-COMProperty $user 'aDSPath')
+        Add-NoteProperty $usr_obj 'Name' (Get-COMProperty $user 'Name')
+        $path = $usr_obj.aDSPath.split('/')
+
+        if ($path.Count -eq 4){
+          Add-NoteProperty $usr_obj 'Domain' $path[2]
+        }elseif ($path.Count -eq 5) {
+          Add-NoteProperty $usr_obj 'Domain' $path[3]
+        }else{
+          Add-NoteProperty $usr_obj 'Domain' 'Unknown'
+        }
+        $members += $usr_obj
+      }
+      $members = @($members | Sort-Object -Property Domain, Name)
+      Add-NoteProperty $grp_obj 'Members' $members
+      Write-Output $grp_obj
+    }
+  }
+  END{} 
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

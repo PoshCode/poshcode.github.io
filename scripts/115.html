@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Start-SQL 1.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Start-SQL 1.0</h1>
+<h3><a href="//scripts/115.ps1">download</a></h3>
+<p>A series of functions to handle getting data from SQL Servers.  Think of these more as tutorials for using SQL Server from powershell than as a finished set of scripts.</p>
+<pre><code class="language-posh"># Start-Sql.ps1
+###################################################################################################
+# This is a SCRIPT which emits functions and variables into the global scope
+# Most importantly, it uses a variable $SqlConnection which is expected to exist....
+#
+# On my computer, I set default values for the server and database, but not for the query, 
+# nor for authentication (I usually use Integrated Security)
+###################################################################################################
+#   By default when you run this script it:
+#     * creates the functions 
+#     * initializes the connection
+#   But we don't automatically do a query -- unless you pass one in!
+#
+#   Thus, calling the script with no parameters results in an initialized connection, 
+#   but it doesn't return anything, so it's basically silent if there are no errors.
+#
+
+# the default server and database
+param( 
+   $Server = $(Read-Host &quot;SQL Server Name&quot;), 
+   $Database = $(Read-Host &quot;Default Database&quot;),  
+   $UserName, $Password, $Query )
+
+## Uncomment the next line to start the SqlServer (or fail miserably but silently)
+# Get-Service -include &quot;MSSQLSERVER&quot; | where {$_.Status -like &quot;Stopped&quot;} | Start-Service 
+
+#
+# change the SqlConnection (it's set to a default when the script it run)
+#
+function global:Set-SqlConnection( $Server = $(Read-Host &quot;SQL Server Name&quot;), $Database = $(Read-Host &quot;Default Database&quot;),  $UserName , $Password  ) {
+
+  if( ($UserName -gt $null) -and ($Password -gt $null)) {
+    $login = &quot;User Id = $UserName; Password = $Password&quot;
+  } else {
+    $login = &quot;Integrated Security = True&quot;
+  }
+  $SqlConnection.ConnectionString = &quot;Server = $Server; Database = $Database; $login&quot;
+}
+
+#
+# A function to perform a query that returns a table full of data
+#
+function global:Get-SqlDataTable( $Query = $(Read-Host &quot;Enter SQL Query&quot;)) {
+  if (-not ($SqlConnection.State -like &quot;Open&quot;)) { $SqlConnection.Open() }
+  $SqlCmd = New-Object System.Data.SqlClient.SqlCommand $Query, $SqlConnection
+
+  $SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter
+  $SqlAdapter.SelectCommand = $SqlCmd
+
+  $DataSet = New-Object System.Data.DataSet
+  $SqlAdapter.Fill($DataSet) | Out-Null
+
+  $SqlConnection.Close()
+  
+  return $DataSet.Tables[0]
+}
+
+#
+# A function to perform a single-value (series) query.  That is, a query that 
+# returns only a single value per row, which we just output strongly typed.
+#
+function global:Get-SQLQuery($Query = $(Read-Host &quot;Enter SQL Query&quot;), $type = &quot;string&quot;)
+{
+  if (-not ($SqlConnection.State -like &quot;Open&quot;)) { $SqlConnection.Open() }
+  $SqlCmd = New-Object System.Data.SqlClient.SqlCommand $Query, $SqlConnection
+
+  # $results = @();
+
+  # trap [SqlException]
+  # {
+    #LogSqlErrors(e.Errors, sqlQuery);
+    # throw new DataException(&quot;Unable to ExecuteReader(), check EventLog for details.&quot;, e);
+  # }
+  
+  $dr = $SqlCmd.ExecuteReader()
+  while($dr.Read())
+  {
+    #$results += $dr.GetValue(0) -as $type
+    $dr.GetValue(0) -as $type # emit the value directly, isn't that more PowerShelly?
+  }
+  $dr.Close()
+  $dr.Dispose()
+
+  # return $results
+}
+
+# Initialize the SqlConnection variable
+Set-Variable SqlConnection (New-Object System.Data.SqlClient.SqlConnection) -Scope Global -Option AllScope -Description &quot;Personal variable for Sql Query functions&quot;
+
+# Initially create the SqlConnection
+Set-SqlConnection $Server $Database
+
+# go ahead and run the initial query if we have one...
+if( $query -gt $null ) {
+  Get-SqlDataTable $Query
+}
+
+# Some aliases to let you use the functions with less typing
+Set-Alias gdt Get-SqlDataTable  -Option AllScope -scope Global -Description &quot;Personal Function alias from Get-Sql.ps1&quot;
+Set-Alias sql Set-SqlConnection -Option AllScope -scope Global -Description &quot;Personal Function alias from Get-Sql.ps1&quot;
+Set-Alias gq  Get-SqlQuery      -Option AllScope -scope Global -Description &quot;Personal Function alias from Get-Sql.ps1&quot;
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

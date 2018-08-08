@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="chriskenis">
+    <title>Get- ExchangeMBStore - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get- ExchangeMBStore</h1>
+<h3><a href="//scripts/3780.ps1">download</a></h3>
+<p>get Mailbox Store Info per Exchange 2003 server
+inspired upon http://gsexdev.blogspot.be/2008/07/show-exchange-whitespace-retained-items.html</p>
+<pre><code class="language-posh">Param (
+[Parameter(Position=0,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$true)]
+[alias(&quot;Name&quot;,&quot;ComputerName&quot;)]$Computer=@(&quot;xcserver01&quot;)
+)
+
+process{
+$XCinfo = GetXCDatabases $Computer
+$XCMaintInfo = GetMBStoreMaintenance $Computer
+foreach ($DB in $XCinfo){
+	try{
+		$DB.WhiteSpace = $XCMaintInfo[$DB.MB].WhiteSpace
+		$DB.RetainedMailbox = $XCMaintInfo[$DB.MB].RetainedMailbox
+		$DB.RetainedMailboxSize = $XCMaintInfo[$DB.MB].RetainedMailboxSize
+		$DB.DeletedMailbox = $XCMaintInfo[$DB.MB].DeletedMailbox
+		$DB.DeletedMailboxSize = $XCMaintInfo[$DB.MB].DeletedMailboxSize
+		$DB.DeletedItems = $XCMaintInfo[$DB.MB].DeletedItems
+		$DB.DeletedItemsSize = $XCMaintInfo[$DB.MB].DeletedItemsSize
+		}
+	catch{
+		Write-Error $(&quot;For &quot; + $Computer + &quot;: &quot; + $($error[0]))
+		}
+	}
+$Global:XCserverInfo += $XCinfo | select Server, StorageGroup, DatabaseName, Path, FileSize, DeletedMailbox, DeletedMailboxSize, RetainedMailbox, RetainedMailboxSize, DeletedItems, DeletedItemsSize 
+}
+
+begin{
+$Global:XCserverInfo = @()
+$Quote = [char]34
+
+Function GetADSIObject ($Name){
+write-verbose &quot;get ADSI information for $Name&quot;
+$root = [ADSI]'LDAP://RootDSE'
+$cfConfigRootpath = &quot;LDAP://&quot; + $root.ConfigurationNamingContext.tostring()
+$configRoot = [ADSI]$cfConfigRootpath
+$searcher = new-object System.DirectoryServices.DirectorySearcher($configRoot)
+$searcher.Filter = '(&amp;(objectCategory=msExchExchangeServer)(cn=' + $Name + '))'
+$searchres = $searcher.FindOne()
+$snServerEntry = New-Object System.DirectoryServices.directoryentry
+$snServerEntry = $searchres.GetDirectoryEntry()
+$adsiServer = [ADSI]('LDAP://' + $snServerEntry.DistinguishedName)
+return $adsiserver
+}
+
+Function GetXCDatabases($XCservername){
+$XCDatabases = @()
+$XCserver = GetADSIObject $XCservername
+write-verbose &quot;get XC DB information for $($XCserver.Name)&quot;
+$dfsearcher = new-object System.DirectoryServices.DirectorySearcher($XCserver)
+#get all standard mailstores
+$dfsearcher.Filter = &quot;(objectCategory=msExchPrivateMDB)&quot;
+$srSearchResults = $dfsearcher.FindAll()
+#get all public folder stores
+$dfsearcher.Filter = &quot;(objectCategory=msExchPublicMDB)&quot;
+$srSearchResults += $dfsearcher.FindAll()
+foreach ($srSearchResult in $srSearchResults){
+	$msMailStore = $srSearchResult.GetDirectoryEntry()
+	$msMailStoreFileName = $msMailStore.msExchEDBFile
+	$Filter = $msMailStoreFileName -replace '\\','\\'
+	write-verbose &quot;getting details for $Filter thru WMI&quot;
+	$msMailStoreFile = (Gwmi -computername $XCservername -class CIM_DataFile -filter &quot;Name = '$Filter'&quot;)
+	$sgStorageGroup = $msMailStore.psbase.Parent
+	#skip recovery databases
+	if ($sgStorageGroup.msExchESEParamBaseName -ne &quot;R00&quot;){
+		$XCdatabase = New-Object PSObject -Property @{
+			Server = [string] $XCservername
+			StorageGroup = [string] $sgStorageGroup.Name
+			DataBaseName = [string] $msMailStore.Name
+			MB = &quot;$($sgStorageGroup.Name)\$($msMailStore.Name)&quot;
+			Path = [string] $msMailStoreFileName
+			FileSize = &quot;$([math]::round($msMailStoreFile.FileSize/1048576,0)) MB&quot;
+			WhiteSpace = &quot;&quot;
+			RetainedMailbox = &quot;&quot;
+			RetainedMailboxSize = &quot;&quot;
+			DeletedMailbox = &quot;&quot;
+			DeletedMailboxSize = &quot;&quot;
+			DeletedItems = &quot;&quot;
+			DeletedItemsSize = &quot;&quot;
+			}
+		}
+	write-verbose &quot;retrieved information for $($XCdatabase.MB)&quot;
+	$XCDatabases += $XCdatabase
+	}
+return $XCdatabases | sort MB
+}
+
+Function GetMBStoreMaintenance ($Computername){
+$MBMaintInfo = @{}
+$WmidtQueryDT = [System.Management.ManagementDateTimeConverter]::ToDmtfDateTime([DateTime]::UtcNow.AddDays(-1))
+$Filter = &quot;Logfile='Application' and SourceName = 'MSExchangeIS Mailbox Store' and TimeWritten &gt;='&quot; + $WmidtQueryDT + &quot;'&quot;
+$Events = (Get-WmiObject -Computername $ComputerName -class Win32_NTLogEvent -Filter $Filter | sort $_.TimeWritten -Descending)
+foreach ($Event in $Events){
+	write-verbose &quot;getting details of Event $($Event.Eventcode)&quot;
+	switch ($Event.Eventcode){
+		'1207'{ #Cleanup Item Recovery
+			$itemsremovedStart = $Event.Insertionstrings[0]
+			$itemsremovedSizeStart = $Event.Insertionstrings[1]
+			$itemsremovedEnd = $Event.Insertionstrings[2]
+			$itemsremovedSizeEnd = $Event.Insertionstrings[3]
+			$MB = $Event.Insertionstrings[4]
+			write-verbose &quot;For: $MB Item Cleanup details&quot;
+			write-verbose &quot;Begin: $itemsremovedStart items with a total size of $itemsremovedStartSize KB&quot;
+			write-verbose &quot;End: $itemsremovedEnd items with a total size of $itemsremovedEndSize KB&quot;
+			if (-not $MBMaintInfo.ContainsKey($MB)){
+				$MBMaintInfo.add($MB,@{})
+				$MBMaintInfo.$MB.Name = $MB
+				}
+			if (-not $MBMaintInfo.$MB.ContainsKey(&quot;DeletedItems&quot;)){$MBMaintInfo.$MB.Add(&quot;DeletedItems&quot;,$itemsremovedEnd)}
+			if (-not $MBMaintInfo.$MB.ContainsKey(&quot;DeletedItemsSize&quot;)){$MBMaintInfo.$MB.Add(&quot;DeletedItemsSize&quot;,&quot;$itemsremovedSizeEnd KB&quot;)}
+			}
+		'1221'{ #Online Defrag Whitespace
+			$WhiteSpace = $Event.Insertionstrings[0]
+			$MB = $Event.Insertionstrings[1]
+			write-verbose &quot;For: $MB Online Defrag details&quot;
+			write-verbose &quot;Defrag has freed up $WhiteSpace MB&quot;
+			if (-not $MBMaintInfo.ContainsKey($MB)){
+				$MBMaintInfo.add($MB,@{})
+				$MBMaintInfo.$MB.Name = $MB
+				}
+			if (-not $MBMaintInfo.$MB.ContainsKey(&quot;WhiteSpace&quot;)){$MBMaintInfo.$MB.Add(&quot;WhiteSpace&quot;,&quot;$WhiteSpace MB&quot;)}
+			}
+		'9535'{ #Cleanup Deleted Mailboxes
+			$mbremoved = $Event.Insertionstrings[0]
+			$mbremovedSize = $Event.Insertionstrings[1]
+			$mbretained = $Event.Insertionstrings[2]
+			$mbretainedSize = $Event.Insertionstrings[3]
+			$MB = $Event.Insertionstrings[4]
+			write-verbose &quot;For: $MB Mailbox Cleanup details&quot;
+			write-verbose &quot;Removed: $mbremoved mailboxes with a total size of $mbremovedSize KB&quot;
+			write-verbose &quot;Retained: $mbretained mailboxes with a total size of $mbretainedSize KB&quot;
+			if (-not $MBMaintInfo.ContainsKey($MB)){
+				$MBMaintInfo.add($MB,@{})
+				$MBMaintInfo.$MB.Name = $MB
+				}
+			if (-not $MBMaintInfo.$MB.ContainsKey(&quot;DeletedMailbox&quot;)){$MBMaintInfo.$MB.Add(&quot;DeletedMailbox&quot;,$mbremoved)}
+			if (-not $MBMaintInfo.$MB.ContainsKey(&quot;DeletedMailboxSize&quot;)){$MBMaintInfo.$MB.Add(&quot;DeletedMailboxSize&quot;,&quot;$mbremovedSize KB&quot;)}
+			if (-not $MBMaintInfo.$MB.ContainsKey(&quot;RetainedMailbox&quot;)){$MBMaintInfo.$MB.Add(&quot;RetainedMailbox&quot;,$mbretained)}
+			if (-not $MBMaintInfo.$MB.ContainsKey(&quot;RetainedMailboxSize&quot;)){$MBMaintInfo.$MB.Add(&quot;RetainedMailboxSize&quot;,&quot;$mbretainedSize KB&quot;)}
+			}
+		'default'{write-verbose &quot;event $($Event.Eventcode) not defined&quot;}
+		}
+		}
+	return $MBMaintInfo | Sort Name
+}
+
+}
+
+
+end{
+$Global:XCserverInfo | sort Server, StorageGroup, DatabaseName
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

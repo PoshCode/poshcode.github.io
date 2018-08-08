@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="monahancj">
+    <title>Updated CloneVM from CSV - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Updated CloneVM from CSV</h1>
+<h3><a href="//scripts/3701.ps1">download</a> - <a href="//scripts/2051.md">parent</a></h3>
+<p>Takes a fixed format CSV and pumps out clones from a template.  Easily modified to do clones of a VM or create new VMs.  Some of the restrictions mentioned in the notes appear to be fixed with VMware ESX v4.1.</p>
+<pre><code class="language-posh">Param ($servercsv)
+
+# $servercsv is the input file
+
+&lt;#
+.SYNOPSIS
+Mass cloning of virtual machines
+.DESCRIPTION
+Mass cloning of virtual machines from a template using a CSV file as a source.
+.NOTES
+ 1- Assumes template only has a C: drive and that only a D: will be added from the CSV file.  Additional drives will have to be done manually.
+ 2- Input CSV file format is at the bottom of this file.
+ 3- When testing use this command to mass delete the VMs created with the script.
+ 	 import-csv inputfile.csv | % { Remove-VM -DeleteFromDisk -VM $_.Name -RunAsync -Confirm:$false }
+ 4- Folder is not set due to the likelihood of duplicate folder names in large environment.  There's no good, consistent, and easy way that I could figure out to handle that.
+ 5- Creating the additional disk fails with PowerCLI 4.0 U1.  Reference URLs on the next two lines:
+ 	http://blog.vmpros.nl/2009/08/21/vmware-number-of-virtual-devices-exceeds-the-maximum-for-a-given-controller/
+	http://communities.vmware.com/thread/251601
+ 6- Setting the guest network fails with PowerCLI 4.0 U1.  I've posted the issue.
+    http://communities.vmware.com/thread/262855
+	** UPDATE- Issue with dvSwitches not supported in PowerCli yet.  Workaround here- http://www.lucd.info/2010/03/04/dvswitch-scripting-part-8-get-and-set-network-adapters/
+	
+
+Todos-
+  1- Set the guest network config. with either Copy-VMGuestfile and Invoke-VMScript, or Set-VMGuestNetworkInterface.
+  2- Check/update vmware tools.  (May not be advisable, my conflict with sysprep reboot(s).)
+  3- Create script to validate CSV file.  Possibly to be run by Project Managers.
+  4- Create Excel spreadsheet with dropdown lists of cluster locations and other info to assist Project Managers.
+
+.LINK
+http://netops.ma.monster.com/virtech/VMware%20Wiki%20Library/Home.aspx
+.EXAMPLE
+C:\Temp&gt; C:\ops\posh\VMware\Clone_Template_fromCSV.ps1 inputfile.csv
+#&gt;
+
+Write-Output &quot;`n++ $(Get-Date) - Starting Script.&quot;
+
+# Prep
+$OrginalVIServer = $global:DefaultVIServer  # Saving the Virtual Center that the shell session was connected to.
+$ScriptDir = &quot;\\vmscripthost201\repo&quot;
+$VMTargets = Import-CSV $servercsv
+
+Write-Output &quot;`n++ $(Get-Date) - Verifying server names are unique.&quot;
+
+$DupeNames = $false
+$AllVMs = Get-VM | Sort
+$i = 0;
+If ( ($VMTargets | Measure-Object).Count -eq 1) { # only one VM in the CSV to deploy
+	$j = 0
+   	while ($AllVMs[$j]) {
+		If ($VMTargets.Name -eq $AllVMs[$j].Name) {
+			$DupeNames = $true
+			$DupeNames
+			Write-Host &quot;Requested VM name&quot; $VMTargets.Name &quot;is in use. `n&quot;
+		} # end If
+	$j++
+	} # end while
+}
+Else { # more than one VM in the CSV to deploy
+	while ($VMTargets[$i]) {
+		$j = 0
+   		while ($AllVMs[$j]) {
+			If ($VMTargets[$i].Name -eq $AllVMs[$j].Name) {
+				$DupeNames = $true
+				$DupeNames
+				Write-Host &quot;Requested VM name&quot; $VMTargets[$i].Name &quot;is in use. `n&quot;
+			} # end If
+		$j++
+		} # end while
+	$i++
+	} # end while
+}
+
+
+If ($dupenames -eq $false) {
+	Write-Output &quot;`n++ $(Get-Date) - Starting deploying.&quot;
+	$serverlist = Import-CSV $servercsv
+	# ** Clone new VM
+	$serverlist | % { 
+	$_.VC
+    Connect-VIServer $_.VC | Select-Object Name
+	
+	If ($_.VC -match &quot;ukvcenter101&quot;) {
+		If ($_.Template -match &quot;std&quot;) {
+			$GuestIDs_mapto_OSCustSpec = Import-Csv $ScriptDir\StaticInfo\guestids_list_UK_Win2K8Std.csv }
+		ElseIf ($_.Template -match &quot;ent&quot;) {
+			$GuestIDs_mapto_OSCustSpec = Import-Csv $ScriptDir\StaticInfo\guestids_list_UK_Win2K8Ent.csv }
+		Else { Write-Host &quot;No matching UK template name to pick OSCustSpec&quot;; break; }
+	}
+	Else { $GuestIDs_mapto_OSCustSpec = Import-Csv $ScriptDir\StaticInfo\guestids_list.csv }
+
+	$TemplateGuestId = (((Get-Template $_.Template).ExtensionData).Guest).GuestId
+	Write-Output &quot;$($_.Template) and $($TemplateGuestId)&quot;
+	$OSCustSpec = ($GuestIDs_mapto_OSCustSpec | ? { $_.guestid -eq $TemplateGuestId }).OSCustSpec
+	Write-Output &quot;$($OSCustSpec)&quot;
+	
+	$respool = $_.ResourcePool
+	$RPTarget = (Get-ResourcePool -location $_.Cluster | Where { $_.Name -match $respool } | get-random)
+	$VMHostTarget = (Get-VMHost -Location $_.Cluster | Where-Object { $_.ConnectionState -eq &quot;Connected&quot; } | Select Name,@{n=&quot;Lightest&quot;;e={ ( ($_.CpuUsageMhz/$_.CpuTotalMhz) + ($_.MemoryUsageMB/$_.MemoryTotalMB) )/2 }} | sort Lightest | select -first 1).Name
+	$DSTTarget = (.$ScriptDir\Get-DatastoreMostFree.ps1 $_.Cluster).Name
+	If ($DSTTarget -eq $null) { 
+		Write-Output &quot;No datatstore returned for cluster $($_.Cluster).  Exiting script.&quot;
+		break
+	}
+	
+	Write-Output &quot;`n++ $(Get-Date) `t- Creating VM:`t $(($_.Name).ToLower())`t$($_.Cluster)`t$($VMHostTarget)`t$($DSTTarget)`t$($RPTarget)`t$($OSCustSpec)&quot;
+
+	New-VM -Confirm:$False `
+           -Name ($_.Name).ToLower() `
+           -Template $_.Template `
+		   -OSCustomizationSpec $OSCustSpec `
+		   -DiskStorageFormat Thin `
+           -ResourcePool $RPTarget `
+           -Description $_.Notes `
+           -VMHost $VMHostTarget `
+           -Datastore $DSTTarget
+	
+	Start-Sleep 5 # Giving the VM time to appear in the Virtual Center inventory.
+		
+	Set-VM -Confirm:$false `
+           -VM $_.Name `
+           -NumCpu $_.NumCpu `
+           -MemoryMB ([int]$_.RAMSizeGB * 1024)
+	
+	If ( $_.Template -match &quot;w2k8&quot; ) { $SCSIControllerType = &quot;VirtualLsiLogicSAS&quot; } else { $SCSIControllerType = &quot;VirtualLsiLogic&quot; }
+	(Get-VM -Name $_.Name).Guest.OSFullName
+	$_.Template
+	$SCSIControllerType
+	New-HardDisk -VM $_.Name -CapacityKB ([int]$_.D_DriveSizeGB * 1024 * 1024) -DiskType Flat -StorageFormat Thin -Confirm:$false | New-ScsiController -Type $SCSIControllerType
+	
+	Get-NetworkAdapter -VM $_.Name | Set-NetworkAdapter -NetworkName $_.VLAN -Confirm:$false
+
+	Set-Annotation -Entity $_.Name -CustomAttribute Application -value $_.Application
+	Set-Annotation -Entity $_.Name -CustomAttribute &quot;Business Unit&quot; -value $_.BusinessUnit
+	Set-Annotation -Entity $_.Name -CustomAttribute Category -value $_.Category
+	Set-Annotation -Entity $_.Name -CustomAttribute Support -value $_.Support
+
+	Get-FloppyDrive -VM $_.Name | Remove-FloppyDrive -Confirm:$false
+	Get-UsbDevice -VM $_.Name | Remove-UsbDevice -Confirm:$false
+	
+	Get-VM -Name $_.Name | Get-VMResourceConfiguration | Set-VMResourceConfiguration -CPUReservationMhz 0 -CPULimitMhz $null
+	Get-VM -Name $_.Name | Get-VMResourceConfiguration | Set-VMResourceConfiguration -MemReservationMB  0 -MemLimitMB  $null
+
+	If (Get-Folder $_.Description) { Move-VM -VM $_.Name -Destination $_.Description }
+	ElseIf (Get-Folder Staging) { Move-VM -VM $_.Name -Destination Staging }
+	Else { &quot;`n++ $(Get-Date) - Folder &quot;&quot;Staging&quot;&quot; does not exist.  The VM will be in the Datacenter root folder.&quot; }
+  
+	} # end %
+  
+	
+	Write-Output &quot;`n++ $(Get-Date) - Finished deploying.&quot;
+	
+	# Dump list of VMs, check Resource Pool
+	$serverlist | % { Get-VM $_.Name } | Select-Object @{n=&quot;Cluster&quot;;e={$_.VMHost.Parent.Name}},Name,ResourcePool,Folder,NumCpu,MemoryMB,@{n=&quot;ProvisionedSpaceGB&quot;;e={[int]$_.ProvisionedSpaceGB}},@{n=&quot;UsedSpaceGB&quot;;e={[int]$_.UsedSpaceGB}}
+
+} #end If
+
+# Reconnecting to the Virtual Center that the shell session was connected to before running the script.
+Connect-VIServer $OrginalVIServer.Name
+
+# Input file format
+&lt;#
+VC,Cluster,Name,Template,ResourcePool,NumCPU,RAMSizeGB,D_DriveSizeGB,VLAN,Application,BusinessUnit,Category,Support,Notes
+vcenterxxx.fqdn.com,Bed-QADevIntv35,QA-DBHYPESS201,w2k8_std_x64_r2_tmpl,Normal,1,3,50,VLAN350,ESS,Hyperion,QA,Finance,&quot;DEV00nnnnnn- For testing blah blah&quot;
+#&gt;
+
+Write-Output &quot;`n++ $(Get-Date) - Finished Script.&quot;
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

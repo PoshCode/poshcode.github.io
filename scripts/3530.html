@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Get-Credential 2.3 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-Credential 2.3</h1>
+<h3><a href="//scripts/3530.ps1">download</a> - <a href="//scripts/1480.md">parent</a></h3>
+<p>Replaces Get-Credential, with options to set the dialog title and message, as well as defaulting the domain and username, and offering the option to prompt in-line in the console, and to get generic (non-domain) credentials (without a leading &quot;&quot;). Better in every way than the built-in Get-Credential ;)</p>
+<p>This version adds support for serializing passwords.</p>
+<pre><code class="language-posh">## Get-Credential 
+## An improvement over the default cmdlet which has no options ...
+###################################################################################################
+## History
+## v 2.3 Add -Store switch and support putting credentials into the file system
+## v 2.1 Fix the comment help and parameter names to agree with each other (whoops)
+## v 2.0 Rewrite for v2 to replace the default Get-Credential
+## v 1.2 Refactor ShellIds key out to a variable, and wrap lines a bit
+## v 1.1 Add -Console switch and set registry values accordingly (ouch)
+## v 1.0 Add Title, Message, Domain, and UserName options to the Get-Credential cmdlet
+###################################################################################################
+function Get-Credential { 
+## .Synopsis
+##    Gets a credential object based on a user name and password.
+## .Description
+##    The Get-Credential function creates a credential object for a specified username and password, with an optional domain. You can use the credential object in security operations.
+## 
+##    The function accepts more parameters to customize the security prompt than the default Get-Credential cmdlet (including forcing the call through the console if you're in the native PowerShell.exe CMD console), but otherwise functions identically.
+[CmdletBinding(DefaultParameterSetName=&quot;Prompted&quot;)]
+PARAM(
+#   A default user name for the credential prompt, or a pre-existing credential (would skip all prompting)
+   [Parameter(ParameterSetName=&quot;Prompted&quot;,Position=1,Mandatory=$false)]
+   [Parameter(ParameterSetName=&quot;Promptless&quot;,Position=1,Mandatory=$true)]
+   [Parameter(ParameterSetName=&quot;StoreCreds&quot;,Position=1,Mandatory=$true)]
+   [Parameter(ParameterSetName=&quot;Flush&quot;,Position=1,Mandatory=$true)]
+   [Alias(&quot;Credential&quot;)]
+   [PSObject]$UserName=$null
+,
+#  Allows you to override the default window title of the credential dialog/prompt
+#
+#  You should use this to allow users to differentiate one credential prompt from another.  In particular, if you're prompting for, say, Twitter credentials, you should put &quot;Twitter&quot; in the title somewhere. If you're prompting for domain credentials. Being specific not only helps users differentiate and know what credentials to provide, but also allows tools like KeePass to automatically determine it.
+   [Parameter(ParameterSetName=&quot;Prompted&quot;,Position=2,Mandatory=$false)]
+   [string]$Title=$null
+,
+#  Allows you to override the text displayed inside the credential dialog/prompt.
+#  
+#  You can use this for things like presenting an explanation of what you need the credentials for.
+   [Parameter(ParameterSetName=&quot;Prompted&quot;,Position=3,Mandatory=$false)]
+   [string]$Message=$null
+,
+#  Specifies the default domain to use if the user doesn't provide one (by default, this is null)
+   [Parameter(ParameterSetName=&quot;Prompted&quot;,Position=4,Mandatory=$false)]
+   [string]$Domain=$null
+,
+#  The Get-Credential cmdlet forces you to always return DOMAIN credentials (so even if the user provides just a plain user name, it prepends &quot;\&quot; to the user name). This switch allows you to override that behavior and allow generic credentials without any domain name or the leading &quot;\&quot;.
+   [Parameter(ParameterSetName=&quot;Prompted&quot;,Mandatory=$false)]
+   [switch]$GenericCredentials
+,
+#  Forces the credential prompt to occur inline in the console/host using Read-Host -AsSecureString (not implemented properly in PowerShell ISE)
+   [Parameter(ParameterSetName=&quot;Prompted&quot;,Mandatory=$false)]
+   [switch]$Inline
+,
+#  Store the credential in the file system (and overwrite them)
+   [Parameter(ParameterSetName=&quot;Prompted&quot;,Mandatory=$false)]
+   [Parameter(ParameterSetName=&quot;Promptless&quot;,Mandatory=$false)]
+   [Parameter(ParameterSetName=&quot;StoreCreds&quot;,Mandatory=$true)]
+   [switch]$Store
+,
+#  Remove stored credentials from the file system
+   [Parameter(ParameterSetName=&quot;Flush&quot;,Mandatory=$true)]
+   [switch]$Flush
+,
+#  Allows you to override the path to store credentials in
+   [Parameter(ParameterSetName=&quot;Prompted&quot;,Mandatory=$false)]
+   [Parameter(ParameterSetName=&quot;Promptless&quot;,Mandatory=$false)]
+   [Parameter(ParameterSetName=&quot;StoreCreds&quot;,Mandatory=$false)]
+   $CredentialFolder = $(Join-Path ${Env:APPDATA} Credentials)
+,
+#  The password
+   [Parameter(ParameterSetName=&quot;Promptless&quot;,Position=5,Mandatory=$true)]
+   $Password = $(
+   if($UserName -and (Test-Path &quot;$(Join-Path $CredentialFolder $UserName).cred&quot;)) {
+         if($Flush) {
+            Remove-Item &quot;$(Join-Path $CredentialFolder $UserName).cred&quot;
+         } else {
+            Get-Content &quot;$(Join-Path $CredentialFolder $UserName).cred&quot; | ConvertTo-SecureString 
+         }
+   })
+)
+process {
+   [PSCredential]$Credential = $null
+   
+   if( $UserName -is [System.Management.Automation.PSCredential]) {
+      $Credential = $UserName
+   } elseif($UserName -ne $null) {
+      $UserName = $UserName.ToString()
+   }
+   
+   if($Password) {
+      if($Password -isnot [System.Security.SecureString]) {
+         [char[]]$Chars = $Password.ToString().ToCharArray()
+         $Password = New-Object System.Security.SecureString
+         foreach($c in $chars) { $Password.AppendChar($c) }
+      }
+      $Credential = New-Object System.Management.Automation.PSCredential $UserName, $Password  
+   }
+   
+   if(!$Credential) {
+      if($Inline) {
+         if($Title)    { Write-Host $Title }
+         if($Message)  { Write-Host $Message }
+         if($Domain) { 
+            if($UserName -and $UserName -notmatch &quot;[@\\]&quot;) { 
+               $UserName = &quot;${Domain}\${UserName}&quot;
+            }
+         }
+         if(!$UserName) {
+            $UserName = Read-Host &quot;User&quot;
+            if(($Domain -OR !$GenericCredentials) -and $UserName -notmatch &quot;[@\\]&quot;) {
+               $UserName = &quot;${Domain}\${UserName}&quot;
+            }
+         }
+         $Credential = New-Object System.Management.Automation.PSCredential $UserName,$(Read-Host &quot;Password for user $UserName&quot; -AsSecureString)
+      }
+   
+      if($GenericCredentials) { $Type = &quot;Generic&quot; } else { $Type = &quot;Domain&quot; }
+   
+      ## Now call the Host.UI method ... if they don't have one, we'll die, yay.
+      ## BugBug? PowerShell.exe disregards the last parameter
+      $Credential = $Host.UI.PromptForCredential($Title, $Message, $UserName, $Domain, $Type, &quot;Default&quot;)
+   }
+   
+   if($Store) {
+      $CredentialFile = &quot;$(Join-Path $CredentialFolder $UserName).cred&quot;
+      if(!(Test-Path $CredentialFolder)) {
+         mkdir $CredentialFolder | out-null
+      }
+      $Credential.Password | ConvertFrom-SecureString | Set-Content $CredentialFile
+   }
+   return $Credential
+}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

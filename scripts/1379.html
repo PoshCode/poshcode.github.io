@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Patrick Dreyer">
+    <title>ExceptionHandling - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ExceptionHandling</h1>
+<h3><a href="//scripts/1379.ps1">download</a></h3>
+<p>Facilitates exception handling as used to under C# or Java.</p>
+<pre><code class="language-posh">## ExceptionHandling.ps1
+##############################################################################################################
+## .Net style exception handling
+##############################################################################################################
+## Usage:
+##    . .\ExceptionHandling.ps1
+##############################################################################################################
+## v 1.0 - First release
+##############################################################################################################
+
+if (-not ($MyInvocation.line -match '^\. .')) {
+	Write-Error 'No Functions were loaded - you need to invoke with . scriptname'
+	return
+}
+
+# .SYNOPSIS 
+# Facilitates exception handling as used to under C# or Java
+#
+# .PARAMETER Command
+# Contains the guarded code that may cause the exception. The block is executed until an exception is thrown or it is completed successfully.
+# .INPUTS
+# None. You cannot pipe objects to try().
+#
+# .EXAMPLE
+# function simpleException() {
+#     try {
+#         &quot;Guarded code&quot;
+#         throw New-Object [System.Exception]
+#     } -catch {
+#         &quot;Catched &quot; + $_.Exception
+#     } -finally {
+#         &quot;All done with trying and catching&quot;
+#     }
+# }
+#
+# .EXAMPLE
+# function multiDivByZeroSpecified() {
+#     try {
+#         [int32]1/[int32]0
+#     } -catch @{[System.DivideByZeroException] = {
+#         &quot;Catched DivideByZeroException&quot;
+#     }} -catch1 @{[System.Exception] = {
+#         &quot;Catched Exception&quot;
+#     }} -finally {
+#         &quot;All done with trying and catching&quot;
+#     }
+# }
+#
+# .EXAMPLE
+# function multiDivByZero() {
+#     try {
+#         [int32]1/[int32]0
+#     } -catch @{[System.DivideByZeroException] = {
+#         &quot;Catched DivideByZeroException&quot;
+#     }} -catch1 {
+#         &quot;Catched Exception&quot;
+#     } -finally {
+#         &quot;All done with trying and catching&quot;
+#     }
+# }
+#
+# .LINK
+# trap
+# .LINK
+# http://huddledmasses.org/trap-exception-in-powershell/
+# .LINK
+# http://weblogs.asp.net/adweigert/archive/2007/10/10/powershell-try-catch-finally-comes-to-life.aspx
+function try {
+	param (
+		[ScriptBlock] $command = $( throw &quot;The parameter -Command is required.&quot; ),
+		[Object]      $catch,
+		[Object]      $catch1,
+		[Object]      $catch2,
+		[Object]      $catch3,
+		[Object]      $catch4,
+		[Object]      $catch5,
+		[Object]      $catch6,
+		[Object]      $catch7,
+		[Object]      $catch8,
+		[Object]      $catch9,
+		[ScriptBlock] $finally = {}
+	)
+	
+	# merge all catches to one single hashtable
+	$catches = @{}
+	($catch,$catch1,$catch2,$catch3,$catch4,$catch5,$catch6,$catch7,$catch8,$catch9) | ? { $_ -ne $null } | % {
+		if ($_ -is [System.Collections.Hashtable]) {
+			$catches += $_
+		} elseif ($_ -is [ScriptBlock]) {
+			if ($catches.Contains([System.Exception])) {
+				$catches.set_Item([System.Exception], $_)
+			} else {
+				$catches.Add([System.Exception], $_)
+			}
+		} else {
+			throw New-Object Exception(&quot;Unknown catch argument type'&quot; + $_.GetType() + &quot;'&quot;)
+		}
+	}
+	
+	&amp; {
+		$local:ErrorActionPreference = &quot;SilentlyContinue&quot;
+		trap {
+			trap {
+				&amp; {
+					trap { throw $_ }
+					&amp;$finally
+				}
+				throw $_
+			}
+			$exType = $_.Exception.GetType()
+			$catch  = $null
+			do {
+				$catches.GetEnumerator() | ? { $exType -eq $_.Key } | % { $catch = $_.Value }
+				if ($catch -ne $null) {
+					break
+				}
+				$exType = $exType.BaseType
+			} while ($exType -ne $null)
+			if ($catch -eq $null) { throw $_ }
+			$_ | &amp; { &amp;$catch }
+		}
+		&amp;$command
+	}
+	&amp; {
+		trap { throw $_ }
+		&amp;$finally
+	}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

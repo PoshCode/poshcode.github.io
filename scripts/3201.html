@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="David">
+    <title>Split-TextToLines Demo - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Split-TextToLines Demo</h1>
+<h3><a href="//scripts/3201.ps1">download</a> - <a href="//scripts/886.md">parent</a></h3>
+<p>ESXi virtual machine VLAN check on two NIC configuration ESXi server.</p>
+<pre><code class="language-posh"># Variables
+$viserver = Read-Host &quot;Enter VI server name&quot;
+$cluster = Read-Host &quot;Enter Cluster name&quot;
+$vmhelper = Read-Host &quot;Enter VM_HELPER name&quot;
+
+Write-Host &quot;Connecting to $viserver...&quot;
+Connect-VIServer $viserver -WarningAction:SilentlyContinue
+
+# Get VM Hosts
+$vmhosts = Get-Cluster $cluster -ErrorAction:SilentlyContinue | Get-VMHost | where {$_.powerstate -eq &quot;poweredon&quot;} | sort name 
+If ($vmhosts -eq $null) {
+	Write-Host &quot;Invalid cluster name&quot;
+	break
+}
+$vmhosts | select name 
+Write-Host &quot;Listed servers will be tested for virtual machine VLAN&quot;
+Write-Host &quot;Verify that $cluster cluster is NOT A PRODUCTION cluster&quot;
+Write-Host &quot;Press Any Key to Continue...&quot;
+$x = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+Write-Host 
+
+# Get VM IP
+Write-Host &quot;Getting VM IP(s) from $vmehlper virtual machine VLAN....&quot;
+$vm = Get-VM $vmhelper -ErrorAction:SilentlyContinue
+if ($vm -eq $null) {
+	Write-Host &quot;Invalid VM name&quot;
+	break
+}	
+$vm.guest.nics | select NetworkName, IPAddress 
+$answer = Read-host &quot;Do you want to continue with current IP address? (yes/no)&quot;
+
+# Start VLAN Ping
+if ($answer -eq &quot;yes&quot;) {
+	$vm.guest.nics | foreach {
+		$vmnic = $_
+		$pingfile = &quot;c:\scripts\&quot;+ $vmnic.networkname + &quot;.cmd&quot;
+		$pingcmd = &quot;ping -t &quot; + $vmnic.IPAddress 
+		Add-Content $pingfile $pingcmd 
+		Start-Process $pingfile
+	}
+# Prep Vmotion by moving VM to last host
+	Write-Host &quot;Moving $vmhelper to &quot; ($vmhosts| select -last 1) &quot;...&quot;
+	Move-VM -VM $vmhelper -Destination ($vmhosts | select -last 1) -Confirm:$false -ErrorAction:SilentlyContinue | Out-Null
+
+# Start Vmotion on two pass-thru NIC
+	Foreach ($vmhost in $vmhosts) {
+		Write-Host &quot;Moving $vmhelper to $vmhost... Check continuous ping&quot;
+		Move-VM -VM $vmhelper -Destination $vmhost -Confirm:$false -ErrorAction:SilentlyContinue | Out-Null
+		if (($vmhost | Get-VM $vmhelper) -eq $nul) {
+			Write-Host &quot;Vmotion to $vmhost failed.  Check settings&quot;
+			break
+		}	
+	}
+
+# Remove vmnic1 from vSiwtch0
+	Foreach ($vmhost in $vmhosts) {
+		$vSwitch = $vmhost | Get-VirtualSwitch | Where-Object {$_.Name -eq &quot;vSwitch0&quot;}
+		Write-Host &quot;Removing vmnic1 from $vmhost...&quot;
+		$vSwitch | Set-VirtualSwitch -Nic vmnic0 -Confirm:$false | Out-Null
+	}
+	sleep 10
+
+# Start Vmotion on two pass-thru NIC
+	Foreach ($vmhost in $vmhosts) {
+		Write-Host &quot;Moving $vmhelper to $vmhost... Check continuous ping&quot;
+		Move-VM -VM $vmhelper -Destination $vmhost -Confirm:$false -ErrorAction:SilentlyContinue | Out-Null
+		if (($vmhost | Get-VM $vmhelper) -eq $null) {
+			Write-Host &quot;Vmotion to $vmhost failed.  Check settings&quot;
+			break	
+		}
+	}	
+
+# Remove vmnic0 from vSiwtch0
+	Foreach ($vmhost in $vmhosts) {
+		$vSwitch = $vmhost | Get-VirtualSwitch | Where-Object {$_.Name -eq &quot;vSwitch0&quot;}
+		Write-Host &quot;Removing vmnic0 from $vmhost...&quot;
+		$vSwitch | Set-VirtualSwitch -Nic vmnic1 -Confirm:$false | Out-Null
+	}
+	sleep 10
+
+	Foreach ($vmhost in $vmhosts) {
+		Write-Host &quot;Moving $vmhelper to $vmhost... Check continuous ping&quot;
+		Move-VM -VM $vmhelper -Destination $vmhost -Confirm:$false -ErrorAction:SilentlyContinue | Out-Null
+	}	
+
+# Add vmnic0 and vmnic1 back to vSwitch0
+	Write-Host &quot;Re-Adding vmnic0 and vmnic1 to vSwitch0...&quot;		
+	Foreach ($vmhost in $vmhosts) {		
+		$vSwitch = $vmhost | Get-VirtualSwitch | Where-Object {$_.Name -eq &quot;vSwitch0&quot;}
+		Write-Host &quot;Adding vmnic0, vmnic1 on $vmhost...&quot;
+		$vSwitch | Set-VirtualSwitch -Nic vmnic0,vmnic1 -Confirm:$false | Out-Null
+	}
+	$vm.guest.nics | foreach {
+		$vmnic = $_
+		$pingfile = &quot;c:\scripts\&quot;+ $vmnic.networkname + &quot;.cmd&quot;
+		del $pingfile
+	}
+	Write-Host &quot;Test is completed.&quot;	
+}		
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

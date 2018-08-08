@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Restart-IISAppPool - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Restart-IISAppPool</h1>
+<h3><a href="//scripts/2466.ps1">download</a> - <a href="//scripts/2465.md">parent</a></h3>
+<p>Restarts local or remote IIS AppPools</p>
+<pre><code class="language-posh">function Restart-IISAppPool {
+   [CmdletBinding(SupportsShouldProcess=$true)]
+   #.Synopsis
+   #  Restarts an IIS AppPool
+   #.Parameter ComputerName
+   #  The name of an IIS web server where the AppPool resides
+   #.Parameter AppPool
+   #  The name of the AppPool to recycle (if you include wildcards, results in an initial call to list all app pools)
+   #.Parameter Credential
+   #  Credentials to connect to the IIS Server
+   #.Example
+   #  Restart-IISAppPool &quot;Classic .NET AppPool&quot; -Cn WebServer1
+   #
+   #  Description
+   #  -----------
+   #  Restart the &quot;Classic .NET AppPool&quot; on WebServer1
+   #.Example
+   #  Restart-IISAppPool *Classic* -Confirm
+   #
+   #  Description
+   #  -----------
+   #  Restart all of the app pools with &quot;Classic&quot; in the name on the local IIS server, prompting for each one
+   param(
+      [Parameter(ValueFromPipelineByPropertyName=$true, Mandatory= $true, Position=0)]
+      [Alias(&quot;Name&quot;,&quot;Pool&quot;)]
+      [String[]]$AppPool
+   ,
+      [Parameter(ValueFromPipelineByPropertyName=$true, Position=1)]
+      [Alias(&quot;CN&quot;,&quot;Server&quot;,&quot;__Server&quot;)]
+      [String]$ComputerName
+   ,
+      [Parameter()]
+      [System.Management.Automation.Credential()]
+      $Credential = [System.Management.Automation.PSCredential]::Empty
+   )
+   
+   begin {
+      if ($Credential -and ($Credential -ne [System.Management.Automation.PSCredential]::Empty)) {
+         $Credential = $Credential.GetNetworkCredential()
+      }
+      Write-Debug (&quot;BEGIN:`n{0}&quot; -f ($PSBoundParameters | Out-String))
+
+      $Skip = $false
+      ## Need to test for AppPool existence (it's not defined in BEGIN if it's piped in)
+      if($PSBoundParameters.ContainsKey(&quot;AppPool&quot;) -and $AppPool -match &quot;\*&quot;) {
+        $null = $PSBoundParameters.Remove(&quot;AppPool&quot;)
+        $null = $PSBoundParameters.Remove(&quot;WhatIf&quot;)
+        $null = $PSBoundParameters.Remove(&quot;Confirm&quot;)
+        Write-Verbose &quot;Searching for AppPools matching: $($AppPool -join ', ')&quot;
+
+        Get-WmiObject IISApplicationPool -Namespace root\MicrosoftIISv2 -Authentication PacketPrivacy @PSBoundParameters | 
+        Where-Object { @(foreach($pool in $AppPool){ $_.Name -like $Pool -or $_.Name -like &quot;W3SVC/APPPOOLS/$Pool&quot; }) -contains $true } |
+        Restart-IISAppPool
+        $Skip = $true
+      }
+      $ProcessNone = $ProcessAll = $false;
+   }
+   process {
+      Write-Debug (&quot;PROCESS:`n{0}&quot; -f ($PSBoundParameters | Out-String))
+   
+      if(!$Skip) {
+        $null = $PSBoundParameters.Remove(&quot;AppPool&quot;)
+        $null = $PSBoundParameters.Remove(&quot;WhatIf&quot;)
+        $null = $PSBoundParameters.Remove(&quot;Confirm&quot;)
+         foreach($pool in $AppPool) {
+            Write-Verbose &quot;Processing $Pool&quot;
+            if($PSCmdlet.ShouldProcess(&quot;Would restart the AppPool '$Pool' on the '$(if($ComputerName){$ComputerName}else{'local'})' server.&quot;, &quot;Restart ${Pool}?&quot;, &quot;Restarting IIS App Pools on $ComputerName&quot;)) {
+               Write-Verbose &quot;Restarting $Pool&quot;
+               # if($PSCmdlet.ShouldContinue(&quot;Do you want to restart $Pool?&quot;, &quot;Restarting IIS App Pools on $ComputerName&quot;, [ref]$ProcessAll, [ref]$ProcessNone)) {
+                 Invoke-WMIMethod Recycle -Path &quot;IISApplicationPool.Name='$Pool'&quot; -Namespace root\MicrosoftIISv2 -Authentication PacketPrivacy @PSBoundParameters
+               # }
+            }
+         }
+      }
+   }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

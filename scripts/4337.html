@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Winston McMiller">
+    <title>PS-NTDSUTIL - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PS-NTDSUTIL</h1>
+<h3><a href="//scripts/4337.ps1">download</a></h3>
+<p>PS-NTDSUTIL
+PowerShell Version of the Classic Active Directory Tool<br />
+The script allows for easy remote or local NTDS operations without using the NTDSUTIL command. Most functions operate without NTDSUTIL except CheckDIT, Offline_Defrag and Create_Full_IFM.</p>
+<p>Covers Active Directory DS tasks such as:
+•	Moving NTDS.DIT
+•	Moving EDB log
+•	Offline Defragmentation
+•	DS integrity check (Semantic Database consistency check)
+•	Creating IFM Media (AD Snapshots)</p>
+<p>Example 1: Move only the NTDS.DIT file
+PS-NTDSUTIL –DomainController WINDC1 –Move_NTDS_Only</p>
+<p>Example 2: Move only the EDB. Log file
+PS-NTDSUTIL –DomainController WINDC1 –Move_DSLog_Only</p>
+<p>Example 3: Perform Offline Defragmentation
+PS-NTDSUTIL –DomainController WINDC1 –Offline_Defrag</p>
+<p>Example 4: Generates Useful DSA Report of the NTDS configuration
+PS-NTDSUTIL –DomainController WINDC1 –DIT_Report</p>
+<p>Example 5: Creates IFM media (AD Snapshot)
+PS-NTDSUTIL –DomainController WINDC1 –Create_FULL_IFM</p>
+<p>Example 6: Runs the Semantic Database Analysis
+PS-NTDSUTIL –DomainController WINDC1 –CheckDIT</p>
+<pre><code class="language-posh">&lt;# 
+
+ .Title
+ PS-NTDSUTIL Script
+
+ .SYNOPSIS 
+    Powershell version of the classic NTDSUTIL utility 
+ .DESCRIPTION 
+   Critical DS task include relocating NTDS.DIT file, EDB.Log, Creating IFM data, offline Defragmentation and the DS intergrity check
+   Most functions operate without NTDSUTIL except CheckDIT. Offline_Defrag and Create_FullIFM
+
+ .NOTES 
+    Author  : Winston McMiller 
+    Requires: PowerShell Version 1.0 and NTDSUTIL
+ .LINK 
+
+#&gt; 
+ 
+
+[CmdletBinding()]
+
+Param(
+  [Parameter(Mandatory=$True,Position=0)]
+  [string] $DomainController,
+  
+  [Parameter(Mandatory=$False,Position=1)]
+  [Switch] $Move_NTDS_only,
+  [Switch] $Move_DSLog_only,
+  [Switch] $Move_NTDS_FULL,
+  [Switch] $Offline_Defrag,
+  [Switch] $DIT_Report,
+  [Switch] $Create_FULL_IFM,
+  [Switch] $CheckDIT
+      )
+
+      #Function to stop AD and its dependant services
+Function StopADDS{
+Write-Output &quot;Stopping Active directory Domain Service on $DomainController.... &quot;
+Stop-Service NTDS -Force 
+}
+       #Function to start AD and its dependant services
+Function StartADDS{
+Write-Output &quot;Starting Active directory Domain Service on $DomainController.... &quot;
+Start-Service NTDS -Confirm
+
+#Routine to Confirm Service Status
+$DSSRV=(Get-Service NTDS).Status
+IF($DSSRV -eq &quot;Running&quot;){
+Write-Host &quot;Active Directory Domain Service on $DomainController is $DSSRV&quot; -ForegroundColor Green
+}
+
+IF($DSSRV -eq &quot;Stopped&quot;){
+Write-Host &quot;Active Directory Domain Service on $DomainController is $DSSRV&quot; -ForegroundColor Red
+}
+}
+
+#Function to trigger NTDSUTIL's semantic database analysis in non-repair mode
+Function CheckDIT{
+$NTDSSTATUS =&quot;&quot;
+Write-Output &quot;Checking NTDS database for errors (semantic database analysis)...&quot;
+Write-Host &quot;&quot;
+Write-Host &quot;____________________________________________________________&quot; -ForegroundColor Blue
+$NTDSdbChecker = ntdsutil &quot;activate instance ntds&quot;  &quot;semantic database analysis&quot; &quot;Go&quot; q &quot;files&quot; &quot;checksum&quot; q q
+$NTDSdbChecker
+Foreach($line in $NTDSdbChecker){If($line -eq &quot;0 bad checksums.&quot;){ $NTDSSTATUS = &quot;Good&quot;}}
+Write-Host &quot;&quot;
+}
+
+#Function to move NTDS.DIT and make DS-related registry changes
+Function MoveDIT{
+
+#User input of new NTDS.DIT path. IF unspecified, script will stop
+$NewNTDS_Path= Read-Host &quot;Please enter target path for new NTDS location. EX: D:\Windows\NTDS&quot;
+if ($NewNTDS_Path -eq &quot;&quot;){
+Write-Host &quot;Target Path unspecified. Cannot continue...&quot; -ForegroundColor Red
+Break}
+
+# Extract Target's drive letter from given path
+$Newdrive=$NewNTDS_Path.substring(0,2)
+
+# Get the target drive's free space
+$freespace=(Get-WmiObject -Class Win32_volume -Filter &quot;Driveletter = '$newdrive'&quot;).freespace
+
+# Get the target drive's file format
+$FS= (Get-WmiObject -Class Win32_volume -Filter &quot;DriveLetter = '$newdrive'&quot;).FileSystem
+$NewDit=$NewNTDS_Path + &quot;\ntds.dit&quot;
+$NewDitBak=$NewNTDS_Path + &quot;\dsadata.bak&quot;
+
+#Extract NTDS parameters from registry
+$NTDSDIT= (get-item -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;).GetValue(&quot;DSA Database File&quot;)
+$NTDSPath=(get-item -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;).GetValue(&quot;DSA Working Directory&quot;)
+$DITSize=(get-item -Path $NTDSDIT).Length
+
+#Check target disk free space
+If($DITSize -le $Freespace){
+Write-Host &quot;Available Free space on $NewNTDS_Path = $Freespace - Good&quot; -foregroundColor Green}
+Else{ Write-Host &quot;Not enough free space on $NewNTDS_Path = $Freespace &quot; -foregroundColor Red
+Break}
+
+#Check target disk format
+If($FS -notmatch &quot;NTFS&quot;){
+Write-Host &quot;Cannot continue NTDS database move. $newDrive is not a NTFS formatted drive.&quot; -foregroundColor Red
+Break}
+
+#Check for older NTDS.DIT file
+If((get-childitem -Path $NewNTDS_Path -Recurse -Filter &quot;NTDS.DIT&quot;).Exists -eq &quot;True&quot;){
+Write-Host &quot;Cannot continue. Old NTDS.DIT file exists in $NewNTDS_Path .&quot;
+Break}
+
+Write-Host &quot;Moving NTDS database from $NTDSpath to $NewNTDS_Path&quot;
+
+#Set DS registry keys to reflect new path
+set-itemproperty -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot; -Name &quot;DSA Database File&quot; -value $NewDit
+set-itemproperty -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot; -Name &quot;DSA Working Directory&quot; -value $NewNTDS_Path
+set-itemproperty -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot; -Name &quot;Database backup path&quot; -value $NewDitBak
+
+#Move the NTDS.Dit file
+Move-Item $NTDSDIT $NewNTDS_Path
+
+If($NewNTDSPath + &quot;\NTDS.DIT&quot;){
+Write-Host &quot;NTDS.DIT file sucessfully moved to $NewNTDS_Path&quot; -ForegroundColor Green
+CheckDIT
+
+Write-Host &quot;NTDS database operation sucessfully completed!!!&quot; -ForegroundColor Green
+Write-Host &quot;&quot;
+}
+}
+
+
+#Function to move EDB.Log and make the required DS-related registry changes
+
+Function MoveLogs{
+
+# User input of Target path. Script will stop if omitted
+
+$NewNTDS_LogPath= Read-Host &quot;Please enter target path for new EDB Log location. EX: D:\Windows\NTDS&quot;
+if ($NewNTDS_LogPath -eq &quot;&quot;){
+Write-Host &quot;Target Path unspecified. Cannot continue...&quot; -ForegroundColor Red
+Break}
+
+#Variables
+
+#Extract the Target drive letter from the given path
+$NewLogdrive=$NewNTDS_LogPath.substring(0,2)
+
+# Get the target drive's free space
+$NewLogfreespace=(Get-WmiObject -Class Win32_volume -Filter &quot;Driveletter = '$newlogdrive'&quot;).freespace
+
+#Extract NTDS parameters from registry
+$DitLogPath=(get-item -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;).GetValue(&quot;Database log files path&quot;)
+$Log= $DitLogPath + &quot;\EDB.Log&quot;
+$LogSize=(get-item -Path $Log).Length
+
+# Get the target drive's file format
+$LogFS= (Get-WmiObject -Class Win32_volume -Filter &quot;DriveLetter = '$newlogdrive'&quot;).FileSystem
+
+# Check target disk free space
+If($LOGSize -le $NewLogfreespace){
+Write-Host &quot;Available Free space on $NewNTDS_Path = $NewLogfreespace - Good&quot; -foregroundColor Green}
+Else{ Write-Host &quot;Not enough free space on $NewNTDS_logPath = $NewLogfreespace &quot; -foregroundColor Red
+Start-Service NTDS -Confirm
+Break}
+
+# Check the target drive's file format
+If($LogFS -ne &quot;NTFS&quot;){
+Write-Host &quot;Cannot continue EDB Log move. $newlogDrive is not a NTFS formatted drive.&quot; -foregroundColor Red
+Start-Service NTDS -Confirm
+Break}
+
+# Check the target path for old EDB.Logs
+If((get-childitem -Path $NewNTDS_LogPath -Recurse -Filter &quot;EDB.Log&quot;).Exists -eq &quot;True&quot;){
+Write-Host &quot;Cannot continue. EDB Logs already exists.&quot;
+Break}
+
+Write-Host &quot;Moving EDB Logs from $DitLogPath to $NewNTDS_LogPath&quot;
+set-itemproperty -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot; -Name &quot;Database log files path&quot; -value $NewNTDS_LogPath
+Move-Item $Log $NewNTDS_LogPath
+Get-ChildItem -Path C:\ntds -Filter &quot;*EDB*&quot; |Remove-item
+Write-Host &quot;&quot;
+If((get-childitem -Path $NewNTDS_LogPath -Recurse -Filter &quot;EDB.LOG&quot;).Exists -eq &quot;True&quot;){
+Write-Host &quot;EDB Log move operation sucessfully completed!!!&quot; -ForegroundColor Green
+Write-Host &quot;&quot;
+}
+}
+
+# Scans the registry for NTDS parameters. Very useful in confirm NTDS changes
+Function Dit_Report{
+$NTDSDIT=(get-item -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;).GetValue(&quot;DSA Database File&quot;)
+$DITSize=(get-item -Path $NTDSDIT).Length
+$DitStats=Get-item -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;
+$DitStats
+Write-Host &quot;                               Present NTDS DB Size                             : $DitSize&quot;
+}
+
+#Performs AD Offline Deframentation using NTDSUtil
+
+Function Offline_Defrag{
+
+# User Input of Temp path. Will default to C:\temp if omitted
+$TempPath= Read-Host &quot;Please enter Temp path for NTDS.Dit file defragmentation process or Press ENTER for Default= C:\Temp&quot;
+if ($TempPath -eq &quot;&quot;){$TempPath=&quot;C:\temp&quot;}
+
+#Varibles
+
+$Tempdrive=$TempPath.substring(0,2)
+$Tempfreespace=(Get-WmiObject -Class Win32_volume -Filter &quot;Driveletter = '$Tempdrive'&quot;).freespace
+$NTDSDIT= (get-item -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;).GetValue(&quot;DSA Database File&quot;)
+$DITSize=(get-item -Path $NTDSDIT).Length
+
+
+If($DITSize -ge $Tempfreespace){
+Write-Host &quot;Not Enough Disk Space on $TempPath for defragmentation process. Cannot continue..&quot; -ForegroundColor Red
+Break}
+
+IF((get-childitem -Path $TempPath -Recurse -Filter &quot;*.dit&quot;).Exists -eq &quot;True&quot;){
+Write-Host &quot;NTDS.DIT already exists - please remove first&quot; -ForegroundColor Red
+Break}
+
+Write-Host &quot;&quot;
+Write-Host &quot;Compacting NTDS database...&quot;
+Write-Host &quot;&quot;
+Write-Host &quot;____________________________________________________________&quot; -ForegroundColor Blue
+
+# Compile NTDSUTIL required commands in series
+$NTDSdbCompactor = ntdsutil &quot;activate instance ntds&quot; &quot;files&quot; &quot;Compact to $TempPath&quot; &quot;q&quot; &quot;q&quot;
+
+#Execute compiled NTDSUTIL commands 
+$NTDSdbCompactor
+
+$NewDit= $TempPath + &quot;\ntds.dit&quot;
+Write-Host &quot;&quot;
+
+# Move newly compacted NTDS.DIT to the working DSA directory
+Move-Item $NewDit $NTDSPath
+
+# Clear the DSA Database Epoch key to indicate backup. Note: Future DS operations will error if this parameter isn't cleared
+Remove-itemproperty -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;  -name &quot;DSA Database Epoch&quot; -ErrorAction SilentlyContinue 
+
+# Delete all logs for DB consistency
+Remove-item $DitLogPath\*.log
+Write-Host &quot;&quot;
+Write-Host &quot;NTDS Defragmentation Completed&quot; -ForegroundColor Green
+Write-Host &quot;&quot;
+}
+
+#Performs IFM (AD Snapshot) using NTDSUTIL
+
+Function Create_FULL_IFM{
+Write-Host &quot;Security Warning: Be advised to store IFM files in a protected repository&quot; -ForegroundColor Yellow -BackgroundColor Black
+Write-Host &quot;&quot;
+$IFMPath = Read-Host &quot;Please enter a secured Target path for IFM files&quot;
+if ($IFMPath -eq &quot;&quot;){
+Write-Host &quot;Target Path unspecified. Cannot continue...&quot; -ForegroundColor Red
+Break}
+
+$IFMdrive=$IFMPath.substring(0,2)
+$IFMfreespace=(Get-WmiObject -Class Win32_volume -Filter &quot;Driveletter = '$IFMdrive'&quot;).freespace
+$NTDSDIT= (get-item -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;).GetValue(&quot;DSA Database File&quot;)
+$NTDSPath=(get-item -Path &quot;HKLM:\SYSTEM\CurrentcontrolSet\Services\NTDS\Parameters&quot;).GetValue(&quot;DSA Working Directory&quot;)
+$DITSize=(get-item -Path $NTDSDIT).Length
+
+If($DITSize -le $IFMFreespace){
+Write-Host &quot;Available Free space on $IFMPath = $IFMfreespace - Good&quot; -foregroundColor Green}
+Else{ Write-Host &quot;Not enough free space on $IFMPath = $IFMFreespace &quot; -foregroundColor Red
+Break}
+
+If((get-childitem -Path $ifmpath -Recurse -Filter &quot;*.dit&quot;).Exists -eq &quot;True&quot;){
+Write-Host &quot;AD Snapshot file already exists in $Ifmpath. Cannot continue operation&quot; -ForegroundColor Red
+Break}
+
+# Check for running AD service. IF AD services are stopped, service will be started
+$DSSRV=(Get-Service NTDS).Status
+IF($DSSRV -ne &quot;Running&quot;){Start-Service NTDS -Confirm}
+
+Write-Host &quot;Creating Full IFM File package in $IFMPath ...&quot;
+Write-Host &quot;&quot;
+Write-Host &quot;____________________________________________________________&quot; -ForegroundColor Blue
+$IFMCMD = ntdsutil &quot;activate instance NTDS&quot; IFM &quot;Create Full $IFMpath&quot; quit quit
+$IFMCMD 
+$IFMFS=get-childitem -Path $IFMPath -Recurse -Verbose
+foreach($IFMF in $IFMFS){$IFMTS=$IFMF.length + $IFMF.length}
+Write-Host &quot;&quot;
+Write-Host &quot;Total size for IFM is $IFMTS&quot;
+Write-Host &quot;&quot;
+}
+
+# Switch Conditions
+
+If($Move_NTDS_only){
+If($DomainController -ne $env:COMPUTERNAME){
+$credential = $host.ui.PromptForCredential(&quot;Credentials for $DomainController&quot;, &quot;Please enter Credentials for $DomainController&quot;,&quot;$env:userdomain\$env:username&quot;,&quot;&quot;)
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:StopADDS}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:CheckDIT}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:MoveDIT}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:StartADDS}
+}
+
+If($DomainController -EQ $env:COMPUTERNAME){
+StopADDS
+CheckDIT
+MoveDIT
+StartADDS
+}
+}
+
+If($Move_DSLog_only){
+
+If($DomainController -NE $env:COMPUTERNAME){
+$credential = $host.ui.PromptForCredential(&quot;Credentials for $DomainController&quot;, &quot;Please enter Credentials for $DomainController&quot;,&quot;$env:userdomain\$env:username&quot;,&quot;&quot;)
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:StopADDS}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:CheckDIT}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:MoveLogs}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:StartADDS}
+}
+
+If($DomainController -EQ $env:COMPUTERNAME){
+StopADDS
+CheckDIT
+MoveLogs
+StartADDS
+}
+}
+
+If($Move_NTDS_FULL){
+If($DomainController -NE $env:COMPUTERNAME){
+$credential = $host.ui.PromptForCredential(&quot;Credentials for $DomainController&quot;, &quot;Please enter Credentials for $DomainController&quot;,&quot;$env:userdomain\$env:username&quot;,&quot;&quot;)
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:StopADDS}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:CheckDIT}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:MoveLogs}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:MoveDIT}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:StartADDS}
+}
+
+If($DomainController -eq $env:COMPUTERNAME){
+StopADDS
+CheckDIT
+MoveLogs
+MoveDIT
+StartADDS
+}
+}
+
+If($Offline_Defrag){
+If($DomainController -NE $env:COMPUTERNAME){
+$credential = $host.ui.PromptForCredential(&quot;Credentials for $DomainController&quot;, &quot;Please enter Credentials for $DomainController&quot;,&quot;$env:userdomain\$env:username&quot;,&quot;&quot;)
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:StopADDS}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:Offline_Defrag}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:StartADDS}
+}
+If($DomainController -eq $env:COMPUTERNAME){
+StopADDS
+Offline_Defrag
+StartADDS
+}
+}
+
+If($Create_FULL_IFM){
+If($DomainController -NE $env:COMPUTERNAME){
+$credential = $host.ui.PromptForCredential(&quot;Credentials for $DomainController&quot;, &quot;Please enter Credentials for $DomainController&quot;,&quot;$env:userdomain\$env:username&quot;,&quot;&quot;)
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:Create_FULL_IFM}
+}
+If($DomainController -eq $env:COMPUTERNAME){
+Create_FULL_IFM
+}
+}
+
+If($DIT_Report){
+
+If($DomainController -NE $env:COMPUTERNAME){
+$credential = $host.ui.PromptForCredential(&quot;Credentials for $DomainController&quot;, &quot;Please enter Credentials for $DomainController&quot;,&quot;$env:userdomain\$env:username&quot;,&quot;&quot;)
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:DIT_Report}
+}
+
+If($DomainController -eq $env:COMPUTERNAME){
+DIT_Report
+}
+}
+
+If($CheckDIT){
+If($DomainController -NE $env:COMPUTERNAME){
+$credential = $host.ui.PromptForCredential(&quot;Credentials for $DomainController&quot;, &quot;Please enter Credentials for $DomainController&quot;,&quot;$env:userdomain\$env:username&quot;,&quot;&quot;)
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:StopADDS}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${Function:CheckDIT}
+invoke-command -ComputerName $DomainController -Credential $credential -scriptblock ${function:StartADDS}
+}
+
+If($DomainController -eq $env:COMPUTERNAME){
+StopADDS
+CheckDIT
+StartADDS
+}
+}
+
+#FIN
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

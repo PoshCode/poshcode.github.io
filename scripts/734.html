@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Steven Murawski">
+    <title>Show-ADObject - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Show-ADObject</h1>
+<h3><a href="//scripts/734.ps1">download</a></h3>
+<p>This is a modification of the Get-ADMapObject (http://poshcode.org/706).  This script uses the Show-NodeXLMap script (http://poshcode.org/733) to display the hierarchical relationship between Active Directory objects of the selected classes.  Running this script with the -ShowADClass switch lists out the different classes or types of AD objects available.</p>
+<pre><code class="language-posh"># Author: Steven Murawski http://www.mindofroot.com
+# This script requires the modified Show-NetMap script (originally from Doug Finke)
+# Show-NodeXLMap which can be found on http://poshcode.org/733
+# and the NodeXL files
+# These can be found at http://www.codeplex.com/NodeXL/Release/ProjectReleases.aspx?ReleaseId=20494
+#
+# Also required are the Quest AD Cmdlets.
+
+#requires -pssnapin Quest.ActiveRoles.ADManagement
+param ($ADClass, $MapLayout= &quot;circular&quot;, [switch]$help, [switch]$ShowADClass, [switch]$Colorize, [switch]$NoTest)
+
+function Write-Help()
+{
+	$ExampleUsage = @'
+To use this script, you will need the Show-Netmap script from Doug Finke,
+along with the NodeXL DLLs.
+Downloadable from http://www.codeplex.com/NodeXL/Release/ProjectReleases.aspx?ReleaseId=20494
+Usage:
+.\Show-ADObject.ps1 -ADClass [(AD Type Name || Array of AD Type Names}] [-Colorize]
+.\Show-ADObject.ps1 -ShowADClasses
+
+
+
+Example:
+.\Show-ADObject -ADClass group, organizationalunit -Colorize 
+
+'@
+	Write-Host $ExampleUsage
+}
+
+#Check to see if the required files are present to run the script.
+function Test-Prerequisites()
+{
+	$required = @{ShowNetMap = 'Show-NodeXLMap.ps1';
+		NetMapApp = 'Microsoft.NodeXL.ApplicationUtil.dll';
+		NetMapControl = 'Microsoft.NodeXL.Control.dll';
+		NetMapCore =  'Microsoft.NodeXL.Core.dll';
+		NetMapUtil =  'Microsoft.NodeXL.Util.dll';
+		NetMapVisual =  'Microsoft.NodeXL.Visualization.dll'
+		}
+		
+	$report = @()
+	
+	foreach ($key in $required.Keys)
+	{
+		$file = $required[$($key)]
+		if (Test-Path $file )
+		{
+			Write-Debug &quot;Found $file&quot;
+		}
+		else
+		{
+			$report +=  &quot;Missing $file&quot;
+		}
+		
+	}
+	
+	if ($report.count -eq 0)
+	{
+		Write-Debug &quot;All prerequisites were found.&quot;
+		return $true
+	}
+	else
+	{
+		Write-Help
+		Write-Host &quot;Missing files: &quot;
+		$report | ForEach-Object { Write-Host &quot;`tMissing $_&quot; }
+		throw &quot;Please move the needed files into the current directory!&quot;
+	}
+
+
+}
+
+#If all the prereq's are in the local directory and the script was not run
+#with the -help switch, load everything up!
+if ($NoTest -or (Test-Prerequisites))
+{
+	[Reflection.Assembly]::LoadWithPartialName(&quot;System.Drawing&quot;)   | Out-Null
+
+	#This is just a helper function to find the parent of an object based on the parent's distinguished name
+	function Get-ParentFromDN()
+	{
+		PROCESS
+		{
+			$root = '^DC=(\w+),DC=(\w+)$'
+			$pattern = '^(OU|CN)=(\w+?),.*?DC=\w+?,DC=\w+?$'
+			$dn = $_
+			
+			
+			if ($dn -notmatch $root)
+			{
+				$dn -replace $pattern, '$2'
+			}
+			else
+			{
+				$dn -replace $root, '$1.$2'
+			}
+		}
+	}
+	
+	#This will return an array of all the Object Classes in your Active Directory
+	function Get-ADObjectClassName()
+	{
+		Get-QADObject -SizeLimit 0 | Select-Object -property @{name='Name';Expression={$_.type}} -unique | Sort-Object name
+	}
+	
+	function Get-ColorList()
+	{
+		[System.Drawing.Color] | Get-Member -memberType property -static | foreach {$_.name}
+	}
+	
+	function Get-RandomColor()
+	{
+		param($ListOfColors)
+		$count = $ListOfColors.count-1
+		$rand = New-Object System.Random
+		$value = $rand.next(0,$count)
+		$ListOfColors[$value]
+	}
+	
+	function Get-ADMapObject()
+	{
+		param($TypesToMap=$(Throw 'One (or more object types as an array) are required to run this function'), [switch]$Color)
+		
+		$script:ColorKey = @{}
+		
+		if ($TypesToMap -is [string])
+		{
+			if ($color)
+			{
+				$MapColor = Get-RandomColor Get-ColorList
+				$script:ColorKey[&quot;$TypesToMap&quot;] = $MapColor
+				Get-QADObject -Type $TypesToMap | select Name, @{name='Parent';Expression={$_.ParentContainerDN | Get-ParentFromDN}}, @{name='Color';Expression={$MapColor}}
+			}
+			else
+			{
+				Get-QADObject -Type $TypesToMap | select Name, @{name='Parent';Expression={$_.ParentContainerDN | Get-ParentFromDN}}
+			}
+		}
+		else
+		{
+			$colorList = Get-ColorList
+			foreach ( $type in $TypesToMap )
+			{
+				if ($color)
+				{
+					$MapColor = Get-RandomColor $colorList
+					$colorList = $colorList | ? {$_ -ne $MapColor}
+					$script:ColorKey[&quot;$type&quot;] = $MapColor
+					Get-QADObject -Type $type | select Name, @{name='Parent';Expression={$_.ParentContainerDN | Get-ParentFromDN}}, @{name='Color';Expression={$MapColor}}
+				}
+				else
+				{
+					Get-QADObject -Type $type | select Name, @{name='Parent';Expression={$_.ParentContainerDN | Get-ParentFromDN}}
+				}
+			}
+		}
+	}
+	
+	#Helper function stolen from Doug Finke and used to create the objects to feed to 
+	#Show-Netmap
+	function New-SourceTarget ($s,$t,$c) 
+	{
+		New-Object PSObject |
+			Add-Member -pass noteproperty source $s |
+			Add-Member -pass noteproperty target $t | 
+			Add-Member -pass noteproperty color $c 
+	}
+	
+	if ($help)
+	{
+		Write-Help
+	}
+	else
+	{
+		if ($ShowADClass)
+		{
+			Get-ADObjectClassName
+		}
+		else
+		{
+			#Add the Show-Netmap functions from Doug Finke
+			. .\Show-NodeXLMap.ps1
+			
+			if ($Colorize)
+			{
+				$MapObjects = Get-ADMapObject -TypesToMap $ADClass -Color |  % { New-SourceTarget $_.Name $_.Parent $_.Color }  
+				Write-Host &quot;Color Key: &quot;
+				$ColorKey
+			}
+			else
+			{
+				$MapObjects = Get-ADMapObject -TypesToMap $ADClass |  % { New-SourceTarget $_.Name $_.Parent }
+			}
+			
+			$MapObjects | Show-NodeXLMap -layoutType $MapLayout
+			
+		}
+	}
+	
+	
+}
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

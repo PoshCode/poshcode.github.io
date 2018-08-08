@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="vCosonok">
+    <title>CDOT-Check.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>CDOT-Check.ps1</h1>
+<h3><a href="//scripts/5498.ps1">download</a> - <a href="//scripts/5497.md">parent</a></h3>
+<p>See www.cosonok.com and CDOT-Check.ps1</p>
+<pre><code class="language-posh">##########################################################################
+## CDOT-Check - V1 OCT '14 (For CDOT 8.2.X)                             ##
+## ==================================================================== ##
+## CAVEAT UTILITOR! This program comes with no warranty and no support! ##
+################################################################################
+## CONTENTS - This script can be broken down into the following sections:     ##
+## 1) (Generic) PowerShell Functions                                          ##
+## 2) (Generic) Data ONTAP PowerShell Toolkit Functions                       ##
+## 3) CLUSTER CONNECT        Set of Functions                                 ##
+## 4) HEALTH CHECK           Set of Functions (ADD ADDITIONAL CHECKS HERE!)   ##
+## 5) GET/SAVE CONFIGURATION Set of Functions                                 ##
+## 6) DISPLAY-ALL            Set of Functions (Used by GET-CONFIGURATION)     ##
+## 7) LOAD CLUSTERCFG        Set of Functions                                 ##
+## 8) COMPARE-DATA           Set of Functions                                 ##
+## 0) MAIN MENU                                                               ##
+################################################################################
+
+$title = &quot;CDOT-Check - V1 OCT '14 (For CDOT 8.2.X)&quot;
+$TKmajor = 3; $TKminor = 1 # Recommended minimum DOT PSTK major.minor version
+[String]$P               = $null                        # Used to put text into some Wr-* Functions
+$aggrUsedThreshold       = 90                           # % used threshold for health check (default)
+$clusterCfg              = New-Object 'object[,]' 2,3   # Define an array of 2 x 3 for 2 cluster configuration with filename, node count, data SVM count! (might make this global!)
+$global:CfgContent       = New-Object 'object[]' 2      # Use to store the Get-Content of the clustercfg files
+$global:saveConfig       = $null                        # Re-initialized in Get-Configuration as an array
+$whoAmI                  = $env:username                # The user running this script
+$workingPath             = $env:USERPROFILE             # The users profile (used to save credentials) Note: Originally used (pwd).path
+$defaultClusterCfgFolder = $workingPath + &quot;\CLUSTERCFG&quot; # Default folder for CLUSTERCFG files
+$global:CompareA = @{}; $global:CompareB = @{}          # Define hashtables for A&amp;B compare options (CLUSTER=,CLUSTERFILE=,NODE=,NODEFILE=,SVM=,SVMFILE=)
+
+# NEW CLUSTER/NODE/SVM CONFIGURATION CHECKS CAN BE ADDED HERE!
+# These are the Get-Nc*'s we use to get configuration information from CLUSTERs/NODEs/SVMs
+# Note 1: &quot;$global:currentnccontroller.Vserver =&quot; does not work with nodes - for this reason GetNcNODEs is a bit different
+# Note 2: These variables are all used in &quot;FN:GET-CONFIGURATION&quot; and &quot;FN:COMPARE-DATA&quot; (supplied via parameter)
+
+$GetNcCLUSTER    = (&quot;Get-NcCluster&quot;,&quot;Get-NcSnmp&quot;,&quot;Get-NcOption&quot;,&quot;Get-NcTimezone&quot;,&quot;Get-NcNetDns&quot;,&quot;Get-NcNetDnsHost&quot;,&quot;Get-NcConfigBackupURL&quot;,&quot;Get-NcConfigBackupCount&quot;,&quot;Get-NcLicense&quot;,
+                    &quot;Get-NcEmsConfig&quot;,&quot;Get-NcEmsDestination&quot;,&quot;Get-NcJobCronSchedule&quot;,&quot;Get-NcJobIntervalSchedule&quot;,&quot;Get-NcKerberosRealm&quot;,
+					&quot;Get-NcNetOption&quot;,&quot;Get-NcNetRoutingGroupRoute&quot;,&quot;Get-NcNetInterface&quot;,
+					&quot;Get-NcSnapmirrorPolicy&quot;,&quot;Get-NcSecurityCertificate&quot;,&quot;Get-NcSecuritySSL&quot;,&quot;Get-NcSnapshotPolicy&quot;)
+$GetNcCLUSTERLR  = (&quot;Get-NcUser&quot;,&quot;Get-NcRoleConfig&quot;,&quot;Get-NcRole&quot;)
+$GetNcNODE       = (&quot;Get-NcNode -Name&quot;,&quot;Get-NcSystemImage -Node&quot;,&quot;Get-NcServiceProcessor -Node&quot;,&quot;Get-NcOption -Vserver&quot;,&quot;Get-NcAutoSupportConfig -Node&quot;,&quot;Get-NcClusterHA&quot;,&quot;Get-NcVol -Vserver&quot;,
+                    &quot;Get-NcNetRoutingGroupRoute&quot;,&quot;Get-NcNetInterface -Vserver&quot;,
+					&quot;Get-NcNetPort -Node&quot;,&quot;Get-NcNetPortIfgrp -Node&quot;,&quot;Get-NcNetPortVlan -Node&quot;,
+					&quot;Get-NcAggrNodeInfo -Name&quot;,&quot;Get-NcSecurityCertificate -Vserver&quot;,&quot;Get-NcSecuritySSL -Vserver&quot;)
+$GetNcAGGR       = (&quot;Get-NcAggr&quot;,&quot;Get-NcAggrOption&quot;)
+$GetNcSVM        = (&quot;Get-NcVserver&quot;,&quot;Get-NcOption&quot;,&quot;Get-NcNetDns&quot;,&quot;Get-NcNetDnsHost&quot;,&quot;Get-NcFileServiceAudit&quot;,&quot;Get-NcFlexcachePolicy&quot;,
+                    &quot;Get-NcFpolicyStatus&quot;,&quot;Get-NcFpolicyPolicy&quot;,&quot;Get-NcFpolicyEvent&quot;,
+					&quot;Get-NcKerberosConfig&quot;,&quot;Get-NcLdapConfig&quot;,&quot;Get-NcLdapClient&quot;,
+					&quot;Get-NcNetRoutingGroupRoute&quot;,&quot;Get-NcNetInterface&quot;,
+					&quot;Get-NcSnapmirrorPolicy&quot;,&quot;Get-NcSecurityCertificate&quot;,&quot;Get-NcSecuritySSL&quot;,&quot;Get-NcSisPolicy&quot;,&quot;Get-NcSnapshotPolicy&quot;)
+$GetNcSVMLR      = (&quot;Get-NcUser&quot;,&quot;Get-NcRoleConfig&quot;,&quot;Get-NcRole&quot;)
+$GetNcSVMCIFS    = (&quot;Get-NcCifsServer&quot;,&quot;Get-NcCifsPreferredDomainController&quot;,&quot;Get-NcGpo&quot;,&quot;Get-NcCifsOption&quot;,&quot;Get-NcCifsSecurity&quot;,&quot;Get-NcCifsHomeDirectorySearchPath&quot;,
+	                &quot;Get-NcCifsLocalUser&quot;,&quot;Get-NcCifsLocalGroup&quot;,&quot;Get-NcCifsLocalGroupMember&quot;,&quot;Get-NcCifsShareAcl&quot;,&quot;Get-NcCifsShare&quot;)
+$GetNcSVMNFS     = (&quot;Get-NcNfsService&quot;,&quot;Get-NcNis&quot;,
+                    &quot;Get-NcNameMapping&quot;,&quot;Get-NcNameMappingUnixGroup&quot;,&quot;Get-NcNameMappingUnixUser&quot;,
+					&quot;Get-NcExportPolicy&quot;,&quot;Get-NcExportRule&quot;,&quot;Get-NcNfsExport&quot;)
+$GetNcSVMVOLUMES = (&quot;Get-NcQtree&quot;,&quot;Get-NcQuota&quot;,&quot;Get-NcQuotaStatus&quot;,
+					&quot;Get-NcSis&quot;,&quot;Get-NcSnapshotAutodelete&quot;,&quot;Get-NcSnapshotReserve&quot;,
+					&quot;Get-NcVol&quot;,&quot;Get-NcVolAutosize&quot;,&quot;Get-NcVolLanguage&quot;,&quot;Get-NcVolOption&quot;)
+
+$clusterConfigurations = $GetNcCLUSTER + $GetNcCLUSTERLR
+$nodeConfigurations    = $GetNcNODE + $GetNcAGGR
+$SVMConfigurations     = $GetNcSVM + $GetNcSVMLR + $GetNcSVMCIFS + $GetNcSVMNFS
+
+################################################################################
+## 1) (Generic) PowerShell Functions                                          ##
+################################################################################
+
+Function Pad-R{ Param([string]$string, [int]$int=30)
+	$string.PadRight($int,&quot; &quot;).SubString(0,$int) }
+Function Pad-L{ Param([string]$in, [int]$padL=3, [string]$pad=&quot; &quot;)
+	$in.PadLeft($padL,$pad) }
+
+Function Columnize-W{
+	$i = 0
+	while($i -lt $args.count){
+        Write-Host ((Pad-R $args[$i] $args[$i+1]) + &quot; &quot;) -F White -NoNewline
+        $i += 2 }; Write-Host}
+
+Function Columnize-C{
+	$i = 0
+	while($i -lt $args.count){
+        Write-Host ((Pad-R $args[$i] $args[$i+1]) + &quot; &quot;) -F $args[$i+2] -NoNewline
+        $i += 3 }; Write-Host}
+
+Function Wr-E{Write-Host}
+Function Wr-C{If($args[0]){$P=$args[0]};Write-Host $P -F Cyan}
+Function Wr-D{If($args[0]){$P=$args[0]};Write-Host $P -F DarkGray}
+Function Wr-G{If($args[0]){$P=$args[0]};Write-Host $P -F Green}
+Function Wr-M{If($args[0]){$P=$args[0]};Write-Host $P -F Magenta}
+Function Wr-R{If($args[0]){$P=$args[0]};Write-Host $P -F Red}
+Function Wr-W{If($args[0]){$P=$args[0]};Write-Host $P -F White}
+Function Wr-Y{If($args[0]){$P=$args[0]};Write-Host $P -F Yellow}
+Function Wn-C{If($args[0]){$P=$args[0]};Write-Host $P -F Cyan -NoNewline}
+Function Wn-D{If($args[0]){$P=$args[0]};Write-Host $P -F DarkGray -NoNewline}
+Function Wn-G{If($args[0]){$P=$args[0]};Write-Host $P -F Green -NoNewline}
+Function Wn-R{If($args[0]){$P=$args[0]};Write-Host $P -F Red -NoNewline}
+Function Wn-W{If($args[0]){$P=$args[0]};Write-Host $P -F White -NoNewline}
+Function Wn-Y{If($args[0]){$P=$args[0]};Write-Host $P -F Yellow -NoNewline}
+Function Rd-W{If($args){Write-Host ($args[0]) -F White -NoNewline}; return (Read-Host &quot;?&quot;)}
+
+Function Prompt-Keys{
+	Param([switch]$anykey)
+	If(!$anykey -and !$args[0]){ return $null }
+	If($args[0]){
+		If($args[0].count -ne 1){ $answers = $args[0] }
+		else { $answers  = $args[0..(($args.count)-1)] } }
+	while($true){
+		$keyPress = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+		$keyPress = $keyPress.character.ToString().ToUpper()
+		If($anyKey){return $keypress}
+		foreach($answer in $answers){
+			if($keyPress -eq $answer.ToUpper()){ return $keyPress } }
+		Write-Host &quot; &quot; -NoNewLine; Write-Host &quot;`b&quot; -NoNewLine } }
+
+Function Prompt-Menu{
+	$question = $args[0]
+	If(($args[1].count) -ne 1){$answers = $args[1]}
+	else{$answers  = $args[1..(($args.count)-1)]}
+	while($true){
+		$readIn = Read-Host &quot;$question&quot;
+		$readIn = $readIn.ToUpper()
+		foreach($answer in $answers){
+			if($readIn -eq $answer.ToUpper()){return $readIn} }	} }
+
+Function Set-Window{
+	Param([string]$textcolor,[string]$background,[string]$title,[int]$percentMax)
+	$window = (get-host).UI.RawUI
+	If($textcolor)      {$window.ForegroundColor = $textcolor}
+	If($background -and ($window.BackgroundColor -ne $background)){
+        $window.BackgroundColor = $background;cls}
+	If($title)          {$window.WindowTitle = $title}
+	$buffer            = $window.BufferSize
+	$buffer.Height     = 9999
+	$window.BufferSize = $buffer
+	If($perCentMax){
+		$maxX = [int](($window.MaxPhysicalWindowSize.Width)*$percentMax/100)
+		$maxY = [int](($window.MaxPhysicalWindowSize.Height)*$percentMax/100)
+		$buffer.Width = $maxX
+		$window.BufferSize = $buffer
+		$size = $window.WindowSize
+		$size.Width = $maxX
+		$size.Height = $maxY
+		$window.WindowSize = $size } }
+
+Function Format-Units{
+	Param([int64]$raw,[string]$unit)
+	$unit = $unit.ToUpper()
+	If($unit -eq &quot;GB&quot;){return (([int64]($raw/(1024*1024*1024))).ToString() + &quot; $unit&quot;)} }
+
+Function Create-Folder {
+	If(!$args[0]){ return $null }
+	If(Test-Path $args[0] -ErrorAction SilentlyContinue){ return ($args[0]) }
+	Else {[Void](New-item $args[0] -type directory -ErrorAction SilentlyContinue)}
+	If(Test-Path $args[0] -ErrorAction SilentlyContinue){ return ($args[0]) }
+	Else { return $null } }
+
+################################################################################
+## 2) (Generic) Data ONTAP PowerShell Toolkit Functions                       ##
+################################################################################
+
+Function Check-PSTK{
+	if(!(Get-Module DataONTAP)){Import-Module DataONTAP -ErrorAction SilentlyContinue}
+	if(!(Get-Module DataONTAP)){return $null}
+	$true}
+	
+Function Check-PSTKversion{
+	Param($major,$minor)
+	$ver = Get-NaToolKitVersion
+	if($ver.major -lt $major){return $null}elseif($ver.major -gt $major){return $true}
+	if($ver.minor -lt $minor){return $null}
+	$true}
+	
+Function Current-Cluster {
+	If($global:currentnccontroller.name){ $ClusterName = (Get-NcCluster).ClusterName } else { return $null}
+	If($ClusterName){ return $ClusterName } else { Current-ClusterNull; return $null } }
+Function Current-ClusterIP  {$global:currentnccontroller.Address.IPAddressToString}
+Function Current-ClusterNull{$global:currentnccontroller = $null}
+Function Current-UserName   {$global:currentnccontroller.Credentials.Username}
+Function Current-Vserver    {$global:currentnccontroller.Vserver}
+Function Current-VserverSet {$global:currentnccontroller.Vserver = $args[0]}
+Function Current-VserverNull{$global:currentnccontroller.Vserver = $null}
+
+################################################################################
+## 3) CLUSTER CONNECT        Set of Functions                                 ##
+################################################################################
+
+Function Cluster-Connect{
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; Connect to Cluster&quot;; Wr-E
+	while ($true) {
+		Wr-W &quot;Enter Netbios/FQDN/IP of Cluster to connect to (or enter to return to MAIN MENU)?&quot;;Wr-E
+		$cluster = Read-Host; Wr-E
+		If(!$cluster){return}
+		$getCreds = Get-Creds; Wr-E
+		If($getCreds){return} } }
+
+Function Get-Creds{
+	$filePath = $workingPath + &quot;\&quot; + $cluster + &quot;-&quot; + $whoAmI + &quot;.cred&quot;
+	Wn-W &quot;Checking for credentials at &quot;;Wr-C $filepath
+	$check = Test-Path $filePath
+	If (!$check){
+		Wr-Y &quot;No saved credentials for $cluster detected!&quot;; Wr-E
+		$PromptForCreds = Prompt-ForCreds
+		If($PromptForCreds){return $true} else {return $null}
+	} else {
+		$readFile = Get-Content $filePath
+		$rdUsername = $readFile[0] # Variable used in UseSavedCreds
+		$rdPassword = $readFile[1] # Variable used in UseSavedCreds		
+		Wr-G &quot;Saved credentials for $cluster detected with user $rdUsername!&quot;; Wr-E
+		Wn-G &quot;&lt;&lt;&lt;&lt;&lt; Re-use credentials &lt;Y/N&gt;: &quot;
+		$key = Prompt-Keys &quot;Y&quot; &quot;N&quot;; Wr-Y $key; Wr-E
+		If($key -eq &quot;Y&quot;){
+			$UseSavedCreds  = Use-SavedCreds
+			If($UseSavedCreds) {return $true} else {return $null}}
+		If($key -eq &quot;N&quot;){
+			$PromptForCreds = Prompt-ForCreds
+			If($PromptForCreds){return $true} else {return $null}} } }
+
+Function Prompt-ForCreds{
+	Wr-W &quot;Enter username to connect to $cluster (or enter to return)?&quot;; Wr-E
+	$username = Read-Host; Wr-E
+	If(!$username){return $null}
+	Wr-W &quot;Enter the password (or enter to return)?&quot;; Wr-E
+	$securePassword = Read-Host -AsSecureString; Wr-E
+	If($securePassword.length -eq 0){return $null}
+	$password       = $securePassword | ConvertFrom-SecureString
+	$credential     = New-Object System.Management.Automation.PsCredential($username,$securePassword)
+	$connect        = Connect-NcController $cluster -Credential $credential -ErrorAction SilentlyContinue
+	If($connect){
+		Wn-G &quot;Connected!&quot;; Wn-W &quot; Saved credentials to &quot;; Wr-C $filePath
+		[Void](New-Item $filePath -Type file -Force)
+		$username,$password | Set-Content $filePath
+		return $true
+	} else {
+		Wr-R &quot;Failed to connect!&quot;
+		return $null } }
+
+Function Use-SavedCreds{
+	$securePassword = $rdPassword | ConvertTo-SecureString
+	$credential = New-Object System.Management.Automation.PsCredential($rdUsername,$securePassword)
+	$connect = Connect-NcController $cluster -Credential $credential -ErrorAction SilentlyContinue
+	If($connect){Wr-G &quot;Connected!&quot;;return $true} else {Wr-R &quot;Failed to connect!&quot;;return $false}}
+
+################################################################################
+## 4) HEALTH CHECK           Set of Functions (ADD MORE HEALTH CHECKS HERE)   ##
+################################################################################
+
+Function Check-Health{
+	
+	$nodes                = Get-NcNode # Used with node checks ($node is available to functions)
+	$SVMquery             = Get-NcVserver -Template
+	$SVMquery.VserverType = &quot;data&quot;
+	$dataSVMs             = Get-NcVserver -Query $SVMquery # Data SVMs
+	$cifsServers          = 0 # Count later
+	$nfsServers           = 0 # Count later
+	
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcDiagnosisSubsystem Checks&quot;; Wr-E
+	Display-HC (get-ncdiagnosissubsystem cifs_ndo) $cCluster &quot;health&quot; &quot;ok&quot;
+	Display-HC (get-ncdiagnosissubsystem sas_connect) $cCluster &quot;health&quot; &quot;ok&quot;
+	Display-HC (get-ncdiagnosissubsystem switch_health) $cCluster &quot;health&quot; &quot;ok&quot;; Wr-E
+	
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcNode Checks&quot;; Wr-E	
+	$nodes | foreach {Check-Nodes $_ 24} # Uptime &gt; 24 hours
+	
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcAutoSupportConfig Checks&quot;; Wr-E
+	$nodes | foreach {Check-ASUP ($_.node)}; Wr-E
+
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcAutoSupportHistory Checks&quot;; Wr-E
+	$nodes | foreach {Check-AsupSent ($_.node)}; Wr-E
+	
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcNetPort Checks&quot;; Wr-E
+	$nodes | foreach {Check-Ports ($_.node)}
+	
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcAggr Checks&quot;; Wr-E
+	$nodes | foreach {Check-Aggrs $_}
+
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcEmsMessage Checks&quot;; Wr-E
+	$nodes | foreach {Check-EventLog ($_.node) 24} # Check events in last 24 hours! 
+		
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcVserver Checks&quot;; Wr-E
+	$dataSVMs | foreach {Check-DataSVMs $_}; Wr-E
+
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcCifs Checks&quot;; Wr-E
+	$dataSVMs | foreach {If(($_.AllowedProtocols).Contains(&quot;cifs&quot;)){$cifsServers++;Check-CIFS ($_.Vserver)}}
+	If($countCifsServers -eq 0){Wr-C &quot;No CIFS enabled SVMs!&quot;}; Wr-E
+		
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt; Get-NcNfsService Checks&quot;; Wr-E
+	$dataSVMs | foreach {If(($_.AllowedProtocols).Contains(&quot;nfs&quot;)){$nfsServers++;Check-NFS ($_.Vserver)}}
+	If($nfsServers -eq 0){Wr-C &quot;No NFS enabled SVMs!&quot;}; Wr-E
+	
+}
+
+Function Display-HC { # Display-HC is used to display Health Checks with different conditions! #
+
+	Param(
+		$thingToDot,$toDisplay,$member,$greenResult,$memberOverride,$resultOverride,
+		[switch]$lt,[switch]$gt,[switch]$ni,[switch]$ct,[switch]$pass,[switch]$failY)
+	
+	$result = $thingToDot.$member
+	If($resultOverride){$outResult = &quot; = &quot; + $resultOverride} else {$outResult = &quot; = &quot; + $result}
+	If($memberOverride){$outString = (Pad-R ($toDisplay + &quot;.&quot; + $memberOverride) 40) + $outResult}
+	else               {$outString = (Pad-R ($toDisplay + &quot;.&quot; + $member)         40) + $outResult}
+
+	$P = $outString                                                        # The complete output ($P feeds into Wr-* functions)
+	If($lt) {If($result -lt $greenResult)      {Wr-G} else {Wr-R}; return} # Green is result Less Than greenResult
+	If($gt) {If($result -gt $greenResult)      {Wr-G} else {Wr-R}; return} # Green is result Greater Than greenResult
+	If($ni) {If(!$result)                      {Wr-G} else {Wr-R}; return} # Green is the null result
+	If($ct) {If($result.contains($greenResult)){Wr-G} else {Wr-R}; return} # Green if it contains the greenResult
+	If($pass)                                  {Wr-G             ; return} # No checking, returns in green
+	If($failY)                                 {Wr-Y             ; return} # No checking, returns in yellow
+	If(!$greenResult)                          {Wr-C             ; return} # If no $greenresult parameter out with WrC
+	If($result -eq $greenResult)               {Wr-G} else {Wr-R}          # Standard check
+
+}
+
+Function Check-Nodes {
+	Param($node,[int]$hoursUp = 24)
+	$nodeName = $node.Node
+	$secondsUptime = $hoursUp*60*60
+	Display-HC $node $nodeName &quot;IsNodeHealthy&quot; &quot;true&quot;
+	Display-HC $node $nodeName &quot;NodeUptime&quot; $secondsUptime -gt
+	Display-HC $node $nodeName &quot;EnvFailedFanCount&quot; &quot;0&quot;
+	Display-HC $node $nodeName &quot;EnvFailedPowerSupplyCount&quot; &quot;0&quot;
+	Display-HC $node $nodeName &quot;EnvOverTemperature&quot; -ni
+	Display-HC $node $nodeName &quot;NvramBatteryStatus&quot; &quot;battery_ok&quot;
+	Display-HC $node $nodeName &quot;IsEpsilonNode&quot;
+	Display-HC $node $nodeName &quot;IsNodeClusterEligible&quot; &quot;true&quot;
+	Wr-E}
+
+function Check-ASUP {
+	Param([string]$nodeName)
+	$attributes                  = Get-NcAutoSupportConfig -Template
+	$attributes.IsEnabled        = &quot;&quot;
+	$attributes.IsSupportEnabled = &quot;&quot;
+	$getAsupConf                 = Get-NcAutoSupportConfig -Node $nodeName -Attributes $attributes
+	Display-HC $getAsupConf $nodeName &quot;IsEnabled&quot; &quot;true&quot;
+	Display-HC $getAsupConf $nodeName &quot;IsSupportEnabled&quot; &quot;true&quot;}
+
+function Check-AsupSent {
+
+	Param([string]$nodeName)
+	$outString            = (Pad-R ($nodeName + &quot;.ASUP Sent Successfully&quot;) 40) + &quot; =&quot;      # Define display out string
+	
+	$attributes           = Get-NcAutoSupportConfig -Template                               # Get-NcAutoSupportConfig: Template
+	$attributes.Transport = &quot;&quot;                                                              # Get-NcAutoSupportConfig: Transport = &quot;&quot; (Attribute)
+	$getAsupConf          = Get-NcAutoSupportConfig -Node $nodeName -Attributes $attributes # Get-NcAutoSupportConfig &lt;&lt;&lt;
+	$transport            = $getAsupConf.transport                                          # Get ASUP Transport
+
+	If ($transport -eq &quot;https&quot;){ $transport = &quot;http&quot;}                                       # Get-NcAutoSupportHistory 'Destination' is smtp/http/noteto only!
+	$attributes           = Get-NcAutoSupportHistory -Template                              # Get-NcAutoSupportHistory: Template for Attributes
+	$attributes.Status    = &quot;&quot;	                                                            # Get-NcAutoSupportHistory: Status = &quot;&quot; (Attribute)
+	$query                = Get-NcAutoSupportHistory -Template                              # Get-NcAutoSupportHistory: Template for Queries
+	$query.Destination    = $transport                                                      # Get-NcAutoSupportHistory: Destination = $transport (Query)
+	$query.NodeName       = $nodeName                                                       # Get-NcAutoSupportHistory: Node = $nodeName (Query)
+	$getAsupHistory       = Get-NcAutoSupportHistory -Attributes $attributes -Query $query  # Get-NcAutoSupportHistory &lt;&lt;&lt;
+	$asupHistoryCount     = $getAsupHistory.count                                           # Count the rows of ASUP History
+	if ($asupHistoryCount -eq 0){ Wr-R &quot;$outString No ASUP History!&quot;; return}               # If no ASUP History, report this, and return!
+	
+	$i = 0
+	while ($i -lt $asupHistoryCount) {   ## Cycle through ASUP History ##
+		if ($getAsupHistory[$i].status -eq &quot;transmission_failed&quot;){Wr-R &quot;$outString Failed!&quot;;          return}
+		if ($getAsupHistory[$i].status -eq &quot;sent-successful&quot;){    Wr-R &quot;$outString Sent Successful!&quot;; return}
+		$i++}
+	
+	Wr-R &quot;$outString Failed!&quot;
+	
+}	
+	
+Function Check-Ports{
+	Param([string]$nodeName)
+	$ncNetPort = Get-NcNetPort -Node $nodeName
+	$ncNetPort | foreach {
+		$port     = $_.Port
+		$adminUp  = $_.IsAdministrativeUp
+		$link     = $_.LinkStatus
+		$nodePort = &quot;$nodeName&quot; + &quot;:&quot; + &quot;$port&quot;
+		$P = &quot;$nodePort.LinkStatus = $link (and IsAdminUp = $adminUp)&quot;;If($adminUp -and ($link -eq &quot;up&quot;)){Wr-G}else{Wr-R}
+		Display-HC $_ $port &quot;OperationalDuplex&quot; &quot;full&quot;
+		Display-HC $_ $port &quot;AdministrativeDuplex&quot; &quot;full&quot;
+		Display-HC $_ $port &quot;OperationalFlowcontrol&quot; &quot;none&quot;
+		Display-HC $_ $port &quot;AdministrativeFlowcontrol&quot; &quot;none&quot;
+		Display-HC $_ $port &quot;OperationalSpeed&quot;
+		Display-HC $_ $port &quot;AdministrativeSpeed&quot; &quot;auto&quot;
+		Display-HC $_ $port &quot;IsOperationalAutoNegotiate&quot; &quot;True&quot;
+		Display-HC $_ $port &quot;IsAdministrativeAutoNegotiate&quot; &quot;True&quot;
+		Display-HC $_ $port &quot;Mtu&quot;
+		Wr-E}}
+
+Function Check-Aggrs{
+
+	Param($node)
+	
+	$volCount             = 0
+	$nodename             = $node.Node
+	$maxAggrSize          = $node.MaximumAggregateSize
+	$maxAggrSizeDisplay   = Format-Units $maxAggrSize GB
+	$maxAggrSizeThreshold = $maxAggrSize*0.95
+	
+	$NcAggrQuery       = Get-NcAggr -Template
+	$NcAggrQuery.Nodes = $nodename
+	$aggrs             = Get-NcAggr  -Query $NcAggrQuery
+
+	$aggrs | foreach {
+			
+		$root     = $false
+		$aggrname = $_.name
+
+		Display-HC $_ $aggrname &quot;state&quot; &quot;online&quot;
+		Display-HC $_ $aggrname &quot;RaidType&quot; &quot;normal&quot; -ct
+		Display-HC ($_.AggrOwnershipAttributes) $aggrname &quot;HomeName&quot; ($_.AggrOwnershipAttributes.OwnerName)
+
+		If($_.AggrRaidAttributes.HasLocalRoot){Display-HC ($_.AggrRaidAttributes) $aggrname &quot;HasLocalRoot&quot;;$root = $true}
+		$modulo = ($_.Disks) % ($_.RaidSize)
+		If(!$root -and ($modulo -eq 0)){			
+				Display-HC $_ $aggrname &quot;Disks&quot; -Pass
+				Display-HC $_ $aggrname &quot;RaidSize&quot; -Pass
+		} elseif (!$root -and ($modulo -ne 0)) {
+				Display-HC $_ $aggrname &quot;Disks&quot; -FailY
+				Display-HC $_ $aggrname &quot;RaidSize&quot; -FailY
+		}
+
+		Display-HC $_ $aggrname &quot;used&quot; $aggrUsedThreshold &quot;UsedPercent&quot; -lt
+		Display-HC $_ $aggrname &quot;TotalSize&quot; $maxAggrSizeThreshold &quot;TotalSize (max = $maxAggrSizeDisplay)&quot; -r (Format-Units $_.TotalSize GB) -lt
+		Display-HC ($_.AggrSnapshotAttributes) $aggrname &quot;SizeUsed&quot; &quot;0&quot; &quot;SnapshotSpaceUsed&quot;
+		Display-HC ($_.AggrSnapshotAttributes) $aggrname &quot;SnapshotReservePercent&quot; &quot;0&quot;
+		Display-HC ($_.AggrPerformanceAttributes) $aggrname &quot;FreeSpaceRealloc&quot;
+
+		Wr-E
+		$volCount += $_.volumes
+		
+	} # END $aggrs
+	
+	$maxVols  = $_.MaximumNumberOfVolumes
+	$maxVolTH = $maxVols*0.95
+	$P = &quot;$nodename has $volCount volumes from a maximum of $maxVols!&quot;;If ($volCount -lt $maxVolTH){Wr-G} else {Wr-R}
+	Wr-E
+
+} 
+
+Function Check-EventLog{
+
+	Param([string]$nodeName,[int]$hours = 24)
+	$attributes       = Get-NcEmsMessage -Template
+	$attributes.Event = &quot;&quot;
+	$attributes.Node  = &quot;&quot;
+	$attributes.Time  = &quot;&quot;
+	$severityList     = &quot;EMERGENCY&quot;,&quot;R&quot;,&quot;ALERT&quot;,&quot;R&quot;,&quot;CRITICAL&quot;,&quot;R&quot;,&quot;ERROR&quot;,&quot;Y&quot;,&quot;WARNING&quot;,&quot;Y&quot;
+	$sevListCount     = $severityList.count
+	
+	$i = 0 
+	$uniqueMessages = New-Object 'object[]' 5 # 5 severities
+	while ($i -lt $sevListCount) {
+		$severity = $severityList[$i]
+		$colour   = $severityList[$i+1]
+		$ems      = Get-NcEmsMessage -Severity $severity -StartTime (Get-Date).AddHours(-$hours) -Attributes $attributes -Node $nodeName
+		$emsCount = $ems.count
+		$P = &quot;$nodeName has $emsCount events for type $severity in the last $hours hours!&quot;; If($emsCount -eq 0){Wr-G} elseif($colour -eq &quot;R&quot;){Wr-R} else{Wr-Y}
+		$uniqueMessages[$i/2] = Check-EventLogUniqueMessages
+		$i+=2
+	} 
+	Wr-E
+	
+	$i = 0
+	while ($i -lt $sevListCount) {
+		$uniqueMessageTable  = $uniqueMessages[$i/2]
+		$uniqueMessageCount  = $uniqueMessageTable.count
+		If ($uniqueMessageCount -ne 0){
+			$colour              = $severityList[$i+1]
+			Wr-W (&quot;$nodeName occurrences of unique &quot; + $severityList[$i] + &quot; events in the last $hours hours &gt;&quot;)
+			Columnize-W &quot;Count&quot; 5 &quot;Last Occurrence&quot; 20 &quot;Event&quot; 80
+			$y = 0
+			while ($y -lt $uniqueMessageCount) {
+				Columnize-C $uniqueMessageTable[3,$y] 5 $colour $uniqueMessageTable[0,$y] 20 $colour $uniqueMessageTable[2,$y] 80 $colour
+				$y++
+				If(!$uniqueMessageTable[0,$y]){$y = $uniqueMessageCount}
+			}
+			Wr-E
+		}
+		$i+=2
+	}
+}
+
+Function Check-EventLogUniqueMessages {
+	$outputArray = New-Object 'object[,]' 4,$emsCount
+	$arrayYsize = 0 
+	foreach ($message in $ems){
+		$match = Check-EventLogMessageMatch
+		if (!$match){
+			$outputArray[0,$arrayYsize]=$message.TimeDT
+			$outputArray[1,$arrayYsize]=$message.Node
+			$outputArray[2,$arrayYsize]=$message.Event
+			$outputArray[3,$arrayYsize]=1
+			$arrayYsize++	
+		}
+	} # END of foreach ($message in $messages)
+	, $outputArray
+}
+
+Function Check-EventLogMessageMatch{
+	$j=0
+	while ($j -lt $arrayYsize){ # NOTE SURE why the -1
+		if ($message.Event -eq $outputArray[2,$j]){
+			$outputArray[3,$j]++ # Accumulate the counter
+			return $true         # Have found a match - stop checking!
+		}
+		$j++
+	}
+	return $false
+} 
+
+Function Check-DataSVMs {
+	Param($dataSVM)
+	Display-HC $dataSVM ($dataSVM.Vserver) &quot;State&quot; &quot;running&quot;}
+
+Function Check-CIFS {
+	Param([string]$currentVserver)
+	Current-VserverSet $currentVserver
+	$getCifsServer = Get-NcCifsServer
+	If (!$getCifsServer){Wr-R &quot;$currentVserver has CIFS allowed but no CIFS server created!&quot;; Current-VserverNull; return}
+	$cifsServer    = $getCifsServer.CifsServer
+	Display-HC $getCifsServer $cifsServer &quot;AdministrativeStatus&quot; &quot;up&quot;
+	Current-VserverNull}
+
+Function Check-NFS{
+	Param([string]$currentVserver)
+	Current-VserverSet $currentVserver
+	$getNfsService = Get-NcNfsService
+	If (!$getNfsService){Wr-R &quot;$currentVserver has NFS allowed but no NFS server created!&quot;; Current-VserverNull; return}
+	Display-HC $getNfsService $currentVserver &quot;GeneralAccess&quot; &quot;True&quot;
+	Current-VserverNull}
+
+################################################################################
+## 5) GET/SAVE CONFIGURATION Set of Functions                                 ##
+###################################################################################
+# For saving configurations, the txt file has headers and footers like the below: #
+# #START#WHAT-TYPE-OF-CONFIGURATION(CLUSTER/NODE/SVM)#ENTITY-NAME#GET-?           #
+# #FINIR#WHAT-TYPE-OF-CONFIGURATION(CLUSTER/NODE/SVM)#ENTITY-NAME#GET-?           #
+###################################################################################
+
+Function Get-Configuration {
+
+	$nodes             = (Get-NcNode).Node                     # NODE: Get list of Node Names
+	$query             = Get-NcVserver -Template               # SVM: Template for Get-NcVserver
+	$query.VserverType = &quot;data&quot;                                # SVM: Query for &quot;data&quot; Vservers
+	$dataSVMs          = (Get-NcVserver -Query $query).Vserver # SVM: Get list of Data SVMs Names
+	
+	# Initialize the content for the clustercfg file
+	$saveConfig   = @()               # The configuration is saved into this array
+	$saveConfig  += &quot;$cCluster&quot;       # First row  [0] of $saveConfig = Cluster Name	
+	[string]$listOfNodes = &quot;&quot;;$nodes | foreach {$listOfNodes += $_ + &quot;,&quot;}
+	$saveConfig  += $listOfNodes      # Second row [1] of $saveConfig = List of Nodes (separated by ,)
+	$saveConfig  += ($nodes.count)    # Third row  [2] of $saveConfig = nodes count
+	[string]$listOfSVMs  = &quot;&quot;;$dataSVMs | foreach {$listOfSVMs += $_ + &quot;,&quot;}
+	$saveConfig  += $listOfSVMs       # Fourth row [3] of $saveConfig = List of SVMs (separated by ,)
+	$saveConfig  += ($dataSVMs.count) # Fifth row  [4] of $saveConfig = Data SVMs count
+	
+	## &gt;&gt; CLUSTER Configurations &lt;&lt; ##
+	
+	foreach ($getNc in $clusterConfigurations){
+			Get-CFGwDisplayAll CLUSTER $cCluster $getNc } 
+	
+	## &gt;&gt; NODE Configurations &lt;&lt; ##
+	
+	foreach ($getNc in $GetNcNODE){
+		foreach ($node in $nodes){
+			Get-CFGwDisplayAll NODE $node $getNc } }
+
+	## &gt;&gt; AGGREGATE Configurations (still NODE entity type) &lt;&lt; ##
+	
+	$attributes = Get-NcAggr -template
+	$query      = Get-NcAggr -template
+	Initialize-NcObjectProperty -object $query -name AggrOwnershipAttributes	
+	foreach ($getNc in $GetNcAGGR){
+		foreach ($node in $nodes){
+			Wn-W &quot;&gt;&gt;&gt;&gt;&gt; NODE:          &quot;; Wr-C $node
+			Wn-W &quot;&gt;&gt;&gt;&gt;&gt; Configuration: &quot;; Wr-C $getNc; Wr-E
+			$saveConfig += &quot;#START#NODE#$node#$getNc&quot;
+			$query.AggrOwnershipAttributes.OwnerName = $node
+			$aggrs = (Get-NcAggr -Attributes $attributes -Query $query).Name | sort
+			$lastAggr = $aggrs[$aggrs.count-1]
+			foreach ($aggr in $aggrs){
+				$aggrHeader = &quot;AGGREGATE&quot;.PadRight(30,&quot; &quot;) + &quot; = &quot; + $aggr
+				Display-CI $aggrHeader
+				$cmdToDisplayAll = $getNc + &quot; -Name &quot; + $aggr
+				$output = Display-All $cmdToDisplayAll -All
+				$output | foreach {Display-CI $_}
+				If($aggr -ne $lastAggr) { Display-CI &quot; &quot; }
+			}			
+			$saveConfig += &quot;#FINIR#NODE#$node#$getNc&quot;
+			Wr-E
+		}
+	}
+	
+	## &gt;&gt; SVM Configurations &lt;&lt; ##
+	
+	foreach ($getNc in $SVMConfigurations){
+		foreach ($dataSVM in $dataSVMs){
+			Get-CFGwDisplayAll SVM $dataSVM $getNc } }
+			
+	## &gt;&gt; VOLUMES Configurations (still SVM entity type) &lt;&lt; ##
+	
+	$attributes = Get-NcVol -template
+	foreach ($getNc in $GetNcSVMVOLUMES){
+		foreach ($dataSVM in $dataSVMs){
+			Current-VserverSet $dataSVM
+			Wn-W &quot;&gt;&gt;&gt;&gt;&gt; SVM:           &quot;; Wr-C $dataSVM
+			Wn-W &quot;&gt;&gt;&gt;&gt;&gt; Configuration: &quot;; Wr-C $getNc; Wr-E
+			$saveConfig += &quot;#START#SVM#$dataSVM#$getNc&quot;
+			$volumes = (Get-NcVol -Attributes $attributes).Name | sort
+			$lastVol = $volumes[$volumes.count-1]
+			If (($getNc -eq &quot;Get-NcVolOption&quot;) -or ($getNc -eq &quot;Get-NcVolLanguage&quot;) -or ($getNc -eq &quot;Get-NcVolAutoSize&quot;))
+				{ $switchParam = &quot; -Name &quot; } else { $switchParam = &quot; -Volume &quot; }
+			foreach ($volume in $volumes) {
+				$volHeader = &quot;VOLUME&quot;.PadRight(30,&quot; &quot;) + &quot; = &quot; + $volume
+				Display-CI $volHeader
+				$cmdToDisplayAll = $getNc + $switchParam + $volume
+				$output = Display-All $cmdToDisplayAll -All
+				$output | foreach {Display-CI $_}
+				If($volume -ne $lastVol) { Display-CI &quot; &quot; }
+			}
+			$saveConfig += &quot;#FINIR#SVM#$dataSVM#$getNc&quot;
+			Wr-E		
+		}
+	}; Current-VserverNull
+
+}
+
+Function Display-CI { Param($member); $saveConfig += $member; Wr-C $member }
+
+Function Get-CFGwDisplayAll { # NOTE: Only used with CLUSTER/NODE/SVM above (and not AGGRS in NODEs, and VOLS in SVMs)!
+	Param($EntityType,$SVMname,$GetNcCommand)	
+	If ($EntityType -ne &quot;NODE&quot;) {                                               # IF &quot;!NODE&quot;
+		        Current-VserverSet $SVMname                                     # . Current-VserverSet (does not work with anything &quot;NODE&quot;)
+		        $cmdToDisplayAll = $GetNcCommand                                # . STANDARD $cmdToDisplayAll
+	} elseif (  $GetNcCommand -eq &quot;Get-NcClusterHA&quot; ){                          # OVERRIDE for &quot;Get-NcClusterHA&quot;
+				$cmdToDisplayAll = &quot;(Get-NcClusterHa -Node $SVMName).SfOptions&quot; # . CUSTOM SHOW just .SfOptions
+	} else	 {  $cmdToDisplayAll = $GetNcCommand + &quot; &quot; + $SVMName}              # If &quot;NODE&quot; add NODENAME to $GetNcCommand
+	$output = Display-All $cmdToDisplayAll -All
+	$EntityDisplay = ($EntityType + &quot;:&quot;).PadRight(14)
+	Wn-W &quot;&gt;&gt;&gt;&gt;&gt; $EntityDisplay &quot;;Wr-C $SVMname
+	Wn-W &quot;&gt;&gt;&gt;&gt;&gt; Configuration: &quot;;Wr-C $cmdToDisplayAll; Wr-E
+	$saveConfig += &quot;#START#$EntityType#$SVMname#$GetNcCommand&quot;
+	$output | foreach {Display-CI $_}
+	$saveConfig += &quot;#FINIR#$EntityType#$SVMname#$GetNcCommand&quot;
+	Current-VserverNull; Wr-E } 
+
+Function Save-Configuration{
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; Save Configuration&quot;;Wr-E
+	$dateString = Get-Date -uformat &quot;%Y%m%d&quot;
+	Wn-W &quot;Current folder for clustercfg files = &quot;; Wr-C $clusterCfgFolder
+	Wn-W &quot;Default filename                    = &quot;; Wr-C &quot;$cCluster.$dateString.clustercfg&quot;; Wr-E
+	Wn-G &quot;&lt;&lt;&lt;&lt;&lt; Use default filename &lt;Y/N&gt;: &quot;
+	$key = Prompt-Keys &quot;Y&quot; &quot;N&quot;; Wr-Y $key; Wr-E	
+	If ($key -eq &quot;Y&quot;){$saveFile = &quot;$clusterCfgFolder\$cCluster.$dateString.clustercfg&quot;}
+	If ($key -eq &quot;N&quot;){
+		$filename = Read-Host &quot;Enter filename (.clustercfg is added)?&quot;;Wr-E
+		If(!$filename){return}
+		$saveFile = &quot;$clusterCfgFolder\$filename.clustercfg&quot;
+	}
+	[Void](New-Item $saveFile -Type file -Force)
+	Get-Configuration
+	$saveConfig | Out-File $saveFile
+}
+
+################################################################################
+## 6) DISPLAY-ALL            Set of Functions (Used by GET-CONFIGURATION)     ##
+################################################################################
+	
+Function Display-All {
+	Param($getCmd,[int]$padR = 30,[switch]$all = $null)
+	If(!$getCmd)   { return }
+	If($getCmd.gettype().name -eq &quot;String&quot;){$parsedCmd = Invoke-Expression $getCmd}
+	else {$parsedCmd = $getCmd}
+	If(!$parsedCmd){ return }
+	$parsedCmdCount = $parsedCmd.count
+	If( ($parsedCmd.Name.count -ge 1) -and                          # Override for Name - Value pairs
+	    ($parsedCmd.Name.count -eq $parsedCmd.Value.count) )        # As an example, this is required for: 
+		                           { Display-AllNameValuePairs    } # Get-NcOption
+	elseif ($parsedCmdCount -eq 1) { Display-AllMembers $parsedCmd} # If $parsedCmdCount = 1, it is not an array
+	else {                                                          # ... otherwise it is an array
+		$count = 0                                                  # To count where in the array
+		$parsedCmd | foreach {                                      # Cycle through the array $parsedCmd
+			Display-AllMembers $_                                   # Invoke Display-AllMembers
+			$count++                                                # Accumulate count of where in the array
+			If ($count -ne $parsedCmdCount){&quot; &quot;} } } }              # Adds a space between array items (but not after the last)
+
+Function Display-AllNameValuePairs{
+	$parsedCmd | foreach { ($_.Name).PadRight($padR,&quot; &quot;).SubString(0,$padR) + &quot; = &quot; + ($_.Value) } }
+
+Function Display-AllMembers{
+	Param($element,[int]$padL=1)
+	($element|gm) | foreach{Member-Data $element $_} }
+	
+Function Member-Data {
+	Param($element,$member)
+	If($member.MemberType -eq &quot;Method&quot;){return}
+	$name    = $member.Name
+	$checks  = &quot;Specified&quot;,&quot;NcController&quot;,&quot;Vserver&quot;,&quot;VserverName&quot;,&quot;VserverType&quot;,&quot;PublicCertificate&quot;
+	foreach($check in $checks){If($name.Contains($check)){return}}
+	$data    = $element.$name
+	$padding = $name.length + $padL
+	$output  = $name.PadLeft($padding,&quot;.&quot;).PadRight($padR,&quot; &quot;).SubString(0,$padR) + &quot; = &quot; + $data
+	If (!$data){If($all){return $output}else{return}}
+	$checks  = &quot;bool&quot;,&quot;string[]&quot;,&quot;NcController&quot;,&quot;System.Object&quot;
+	foreach($check in $checks){If($member.Definition.Contains($check)){return $output}}
+	$checks  = &quot;String&quot;,&quot;Boolean&quot;,&quot;TimeSpan&quot;,&quot;DateTime&quot;,&quot;Int32&quot;,&quot;Int64&quot;
+	foreach($check in $checks){If($data.gettype().name -eq $check){return $output}}
+	If (($data|gm).count -eq 0){return $output}
+	$name.PadLeft($padding,&quot;.&quot;);$padL++
+	$output  = Display-AllMembers $data $padL
+	return $output}
+
+################################################################################
+## 7) LOAD CLUSTERCFG        Set of Functions                                 ##
+################################################################################
+
+Function Set-ClusterCFGFolder{
+	Wr-W &quot;Enter folder/folderpath for clustercfg files?&quot;; Wr-E
+	$readIn     = Read-Host; Wr-E
+	$testCreate = Create-Folder $readIn
+	If (!$testCreate){Wr-R &quot;Failed to create folder!&quot;; Wr-E; return $clusterCfgFolder} # If fails to create, we return the original $clusterCfgFolder
+	else {return $readIn}                                                              # Otherwise we return the new clustercfg folder
+}
+
+Function Load-ClusterCfg {
+
+	Param([int]$fileNumber)
+	Wr-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; Load ClusterCfg File&quot;; Wr-E
+	Wn-W &quot;Folder/folderpath for clustercfg files = &quot;; Wr-C $clusterCfgFolder
+	$items        = Get-ChildItem -Path $clusterCfgFolder
+	$searchString = &quot;*.clustercfg&quot;
+	
+	# Note: -like will only return true and not the list of matches if the array is only 1 in size
+	If     ( $items.count -eq 0) { Wr-R &quot;No *.clustercfg files in this folder!&quot;; Wr-E; return $null} 
+	elseif (($items.count -eq 1) -and ($items.name -like $searchString)) { $matches = @(); $matches += $items.name } # Makes $matches to be an array with 1 item
+	else   { $matches = $items -like $searchString }
+	If     (!$matches)           { Wr-R &quot;No *.clustercfg files in this folder!&quot;; Wr-E; return $null}
+	
+	Wr-E; Wr-W &quot;Clustercfg Files in this Directory:&quot;; Wr-E
+	
+	$i = 1
+	$promptOptions = @()
+	$promptOptions += &quot;0&quot;
+	Wr-W &quot;  0) Unload clustercfg file and/or Return to Main Menu&quot;
+	$matches | foreach{
+		$promptOptions += ($i.toString())
+		$display = Pad-L ($i.toString())
+		Wr-C &quot;$display) $_&quot;
+		$i++
+	}; Wr-E
+	
+	$answer = Prompt-Menu &quot;Choose clustercfg file to load (or 0)?&quot; $promptOptions
+	Unload-ClusterCfg                  # We unload the clustercfg for this filenumber prior to reloading it below
+	If($answer -eq &quot;0&quot;){ Wr-E; return} # If 0 is chosen return (clustercfgfile unloaded)
+	
+	$chosenFilename = $matches[([Int]$answer) -1] # We allow chosing the same clustercfg file twice! (for checking script functionality)	
+	$content        = Get-Content ($clusterCfgFolder + &quot;\&quot; + $chosenFilename) -ErrorAction SilentlyContinue
+	If(!$content){ Wr-E; Wr-R &quot;Unable to load file!&quot;; Wr-E; return}
+
+	$clusterCfg[$fileNumber,0] = $chosenFilename
+	$clusterCfg[$fileNumber,1] = $content[2] # Count of nodes is on line 3 of the clustercfg file
+	$clusterCfg[$fileNumber,2] = $content[4] # Count of SVMs  is on line 5 of the clustercfg file
+	$CfgContent[$fileNumber]   = $content
+	
+	If($fileNumber -eq 0){ $CompareA.CLUSTER = $content[0]; $CompareA.CLUSTERFILE = 0} # Automatically sets Compare A and B for clusters
+	If($fileNumber -eq 1){ $CompareB.CLUSTER = $content[0]; $CompareB.CLUSTERFILE = 1} # since only one cluster per config file with name at row 1 (0 for array)
+		
+	Wr-E
+	
+}
+
+Function Unload-ClusterCfg {
+
+	$clusterCfg[$fileNumber,0] = $clusterCfg[$fileNumber,1] = $clusterCfg[$fileNumber,2] = $null
+
+	If($CompareA.CLUSTERFILE -eq $fileNumber){$CompareA.CLUSTER = $null} 
+	If($CompareB.CLUSTERFILE -eq $fileNumber){$CompareB.CLUSTER = $null}
+	
+	# Reset $CompareA/B.NODE/SVM if they were taken from the config file number which we've now reloaded
+	# . or if there was previously only 1 config file loaded, and CompareA/B NODE/SVM pairs got autoselected!	
+	If(($CompareA.NODEFILE -eq $fileNumber) -or ($cfgFiles -eq 1)){$CompareA.NODE = $null} 
+	If(($CompareB.NODEFILE -eq $fileNumber) -or ($cfgFiles -eq 1)){$CompareB.NODE = $null}
+	If(($CompareA.SVMFILE -eq $fileNumber ) -or ($cfgFiles -eq 1)){$CompareA.SVM = $null}
+	If(($CompareB.SVMFILE -eq $fileNumber ) -or ($cfgFiles -eq 1)){$CompareB.SVM = $null}
+
+}
+
+
+################################################################################
+## 8) COMPARE-DATA           Set of Functions                                 ##
+################################################################################
+
+Function Select-PairToCompare{
+
+	Param([string]$EntityType)
+
+	# $itemsMenu is an array with X x 3, the 3 are the columns - ENTITY, cluster, clustercfg file number	
+	If ($EntityType -eq &quot;NODE&quot;){ $itemsMenu = New-Object 'object[,]' $cfgNodeCount,3 ; $rowInCfgFile = 1} # Menu of NODEs / row (-1) in cfg file with list of NODEs
+	If ($EntityType -eq &quot;SVM&quot;) { $itemsMenu = New-Object 'object[,]' $cfgSVMCount,3  ; $rowInCfgFile = 3} # Menu of SVMs  / row (-1) in cfg file with list of SVMs
+
+	$x = 0                                                         # The ITEM number in the complete list of ITEMs
+	0,1 | foreach { # -------------------------------------------- # There's only 2 config files - 0 &amp; 1
+		If($global:CfgContent[$_]){                                # .Checking there is some content!
+			$items     = $CfgContent[$_][$rowInCfgFile].split(&quot;,&quot;) # .. we get clustercfg row with the NODE/SVMS in and split it
+			$itemCount = $items.count -1                           # .. count is one less than the split (because of trailing &quot;,&quot;)
+			$j = 0                                                 # .. The ITEM in the list of ITEMs for that config file
+			while ($j -lt $itemCount){                             # .. LOOP items in the clustercfg file
+				$itemsMenu[$x,0] = $items[$j]                      # ... item $j (NODE/SVM) from the clustercfg file (COLUMN 2 in table below) ENTITY
+				$itemsMenu[$x,1] = $CfgContent[$_][0]              # ... get CLUSTER from line 0 of clustercfg file  (COLUMN 3 in table below) CLUSTER
+				$itemsMenu[$x,2] = $_                              # ... clustercfg file number                      (COLUMN 4 in table below) CLUSTERCFGFILE
+				$x++ ; $j++ } } } # ------------------------------ # ... accumulate total number of ITEMs / accumulate item in the current clustercfg
+
+	Columnize-W &quot;Menu Option&quot; 20 &quot;$EntityType Name&quot; 20 &quot;Cluster Name&quot;       20 &quot;Config File Number&quot; 20
+	Columnize-C &quot;0&quot;           20 Yellow    &quot;&lt;Return to Main Menu&gt;&quot; 25 Cyan
+	$r = 0                                # r for rows (must use $r because Columnize uses $i)
+	$menuOptions  = @()                   # Define Menu Options Array
+	$menuOptions += &quot;0&quot;                   # Add option 0
+	while ($r -lt $x){ # ---------------- # START: WHILE: r &lt; x (total number of ITEMs in the loaded config files from above)
+		$option       = ($r+1).ToString() # Put option in string form (COLUMN 1 in table below)
+		$menuOptions += $option           # Accumulate Menu Options Array
+		Columnize-C $option 20 Yellow ($itemsMenu[$r,0]) 20 Green ($itemsMenu[$r,1]) 20 Cyan ($itemsMenu[$r,2].ToString()) 20 Cyan
+		$r++                              # Accumulate r (ITEM in ITEMs Menu)
+	}; Wr-E # --------------------------- # FINIT: WHILE
+	
+	$answer0 = Prompt-Menu &quot;Enter 1st item (to be compared with)    ?&quot; $menuOptions; If($answer0 -eq &quot;0&quot;){ Wr-E; return}; $option0 = ([int]$answer0) -1
+	$answer1 = Prompt-Menu &quot;Enter 2nd item (to compare with the 1st)?&quot; $menuOptions; If($answer1 -eq &quot;0&quot;){ Wr-E; return}; $option1 = ([int]$answer1) -1; Wr-E
+	
+	$CompareA.$EntityType            = $itemsMenu[$option0,0]; $CompareB.$EntityType            = $itemsMenu[$option1,0] # Sets comparison A/B object for Entity (NODE/SVM)
+	$CompareA.($EntityType + &quot;FILE&quot;) = $itemsMenu[$option0,2]; $CompareB.($EntityType + &quot;FILE&quot;) = $itemsMenu[$option1,2] # Sets comparison A/B filenumber (0/1) for Entity (NODE/SVM)
+	
+}
+
+Function Compare-Data{
+	
+	Param($EntityType,$check) # $EntityType = CLUSTER\NODE\SVM, and $configChecks the list of $GetNc?(s)
+	Wn-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; Compare $EntityType&quot;; Wr-W &quot;s&quot;; Wr-E # Heading
+		
+	## &gt;&gt; Search through the cluster cfg files &lt;&lt; ##
+	
+	# Initialize arrays (for comparing two objects) with source cfgfile number, row count in CfgContent, size of cfgfile, and output
+	$cfgFile = New-Object 'object[]' 2; $rowCount = New-Object 'object[]' 2; $rowsInFile = New-Object 'object[]' 2; $output = New-Object 'object[]' 2
+	$cfgFile[0]        = $CompareA.($EntityType + &quot;FILE&quot;) # CFG file number 0 comes from svmsMenu and the chosen option1
+	$cfgFile[1]        = $CompareB.($EntityType + &quot;FILE&quot;) # CFG file number 1 comes from svmsMenu and the chosen option2
+	$rowCount[0]       = $rowCount[1] = 5        # Start on 6th row (5 in array) of CfgContent
+	$rowsInFile[0]     = ($global:CfgContent[ $cfgFile[0] ]).count # Records size of file
+	$rowsInFile[1]     = ($global:CfgContent[ $cfgFile[1] ]).count # Records size of file
+	$entityName1       = $CompareA.$EntityType
+	$entityName2       = $CompareB.$EntityType
+	$searchString      = New-Object 'object[,]' 2,2
+	$searchString[0,0] = &quot;#START#$EntityType#&quot; + $entityName1 + &quot;#&quot; + $check
+	$searchString[0,1] = &quot;#FINIR#$EntityType#&quot; + $entityName1 + &quot;#&quot; + $check
+	$searchString[1,0] = &quot;#START#$EntityType#&quot; + $entityName2 + &quot;#&quot; + $check
+	$searchString[1,1] = &quot;#FINIR#$EntityType#&quot; + $entityName2 + &quot;#&quot; + $check
+
+	&quot;0&quot;,&quot;1&quot; | foreach { # ---- # START: Cycle through the two config files, 0 and 1 (may be the same clustercfg file)
+		$checking   = $true    # Initialize $checking TRUE
+		$recording  = $null    # Initialize $recording NULL
+		$output[$_] = @()      # Initialize $output as a blank array
+		while ($checking) {    # START: Checking for $searchString ------------------------------------------------------------ #
+			If( $CfgContent[ $cfgFile[$_] ][ $rowCount[$_] ] -eq $searchString[$_,0]){ $recording = $true; $rowCount[$_]++ }    # If it finds the start searchString, start recording from the next row
+			If( $CfgContent[ $cfgFile[$_] ][ $rowCount[$_] ] -eq $searchString[$_,1]){ $recording = $null; $checking  = $null } # If finds the end searchString, stop recording and stop checking
+			If( $recording ) { $output[$_] += $CfgContent[ $cfgFile[$_] ][ $rowCount[$_] ] }                                    # If recording then add the row to output
+			$rowCount[$_]++				                                                                                        # Accumulate row count by 1
+			If ($rowCount[$_] -ge $rowsInFile[$_]){ $checking = $null; $rowCount[$_] = 5 } # Don't let rowCount go beyond the file size, and reset counter back to the start
+		}                      # FINIR: while ($checking) -------------------------------- #
+	} # ---------------------- # FINIR: foreach
+	
+	## &gt;&gt; Output the comparison &lt;&lt; ##
+	
+	Wn-W &quot;&gt;&gt;&gt;&gt;&gt; $EntityType Configuration Compare: &quot;; Wr-C $check; Wr-E
+	$x1 = 30; $x2 = 25; $x3 = 25; $x4 = 30 # Define column widths for output
+	Columnize-W &quot;PROPERTY&quot; $x1 &quot;$entityName1&quot; $x2 &quot;$entityName2&quot; $x3 &quot;PROPERTY&quot; $x4
+	
+	$count0 = $output[0].count; $count1 = $output[1].count               # Get the size of the outputs
+	$maxCount = $count0; If ($count1 -gt $count0){ $maxCount = $count1 } # Max Count = $count0, unless $count1 is greater!
+	
+	$r = 0               # Initialize $r for (R)ow count as 0
+	$haveContent = $true # The loop below runs whilst we have content to display
+	
+	while ($haveContent){
+	
+		# This section generates for display $property0 and $entity0item ------------- #
+		If     ($r -ge $count0)              { $property0 = &quot;&quot;;  $entity0item  = &quot;&quot;  } # If $r (row) &gt;= count of rows in $output[0]
+		elseif ($output[0][$r].trim() -eq &quot;&quot;){ $property0 = &quot; &quot;; $entity0item  = &quot; &quot; } # Handles config file having blank output (separator) (Generated with Display-All)
+		else {                                                                         # ------------------------ #
+			$splitString0 = $output[0][$r].split(&quot;=&quot;)                                                             # Split output row on &quot;=&quot;
+			$property0    = $splitString0[0]                                                                      # $property0 is the bit before the first/only &quot;=&quot;
+			If     ($splitString0.count -eq 1){ $entity0item = &quot; &quot;}                                               # Handles if theres no = in the output
+			elseif ($splitString0.count -eq 3){ $entity0item = $splitString0[1].trim() + &quot;=&quot; + $splitString0[2] } # Handles if there's a 2nd = in the output, concatentate [1]=[2]
+			else                              { $entity0item = $splitString0[1].trim() }  }                       # $entity0item is the bit after the first/only &quot;=&quot;
+
+		# This section generates for display $property1 and $entity1item ------------- #
+		If     ($r -ge $count1)              { $property1 = &quot;&quot;;  $entity1item  = &quot;&quot;  } # If $r (row) &gt;= count of rows in $output[1]
+		elseif ($output[1][$r].trim() -eq &quot;&quot;){ $property1 = &quot; &quot;; $entity1item  = &quot; &quot; } # Handles config file having blank output (separator) (Generated with Display-All)
+		else {                                                                         # ------------------------ #
+			$splitString1 = $output[1][$r].split(&quot;=&quot;)                                                             # Split output row on &quot;=&quot;
+			$property1    = $splitString1[0]                                                                      # $property0 is the bit before the first/only &quot;=&quot;
+			If     ($splitString1.count -eq 1){ $entity1item = &quot; &quot;}                                               # Handles if theres no = in the output
+			elseif ($splitString1.count -eq 3){ $entity1item = $splitString1[1].trim() + &quot;=&quot; + $splitString1[2] } # Handles if there's a 2nd = in the output, concatentate [1]=[2]
+			else                              { $entity1item = $splitString1[1].trim() }  }                       # $entity0item is the bit after the first/only &quot;=&quot;
+
+		# If the properties are the same, we check for attribute matching, and display green (matched), yellow (unmatched)
+		# ... otherwise we cannot, so display attributes as yellow (unmatched)
+		If (($property0 -eq &quot; &quot;) -and ($property1 -eq &quot; &quot;)) { Columnize-W &quot;PROPERTY&quot; $x1       $entityName1 $x2        $entityName2 $x3        &quot;PROPERTY&quot; $x4       } # No         properties
+		elseif ($property0 -eq &quot; &quot;) {                         Columnize-C &quot;PROPERTY&quot; $x1 White $entityName1 $x2 White  $entity1item $x3 Yellow $property1 $x4 Cyan  } # No &quot;left&quot;  property
+		elseif ($property1 -eq &quot; &quot;) {                         Columnize-C $property0 $x1 Cyan  $entity0item $x2 Yellow $entityName2 $x3 White  &quot;PROPERTY&quot; $x4 White } # No &quot;right&quot; property
+		elseif ($property0 -eq $property1) {                                                                                                                          # Properties match
+			If ($entity0item -eq $entity1item) {              Columnize-C $property0 $x1 Cyan  $entity0item $x2 Green  $entity1item $x3 Green  $property1 $x4 Cyan  } # Entities   match
+			else {                                            Columnize-C $property0 $x1 Cyan  $entity0item $x2 Yellow $entity1item $x3 Yellow $property1 $x4 Cyan  } # Entities   don't match
+		} else {                                              Columnize-C $property0 $x1 Cyan  $entity0item $x2 Yellow $entity1item $x3 Yellow $property1 $x4 Cyan  } # Properties don't match
+		
+		$r ++ # accumulate the row count
+		If (($count0 -le $r) -and ($count1 -le $r)){$haveContent = $null} # If $r (rows) has gone beyond the rows in $output[0] and [1], have content = NULL
+		
+	}; Wr-E # FINIR: while ($haveContent)
+
+} # FINIR: Function Compare-Data
+
+Function Compare-DataChooseGetNc{
+
+	Param($entity,$list)
+	
+	Wr-W &quot;Type a COMPLETE command from the following list, or type:&quot;; Wr-E
+	Wr-W &quot;    ALL to cycle through the complete list&quot;
+	Wr-W &quot;    EXIT to return&quot;; Wr-E
+	
+	$list        = $list | sort ; $listCount    = $list.count
+	$menuChoices = @()          ; $menuChoices += &quot;ALL&quot;,&quot;EXIT&quot;; $l = 0	
+	while ($l -lt $listCount){
+		# Note 1: substring(6) gets rid of the &quot;Get-Nc&quot;. Note 2: split(&quot; &quot;) is for NODE Get-NC*'s which have a &quot; -SWITCHNAME&quot;
+		If( ($l+0) -lt $listCount){ $col0 = ($list[$l].substring(6).split(&quot; &quot;))[0];   $menuChoices += $col0 } else { $col0 = &quot; &quot; }
+		If( ($l+1) -lt $listCount){ $col1 = ($list[$l+1].substring(6).split(&quot; &quot;))[0]; $menuChoices += $col1 } else { $col1 = &quot; &quot; }
+		If( ($l+2) -lt $listCount){ $col2 = ($list[$l+2].substring(6).split(&quot; &quot;))[0]; $menuChoices += $col2 } else { $col2 = &quot; &quot; }
+		Columnize-C $col0 35 Cyan $col1 35 Cyan $col2 35 Cyan
+		$l+=3 }; Wr-E
+	
+	$answer = Prompt-Menu &quot;Type a Get-Nc* command&quot; $menuChoices; Wr-E
+	If($answer -eq &quot;EXIT&quot;) { return }
+	If($answer -eq &quot;ALL&quot;){
+		Foreach ($GetNcCompare in $list){
+			Compare-Data $entity $GetNcCompare
+			Wr-G &quot;&gt;&gt;&gt;&gt; Press ANY key to continue or X to E(X)IT&quot;; Wr-E
+			$key = Prompt-Keys -AnyKey; If($key -eq &quot;X&quot;){ return } }
+		return }
+
+	$GetNcCompare = &quot;Get-Nc&quot; + $answer
+	
+	If($entity -eq &quot;NODE&quot;){
+		# NODE Get-NC*'s need their &quot; -SWITCHNAME&quot; re-added
+		$i = 0
+		while ($i -lt $listCount){
+			If ($list[$i] -match $GetNcCompare){ $GetNcCompare = $list[$i]; $i = $listCount }
+			$i++ } } 
+
+	Compare-Data $entity $GetNcCompare
+	
+}
+
+################################################################################
+## 0) MAIN PROGRAM                                                            ##
+################################################################################
+
+If($PSIse){Wr-E; Wr-R &quot;This program cannot run in PowerShell ISE. ISE does not support ReadKey!&quot;; Wr-E; EXIT}     # Check not running in PowerShell ISE
+$toolkit = Check-PSTK; If($toolkit){$versionChk = Check-PSTKversion $TKmajor $TKminor} else {$versionChk = $null} # Check for DOT PSTK and Version
+[Void](Create-Folder $defaultClusterCfgFolder); $clusterCfgFolder = $defaultClusterCfgFolder                      # Check for default CLUSTERCFG folder
+
+Set-Window White Black $title 80            # Set White text, Black background, Window Title, @ 80% max window size
+Wr-E;Wr-M &quot;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt; $title &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&quot;;Wr-E # Display TITLE
+If($toolkit -and !$versionChk){Wr-Y &quot;Recommend DataONTAP PowerShell Toolkit version $TKmajor.$TKminor or better - older version detected!&quot;};Wr-E
+$lastPressed = $null # We record the last pressed key (since sometimes the output's big and I forget what I last pressed, and don't want to scroll back)
+
+while ($true) { ## &gt;&gt; MENU SYSTEM &lt;&lt; ##
+
+	Wr-M &quot;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt; MAIN MENU &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&quot;; Wr-E
+	
+	# Checking currently-connected-to-cluster
+	$cCluster = Current-Cluster; $cClusterIP = Current-ClusterIP; $cUsername = Current-Username
+	If($cCluster) { Current-VserverNull } # Make sure no Vserver is selected!
+	
+	# Checking loaded clustercfg files &amp; CompareA/B HashTables
+	If ($clusterCfg[0,0] -and $clusterCfg[1,0]){$cfgFiles = 2} elseif ($clusterCfg[0,0] -or  $clusterCfg[1,0]){$cfgFiles = 1} else {$cfgFiles = 0}
+	$cfgNodeCount = [int]$clusterCfg[0,1] + [int]$clusterCfg[1,1]; If(!$cfgNodeCount){$cfgNodeCount = 0} # Count Nodes
+	$cfgSVMCount  = [int]$clusterCfg[0,2] + [int]$clusterCfg[1,2]; If(!$cfgSVMCount) {$cfgSVMCount = 0}  # Count SVMs
+
+	If($cfgNodeCount -eq 2){ # We have a pair of nodes, so to override needing to select two from two
+		If ($cfgFiles -eq 2){ # Two files so take one node from each file
+			$CompareA.NODE = ( ($CfgContent[0][1]).Split(&quot;,&quot;) )[0]; $CompareA.NODEFILE = 0
+			$CompareB.NODE = ( ($CfgContent[1][1]).Split(&quot;,&quot;) )[0]; $CompareB.NODEFILE = 1
+		} else { # We must have 1 $cfgFile, but which?
+			If ($clusterCfg[0,0]){
+				$CompareA.NODE = ( ($CfgContent[0][1]).Split(&quot;,&quot;) )[0]; $CompareA.NODEFILE = 0
+				$CompareB.NODE = ( ($CfgContent[0][1]).Split(&quot;,&quot;) )[1]; $CompareB.NODEFILE = 0 }		
+			If ($clusterCfg[1,0]){
+				$CompareA.NODE = ( ($CfgContent[1][1]).Split(&quot;,&quot;) )[0]; $CompareA.NODEFILE = 1
+				$CompareB.NODE = ( ($CfgContent[1][1]).Split(&quot;,&quot;) )[1]; $CompareB.NODEFILE = 1 } } }
+
+	If($cfgSVMCount -eq 2){ # We have a pair of SVMs, so to override needing to select two from two
+		If ($cfgFiles -eq 2){ # Two files so take one SVM from each file
+			$CompareA.SVM = ( ($CfgContent[0][3]).Split(&quot;,&quot;) )[0]; $CompareA.SVMFILE = 0
+			$CompareB.SVM = ( ($CfgContent[1][3]).Split(&quot;,&quot;) )[0]; $CompareB.SVMFILE = 1
+		} else { # We must have 1 $cfgFile, but which?
+			If ($clusterCfg[0,0]){
+				$CompareA.SVM = ( ($CfgContent[0][3]).Split(&quot;,&quot;) )[0]; $CompareA.SVMFILE = 0
+				$CompareB.SVM = ( ($CfgContent[0][3]).Split(&quot;,&quot;) )[1]; $CompareB.SVMFILE = 0 }		
+			If ($clusterCfg[1,0]){
+				$CompareA.SVM = ( ($CfgContent[1][3]).Split(&quot;,&quot;) )[0]; $CompareA.SVMFILE = 1
+				$CompareB.SVM = ( ($CfgContent[1][3]).Split(&quot;,&quot;) )[1]; $CompareB.SVMFILE = 1 } } }
+
+	$clusterA = $CompareA.CLUSTER; $clusterB = $CompareB.CLUSTER; If($clusterA  -and $clusterB){$clusterPair  = $true} else {$clusterPair  = $null}   
+	$nodeA    = $CompareA.NODE;    $nodeB    = $CompareB.NODE;    If($nodeA     -and $nodeB)   {$nodePair     = $true} else {$nodePair     = $null}
+	$svmA     = $CompareA.SVM;     $svmB     = $CompareB.SVM;     If($svmA      -and $svmB)    {$svmPair      = $true} else {$svmPair      = $null}
+				
+	# Display menu options	
+	$PROMPTKEYS = &quot;X&quot;,&quot;3&quot;,&quot;A&quot;,&quot;B&quot; # Always available options
+	$P = &quot;    &lt; 1 &gt; Connect to Cluster - PS toolkit not loaded!&quot;; If(!$toolkit){Wr-D}
+	$P = &quot;    &lt; 1 &gt; Connect to Cluster - &quot;; If($toolkit -and !$cCluster){Wn-W;Wr-Y &quot;no current connection!&quot;;$PROMPTKEYS += &quot;1&quot;}
+	$P = &quot;    &lt; 1 &gt; Connect to Cluster -&quot;;  If($toolkit -and  $cCluster){Wn-W &quot;$P current = &quot;;Wn-C $cCluster;Wn-W &quot; (IP &quot;;Wn-C $cClusterIP;Wn-W &quot;, user &quot;;Wn-C $cUsername;Wr-W &quot;)&quot;;$PROMPTKEYS += &quot;1&quot;}
+	$P = &quot;    &lt; 2 &gt; Health Check Cluster&quot;;  If($cCluster) {Wr-W;$PROMPTKEYS += &quot;2&quot;} else {Wr-D}; Wr-E
+	Wn-W &quot;    &lt; 3 &gt; Change Folder for saved clustercfg files - current = &quot;; Wr-C $clusterCfgFolder
+	$P = &quot;    &lt; 4 &gt; Save Current Cluster's Configuration&quot;; If($cCluster)        {Wr-W;$PROMPTKEYS += &quot;4&quot;} else {Wr-D}
+	$P = &quot;    &lt; A &gt; Load clustercfg File A -&quot;;             If($clusterCfg[0,0]) {Wn-W &quot;$P loaded = &quot;; Wr-C $clusterCfg[0,0]} else {Wr-W &quot;$P nothing loaded!&quot;}
+	$P = &quot;    &lt; B &gt; Load clustercfg File B -&quot;;             If($clusterCfg[1,0]) {Wn-W &quot;$P loaded = &quot;; Wr-C $clusterCfg[1,0]} else {Wr-W &quot;$P nothing loaded!&quot;}
+	$P = &quot;    Loaded  clustercfg files contain: &quot;;    If($cfgFiles -ne 0)    {Wr-E; Wn-W; Wr-C &quot;$cfgFiles CLUSTER(s), $cfgNodeCount NODE(s), and $cfgSVMCount Data SVM(s)&quot;}; Wr-E
+	$P = &quot;    &lt; C &gt; Compare CLUSTER  Configurations&quot;; If($clusterPair)       {Wn-W &quot;$P for &quot;;Wn-C $clusterA;Wn-W &quot; and &quot;;Wr-C $clusterB;$PROMPTKEYS += &quot;C&quot;} else {Wr-D}
+	$P = &quot;    &lt; M &gt; Select  NODEs to Compare&quot;;        If($cfgNodeCount -gt 2){Wr-W; $PROMPTKEYS += &quot;M&quot;}
+	$P = &quot;    &lt; N &gt; Compare NODE     Configurations&quot;; If($nodePair)          {Wn-W &quot;$P for &quot;;Wn-C $nodeA;Wn-W &quot; and &quot;;Wr-C $nodeB;$PROMPTKEYS += &quot;N&quot;} else {Wr-D}
+	$P = &quot;    &lt; R &gt; Select  SVMs  to Compare&quot;;        If($cfgSVMCount -gt 2) {Wr-W; $PROMPTKEYS += &quot;R&quot;}
+	$P = &quot;    &lt; S &gt; Compare SVM      Configurations&quot;; If($svmPair)           {Wn-W &quot;$P for &quot;;Wn-C $svmA; Wn-W &quot; and &quot;;Wr-C $svmB; $PROMPTKEYS += &quot;S&quot;} else {Wr-D}; Wr-E
+	Wr-W &quot;    &lt; X &gt; Exit&quot;; Wr-E
+	$P = &quot;    &lt;&lt;&lt;&lt;&lt; Last pressed key: $lastPressed&quot;; If($lastPressed) {Wr-W}
+	Wn-G &quot;    &gt;&gt;&gt;&gt;&gt; Press a Key: &quot;
+	
+    # Handle the Keys
+    $key = Prompt-Keys $PROMPTKEYS;Wr-Y $key; Wr-E
+	If($key -eq &quot;1&quot;){ Cluster-Connect }
+	If($key -eq &quot;2&quot;){ Check-Health }
+	If($key -eq &quot;3&quot;){ $clusterCfgFolder = Set-ClusterCFGFolder }
+	If($key -eq &quot;4&quot;){ Save-Configuration }
+	If($key -eq &quot;A&quot;){ Load-ClusterCfg 0 }
+	If($key -eq &quot;B&quot;){ Load-ClusterCfg 1 }
+	If($key -eq &quot;C&quot;){ Compare-DataChooseGetNc CLUSTER $clusterConfigurations }
+	If($key -eq &quot;M&quot;){ Select-PairToCompare NODE }
+	If($key -eq &quot;N&quot;){ Compare-DataChooseGetNc NODE    $nodeConfigurations }
+	If($key -eq &quot;R&quot;){ Select-PairToCompare SVM }
+	If($key -eq &quot;S&quot;){ Compare-DataChooseGetNc SVM     ($SVMConfigurations + $GetNcSVMVOLUMEs) }
+	If($key -eq &quot;X&quot;){ EXIT }
+	$lastPressed = $key
+	
+} ## END of MENU SYSTEM ##
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

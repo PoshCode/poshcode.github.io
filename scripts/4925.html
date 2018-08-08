@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="SQLDBAWithABeard">
+    <title>Last DB Usage to Excel - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Last DB Usage to Excel</h1>
+<h3><a href="//scripts/4925.ps1">download</a></h3>
+<h1>NAME: lastdbusage.ps1</h1>
+<h1>AUTHOR: Rob Sewell</h1>
+<h1>DATE:19/10/2013</h1>
+<h1></h1>
+<h1>COMMENTS: Fill Excel WorkBook with details for last access times for each database</h1>
+<h1></h1>
+<h1>NOTES : Does NOT work with SQL 2000 boxes</h1>
+<h1>http://sqldbawithabeard.com</h1>
+<pre><code class="language-posh">#############################################################################################
+#
+# NAME: lastdbusage.ps1
+# AUTHOR: Rob Sewell
+# DATE:19/10/2013
+#
+# COMMENTS: Fill Excel WorkBook with details for last access times for each database
+#
+# NOTES : Does NOT work with SQL 2000 boxes
+ 
+# Set SQL Query
+$query = &quot;WITH agg AS
+(
+  SELECT
+       max(last_user_seek) last_user_seek,
+       max(last_user_scan) last_user_scan,
+       max(last_user_lookup) last_user_lookup,
+       max(last_user_update) last_user_update,
+       sd.name dbname
+   FROM
+       sys.dm_db_index_usage_stats, master..sysdatabases sd
+   WHERE
+      sd.name not in('master','tempdb','model','msdb')
+   AND
+     database_id = sd.dbid  group by sd.name
+)
+SELECT
+   dbname,
+   last_read = MAX(last_read),
+   last_write = MAX(last_write)
+FROM
+(
+   SELECT dbname, last_user_seek, NULL FROM agg
+   UNION ALL
+  SELECT dbname, last_user_scan, NULL FROM agg
+   UNION ALL
+   SELECT dbname, last_user_lookup, NULL FROM agg
+   UNION ALL
+   SELECT dbname, NULL, last_user_update FROM agg
+) AS x (dbname, last_read, last_write)
+GROUP BY
+   dbname
+ORDER BY 1;
+&quot;
+#Open Excel
+$xl = new-object -comobject excel.application
+$wb = $xl.Workbooks.Add()
+ 
+  
+    # Load SMO extension
+[System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.Smo&quot;) | Out-Null;
+ 
+# Get List of sql servers to check
+$sqlservers = Get-Content 'D:\SkyDrive\Documents\Scripts\Powershell Scripts\sqlservers.txt'
+
+# Loop through each sql server from sqlservers.txt
+foreach($sqlserver in $sqlservers)
+{
+# Get the time SQL was restarted
+$svr = New-Object 'Microsoft.SQLServer.Management.Smo.Server' $SQLServer
+$db = $svr.Databases['TempDB']
+$CreateDate = $db.CreateDate
+
+#Run Query against SQL Server
+$Results = Invoke-Sqlcmd -ServerInstance $sqlServer -Query $query -Database master
+# Add a new sheet
+$ws = $wb.Worksheets.Add()
+$name = &quot;$sqlserver&quot;
+# Name the Sheet
+$ws.name = $Name
+$cells=$ws.Cells
+$xl.Visible = $true
+#define some variables to control navigation
+$row = 2
+$col = 2
+    $cells.item($row,$col)=$SQLServer + ' Was Rebooted at ' + $CreateDate
+    $cells.item($row,$col).font.size=16
+    $Cells.item($row,$col).Columnwidth = 10
+$row=3
+$col=2
+# Set some titles
+    $cells.item($row,$col)=&quot;Server&quot;
+    $cells.item($row,$col).font.size=16
+    $Cells.item($row,$col).Columnwidth = 10
+    $col++
+    $cells.item($row,$col)=&quot;Database&quot;
+    $cells.item($row,$col).font.size=16
+    $Cells.item($row,$col).Columnwidth = 40
+    $col++
+    $cells.item($row,$col)=&quot;Last Read&quot;
+    $cells.item($row,$col).font.size=16
+    $Cells.item($row,$col).Columnwidth = 20
+    $col++
+    $cells.item($row,$col)=&quot;Last Write&quot;
+    $cells.item($row,$col).font.size=16   
+    $Cells.item($row,$col).Columnwidth = 20
+    $col++
+ 
+ 
+foreach($result in $results)
+{
+# Check if value is NULL
+$DBNull = [System.DBNull]::Value
+$LastRead = $Result.last_read
+$LastWrite = $Result.last_write
+ 
+$row++
+$col=2
+$cells.item($Row,$col)=$sqlserver
+$col++
+$cells.item($Row,$col)=$Result.dbname
+$col++
+if($LastRead -eq $DBNull)
+{
+$LastRead = &quot;Not Since Last Reboot&quot;
+$colour = &quot;46&quot;
+$cells.item($Row,$col).Interior.ColorIndex = $colour
+$cells.item($Row,$col)= $LastRead
+}
+else
+{
+$cells.item($Row,$col)= $LastRead
+}
+$col++
+if($LastWrite -eq $DBNull)
+{
+$LastWrite = &quot;Not Since Last Reboot&quot;
+$colour = &quot;46&quot;
+$cells.item($Row,$col).Interior.ColorIndex = $colour
+$cells.item($Row,$col)= $LastWrite
+}
+else
+{
+$cells.item($Row,$col)= $LastWrite
+}
+}
+ 
+}
+ 
+ 
+$xl.DisplayAlerts = $false
+
+$wb.Saveas(&quot;D:\DatabaseLastAccessTimeFeb2014.xlsx&quot;)
+$xl.quit()
+Stop-Process -Name *excel*
+ 
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

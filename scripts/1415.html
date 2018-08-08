@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Archdeacon">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/1415.ps1">download</a> - <a href="//scripts/1414.md">parent</a></h3>
+<p>Scan the System Event log for all GPRS online activity - PCMCIA, USB, mobile phone, etc. A Balloon Tip will also be issued when the SIM card is about to expire (Needs an icon file to be named 'exclamation.ico' for this feature to work).</p>
+<pre><code class="language-posh">################################################################################
+# Get-GprsTime.ps1(V 1006A)
+#       Check the total connect time of any GPRS devices from a specified date. 
+# Use the -Detail switch for some extra information if desired.  A default value
+# can be set with the -Monthly switch but can be temporarily overridden with any
+# -Start value and deleted by entering an invalid date.  Now uses .NET Parse to 
+# use any culture date input. Switches -M and -S cannot be used together.
+#       A Balloon prompt will be issued in the Notification area for the 5 days
+# before the nominal month end, and a suitable Icon (exclamation.ico) file needs 
+# to be available in the $PWD directory for this to work.
+# NOTE:  this can effectively be suppressed by using a value higher than the SIM
+# card term, ie something like -Expire 100 for a 30 day card which will override 
+# the default setting. Use -Today to check only today's usage.
+# Examples:
+#    .\Get-GprsTime.ps1 -Monthly 4/8/2009
+#    .\Get-GprsTime.ps1 -Start 12/07/2009 -Expires 100 -Detail
+#    .\Get-GprsTime.ps1 -m 5/9/2009
+#    .\Get-GprsTime.ps1  10/4/2009 -d
+#    .\Get-GprsTime.ps1 -d
+#    .\Get-GprsTime.ps1 -Today
+#    .\Get-GprsTime.ps1
+#
+# The author can be contacted at www.SeaStarDevelopment.Bravehost.com and the
+# 'exclamation.ico' file is included in the Gprs100x.zip download there.
+################################################################################
+Param ([String] $start,
+       [String] $monthly,
+       [Int]    $expires = 30,    #Start warning prompt 5 days before month end.
+       [Switch] $today,
+       [Switch] $detail)
+
+Trap [System.Management.Automation.MethodInvocationException] {
+    Write-Warning &quot;[$name] Date is missing or invalid $SCRIPT:form&quot;
+    [System.Media.SystemSounds]::Hand.Play()
+    [Int]$line = $error[0].InvocationInfo.ScriptLineNumber
+    If ($line -eq  114) {
+	Write-Warning &quot;Current GPRS variable has been deleted.&quot;
+	$monthly = &quot;&quot;
+	[Environment]::SetEnvironmentVariable(&quot;GPRS&quot;,$monthly,&quot;User&quot;)
+    }
+    Exit 1
+}
+
+$name = $myInvocation.MyCommand
+$newLine = &quot;[$name] The switches -Start and -Monthly `n $(' '*($name.ToString().Length +10)) can only be used separately.&quot;
+If ($start -and $monthly) {
+    [System.Media.SystemSounds]::Hand.Play()
+    Write-Warning &quot;$newLine&quot;
+    Exit 1
+}
+$SCRIPT:form = &quot;&quot;
+#In certain cases Culture &amp; UICulture can be different and have been known to
+# return conflicting results regarding '-is [DateTime]' queries, etc.
+If ($Host.CurrentCulture -eq $Host.CurrentUICulture) {
+    $SCRIPT:form = '-Use format mm/dd/year'               
+    [Int]$culture = &quot;{0:%d}&quot; -f [DateTime] &quot;6/5/2009&quot;        #Returns local day.
+    If ($culture -eq 6) {
+	$SCRIPT:form = '-Use format dd/mm/year'
+    }
+}
+
+$VerbosePreference = 'SilentlyContinue'
+$WarningPreference = 'Continue'
+$conn = $disc = $null              
+$timeNow = [DateTime]::Now 
+$total = $timeNow - $timeNow                      #Set initial value to 00:00:00
+$insert = &quot;since&quot;
+If ($detail) {
+    $VerbosePreference = 'Continue'
+}
+
+Function CreditMsg ($value) {
+    $value = [Math]::Abs($value)
+    $prefix = &quot;CURRENT&quot;
+    $creditDate = [Environment]::GetEnvironmentVariable(&quot;GPRS&quot;,&quot;User&quot;)
+    If ($creditDate) {                       #Do nothing if no monthly date set.
+	[DateTime] $creditDT = $creditDate 
+	$creditDT = $creditDT.AddDays($value)            #Add the -Expires days.
+	$thisDay = &quot;{0:M/d/yyyy}&quot; -f [DateTime]::Now           #Force US format.
+	#If we use '$number = $creditDT - (Get-Date)' instead of the line below 
+	#we can sometimes get a value of 1 returned instead 2, hence the  above.
+	$number = $creditDT - [DateTime] $thisDay
+	[String] $credit = $creditDT   
+	$credit = $credit.Replace('00:00:00','')      #Remove any trailing time.
+	$credit = &quot;{0:d}&quot; -f [DateTime]$credit
+	Switch($number.Days) {
+            1            {$prefix = &quot;($value days) will expire tomorrow&quot;; break}
+            0            {$prefix = &quot;($value days) will expire today&quot;; break}
+            -1           {$prefix = &quot;($value days) expired yesterday&quot;; break}
+            {($_ -lt 0)} {$prefix = &quot;($value days) expired on $credit&quot;; break}
+            {($_ -le 5)} {$prefix = &quot;($value days) will expire on $credit&quot;}
+            Default      {$prefix = &quot;CURRENT&quot;}   #Only come here if over 5 days.
+	}
+    }
+    Return $prefix
+}
+
+Function Interval ([String] $value) {
+    Switch($value) {
+   	{ $_ -match '^00:00:\d+(.*)$' } {$suffix = &quot;seconds&quot;; break}
+	{ $_ -match '^00:\d+:\d+(.*)$'} {$suffix = &quot;minutes&quot;; break}
+	Default                         {$suffix = &quot;  hours&quot;}
+    }
+    Return $suffix
+}
+
+#The Script effectively starts here.............................................
+If ($start) {
+    [DateTime] $limit = [DateTime]::Parse($start)      #Trigger TRAP if invalid!
+    $convert = &quot;{0:D}&quot; -f $limit
+} 
+
+If ($monthly) {
+    $start = [DateTime]::Parse($monthly)               #Trigger TRAP if invalid!
+    Write-Output &quot;Setting GPRS (monthly) environment variable to: $monthly&quot;
+    $gprs = [String]$start.Replace('00:00:00','')
+    [Environment]::SetEnvironmentVariable(&quot;GPRS&quot;,$gprs,&quot;User&quot;)
+    [DateTime] $limit = $start               #Change to required US date format.
+    $convert = &quot;{0:D}&quot; -f $limit
+}
+
+If ($today) {                    
+    $verBosePreference = 'Continue'                    #Show VERBOSE by default.
+    [DateTime] $limit = (Get-Date)
+    $convert = &quot;{0:D}&quot; -f $limit
+    $limit = $limit.Date         #Override any start date if using -Today input.
+    $insert = &quot;for today&quot;
+}
+         #Now we can only continue if we have a valid GPRS environment variable.
+If ((!$today) -and (!$monthly) -and (!$start)) {         #Come here if -Expires.
+    $monthly = [Environment]::GetEnvironmentVariable(&quot;GPRS&quot;,&quot;User&quot;)
+	             #If no GPRS we have to generate an error for TRAP to catch.
+    If (!$monthly) {							
+	$monthly = [DateTime]::Parse($monthly)
+    }
+    [DateTime] $limit = $monthly      
+    $convert = &quot;{0:D}&quot; -f $limit
+}
+Write-Verbose &quot;All records $($insert.Replace('for ','')) - $convert&quot;
+Write-Verbose &quot;Script activation - User [$($env:UserName)] Computer [$($env:ComputerName)]&quot;
+
+$text = CreditMsg $expires        #Check if we are within 5 days of expiry date.
+If (($text -ne &quot;CURRENT&quot;) -and (Test-Path &quot;$pwd\exclamation.ico&quot;)) {
+    [void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;)
+    $objNotifyIcon = New-Object System.Windows.Forms.NotifyIcon 
+    $objNotifyIcon.Icon = &quot;$pwd\exclamation.ico&quot; 
+    $objNotifyIcon.BalloonTipIcon  = &quot;Info&quot; 
+    $objNotifyIcon.BalloonTipTitle = &quot;GPRS online account&quot;
+    $objNotifyIcon.BalloonTipText  = &quot;Credit $text&quot;
+    $objNotifyIcon.Visible = $True 
+    $objNotifyIcon.ShowBalloonTip(10000)
+}
+Write-Output &quot;&quot;
+Write-Output &quot;Calculating total connect time of all GPRS modem devices...&quot;
+                    #We cannot proceed beyond here without a valid $limit value.
+
+$lines = Get-EventLog system | Where-Object {($_.TimeGenerated -ge $limit) -and `
+    ($_.EventID -eq 20159 -or $_.EventID -eq 20158)} 
+If ($lines) {
+    Write-Verbose &quot;A total of $([Math]::Truncate($lines.Count/2)) online sessions extracted from the System Event Log.&quot;
+}
+Else {
+    Write-Output &quot;(There are no events indicated in the System Event Log)&quot;
+}
+$lines | ForEach-Object {
+    $source = $_.Source
+    If ($_.EventID -eq 20159) {                      #Event 20159 is Disconnect.
+       $disc = $_.TimeGenerated
+    } 
+    Else {                                              #Event 20158 is Connect.
+       $conn = $_.TimeGenerated	
+    }                  #We are only interested in matching pairs of DISC/CONN...
+    If ($disc -ne $null -and $conn -ne $null -and $disc -gt $conn) {
+       $diff = $disc - $conn
+       $total += $diff
+       $convDisc = &quot;{0:G}&quot; -f $disc
+       $convConn = &quot;{0:G}&quot; -f $conn
+       $period = Interval $diff
+       Write-Verbose &quot;Disconnect at $convDisc. Online - $diff $period&quot;
+       Write-Verbose &quot;   Connect at $convConn.&quot;
+    }
+}   #End ForEach
+If (!$source) {
+    $source = '(Undetermined)'
+}
+Write-Verbose &quot;Using local event source - System Event Log [$source]&quot;
+$period = Interval $total
+Write-Output &quot;Total online usage $insert $convert is $total $($period.Trim()).&quot;
+Write-Output &quot;&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

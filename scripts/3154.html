@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Justin Dearing">
+    <title>mstsc-Ac.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>mstsc-Ac.ps1</h1>
+<h3><a href="//scripts/3154.ps1">download</a></h3>
+<p>Pings a host until it responds, tries to connect to the RDP port, and then when that succeeds, launches a remote desktop connection via mstsc.exe. I discuss this version here http://www.justaprogrammer.net/2012/01/07/making-an-rdp-connection-to-a-server-you-just-rebooted-with-powershell/</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+mstsc-Ac.ps1 (Version 1.0, 7 Jan 2012)
+The author may be contacted via zippy1981@gmail.com
+The latest authoritative version of this script is always available at
+http://bit.ly/mstsc-Ac
+.DESCRIPTION 
+This script will see if a host is up and listening on a given port, and start a 
+remote desktop connection to it. The idea is you run this script after rebooting a windows server
+.EXAMPLE
+.\mstsc-Ac.ps1 192.168.0.2
+Starts an RDP connection on 192.168.0.2
+.EXAMPLE
+.\mstsc-Ac.ps1 192.168.0.2 3390
+Starts an RDP connection on 192.168.0.2 port 3390 .
+.EXAMPLE
+mstsc-Ac.ps1 192.168.0.2 -AdditionalParameters &quot;/w:1000 /h:500&quot;
+Starts an RDP connection on 192.168.0.2 with a width of 1000 pixels and a height of 500 pixels.
+.Notes
+   Copyright (c) 2012 Justin Dearing
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy 
+   of this software and associated documentation files (the &quot;Software&quot;), to deal
+   in the Software without restriction, including without limitation the rights 
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell 
+   copies of the Software, and to permit persons to whom the Software is 
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in 
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED &quot;AS IS&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+   SOFTWARE.
+   *****************************************************************************
+   NOTE: YOU MAY *ALSO* DISTRIBUTE THIS FILE UNDER ANY OF THE FOLLOWING...
+   PERMISSIVE LICENSES:
+   BSD:	 http://www.opensource.org/licenses/bsd-license.php
+   MIT:   http://www.opensource.org/licenses/mit-license.html
+   RECIPROCAL LICENSES:
+   GPL 2: http://www.gnu.org/copyleft/gpl.html
+   *****************************************************************************
+   LASTLY: THIS IS NOT LICENSED UNDER GPL v3 (although the above are compatible)
+#&gt;
+param(
+	[string] $HostOrIpAddress = &quot;&quot;,
+	[int] $Port = 3389,
+	[string] $AdditionalParameters = &quot;/f&quot;
+)
+# TODO: It seems you can't specify the user name and password on the command line
+&lt;#	
+	[string] $userName = $(Read-Host -Prompt &quot;Username&quot;),
+	[string] $password = $(
+		[System.Runtime.InteropServices.Marshal]::SecureStringToBSTR(
+			(Read-Host -Prompt &quot;Password&quot; -AsSecureString)
+		)
+	)
+#&gt;
+
+if ([String]::IsNullOrEmpty($HostOrIpAddress)) {
+	# This is the first value in the drop down list of the remote desktop client
+	$lastHost = (Get-ItemProperty 'HKCU:\Software\Microsoft\Terminal Server Client\Default' 'MRU0').MRU0
+	
+	$hostInput = (Read-Host -Prompt &quot;Host (Default $($lastHost))&quot;).Split(':')
+	if ([String]::IsNullOrEmpty($hostInput)) { $hostInput = $lastHost }
+	$HostOrIpAddress = $hostInput[0];
+	if ($host.Length -gt 1) { $Port = $hostInput[1] }
+}
+
+$pingTimeout = 1000 # ping timeout in milllliseconds
+$successfulConsecutivePingCount = 5
+$sleepTime = 5 # Time to sleep in seconds
+$ping = New-Object System.Net.NetworkInformation.Ping
+$rdpPortListening = $false;
+
+# Were looking for 5 consecutive pings that don't time out.
+# Then were going to try to connect to the remote desktop port 
+
+while (-not $rdpPortListening) {
+	for ($i = 0; $i -lt $successfulConsecutivePingCount; $i++) {
+		$result = $ping.Send($HostOrIpAddress, $pingTimeout);
+		if ($result.Status -eq 'Success') {
+			Write-Host &quot;Reply from $($result.Address) Round Trip Time $($result.RoundTripTime)&quot;
+		} else {
+			Write-Host &quot;Request Timed out. Sleeping for $($sleepTime) seconds.&quot;
+			$i = 0;
+			Start-Sleep $sleepTime
+		}
+		#$ping.Send('74.125.115.107', 500);
+	}
+	try {
+		$socket = New-Object Net.Sockets.TcpClient($HostOrIpAddress, $Port)
+		if ($socket.Connected) { 
+			$rdpPortListening = $true
+			Write-Host &quot;RDP Service appears to be up&quot;
+		}
+		$socket.Close()
+	}
+	catch [System.Management.Automation.MethodInvocationException] {
+		if ($_.Exception.InnerException.GetType() -eq [System.Net.Sockets.SocketException]) {
+			Write-Host $_.Exception.InnerException.Message
+			Start-Sleep $sleepTime
+		}
+		else {
+			throw $_.Exception.InnerException
+		}
+		
+	}
+}
+
+Invoke-Expression &quot;mstsc /v $($HostOrIpAddress):$($Port) $($AdditionalParameters)&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

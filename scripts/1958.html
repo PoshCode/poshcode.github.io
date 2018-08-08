@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="George Howarth">
+    <title>Add-Namespace - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Add-Namespace</h1>
+<h3><a href="//scripts/1958.ps1">download</a> - <a href="//scripts/1957.md">parent</a></h3>
+<p>Imports the types in the specified namespaces in the specified assemblies.</p>
+<p>Special thanks to &quot;Oisin Grehan for his great work&quot;:http://www.nivot.org/2008/12/25/ListOfTypeAcceleratorsForPowerShellCTP3.aspx</p>
+<pre><code class="language-posh">trap [System.Management.Automation.RuntimeException]
+{
+    $entryException = $_
+    
+    if ($_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::InvalidOperation)
+    {
+        if ($_.FullyQualifiedErrorId -eq &quot;TypeNotFound&quot;)
+        {
+            $targetName = $_.CategoryInfo.TargetName
+            
+            try
+            {
+                $isUnresolvable = $global:__ambiguousTypeNames.Contains($targetName)
+            }
+            catch
+            {
+                throw $entryException
+            }
+            
+            if ($isUnresolvable)
+            {
+                $message = New-Object System.Text.StringBuilder
+                $message.AppendFormat(&quot;The type [{0}] is ambiguous. Specify one of the following: &quot;, $targetName).AppendLine() | Out-Null
+                
+                [System.Type]::GetType(&quot;System.Management.Automation.TypeAccelerators&quot;)::Get.GetEnumerator() | ForEach-Object {
+                    if (($_.Key.Split('.'))[-1] -eq $targetName)
+                    {
+                        $message.Append($_.Key).AppendLine() | Out-Null
+                    }
+                }
+                
+                $exception = New-Object System.Management.Automation.RuntimeException -ArgumentList $message.ToString()
+                $errorId = &quot;TypeNotFound&quot;
+                $errorCategory = [System.Management.Automation.ErrorCategory]::InvalidOperation
+                $targetObject = $_.TargetObject
+                
+                throw New-Object System.Management.Automation.ErrorRecord -ArgumentList $exception, $errorId, $errorCategory, $targetObject
+            }
+        }
+    }
+}
+
+&lt;#
+    .SYNOPSIS
+        Imports the types in the specified namespaces in the specified assemblies.
+
+    .DESCRIPTION
+        The Add-Namespace function adds a type accelerator for each type found in the specified namespaces in the specified assemblies that satisfy a set of conditions. For more information see the NOTES section.
+
+    .PARAMETER Assembly
+        The namespace to import.
+
+    .PARAMETER Namespace
+        Specifies one or more namespaces to import.
+
+    .INPUTS
+        System.Reflection.Assembly
+            You can pipe an assembly to Add-Namespace.
+
+    .OUTPUTS
+        None
+            This function does not return any output.
+
+    .NOTES
+        The type accelerator for the type is added if the type:
+        
+        - Has a base type which is not System.Attribute, System.Delegate or System.MulticastDelegate
+        - Is not abstract
+        - Is not an interface
+        - Is not nested
+        - Is public
+        - Is visible
+        - Is qualified by the namespace specified in the Namespace parameter
+        
+        This function also comes with an exception handler in the form of a trap block. Type name collisions occur when a type has the same name of another type which is in a different namespace. When this happens, the function adds or replaces the type accelerator for that type using its fully-qualified type name. If a type resolution occurs during runtime, the trap block will determine if the type was unresolved during any of the calls made to Add-Namespace and throw an exception listing valid replacements.
+        
+        The type accelerators added by this function exist only in the current session. To use the type accelerators in all sessions, add them to your Windows PowerShell profile. For more information about the profile, see about_profiles.
+        
+        Be aware that namspaces can span multiple assemblies, in which case you would have to import the namespace for each assembly that it exists in.
+        
+        This function will not attempt to add or replace types which already exist under the same name.
+    
+    .EXAMPLE
+        C:\PS&gt; [System.Reflection.Assembly]::LoadWithPartialName(&quot;mscorlib&quot;) | Add-Namespace System.Reflection
+        
+        C:\PS&gt; [Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;)
+        
+        This example shows how to import namespaces from an assembly. The assembly must be loaded non-reflectively into the current application domain.
+    
+    .EXAMPLE
+        C:\PS&gt; $assemblies = @([System.Reflection.Assembly]::LoadWithPartialName(&quot;mscorlib&quot;), [System.Reflection.Assembly]::LoadWithPartialName(&quot;System&quot;), [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;), [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Xml&quot;), [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Xml.Linq&quot;))
+        
+        C:\PS&gt; $assemblies | Add-Namespace System, System.Collections, System.Collections.Generic, System.Net, System.Net.NetworkInformation, System.Reflection, System.Windows.Forms, System.Xml.Linq
+        
+        This example shows how to import multiple namespaces from multiple assemblies.   
+    
+    .LINK
+        about_trap
+#&gt;
+function Add-Namespace
+{
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param (
+        [Parameter(ValueFromPipeline = $true)]
+        [System.Reflection.Assembly]$Assembly,
+        [Parameter(Mandatory = $true, Position = 0)]
+        [ValidateNotNullOrEmpty()]
+        [String[]]$Namespace
+    )
+    
+    BEGIN
+    {
+        if ($global:__ambiguousTypeNames -eq $null)
+        { 
+            $global:__ambiguousTypeNames = New-Object 'System.Collections.Generic.List[System.String]'
+        }
+        
+        $genericRegex = [Regex]'(?&lt;Name&gt;.*)`\d+'
+        
+        $typeAccelerators = [System.Type]::GetType(&quot;System.Management.Automation.TypeAccelerators&quot;)
+        $typeDictionary = $typeAccelerators::Get
+    }
+    
+    PROCESS
+    {
+        $_.GetTypes() | Where-Object { 
+            ($_.BaseType -ne [System.Attribute]) -and 
+            ($_.BaseType -ne [System.Delegate]) -and 
+            ($_.BaseType -ne [System.MulticastDelegate]) -and 
+            !$_.IsAbstract -and
+            !$_.IsInterface -and 
+            !$_.IsNested -and 
+            $_.IsPublic -and 
+            $_.IsVisible -and 
+            ($Namespace -contains $_.Namespace)
+        } | ForEach-Object { 
+            $name = $_.Name
+            $fullName = $_.FullName
+        
+            if ($_.IsGenericType)
+            {
+                if ($_.Name -match $genericRegex)
+                {
+                    $name = $Matches[&quot;Name&quot;]
+                }
+                
+                if ($_.FullName -match $genericRegex)
+                {
+                    $fullName = $Matches[&quot;Name&quot;]
+                }
+            }
+            
+            if ($typeDictionary.ContainsKey($name))
+            {
+                if ($typeDictionary[$name] -eq $_)
+                {
+                    return
+                }
+            }
+            
+            if ($typeDictionary.ContainsKey($fullName))
+            {
+                if ($typeDictionary[$fullName] -eq $_)
+                {
+                    return
+                }
+            }
+            
+            if ($global:__ambiguousTypeNames.Contains($name))
+            {
+                $typeAccelerators::Add($fullName, $_)
+                return
+            }
+            
+            if ($typeDictionary.ContainsKey($name))
+            {
+                $type = $typeDictionary[$name]
+                
+                if ($_ -ne $type)
+                {
+                    $global:__ambiguousTypeNames.Add($name)
+                    
+                    $newName = $typeDictionary[$name].FullName
+                    
+                    if ($newName -match $genericRegex)
+                    {
+                        $newName = $Matches[&quot;Name&quot;]
+                    }
+                    
+                    $typeAccelerators::Remove($name)
+                    $typeAccelerators::Add($newName, $type)
+                    
+                    $typeAccelerators::Add($fullName, $_)
+                }
+                
+                return
+            }
+            
+            $typeAccelerators::Add($name, $_)
+        } | Out-Null
+    }
+    
+    END
+    {
+        
+    }
+}
+
+# Sample usage
+# You can do this as an initialization task for your script
+
+@(
+    [System.Reflection.Assembly]::LoadWithPartialName(&quot;mscorlib&quot;),
+    [System.Reflection.Assembly]::LoadWithPartialName(&quot;System&quot;),
+    [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;),
+    [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Xml&quot;),
+    [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Xml.Linq&quot;) 
+) | Add-Namespace -Namespace `
+    System, 
+    System.Collections, 
+    System.Collections.Generic, 
+    System.Net, 
+    System.Net.NetworkInformation, 
+    System.Reflection, 
+    System.Windows.Forms,
+    System.Xml.Linq
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

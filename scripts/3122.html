@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Archdeacon">
+    <title>Set Logfile length - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set Logfile length</h1>
+<h3><a href="//scripts/3122.ps1">download</a> - <a href="//scripts/1472.md">parent</a></h3>
+<p>Set any text file to a fixed number of lines. Useful for maintaining files such as the PS Transcript log. Now option added to remove blank lines.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Set any text file to a fixed number of lines. Use 'Get-Help .\SetFileLines
+-full' to view Help for this file.
+.DESCRIPTION
+This script will maintain the PS Transcript file (default setting), or any 
+text file, at a fixed length, ie matching the number of lines entered.
+However, omitting the lines parameter will just remove any blank lines; and 
+using the -Blanks switch will remove blanks from the desired length. Can be 
+included in $profile.
+.EXAMPLE
+Set-FileLines -File c:\Scripts\anyfile.txt
+Remove all blank lines from the file 'anyfile.txt'.
+.EXAMPLE  
+Set-FileLines 1500 -Blanks
+This will set the file length of 'Transcript.txt' to 1500 lines and also 
+remove all blank lines.
+.EXAMPLE
+Set-FileLines
+Remove any blank lines from the default file 'Transcript.txt'.
+.NOTES
+The 'Lines' property returned by '(Get-Content $file | Measure-Object -line)'
+excludes any blank lines so the resulting calculated totals may not be 100% 
+accurate.
+The author can be contacted via www.SeaStarDevelopment.Bravehost.com
+V2.1 Use 'Switch -regex' instead of 'Get-Content | foreach', 22 Dec 2011. 
+#&gt;
+
+
+Param ([int]   $lines = 0,
+       [String]$file = &quot;$pwd\Transcript.txt&quot;,
+       [Switch]$blanks)
+
+if ($file -notlike &quot;*.txt&quot;) {
+    [System.Media.SystemSounds]::Hand.Play()
+    Write-Warning &quot;This script can only process .txt files&quot;
+    exit 1
+}
+if (!(Test-Path $file)) {
+    [System.Media.SystemSounds]::Hand.Play()
+    Write-Warning &quot;File $file does not exist - please enter valid filename.&quot;
+    exit 1
+}
+
+[int]$count = 0
+[int]$blankLines = 0
+$encoding = 'Default'
+$errorActionPreference = 'SilentlyContinue'
+if ($lines -eq  0) {                #A value of 0 lines will just remove blanks.
+    [int]$extra = 1
+    [int]$count = 1
+    [switch]$blanks = $true          #Otherwise no blanks will be deleted below.
+}
+else {
+    $fileLength = (Get-Content $file | Measure-Object -line)
+    [int]$extra = $fileLength.Lines - $lines     #Number of lines to remove.
+}   #Note: $fileLength.Lines excludes any blank lines, so not 100% accurate.
+if ($extra -gt 0) {
+    $fileLength = $null
+    $date = &quot;{0:G}&quot; -f [DateTime]::Now
+    Write-Output &quot;$date Starting maintenance on file &lt;$file&gt;&quot;
+    $tempfile = [IO.Path]::GetTempFileName()
+    if ($file -like &quot;*transcript*.txt&quot;) {
+        $encoding = 'Unicode' 
+        Stop-Transcript | Out-Null
+        $status = $?                       # $true if we are running transcript.
+    }
+    switch -regex -file $file {
+      { $count -lt $extra } { $count++; continue}
+      '^\s*$'               { if ($blanks) {
+                                 $blankLines++
+                                 continue  
+                              }
+                              $_ | Out-File $tempFile -encoding $encoding -Append -Force  
+                            } #End blank line.
+      default               { $_ | Out-File $tempFile -encoding $encoding -Append -Force } 
+    } #End switch
+    Remove-Item $file -Force                #File in use by another process.
+    if (!$?) {
+        [System.Media.SystemSounds]::Hand.Play()
+        Write-Warning &quot;$($error[0]) Application terminating.&quot; 
+        Remove-Item $tempfile
+        $ErrorActionPreference = 'Continue'
+        exit 2
+    }
+    Move-Item $tempfile -Destination $file -Force 
+    if ($lines -eq 0) {                    #Only interested in blank lines here.
+        $tag = &quot;$blankLines blank lines removed.&quot;
+    }
+    elseIf ($blanks) {
+        $tag = &quot;$extra lines removed (+ $blankLines blank).&quot;
+    }
+    else {
+        $tag = &quot;$extra lines removed.&quot;
+    }
+    if (($file -like &quot;*transcript.txt&quot;) -and $status) {
+        Start-Transcript -append -path $file -force | Out-Null
+    }
+    Write-Output &quot;Maintenance of file completed: $tag&quot;
+}
+else {
+    Write-Output &quot;[$file] Filesize ($($FileLength.Lines) lines) is below minimum; no lines removed.&quot;
+}
+$ErrorActionPreference = 'Continue'
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

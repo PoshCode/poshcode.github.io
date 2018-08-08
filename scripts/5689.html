@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Daniel Cheng">
+    <title>ColorPattern - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ColorPattern</h1>
+<h3><a href="//scripts/5689.ps1">download</a></h3>
+<p>Color strings via Write-Host via Regular Expressions or simple matching via pipelining. The order precedence is set under the $patterns variable, so you can have overlapping matches, resulting in output such as, e.g.:</p>
+<pre><code>0 = @{ForegroundColor = 'White'; BackgroundColor='Gray'}
+'\d+' = @{ForegroundColor = 'Gray'; BackgroundColor='Black'}
+</code></pre>
+<p>This will result in all strings '0' colored as white with a gray background, while coloring all other digits gray with a black background.</p>
+<p>$colorCollection (system.collections.generic.dictionary) will convert everything, including digits, to a string.</p>
+<p>The performance is lackluster as the script parses regex matches, then finds out the non-matches of the line, and adds it all under a System.Collections.Generic.SortedDictionary object. This is used to output the colors.</p>
+<p>Uncomment #$VerbosePreference = 'continue' to get more details as it parses the matches and line characters.</p>
+<p>Tested under Powershell v4.0, and may not work under previous versions without modifications. This was posted as a late reply to http://stackoverflow.com/questions/7362097/color-words-in-powershell-script-format-table-output/27912993#27912993.</p>
+<pre><code class="language-posh"># Daniel Cheng
+
+#$VerbosePreference = 'continue'
+$VerbosePreference = 'silent'
+
+filter ColorPattern {
+    param ([object]$colors, [switch]$SimpleMatch)
+    [string]$line = $_
+
+    $collection = New-Object 'System.Collections.Generic.SortedDictionary[int, pscustomobject]'
+    $RegexOptions = [Text.RegularExpressions.RegexOptions]::IgnoreCase.value__ + [Text.RegularExpressions.RegexOptions]::Singleline.value__
+
+    if ($SimpleMatch){
+        $patternMatches = $colors.keys | % {[regex]::Escape($_)}
+        $reference = 'Value'
+    } else {
+        $patternMatches = $colors.keys
+        $reference = 'Pattern'
+    }
+
+    # detect RegEx matches and add to collection object
+    Write-Verbose &quot;'$line'&quot;
+
+    $measureparsing_match = (Measure-Command {
+        foreach ($pattern in $patternMatches){
+            Write-Verbose &quot;regex pattern: $pattern&quot;
+            foreach ($match in ([regex]::Matches($line, $pattern, $RegexOptions))){ # lazy matching
+                Write-Verbose &quot;`tmatch index: $($match.Index) length: $($match.length)&quot;
+
+                $currentset = ($match.Index)..($match.Index + $match.length - 1)
+                Write-Verbose &quot;`tcurrent set: $currentset&quot;
+
+                if (-not [bool]$collection.Count){
+                    Write-Verbose &quot;`t`tindex: $($match.Index) value: $($match.value) (inital add)&quot;
+                    [void]$collection.Add($match.Index, [PSCustomObject]@{Length = $match.Length; Value = $match.Value; Pattern = $pattern; Range = $currentset})
+                } else {
+                    (,$collection.Values) | % {
+                        $currentRange = $_.range
+                        $intersect = Compare-Object -PassThru $currentset $currentRange -IncludeEqual -ExcludeDifferent
+                        if ($intersect){
+                            Write-Verbose &quot;`t`tintersect: $([string]($intersect | % {[string]::Concat($_)})) (skipped)&quot;
+
+                            $nonintersect = Compare-Object -PassThru $currentset $intersect
+                            Write-Verbose &quot;`t`tnonintersect: $([string]($nonintersect | % {[string]::Concat($_)}))&quot;
+
+                            $nonintersect | % {
+                                if ($currentRange -notcontains $_){
+                                    Write-Verbose &quot;`t`tindex: $_ value: $($line[$_]) (adding intersect-fallout)&quot;
+                                    [void]$collection.Add($_, [PSCustomObject]@{Length = $_.Length; Value = $line[$_]; Pattern = $pattern; Range = $currentset})
+                                } else {
+                                    Write-Verbose &quot;`t`t`tindex: $_ value: $($line[$_]) (skipped intersect-fallout)&quot;
+                                }
+                            }
+                        } else {
+                            Write-Verbose &quot;`t`tindex: $($match.index) value: $($match.value) (adding nonintersect)&quot;
+                            [void]$collection.Add($match.Index, [PSCustomObject]@{Length = $match.Length; Value = $match.Value; Pattern = $pattern; Range = $currentset})
+                        }
+                    } # end values
+                } #end if
+            } # end matching
+        } # end pattern
+    }).TotalMilliseconds
+
+    $measureparsing_nonmatch = (Measure-Command {
+        if ([bool]$collection.count){ # if there are no matches, skip!
+            Compare-Object -PassThru `
+            -ReferenceObject (
+                $collection.Keys | % { # all matched keys and their lengths
+                    $word = $collection.item($_)
+                    $currentlength = ($word.value).length
+                    ($_..($_ + ($currentlength - 1)))
+                }) `
+            -DifferenceObject (0..($line.Length - 1)) | # entire line
+                % {[void]$collection.Add($_, [PSCustomObject]@{Length = $_.length; Value = $line[$_]})} # add non matches to collection
+        }
+    }).TotalMilliseconds
+
+    Write-Verbose &quot;match: $measureparsing_match ms. VS nonmatch: $measureparsing_nonmatch ms.&quot;
+
+    $collection.keys | % {
+        $word = $collection.item($_)
+        if ($word.pattern){
+            if ($colors.ContainsKey($word.$reference)){
+                $color = @{
+                    ForegroundColor = $colors[$word.$reference].ForegroundColor;
+                    BackgroundColor = $colors[$word.$reference].BackgroundColor
+                }
+                if ($word.value){
+                    Write-Host -NoNewline $([string]::Concat($word.value)) @color
+                }
+            }
+        } else {
+            Write-Host -NoNewline $([string]::Concat($word.value))
+        }
+    }
+    Write-Host # needed for line feed
+}
+
+$Patterns = [ordered]@{
+    # higher in list takes precendence
+    'stopped' = @{ForegroundColor = 'Red'; BackgroundColor='DarkRed'}
+    'running' = @{ForegroundColor = 'Green'; BackgroundColor='DarkGreen'}
+    'paused' = @{ForegroundColor = 'Yellow'; BackgroundColor='DarkYellow'}
+    0 = @{ForegroundColor = 'White'; BackgroundColor='Gray'}
+    '\d+' = @{ForegroundColor = 'Gray'; BackgroundColor='Black'}
+    '\.' = @{ForegroundColor = 'Magenta'; BackgroundColor='DarkMagenta'}
+    '(a|e|i|o|u)' = @{ForegroundColor = 'Yellow'; BackgroundColor='DarkYellow'}
+    '\w+' = @{ForegroundColor = 'Cyan'; BackgroundColor='DarkCyan'}
+
+}
+
+# strongly typed collection.. we could probably do this better..
+$colorCollection = New-Object 'system.collections.generic.dictionary[string, hashtable]'([StringComparer]::OrdinalIgnoreCase) # Ordinal
+$Patterns.GetEnumerator() | % {[void]$colorCollection.Add($_.Name, $_.Value)}
+
+Get-Service | Out-String -Stream | ColorPattern -colors $colorCollection
+#Get-Service | Out-String -Stream | ColorPattern -colors $colorCollection -SimpleMatch
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

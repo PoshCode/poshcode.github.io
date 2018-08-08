@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Dmitry Sotnikov">
+    <title>Convert-PowerPack2Ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Convert-PowerPack2Ps1</h1>
+<h3><a href="//scripts/817.ps1">download</a></h3>
+<p>Converts PowerGUI's .PowerPack files into ps1 script files - each script node, link and action get represented as a function with the element's name and its code inside. You can then dot-source the file and use the functions in your scripts or command line. Works both in PowerShell v1 and v2.
+Example:
+&amp; .\Convert-PowerPack2Ps1 &quot;ActiveDirectory.powerpack&quot; &quot;ActiveDirectory.ps1&quot;
+. .\ActiveDirectory.ps1
+Get-QADUser 'Dmitry Sotnikov' | MemberofRecursive</p>
+<pre><code class="language-posh">#######################################################################
+# Convert-PowerPack2Ps1
+# 
+# Converts PowerGUI .PowerPack files to ps1 PowerShell script library
+# v1 - raw conversion, no name changes, only script elements converted
+######################################################################
+# Example:
+# &amp; .\Convert-PowerPack2Ps1 &quot;ActiveDirectory.powerpack&quot; &quot;ActiveDirectory.ps1&quot;
+# . .\ActiveDirectory.ps1
+# Get-QADUser 'Dmitry Sotnikov' | MemberofRecursive
+######################################################################
+#
+# (c) Dmitry Sotnikov
+#  http://dmitrysotnikov.wordpress.com
+#
+#####################################################################
+param(
+	$PowerPackFile = (throw 'Please supply  path to source powerpack file'),
+	$OutputFilePath = (throw 'Please supply  path to output ps1 file')
+)
+
+#region Functions
+
+function IterateTree {
+	# processes all script nodes
+	param($segment)
+	if ( $segment.Type -like 'Script*' ) {
+		
+		$name = $segment.name -replace ' |\(|\)', ''
+		$code = $segment.script.PSBase.InnerText
+		
+@&quot;
+
+########################################################################
+# Function: $name
+# Return type: $($segment.returntype)
+########################################################################
+function $name {
+$code
+}
+&quot;@ | Out-File $OutputFilePath -Append		
+		
+	}
+	# recurse folders
+	if ($segment.items.container -ne $null) {
+		$segment.items.container | ForEach-Object { IterateTree $_ }
+	}
+}
+
+
+function Output-Link {
+	PROCESS {
+		if ( $_.script -ne $null ) { 
+			$name = $_.name -replace ' |\(|\)', ''
+			$code = $_.script.PSBase.InnerText
+
+@&quot;
+
+########################################################################
+# Function: $name
+# Input type: $($_.type)
+# Return type: $($_.returntype)
+########################################################################
+function $name {
+$code
+}
+&quot;@ | Out-File $OutputFilePath -Append		
+		}
+	}
+}
+
+
+#endregion
+
+
+$sourcefile = Get-ChildItem $PowerPackFile
+if ($sourcefile -eq $null) { throw 'File not found' }
+	
+@&quot;
+########################################################################
+# Generated from: $PowerPackFile
+#   by Convert-PowerPack2Ps1 script
+#   on $(get-date)
+########################################################################
+&quot;@ | Out-File $OutputFilePath
+
+$pp = [XML] (Get-Content $sourcefile)
+
+@&quot;
+
+# Scripts generated from script nodes
+&quot;@ | Out-File $OutputFilePath -Append
+IterateTree $pp.configuration.items.container[0]
+
+@&quot;
+
+# Scripts generated from script links
+&quot;@ | Out-File $OutputFilePath -Append
+
+$pp.configuration.items.container[1].items.container | 
+	where { $_.id -eq '481eccc0-43f8-47b8-9660-f100dff38e14' } | ForEach-Object {
+		$_.items.item, $_.items.container | Output-Link
+	}
+
+
+@&quot;
+
+# Scripts generated from script actions
+&quot;@ | Out-File $OutputFilePath -Append
+
+$pp.configuration.items.container[1].items.container | 
+	where { $_.id -eq '7826b2ed-8ae4-4ad0-bf29-1ff0a25e0ece' } | ForEach-Object {
+		$_.items.item, $_.items.container | Output-Link
+	}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

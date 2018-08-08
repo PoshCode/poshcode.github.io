@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jrich523">
+    <title>Advanced Show-Object 1.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Advanced Show-Object 1.0</h1>
+<h3><a href="//scripts/5854.ps1">download</a></h3>
+<p>This is a jacked up version of Lee's Show-Object. Uses WMF and a customized tree view grid (Got the C# from MSDN some place, lost the link). Still pretty early on, will likely update it.</p>
+<pre><code class="language-posh">
+function Show-Object{
+param(
+    ## The object to examine
+    [Parameter(ValueFromPipeline = $true)]
+    $InputObject
+)
+
+#custom controls for treeview... found it on MSDN a while ago, lost link :-/
+[void][System.Reflection.Assembly]::LoadWithPartialName('presentationframework')
+add-type @&quot;
+using System;
+using System.Windows.Controls;
+using System.Windows;
+using System.Windows.Data;
+using System.Globalization;
+
+
+namespace _treeListView
+{
+    public class TreeListView : TreeView
+    {
+        protected override DependencyObject GetContainerForItemOverride()
+        {
+            return new TreeListViewItem();
+        }
+
+        protected override bool IsItemItsOwnContainerOverride(object item)
+        {
+            return item is TreeListViewItem;
+        }
+    }
+
+    public class TreeListViewItem : TreeViewItem
+    {
+        private int _level = -1;
+        public int Level
+        {
+            get
+            {
+                if (_level != -1) return _level;
+                var parent = ItemsControl.ItemsControlFromItemContainer(this) as TreeListViewItem;
+                _level = (parent != null) ? parent.Level + 1 : 0;
+                return _level;
+            }
+        }
+
+        public TreeListViewItem(object header)
+        {
+            Header = header;
+        }
+
+        public TreeListViewItem(){}
+
+        protected override DependencyObject GetContainerForItemOverride()
+        {
+            return new TreeListViewItem();
+        }
+
+        protected override bool IsItemItsOwnContainerOverride(object item)
+        {
+            return item is TreeListViewItem;
+        }
+    }
+
+    public class LevelToIndentConverter : IValueConverter
+    {
+        private const double c_IndentSize = 19.0;
+        public object Convert(object o, Type type, object parameter,CultureInfo culture)
+        {
+            return new Thickness((int)o * c_IndentSize, 0, 0, 0);
+        }
+
+        public object ConvertBack(object o, Type type, object parameter,CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+}
+&quot;@ -ReferencedAssemblies presentationFramework,PresentationCore,WindowsBase,System.Xaml -ErrorAction SilentlyContinue
+## form layout
+[xml]$xaml = @&quot;
+&lt;Window xmlns=&quot;http://schemas.microsoft.com/winfx/2006/xaml/presentation&quot;
+        xmlns:x=&quot;http://schemas.microsoft.com/winfx/2006/xaml&quot;
+	    xmlns:s='clr-namespace:System;assembly=mscorlib' 
+	    xmlns:l='clr-namespace:_treeListView;assembly=$([_treeListView.LevelToIndentConverter].Assembly)' 
+		Title=&quot;TreeListView&quot; Width=&quot;640&quot; Height=&quot;480&quot;&gt;
+    &lt;Window.Resources&gt;
+    &lt;Style x:Key=&quot;ExpandCollapseToggleStyle&quot;
+           TargetType=&quot;{x:Type ToggleButton}&quot;&gt;
+            &lt;Setter Property=&quot;Focusable&quot; Value=&quot;False&quot;/&gt;
+            &lt;Setter Property=&quot;Width&quot; Value=&quot;19&quot;/&gt;
+            &lt;Setter Property=&quot;Height&quot; Value=&quot;13&quot;/&gt;
+            &lt;Setter Property=&quot;Template&quot;&gt;
+                &lt;Setter.Value&gt;
+                    &lt;ControlTemplate TargetType=&quot;{x:Type ToggleButton}&quot;&gt;
+                        &lt;Border Width=&quot;19&quot; Height=&quot;13&quot; Background=&quot;Transparent&quot;&gt;
+                            &lt;Border Width=&quot;9&quot; Height=&quot;9&quot; BorderThickness=&quot;1&quot; BorderBrush=&quot;#FF7898B5&quot; CornerRadius=&quot;1&quot; SnapsToDevicePixels=&quot;true&quot;&gt;
+                                &lt;Border.Background&gt;
+                                    &lt;LinearGradientBrush StartPoint=&quot;0,0&quot; EndPoint=&quot;1,1&quot;&gt;
+                                        &lt;LinearGradientBrush.GradientStops&gt;
+                                            &lt;GradientStop Color=&quot;White&quot; Offset=&quot;.2&quot;/&gt;
+                                            &lt;GradientStop Color=&quot;#FFC0B7A6&quot; Offset=&quot;1&quot;/&gt;
+                                        &lt;/LinearGradientBrush.GradientStops&gt;
+                                    &lt;/LinearGradientBrush&gt;
+                                &lt;/Border.Background&gt;
+                                &lt;Path x:Name=&quot;ExpandPath&quot; Margin=&quot;1,1,1,1&quot; Fill=&quot;Black&quot; 
+                                      Data=&quot;M 0 2 L 0 3 L 2 3 L 2 5 L 3 5 L 3 3 L 5 3 L 5 2 L 3 2 L 3 0 L 2 0 L 2 2 Z&quot;/&gt;
+                            &lt;/Border&gt;
+                        &lt;/Border&gt;
+                        &lt;ControlTemplate.Triggers&gt;
+                            &lt;Trigger Property=&quot;IsChecked&quot; Value=&quot;True&quot;&gt;
+                                &lt;Setter Property=&quot;Data&quot; TargetName=&quot;ExpandPath&quot; Value=&quot;M 0 2 L 0 3 L 5 3 L 5 2 Z&quot;/&gt;
+                            &lt;/Trigger&gt;
+                        &lt;/ControlTemplate.Triggers&gt;
+                    &lt;/ControlTemplate&gt;
+                &lt;/Setter.Value&gt;
+            &lt;/Setter&gt;
+        &lt;/Style&gt;
+
+        &lt;l:LevelToIndentConverter x:Key=&quot;LevelToIndentConverter&quot;/&gt;
+
+        &lt;DataTemplate x:Key=&quot;CellTemplate_Name&quot;&gt;
+            &lt;DockPanel&gt;
+                &lt;ToggleButton x:Name=&quot;Expander&quot; 
+                      Style=&quot;{StaticResource ExpandCollapseToggleStyle}&quot; 
+                      Margin=&quot;{Binding Level, Converter={StaticResource LevelToIndentConverter},
+                             RelativeSource={RelativeSource AncestorType={x:Type l:TreeListViewItem}}}&quot;
+                      IsChecked=&quot;{Binding Path=IsExpanded, RelativeSource=
+                    {RelativeSource AncestorType={x:Type l:TreeListViewItem}}}&quot;
+                      ClickMode=&quot;Press&quot;/&gt;
+                &lt;TextBlock Text=&quot;{Binding Name}&quot;/&gt;
+            &lt;/DockPanel&gt;
+            &lt;DataTemplate.Triggers&gt;
+                &lt;DataTrigger Binding=&quot;{Binding Path=HasItems,RelativeSource={RelativeSource AncestorType={x:Type l:TreeListViewItem}}}&quot; Value=&quot;False&quot;&gt;
+                    &lt;Setter TargetName=&quot;Expander&quot; Property=&quot;Visibility&quot; Value=&quot;Hidden&quot;/&gt;
+                &lt;/DataTrigger&gt;
+            &lt;/DataTemplate.Triggers&gt;
+        &lt;/DataTemplate&gt;
+
+        &lt;GridViewColumnCollection x:Key=&quot;gvcc&quot;&gt;
+            &lt;GridViewColumn Header=&quot;Name&quot; CellTemplate=&quot;{StaticResource CellTemplate_Name}&quot; /&gt;
+            &lt;GridViewColumn Header=&quot;MemberType&quot; DisplayMemberBinding=&quot;{Binding MemberType}&quot; /&gt;
+            &lt;GridViewColumn Header=&quot;Definition&quot; DisplayMemberBinding=&quot;{Binding Definition}&quot; /&gt;
+            &lt;GridViewColumn Header=&quot;Value&quot; DisplayMemberBinding=&quot;{Binding Value}&quot; /&gt;
+        &lt;/GridViewColumnCollection&gt;
+
+        &lt;Style TargetType=&quot;{x:Type l:TreeListViewItem}&quot;&gt;
+            &lt;Setter Property=&quot;Template&quot;&gt;
+                &lt;Setter.Value&gt;
+                    &lt;ControlTemplate TargetType=&quot;{x:Type l:TreeListViewItem}&quot;&gt;
+                        &lt;StackPanel&gt;
+                            &lt;Border Name=&quot;Bd&quot;
+                      Background=&quot;{TemplateBinding Background}&quot;
+                      BorderBrush=&quot;{TemplateBinding BorderBrush}&quot;
+                      BorderThickness=&quot;{TemplateBinding BorderThickness}&quot;
+                      Padding=&quot;{TemplateBinding Padding}&quot;&gt;
+                                &lt;GridViewRowPresenter x:Name=&quot;PART_Header&quot; 
+                                      Content=&quot;{TemplateBinding Header}&quot; 
+                                      Columns=&quot;{StaticResource gvcc}&quot; /&gt;
+                            &lt;/Border&gt;
+                            &lt;ItemsPresenter x:Name=&quot;ItemsHost&quot; /&gt;
+                        &lt;/StackPanel&gt;
+                        &lt;ControlTemplate.Triggers&gt;
+                            &lt;Trigger Property=&quot;IsExpanded&quot; Value=&quot;false&quot;&gt;
+                                &lt;Setter TargetName=&quot;ItemsHost&quot; Property=&quot;Visibility&quot; Value=&quot;Collapsed&quot;/&gt;
+                            &lt;/Trigger&gt;
+                            &lt;MultiTrigger&gt;
+                                &lt;MultiTrigger.Conditions&gt;
+                                    &lt;Condition Property=&quot;HasHeader&quot; Value=&quot;false&quot;/&gt;
+                                    &lt;Condition Property=&quot;Width&quot; Value=&quot;Auto&quot;/&gt;
+                                &lt;/MultiTrigger.Conditions&gt;
+                                &lt;Setter TargetName=&quot;PART_Header&quot; Property=&quot;MinWidth&quot; Value=&quot;75&quot;/&gt;
+                            &lt;/MultiTrigger&gt;
+                            &lt;MultiTrigger&gt;
+                                &lt;MultiTrigger.Conditions&gt;
+                                    &lt;Condition Property=&quot;HasHeader&quot; Value=&quot;false&quot;/&gt;
+                                    &lt;Condition Property=&quot;Height&quot; Value=&quot;Auto&quot;/&gt;
+                                &lt;/MultiTrigger.Conditions&gt;
+                                &lt;Setter TargetName=&quot;PART_Header&quot; Property=&quot;MinHeight&quot; Value=&quot;19&quot;/&gt;
+                            &lt;/MultiTrigger&gt;
+                            &lt;Trigger Property=&quot;IsSelected&quot; Value=&quot;true&quot;&gt;
+                                &lt;Setter TargetName=&quot;Bd&quot; Property=&quot;Background&quot; Value=&quot;{DynamicResource {x:Static SystemColors.HighlightBrushKey}}&quot;/&gt;
+                                &lt;Setter Property=&quot;Foreground&quot; Value=&quot;{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}&quot;/&gt;
+                            &lt;/Trigger&gt;
+                            &lt;MultiTrigger&gt;
+                                &lt;MultiTrigger.Conditions&gt;
+                                    &lt;Condition Property=&quot;IsSelected&quot; Value=&quot;true&quot;/&gt;
+                                    &lt;Condition Property=&quot;IsSelectionActive&quot; Value=&quot;false&quot;/&gt;
+                                &lt;/MultiTrigger.Conditions&gt;
+                                &lt;Setter TargetName=&quot;Bd&quot; Property=&quot;Background&quot; Value=&quot;{DynamicResource  {x:Static SystemColors.ControlBrushKey}}&quot;/&gt;
+                                &lt;Setter Property=&quot;Foreground&quot; Value=&quot;{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}&quot;/&gt;
+                            &lt;/MultiTrigger&gt;
+                            &lt;Trigger Property=&quot;IsEnabled&quot; Value=&quot;false&quot;&gt;
+                                &lt;Setter Property=&quot;Foreground&quot; Value=&quot;{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}&quot;/&gt;
+                            &lt;/Trigger&gt;
+                        &lt;/ControlTemplate.Triggers&gt;
+                    &lt;/ControlTemplate&gt;
+                &lt;/Setter.Value&gt;
+            &lt;/Setter&gt;
+        &lt;/Style&gt;
+
+        &lt;Style TargetType=&quot;{x:Type l:TreeListView}&quot;&gt;
+            &lt;Setter Property=&quot;Template&quot;&gt;
+                &lt;Setter.Value&gt;
+                    &lt;ControlTemplate TargetType=&quot;{x:Type l:TreeListView}&quot;&gt;
+                        &lt;Border BorderBrush=&quot;{TemplateBinding BorderBrush}&quot; BorderThickness=&quot;{TemplateBinding BorderThickness}&quot;&gt;
+                            &lt;DockPanel&gt;
+                                &lt;GridViewHeaderRowPresenter Columns=&quot;{StaticResource gvcc}&quot; DockPanel.Dock=&quot;Top&quot;/&gt;
+                                &lt;ScrollViewer CanContentScroll=&quot;True&quot;&gt;
+                                    &lt;Grid&gt;
+                                    &lt;ItemsPresenter/&gt;
+                                    &lt;/Grid&gt;
+                                &lt;/ScrollViewer&gt;
+                            &lt;/DockPanel&gt;
+                        &lt;/Border&gt;
+                    &lt;/ControlTemplate&gt;
+                &lt;/Setter.Value&gt;
+            &lt;/Setter&gt;
+        &lt;/Style&gt;
+    &lt;/Window.Resources&gt;
+    &lt;l:TreeListView x:Name=&quot;Tlv&quot;/&gt;
+&lt;/Window&gt;
+
+&quot;@
+
+$rootVariableName = dir variable:\* -Exclude InputObject,Args |
+    Where-Object {
+        $_.Value -and
+        ($_.Value.GetType() -eq $InputObject.GetType()) -and
+        ($_.Value.GetHashCode() -eq $InputObject.GetHashCode())
+}
+
+## If we got multiple, pick the first
+$rootVariableName = $rootVariableName| % Name | Select -First 1
+
+## If we didn't find one, use a default name
+if(-not $rootVariableName)
+{
+    $rootVariableName = &quot;InputObject&quot;
+}
+
+## A function to add an object to the display tree
+function PopulateNode($node, $object)
+{
+    ## If we've been asked to add a NULL object, just return
+    if(-not $object) { return }
+
+    ## If the object is a collection, then we need to add multiple
+    ## children to the node
+    if([System.Management.Automation.LanguagePrimitives]::GetEnumerator($object))
+    {
+        ## Some very rare collections don't support indexing (i.e.: $foo[0]).
+        ## In this situation, PowerShell returns the parent object back when you
+        ## try to access the [0] property.
+        $isOnlyEnumerable = $object.GetHashCode() -eq $object[0].GetHashCode()
+
+        ## Go through all the items
+        $count = 0
+        foreach($childObjectValue in $object)
+        {
+            ## Create the new node to add, with the node text of the item and
+            ## value, along with its type
+            $newChildNode = New-Object _treeListView.TreeListViewItem
+            #make sure the string version of it isnt more than a single line.
+            $showValue = if(($arr=&quot;$childObjectValue&quot; -split &quot;\n&quot; | ?{$_}).count -gt 1)
+            {
+                &quot;$($arr[0].trim()) ...&quot;
+            }
+            else
+            {
+                &quot;$childObjectValue&quot;
+            }
+            $newChildNode.ToolTip = &quot;$childObjectValue&quot;
+
+            $newChildNode.Header = [pscustomobject] @{
+                Name=$childObjectValue.GetType().name
+                Value=&quot;$showValue&quot;
+                Definition=$childObjectValue.gettype()
+                MemberType=&quot;Collection&quot;
+            }
+            
+            ## Use the node name to keep track of the actual property name
+            ## and syntax to access that property.
+            ## If we can't use the index operator to access children, add
+            ## a special tag that we'll handle specially when displaying
+            ## the node names.
+            if($isOnlyEnumerable)
+            {
+                $newChildNode.Tag = &quot;@&quot;
+            }
+
+            $newChildNode.Tag += &quot;[$count]&quot;
+            $null = $node.Items.Add($newChildNode)               
+
+            ## If this node has children or properties, add a placeholder
+            ## node underneath so that the node shows a '+' sign to be
+            ## expanded.
+            AddPlaceholderIfRequired $newChildNode $childObjectValue
+
+            $count++
+        }
+    }
+    else
+    {
+        ## If the item was not a collection, then go through its
+        ## properties
+        $members = Get-Member -InputObject $object
+        foreach($member in $members)
+        {
+            $childNode = New-Object _treeListView.TreeListViewItem
+            
+            $memberValue = if($member.MemberType -like &quot;*Propert*&quot;)
+            {
+                
+                $prop = $object.($member.Name)                
+                if($prop)
+                {
+                    $prop
+                    $childnode.ToolTip = $prop
+                    if($prop.gettype().fullname | ?{($_ -split '\.').count -gt 2})
+                    {
+                        AddPlaceholderIfRequired $childNode $prop
+                    }
+                }
+                else { '$null' }
+            }
+            elseif($member.MemberType -eq &quot;Method&quot;)
+            {
+               $childNode.ToolTip = ($object.($member.name) | Out-String).trim()
+            }
+
+            $showValue = if(($arr=&quot;$memberValue&quot; -split &quot;\n&quot;|?{$_}).count -gt 1)
+            {
+                &quot;$($arr[0].trim()) ...&quot;
+            }
+            else
+            {
+                &quot;$memberValue&quot;
+            }
+            
+
+            $childNode.Header = [pscustomobject] @{
+                Name=$member.name
+                Value=$showValue
+                Definition=$member.Definition
+                MemberType=$member.MemberType
+            }
+
+            $childNode.Tag = $member.Name
+            $null = $node.Items.Add($childNode)
+        }
+    }
+}
+
+## A function to add a placeholder if required to a node.
+## If there are any properties or children for this object, make a temporary
+## node with the text &quot;...&quot; so that the node shows a '+' sign to be
+## expanded.
+function AddPlaceholderIfRequired($node, $object)
+{
+    if(-not $object) { return }
+
+    if([System.Management.Automation.LanguagePrimitives]::GetEnumerator($object) -or
+        @($object.PSObject.Properties))
+    {
+        $null = $node.Items.Add( (New-Object _treeListView.TreeListViewItem ([pscustomobject]@{Name=&quot;...&quot;}) ) )
+    }
+}
+
+## A function invoked when a node is selected.
+function OnSelect
+{
+    param($Sender, $TreeViewEventArgs)
+
+    ## Determine the selected node
+    $nodeSelected = $TreeViewEventArgs.source
+
+    ## Walk through its parents, creating the virtual
+    ## PowerShell syntax to access this property.
+    $nodePath = GetPathForNode $nodeSelected
+
+    ## Now, invoke that PowerShell syntax to retrieve
+    ## the value of the property.
+    $resultObject = Invoke-Expression $nodePath
+    #$outputPane.Text = $nodePath
+
+    ## If we got some output, put the object's member
+    ## information in the text box.
+    
+    if($resultObject)
+    {
+        $members = Get-Member -InputObject $resultObject | Out-String       
+        #$outputPane.Text += &quot;`n&quot; + $members
+    }
+}
+
+## A function invoked when the user is about to expand a node
+function OnExpand
+{
+    param($Sender, $TreeViewCancelEventArgs)
+    ## Determine the selected node
+    $selectedNode = $TreeViewCancelEventArgs.Source
+    ## If it has a child node that is the placeholder, clear
+    ## the placeholder node.
+    if($selectedNode.items.Count -eq 1 -and
+        ($selectedNode.Items[0].Header.Name-eq &quot;...&quot;))
+    {
+        $selectedNode.items.Clear()
+    }
+    else
+    {
+        return
+    }
+
+    ## Walk through its parents, creating the virtual
+    ## PowerShell syntax to access this property.
+    $nodePath = GetPathForNode $selectedNode 
+    $global:nodepath= $nodePath
+    ## Now, invoke that PowerShell syntax to retrieve
+    ## the value of the property.
+    Invoke-Expression &quot;`$resultObject = $nodePath&quot;
+
+    ## And populate the node with the result object.
+    PopulateNode $selectedNode $resultObject
+}
+
+## A function to handle keypresses on the form.
+## In this case, we capture ^C to copy the path of
+## the object property that we're currently viewing.
+function OnKeyPress
+{
+    param($Sender, $KeyPressEventArgs)
+
+    ## [Char] 3 = Control-C
+    if($KeyPressEventArgs.KeyChar -eq 3)
+    {
+        $KeyPressEventArgs.Handled = $true
+
+        ## Get the object path, and set it on the clipboard
+        $node = $Sender.SelectedNode
+        $nodePath = GetPathForNode $node
+        [System.Windows.Forms.Clipboard]::SetText($nodePath)
+
+        $form.Close()
+    }
+}
+
+## A function to walk through the parents of a node,
+## creating virtual PowerShell syntax to access this property.
+function GetPathForNode
+{
+    param($Node)
+
+    $nodeElements = @()
+
+    ## Go through all the parents, adding them so that
+    ## $nodeElements is in order.
+    while($Node.Tag)
+    {
+        $nodeElements = ,$Node + $nodeElements
+        $Node = $Node.Parent
+    }
+
+    ## Now go through the node elements
+    $nodePath = &quot;&quot;
+    foreach($Node in $nodeElements)
+    {
+        $nodeName = $Node.Tag 
+
+        ## If it was a node that PowerShell is able to enumerate
+        ## (but not index), wrap it in the array cast operator.
+        if($nodeName.StartsWith('@'))
+        {
+            $nodeName = $nodeName.Substring(1)
+            $nodePath = &quot;@(&quot; + $nodePath + &quot;)&quot;
+        }
+        elseif($nodeName.StartsWith('['))
+        {
+            ## If it's a child index, we don't need to
+            ## add the dot for property access
+        }
+        elseif($nodePath)
+        {
+            ## Otherwise, we're accessing a property. Add a dot.
+            $nodePath += &quot;.&quot;
+        }
+
+        ## Append the node name to the path
+        $nodePath += $nodeName
+    }
+
+    ## And return the result
+    $nodePath
+}
+
+
+## Create the TreeView, which will hold our object navigation
+## area.
+
+$reader=(New-Object System.Xml.XmlNodeReader $xaml)
+$Form=[Windows.Markup.XamlReader]::Load( $reader )
+
+$tlv = $Form.FindName('Tlv')
+
+
+[System.Windows.RoutedEventHandler]$Script:Select = { OnSelect @args }
+[System.Windows.RoutedEventHandler]$Script:Expand = { OnExpand @args }
+[System.Windows.RoutedEventHandler]$Script:KeyPress = { OnKeyPress @args }
+$tlv.AddHandler([_treeListView.TreeListViewItem]::SelectedEvent, $Script:Select)
+$tlv.AddHandler([_treeListView.TreeListViewItem]::ExpandedEvent, $Script:Expand)
+$tlv.AddHandler([_treeListView.TreeListViewItem]::KeyUpEvent, $Script:KeyPress)
+
+
+## Create the root node, which represents the object
+## we are trying to show.
+$root = New-Object _treeListView.TreeListViewItem ([pscustomobject]@{
+    Name=$InputObject.gettype().name
+    Value=&quot;$InputObject&quot;
+    Definition=$InputObject.gettype().fullname})
+
+#root.Header = &quot;$InputObject : &quot; + $InputObject.GetType()
+$root.Tag = '$' + $rootVariableName
+$root.ToolTip = &quot;$InputObject&quot;
+$root.IsExpanded = $true
+
+## And populate the initial information into the tree
+## view.
+PopulateNode $root $InputObject
+
+$null = $tlv.Items.Add($root)
+$null = $Form.ShowDialog()
+
+
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

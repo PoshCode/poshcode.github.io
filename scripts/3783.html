@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Laerte Junior">
+    <title>Invoke-ExecuteTSQL - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-ExecuteTSQL</h1>
+<h3><a href="//scripts/3783.ps1">download</a> - <a href="//scripts/3782.md">parent</a></h3>
+<p>This function runs a T-SQL Statment and output an object with the T-SQL Print Messages using SMO Events</p>
+<pre><code class="language-posh">#######################
+&lt;#
+.SYNOPSIS
+Execute T-SQL Statments and return messages from SQL Server (print).
+.DESCRIPTION
+Execute T-SQL Statments and return messages from SQL Server (print).
+.INPUTS
+None
+    You cannot pipe objects to Invoke-ExecuteTSQL 
+.OUTPUTS
+PSObject :
+Boolean Exitcode = $True or $False indicating if the query ran successfully 
+String  ErrorMessage = The ErrorMessage if not ran successfully
+String  Message = Messages from SQL Server (print)
+.EXAMPLE
+Invoke-ExecuteTSQL -SQLInstanceName . -DatabaseName YourDB -UserName YourUserName -PassWord YourPassword -Query $Query -verbose
+This command runs a T-SQL Query using UserName and Password
+.EXAMPLE
+Invoke-ExecuteTSQL -SQLInstanceName . -DatabaseName YourDB -Query $Query -verbose
+This command runs a T-SQL Query using TrustedConnection
+.LINK
+Invoke-ExecuteTSQL 
+#&gt; 
+ 
+function Invoke-ExecuteTSQL { 
+
+	[cmdletbinding()]
+
+	Param(
+		[Parameter(Position=0,Mandatory = $true)]
+		[ValidateNotNullorEmpty()]
+		[string]$SQLInstanceName,
+			
+		[Parameter(Position=1,Mandatory = $true)]
+		[ValidateNotNullorEmpty()]
+		[string]$DatabaseName,
+			
+		[Parameter(Position=2)]
+		[string]$UserName,
+			
+		[Parameter(Position=3)]
+		[string]$PassWord,	
+			
+		[Parameter(Position=4,Mandatory = $true)]
+		[ValidateNotNullorEmpty()]
+		[string]$Query	
+
+		)
+	function Get-SQLConnectionEvent($EventID) {
+	
+		write-output (Get-Event -SourceIdentifier $EventID -ErrorAction SilentlyContinue  | 
+		Select -ExpandProperty SourceEventArgs | 
+		Select -ExpandProperty message) 
+		Remove-Event -SourceIdentifier $EventID -ErrorAction SilentlyContinue
+	}
+	try {
+		
+		if($Username -and $Password) {
+			Write-Verbose &quot;Connecting to SQL Server using trusted connection&quot;
+			$SqlConnection.ConnectionString = &quot;Server=$($SQLInstanceName);Database=$($DatabaseName);Integrated Security=True&quot;
+		} else {
+			Write-Verbose &quot;Connecting to SQL Server using Username and Password&quot;
+			$SqlConnection.ConnectionString = &quot;Server=$($SQLInstanceName);Database=$($DatabaseName);UID=$($Username);PWD=$($Password)&quot;
+		}
+
+		$SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+	 	$SqlConnection.ConnectionString = &quot;Server=localhost;Database=confio;Integrated Security=True&quot;
+	 
+	 	$eventID = &quot;SQLConnectionEvent$(Get-date -format 'yyyyMMddhhmmss')&quot;;
+		
+		write-verbose &quot;Registering the event $eventID&quot; 
+	 	Register-ObjectEvent -inputObject $SqlConnection -eventName InfoMessage -sourceIdentifier $eventID
+		
+		$SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+		$SqlCmd.Connection = $SqlConnection
+		$SqlCmd.CommandTimeout = 0
+		$SqlCmd.Connection.Open()
+
+		write-verbose &quot;Running the Query&quot; 
+
+		$SqlCmd.CommandText = $Query
+		$SqlCmd.ExecuteNonQuery() | Out-Null
+		$ExitCode = $true
+		$Message = Get-SQLConnectionEvent $eventID
+		$ErroMessage = &quot;&quot;
+	} catch {
+		$ExitCode = $false
+		$Message = &quot;&quot;
+		$ErroMessage = $_.exception
+	}
+	Finally {
+		if ($SqlCmd.Connection.State -eq [System.Data.ConnectionState]::Open) {
+			write-verbose &quot;Closing Connection&quot; 
+	            	$SqlCmd.Connection.Close()
+			$SqlCmd.Connection.Dispose()
+	    }
+    }
+
+	Write-Output (New-Object psobject -Property @{	'ExitCode' = $ExitCode
+							'Message' = $Message	
+  							'ErrorMessage' =$ErroMessage})
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

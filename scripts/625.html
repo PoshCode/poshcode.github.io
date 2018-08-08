@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="MOW000">
+    <title>FormsLib.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>FormsLib.ps1</h1>
+<h3><a href="//scripts/625.ps1">download</a></h3>
+<p>FormsLib.ps1
+contains some helper functions to create and modify Form controls in a PowerShell script</p>
+<pre><code class="language-posh"># FormsLib.ps1
+# contains some helper functions to create and modify Form controls
+# in a PowerShell script used by RoboGUI.ps1
+#
+# /\/\o\/\/
+# http://thePowerShellGuy.com 
+
+Function ConvertTo-HashTable ([string]$StringValue) {
+  invoke-expression (&quot;@$StringValue&quot;.replace(',',';')) 
+}
+
+Function ConvertTo-Point ([string]$StringValue) {
+  ConvertTo-HashTable $StringValue |
+      % {New-Object System.Drawing.Point([int]($_.x),[int]($_.y))}
+}
+
+Function ConvertTo-Size ([string]$StringValue) {
+  ConvertTo-HashTable $StringValue |
+      % {New-Object System.Drawing.Size([int]($_.Width),[int]($_.Height))}
+}
+
+
+filter get-PropertyList {  
+  $o = $_ ; $_ | gm -MemberType Property | 
+    select name, 
+      @{Name='Type';Expression={$_.definition.split()[0]}},
+      @{Name='Value';Expression={$o.&quot;$($_.name)&quot;}}
+}
+
+Function Get-ControlFormat {
+  Param (
+    $Control,
+    $properties = ('Text','Size','Location','Dock','Anchor'),
+    $ExtraProperties
+  ) 
+  $properties += $ExtraProperties
+  &quot;Set-ControlFormat `$$($Control.name) ``&quot;
+  $Control | get-PropertyList |
+    Where {$Properties -contains $_.name} |
+      Foreach  {
+        &quot;  -$($_.name) '$($_.Value)'``&quot;
+      }
+}
+
+Function Set-ControlFormat {
+  Param  (
+    $Control
+  )
+  foreach ($arg in $args) {
+    if ($arg.startswith('-')) {
+      $Property = $arg.trim('-')
+      [void] $foreach.MoveNext()
+      Switch ($Property) {
+        'Location' { $Control.Location = ConvertTo-Point $foreach.current ; break}
+        'Size' { $Control.Size = ConvertTo-Size $foreach.current ; break}
+        Default {$Control.&quot;$Property&quot; = $foreach.current}
+      }
+    }
+  }
+}
+
+
+Function get-FormControls ($psObject) {
+  $form = new-object Windows.Forms.Form
+  $form.Size = new-object Drawing.Size @(600,600)
+  $controls = @(&quot;form&quot;) 
+  $psObject.Controls |% {$controls += $_.name}
+  $CB = new-object Windows.Forms.Combobox
+  $cb.Size = new-object Drawing.Size @(500,21)
+  $cb.Items.AddRange($controls)
+  $PG = new-object Windows.Forms.PropertyGrid
+  $PG.Size = new-object Drawing.Size @(500,500)
+  $PG.Location = New-Object System.Drawing.Point(50 , 50)
+  $form.text = &quot;$psObject&quot;
+  $PG.selectedobject = $psObject.PsObject.baseobject
+  $cb.text = 'form'
+  $cb.add_TextChanged({
+    if ( $this.SelectedItem -eq 'Form') {
+      $PG.selectedobject = $psObject.PsObject.baseobject
+    } Else {
+      $PG.selectedobject = $psObject.Controls[&quot;$($this.SelectedItem)&quot;].PsObject.baseobject
+    }
+  })
+  $form.Controls.Add($PG)
+  $form.Controls.Add($CB)
+  $Form.Add_Shown({$form.Activate()})
+  $form.showdialog()
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

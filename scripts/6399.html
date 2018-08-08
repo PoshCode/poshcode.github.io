@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Wojciech Sciesin">
+    <title>Start-Demo 3.5.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Start-Demo 3.5.0</h1>
+<h3><a href="//scripts/6399.ps1">download</a> - <a href="//scripts/6398.md">parent</a></h3>
+<p>This is an overhaul of Jeffrey Snover's original Start-Demo script ... I've switched it to use ReadKey, which saves you some typing and makes the whole thing seem more natural when you're demoing, (at least to me). I've also added a bunch of command-line options and a couple of features in the process (see the Revision History in the script).</p>
+<pre><code class="language-posh">## Start-Demo.ps1
+##################################################################################################
+## This is an overhaul of Jeffrey Snover's original Start-Demo script by Joel &quot;Jaykul&quot; Bennett
+##
+## I've switched it to using ReadKey instead of ReadLine (you don't have to hit Enter each time)
+## As a result, I've changed the names and keys for a lot of the operations, so that they make 
+## sense with only a single letter to tell them apart (sorry if you had them memorized).
+##
+## I've also been adding features as I come across needs for them, and you'll contribute your 
+## improvements back to the PowerShell Script repository as well.
+##################################################################################################
+## Revision History (version 3.5.0)
+## 3.5.0 Added:    StartDelay parameter added
+##       Added:	   SkipInstructions parameter added
+##       Added:    The help section 'Improving ideas' added
+##       Addde:    DelayAfterComment switch added, add wait time after write comments to screen
+##       Fixed:    Some comments to code added
+##       Fixed:    Restoring oryginal prompt corrected
+## 3.4.1 Fixed:    Switches SkipAddTheEndLine and SkipAddDemoTime corrected
+## 3.4.0 Fixed:    FullAuto mode corrected
+##       Fixed:    Small corrections of code based on PSScriptAnalyzer 1.6.0 sugestions
+##       Added:    Console window title will be set back after a demo end
+##       Added:    Own custom prompt can be used under demo
+##       Added:    SkipAddTheEndLine switch to don't display 'The end' line
+##       Added:    SkipAddDemoTime switch to don't display start/end demo and demo duration in 
+##                 a PowerShell console window
+##       Added:    backgroundColor parameter added - now PowerShell console don't need to be black 
+## 3.3.3 Fixed:    Script no longer says &quot;unrecognized key&quot; when you hit shift or ctrl, etc.
+##       Fixed:    Blank lines in script were showing as errors (now printed like comments)
+## 3.3.2 Fixed:    Changed the &quot;x&quot; to match the &quot;a&quot; in the help text
+## 3.3.1 Fixed:    Added a missing bracket in the script
+## 3.3 - Added:    Added a &quot;Clear Screen&quot; option
+##     - Added:    Added a &quot;Rewind&quot; function (which I'm not using much)
+## 3.2 - Fixed:    Put back the trap { continue; }
+## 3.1 - Fixed:    No Output when invoking Get-Member (and other cmdlets like it???)
+## 3.0 - Fixed:    Commands which set a variable, like: $files = ls
+##     - Fixed:    Default action doesn't continue
+##     - Changed:  Use ReadKey instead of ReadLine
+##     - Changed:  Modified the option prompts (sorry if you had them memorized)
+##     - Changed:  Various time and duration strings have better formatting
+##     - Enhance:  Colors are settable: prompt, command, comment
+##     - Added:    NoPauseAfterExecute switch removes the extra pause
+##                 If you set this, the next command will be displayed immediately
+##     - Added:    Auto Execute mode (FullAuto switch) runs the rest of the script
+##                 at an automatic speed set by the AutoSpeed parameter (or manually)
+##     - Added:    Automatically append an empty line to the end of the demo script
+##                 so you have a chance to &quot;go back&quot; after the last line of you demo
+##################################################################################################
+## Improving ideas
+## - convert script to function
+## - add padding zero(s) to command number
+## - remove char '?' from the prompt in the FullAuto mode
+##################################################################################################
+
+param (
+    $file = &quot;.\demo.txt&quot;,
+    [int]$command = 0,
+    [System.ConsoleColor]$promptColor = &quot;Yellow&quot;,
+    [System.ConsoleColor]$commandColor = &quot;White&quot;,
+    [System.ConsoleColor]$commentColor = &quot;Green&quot;,
+    [System.ConsoleColor]$backgroundColor = &quot;black&quot;,
+	[int]$StartDelay,
+	[switch]$SkipInstructions,
+    [switch]$FullAuto,
+    [int]$AutoSpeed = 3,
+	[int]$DelayAfterComment = 1,
+	[switch]$NoPauseAfterExecute,
+    [switch]$UseMyPrompt, #To customize change definition in the function Prompt (below)
+    [switch]$SkipAddTheEndLine,
+    [switch]$SkipAddDemoTime    
+)
+
+$RawUI = $Host.UI.RawUI
+$hostWidth = $RawUI.BufferSize.Width
+$hostTitle = $RawUI.WindowTitle
+
+If ($UseMyPrompt.ispresent) {
+    $OryginalPrompt = Get-Content Function:\prompt
+    Prompt
+}
+
+# More about constructing prompts here: https://technet.microsoft.com/en-us/library/hh847739.aspx
+Function prompt { &quot;[PS] &gt;&quot; }
+
+# A function for reading in a character 
+function Read-Char() {
+    $_OldColor = $RawUI.ForeGroundColor
+    $RawUI.ForeGroundColor = &quot;Red&quot;
+    $inChar = $RawUI.ReadKey(&quot;IncludeKeyUp&quot;)
+    # loop until they press a character, so Shift or Ctrl, etc don't terminate us
+    while ($inChar.Character -eq 0) {
+        $inChar = $RawUI.ReadKey(&quot;IncludeKeyUp&quot;)
+    }
+    $RawUI.ForeGroundColor = $_OldColor
+    return $inChar.Character
+}
+
+
+
+function Rewind($lines, $index, $steps = 1) {
+    $started = $index;
+    $index -= $steps;
+    while (($index -ge 0) -and ($lines[$index].Trim(&quot; `t&quot;).StartsWith(&quot;#&quot;))) {
+        $index--
+    }
+    if ($index -lt 0) { $index = $started }
+    return $index
+}
+
+$file = Resolve-Path $file
+while (-not (Test-Path $file)) {
+    $file = Read-Host &quot;Please enter the path of your demo script (Crtl+C to cancel)&quot;
+    $file = Resolve-Path $file
+}
+
+Clear-Host
+
+If ( $StarDelay -gt 0 ) {
+	Start-Sleep -seconds $StartDelay
+}
+
+$_lines = Get-Content $file
+
+If (-not $SkipAddTheEndLine.IsPresent) {
+    # Append an extra (do nothing) line on the end so we can still go back after the last line.
+    $_lines += &quot;Write-Host 'The End'&quot;
+}
+
+$_starttime = [DateTime]::now
+
+#Overwrite original prompt (?)
+Write-Host -nonew -back $backgroundColor -fore $promptColor $(&quot; &quot; * $hostWidth)
+
+If (-not $SkipAddDemoTime.IsPresent) {
+    Write-Host -nonew -back $backgroundColor -fore $promptColor @&quot;
+&lt;Demo Started :: $(split-path $file -leaf)&gt;$(' ' * ($hostWidth - (18 + $(split-path $file -leaf).Length)))
+&quot;@
+}
+
+If ( -not ($SkipInstructions.IsPresent -or $FullAuto.IsPresent) ) {
+	Write-Host -nonew -back $backgroundColor -fore $promptColor &quot;Press&quot;
+	Write-Host -nonew -back $backgroundColor -fore Red &quot; ? &quot;
+	Write-Host -nonew -back $backgroundColor -fore $promptColor &quot;for help.$(' ' * ($hostWidth - 17))&quot;
+	Write-Host -nonew -back $backgroundColor -fore $promptColor $(&quot; &quot; * $hostWidth)
+}
+
+# We use a FOR and an INDEX ($_i) instead of a FOREACH because
+# it is possible to start at a different location and/or jump 
+# around in the order.
+for ($_i = $Command; $_i -lt $_lines.count; $_i++) {
+    # Put the current command in the Window Title along with the demo duration
+    $Dur = [DateTime]::Now - $_StartTime
+    $RawUI.WindowTitle = &quot;$(if ($dur.Hours -gt 0) { '{0}h ' })$(if ($dur.Minutes -gt 0) { '{1}m ' }){2}s   {3}&quot; -f
+    $dur.Hours, $dur.Minutes, $dur.Seconds, $($_Lines[$_i])
+    
+    # Echo out the commmand to the console with a prompt as though it were real
+    Write-Host -nonew -fore $promptColor &quot;[$_i]$([char]0x2265) &quot;
+	
+	# Comments line from file can be write to the console using $commentColor as a text (not executed)
+    if ($_lines[$_i].Trim(&quot; &quot;).StartsWith(&quot;#&quot;) -or $_lines[$_i].Trim(&quot; &quot;).Length -le 0) {
+        Write-Host -fore $commentColor &quot;$($_Lines[$_i])  &quot;
+		Start-Sleep -Seconds $DelayAfterComment
+        continue
+    }
+    else {
+        Write-Host -nonew -fore $commandColor &quot;$($_Lines[$_i])  &quot;
+    }
+    
+    if ($FullAuto.IsPresent) { $FullAutoInt = $true; Start-Sleep $autoSpeed; $ch = [char]13 }
+    else { $ch = Read-Char }
+    
+    switch ($ch) {
+        &quot;?&quot; {
+            Write-Host -Fore $promptColor @&quot;
+
+Running demo: $file
+(n) Next       (p) Previous
+(q) Quit       (s) Suspend 
+(t) Timecheck  (v) View $(split-path $file -leaf)
+(g) Go to line by number
+(f) Find lines by string
+(a) Auto Execute mode
+(c) Clear Screen
+&quot;@
+            $_i-- # back a line, we're gonna step forward when we loop
+        }
+        &quot;n&quot; {
+            # Next (do nothing)
+            Write-Host -Fore $promptColor &quot;&lt;Skipping Line&gt;&quot;
+        }
+        &quot;p&quot; {
+            # Previous
+            Write-Host -Fore $promptColor &quot;&lt;Back one Line&gt;&quot;
+            while ($_lines[--$_i].Trim(&quot; &quot;).StartsWith(&quot;#&quot;)) { }
+            $_i-- # back a line, we're gonna step forward when we loop
+        }
+        &quot;a&quot; {
+            # EXECUTE (Go Faster)
+            $AutoSpeed = [int](Read-Host &quot;Pause (seconds)&quot;)
+            $FullAutoInt = $true;
+            Write-Host -Fore $promptColor &quot;&lt;eXecute Remaining Lines&gt;&quot;
+            $_i-- # Repeat this line, and then just blow through the rest
+        }
+        &quot;q&quot; {
+            # Quit
+            Write-Host -Fore $promptColor &quot;&lt;Quiting demo&gt;&quot;
+            $_i = $_lines.count;
+            #Restore oryginal PowerShell host title
+            $RawUI.WindowTitle = $hostTitle
+            #Restore oryginal PowerShell prompt
+            If ($UseMyPrompt.IsPresent) {
+				Invoke-Expression 
+            }
+            break;
+        }
+        &quot;v&quot; {
+            # View Source
+            $lines[0..($_i - 1)] | Write-Host -Fore Yellow
+            $lines[$_i] | Write-Host -Fore Green
+            $lines[($_i + 1)..$lines.Count] | Write-Host -Fore Yellow
+            $_i-- # back a line, we're gonna step forward when we loop
+        }
+        &quot;t&quot; {
+            # Time Check
+            $dur = [DateTime]::Now - $_StartTime
+            Write-Host -Fore $promptColor $(
+                &quot;{3} -- $(if ($dur.Hours -gt 0) { '{0}h ' })$(if ($dur.Minutes -gt 0) { '{1}m ' }){2}s&quot; -f
+                $dur.Hours, $dur.Minutes, $dur.Seconds, ([DateTime]::Now.ToShortTimeString()))
+            $_i-- # back a line, we're gonna step forward when we loop
+        }
+        &quot;s&quot; {
+            # Suspend (Enter Nested Prompt)
+            Write-Host -Fore $promptColor &quot;&lt;Suspending demo - type 'Exit' to resume&gt;&quot;
+            $Host.EnterNestedPrompt()
+            $_i-- # back a line, we're gonna step forward when we loop
+        }
+        &quot;g&quot; {
+            # GoTo Line Number
+            $i = [int](Read-Host &quot;line number&quot;)
+            if ($i -le $_lines.Count) {
+                if ($i -gt 0) {
+                    # extra line back because we're gonna step forward when we loop
+                    $_i = Rewind $_lines $_i (($_i - $i) + 1)
+                }
+                else {
+                    $_i = -1 # Start negative, because we step forward when we loop
+                }
+            }
+        }
+        &quot;f&quot; {
+            # Find by pattern
+            $match = $_lines | Select-String (Read-Host &quot;search string&quot;)
+            if ([String]::IsNullOrEmpty($match)) {
+                Write-Host -Fore Red &quot;Can't find a matching line&quot;
+            }
+            else {
+                $match | ForEach-Object -Process { Write-Host -Fore $promptColor $(&quot;[{0,2}] {1}&quot; -f ($_.LineNumber - 1), $_.Line) }
+                if ($match.Count -lt 1) {
+                    $_i = $match.lineNumber - 2 # back a line, we're gonna step forward when we loop
+                }
+                else {
+                    $_i-- # back a line, we're gonna step forward when we loop
+                }
+            }
+        }
+        &quot;c&quot; {
+            Clear-Host
+            $_i-- # back a line, we're gonna step forward when we loop
+        }
+        &quot;$([char]13)&quot; {
+            # on enter
+            Write-Host
+            trap [System.Exception] { Write-Error $_; continue; }
+            Invoke-Expression ($_lines[$_i]) | out-default
+            if (-not $NoPauseAfterExecute -and -not $FullAutoInt) {
+                $null = $RawUI.ReadKey(&quot;NoEcho,IncludeKeyUp&quot;) # Pause after output for no apparent reason... ;)
+            }
+        }
+        default {
+            Write-Host -Fore Green &quot;`nKey not recognized.  Press ? for help, or ENTER to execute the command.&quot;
+            $_i-- # back a line, we're gonna step forward when we loop
+        }
+    }
+}
+$dur = [DateTime]::Now - $_StartTime
+If (-not $SkipAddDemoTime.IsPresent) {
+    Write-Host -Fore $promptColor $(
+        &quot;&lt;Demo Complete -- $(if ($dur.Hours -gt 0) { '{0}h ' })$(if ($dur.Minutes -gt 0) { '{1}m ' }){2}s&gt;&quot; -f
+        $dur.Hours, $dur.Minutes, $dur.Seconds, [DateTime]::Now.ToLongTimeString())
+    Write-Host -Fore $promptColor $([DateTime]::now)
+}
+Write-Host
+#Restore oryginal PowerShell host title
+$RawUI.WindowTitle = $hostTitle
+#Restore oryginal PowerShell prompt
+If ($UseMyPrompt.IsPresent) {
+    Invoke-Expression -Command &quot;Function Prompt { $OryginalPrompt }&quot; -ErrorAction SilentlyContinue
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

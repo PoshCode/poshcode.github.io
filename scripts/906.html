@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-Shortcut - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-Shortcut</h1>
+<h3><a href="//scripts/906.ps1">download</a></h3>
+<p>A script to create shortcuts ... with support for short &quot;special folder&quot; names.</p>
+<pre><code class="language-posh">#requires -version 2.0
+function New-Shortcut {
+&lt;#
+.SYNOPSIS
+	Creates a new shortcut (.lnk file) pointing at the specified file.
+
+.DESCRIPTION
+	The New-Shortcut script creates a shortcut pointing at the target in the location you specify.  You may specify the location as a folder path (which must exist), with a name for the new file (ending in .lnk), or you may specify one of the &quot;SpecialFolder&quot; names like &quot;QuickLaunch&quot; or &quot;CommonDesktop&quot; followed by the name.
+	If you specify the path for the link file without a .lnk extension, the path is assumed to be a folder.
+	
+.EXAMPLE
+	New-Shortcut C:\Windows\Notepad.exe
+		Will make a shortcut to notepad in the current folder named &quot;Notepad.lnk&quot;
+.EXAMPLE
+	New-Shortcut C:\Windows\Notepad.exe QuickLaunch\Editor.lnk -Description &quot;Run Notepad&quot;
+		Will make a shortcut to notepad on the QuickLaunch bar with the name &quot;Editor.lnk&quot; and the tooltip &quot;Run Notepad&quot;
+.EXAMPLE
+	New-Shortcut C:\Windows\Notepad.exe F:\User\
+		Will make a shortcut to notepad in the F:\User\ folder with the name &quot;Notepad.lnk&quot;
+.NOTE
+   Partial dependency on Get-SpecialPath ( http://poshcode.org/858 )
+#&gt;
+[CmdletBinding()]
+param(
+   [Param(Position=0,Mandatory=$true)]
+	[string]$TargetPath,
+	## Put the shortcut where you want: &quot;Special Folder&quot; names allowed!
+   [Param(Position=1,Mandatory=$true)]
+	[string]$LinkPath,
+	## Extra parameters for the shortcut
+	[string]$Arguments=&quot;&quot;,
+	[string]$WorkingDirectory=&quot;&quot;,
+	[string]$WindowStyle=&quot;Normal&quot;,
+	[string]$IconLocation=&quot;&quot;,
+	[string]$Hotkey=&quot;&quot;,
+	[string]$Description=&quot;&quot;,
+	[string]$Folder=&quot;&quot;
+)
+
+# Values for Window Style:
+# 1 - Normal    -- Activates and displays a window. If the window is minimized or maximized, the system restores it to its original size and position.
+# 3 - Maximized -- Activates the window and displays it as a maximized window.
+# 7 - Minimized -- Minimizes the window and activates the next top-level window.
+
+if(!(Test-Path $TargetPath) -and !($TargetPath.Contains(&quot;://&quot;))) {
+   Write-Error &quot;TargetPath must be an existing file for the link to point at (or a URL)&quot;
+ 	return
+}
+
+function New-ShortCutFile {
+    param(
+		[string]$TargetPath=$(throw &quot;Please specify a TargetPath for link to point to&quot;),
+		[string]$LinkPath=$(throw &quot;must pass a path for the shortcut file&quot;),
+		[string]$Arguments=&quot;&quot;,
+		[string]$WorkingDirectory=$(Split-Path $TargetPath -parent),
+		[string]$WindowStyle=&quot;Normal&quot;,
+		[string]$IconLocation=&quot;&quot;,
+		[string]$Hotkey=&quot;&quot;,
+		[string]$Description=$(Split-Path $TargetPath -Leaf)
+	)
+
+	if(-not ($TargetPath.Contains(&quot;://&quot;) -or (Test-Path (Split-Path (Resolve-Path $TargetPath) -parent)))) {
+		Throw &quot;Cannot create Shortcut: Parent folder does not exist&quot;
+	}
+	if(-not (Test-Path variable:\global:WshShell)) { 
+		$global:WshShell = New-Object -com &quot;WScript.Shell&quot; 
+	}
+
+	
+	$Link = $global:WshShell.CreateShortcut($LinkPath)
+	$Link.TargetPath = $TargetPath
+	
+	[IO.FileInfo]$LinkInfo = $LinkPath
+
+	## Properties for file shortcuts only
+	## If the $LinkPath ends in .url you can't set the arguments, icon, etc
+	## if you make the same shortcut with a .lnk extension
+	## you can still point it at a URL, but you can set hotkeys, icons, etc
+	if( $LinkInfo.Extension -ne &quot;.url&quot; ) {
+		$Link.WorkingDirectory = $WorkingDirectory
+		## Validate $WindowStyle
+		if($WindowStyle -is [string]) {
+			if( $WindowStyle -like &quot;Normal&quot; ) { $WindowStyle = 1 }
+			if( $WindowStyle -like &quot;Maximized&quot; ) { $WindowStyle = 3 }
+			if( $WindowStyle -like &quot;Minimized&quot; ) { $WindowStyle = 7 }
+		} 
+
+		if( $WindowStyle -ne 1 -and $WindowStyle -ne 3 -and $WindowStyle -ne 7) { $WindowStyle = 1 }
+		$Link.WindowStyle = $WindowStyle
+	
+		if($Hotkey.Length -gt 0 ) { $Link.HotKey = $Hotkey }
+		if($Arguments.Length -gt 0 ) { $Link.Arguments = $Arguments }
+		if($Description.Length -gt 0 ) { $Link.Description = $Description }
+		if($IconLocation.Length -gt 0 ) { $Link.IconLocation = $IconLocation }
+		
+	}
+
+  $Link.Save()
+	Write-Output (get-item $LinkPath)
+}
+
+
+## If they didn't explicitly specify a folder
+if($Folder.Length -eq 0) {
+	if($LinkPath.Length -gt 0) { 
+		$path = Split-Path $LinkPath -parent 
+		[IO.FileInfo]$LinkInfo = $LinkPath
+		if( $LinkInfo.Extension.Length -eq 0 ) {
+			$Folder = $LinkPath
+		} else {	
+			# If the LinkPath is just a single word with no \ or extension...
+			if($path.Length -eq 0) {
+				$Folder = $Pwd
+			} else {
+				$Folder = $path
+			}
+		}
+	}
+	else 
+	{ $Folder = $Pwd }
+}
+
+## If they specified a link path, check it for an extension
+if($LinkPath.Length -gt 0) {
+	$LinkPath = Split-Path $LinkPath -leaf
+	[IO.FileInfo]$LinkInfo = $LinkPath
+	if( $LinkInfo.Extension.Length -eq 0 ) {
+		# If there's no extension, it must be a folder
+		$Folder = $LinkPath
+		$LinkPath = &quot;&quot;
+	}
+}
+## If there's no Link name, make one up based on the target
+if($LinkPath.Length -eq 0) {
+	if($TargetPath.Contains(&quot;://&quot;)) {
+		$LinkPath = &quot;$($TargetPath.split('/')[2]).url&quot;
+	} else {
+		[IO.FileInfo]$LinkInfo = $TargetPath
+		$LinkPath = &quot;$(([IO.FileInfo]$TargetPath).BaseName).lnk&quot;
+	}
+}
+
+## If the folder doesn't actually exist, maybe it's special...
+if( -not (Test-Path $Folder)) {
+	$morepath = &quot;&quot;;
+	if( $Folder.Contains(&quot;\&quot;) ) {
+		$morepath = $Folder.SubString($Folder.IndexOf(&quot;\&quot;))
+		$Folder = $Folder.SubString(0,$Folder.IndexOf(&quot;\&quot;))
+	}
+	$Folder = Join-Path (Get-SpecialPath $Folder) $morepath
+	# or maybe they just screwed up
+	trap { throw new-object ArgumentException &quot;Cannot create shortcut: parent folder does not exist&quot; }
+}
+
+$LinkPath = (Join-Path $Folder $LinkPath)
+New-ShortCutFile $TargetPath $LinkPath $Arguments $WorkingDirectory $WindowStyle $IconLocation $Hotkey $Description
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Patrick Sczepanski">
+    <title>LDAPLogging - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>LDAPLogging</h1>
+<h3><a href="//scripts/3673.txt">download</a></h3>
+<p>Functions to view/enable/disable LDAP query logging on a DC and parse eventlog message from logged queries.</p>
+<pre><code class="language-text">
+function Private:Configure-Logging {
+        Use one of the following aliases:
+        Get-LDAPLogging
+            View current LDAP logging settings
+        Enable-LDAPLogging
+            Enables LDAP logging. Logging is set to log every single LDAP query and stores it in directory services log.
+        Disable-LDAPLogging
+            Disables LDAP logging. Logging is set to its default values.
+		PS C:\&gt; Get-LDAPLogging
+		PS C:\&gt; Enable-LDAPLogging DC1
+		Author:    Patrick Sczepanski 
+        Version:   1.0
+        Email:     patrick -at- sczepanski -dot- com
+                   patrick -dot- redtoo -at- redtoo -dot- com
+        Blog:      http://redtoo.com/blog
+        Copyright: 2012
+        Enable-LDAPLogging
+        Disable-LDAPLogging
+        Get-LDAPEventLog
+    Param (
+        [string]
+        $HostName = $env:COMPUTERNAME
+    )
+    [System.Nullable``1[[System.Int32]]]$EnableLogging = $null
+    switch ( $MyInvocation.InvocationName ) {
+            [System.Nullable``1[[System.Int32]]]$EnableLogging = $true
+            [bool]$ReadWrite = $true
+            [int]$Threshold = 1
+            [int]$FieldEngDef = 5
+            break
+        }
+            [System.Nullable``1[[System.Int32]]]$EnableLogging = $false
+            [bool]$ReadWrite = $true
+            [int]$Threshold = 0
+            [int]$FieldEngDef = 0
+            break
+        }
+        Default     { 
+            [System.Nullable``1[[System.Int32]]]$EnableLogging = $null
+            [bool]$ReadWrite = $false
+        }
+    }
+    if ( -not (Test-Connection $HostName -Quiet -Count 1) ) {
+        continue
+    }
+    if ( -not ( 
+                      -ComputerName $HostName -ErrorAction SilentlyContinue) ) {
+        continue
+    }
+    $baseKey = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey( &quot;LocalMachine&quot;, $HostName   )
+    try {
+        $key = $baseKey.OpenSubKey($NTDSParams,$ReadWrite)
+        if ( $EnableLogging -eq $true ) { 
+            $key.SetValue( $ExpThre, 1, [Microsoft.Win32.RegistryValueKind]::DWord )
+            $key.SetValue( $IneThre, 1, [Microsoft.Win32.RegistryValueKind]::DWord )
+        } elseif ( $EnableLogging -eq $false ) {
+            $key.DeleteValue( $ExpThre )
+            $key.DeleteValue( $IneThre )
+        }
+        $ExpThreValue = $key.GetValue($ExpThre)
+        $IneThreValue = $key.GetValue($IneThre)
+        $key.Close()
+    }
+    catch {
+    }
+    try {
+        $key = $baseKey.OpenSubKey($NTDSDiag,$ReadWrite)
+        if ( $EnableLogging -ne $null ) { 
+            $key.SetValue( $FieldEng, $FieldEngDef )
+        } 
+        $FieldEngValue = $key.GetValue($FieldEng)
+        $key.Close()
+    }
+    catch {
+    }
+    $baseKey.Close()
+    New-Object PSObject -Property @{
+    }
+}
+New-Alias Get-LDAPLogging Configure-Logging -Force
+New-Alias Enable-LDAPLogging Configure-Logging -Force
+New-Alias Disable-LDAPLogging Configure-Logging -Force
+Function Global:Get-LDAPEventLog {
+		PS C:\&gt; Get-LDAPEventLog
+		[string],[int]
+		[LDAPLookups]
+		Author:    Patrick Sczepanski 
+        Version:   1.0
+        Email:     patrick -at- sczepanski -dot- com
+                   patrick -dot- redtoo -at- redtoo -dot- com
+        Blog:      http://redtoo.com/blog
+        Copyright: 2012
+        Enable-LDAPLogging
+        Disable-LDAPLogging
+Param (
+        [Parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,Position=0)]
+        [string]
+        $DNSHostName = $env:COMPUTERNAME,
+        [int]
+        $LookupMinutes = 60
+    )
+    Begin {
+        $Script:AlreadyLookedUp = @{}
+Add-Type @'
+using System;
+        public class LDAPLookups {
+            public string DNSHostName;
+            public string ClientIP;
+            public string ClientName;
+            public string StartNode;
+            public string Filter;
+            public string SearchScope;
+            public string Attributes;
+            public string ServerControls;
+            public string Date;
+            public string Time;
+        }
+'@      
+(?msx)
+    # Option m = multi-line e.g. ^=start of line and $=end of line    
+    # Option s = single-line e.g. . includes end-of-line    
+    # Option x = spaces and comments are allowed in the pattern 
+Client:\r\n
+  (?&lt;Client&gt;.*)\:(?&lt;Port&gt;.*)\r\n?
+Starting\snode\:\r\n
+  (?&lt;StartNode&gt;.*?)\r\n
+Filter:\r\n
+  (?&lt;Filter&gt;.*?)\r\n
+Search\sscope:\r\n
+  (?&lt;SearchScope&gt;.*?)\r\n
+Attribute\sselection:\r\n
+  (?&lt;Attributes&gt;.*?)\r\n
+Server\scontrols:\r\n
+  (?&lt;ServerControls&gt;.*?)\r\n
+Visited\sentries:\r\n
+  (?&lt;VisitedEntries&gt;.*?)\r\n
+Returned\sentries:\r\n
+  (?&lt;ReturnedEntries&gt;.*)
+    }
+    Process {
+        Get-WinEvent -ComputerName $DNSHostName  -FilterHashtable @{ &quot;LogName&quot;=&quot;Directory Service&quot; ; &quot;ID&quot;=1644; StartTime= [datetime]::Now.AddMinutes( -$LookupMinutes ) } |
+            Foreach-Object { 
+                if ( $_.Message -match $RegEx ) { 
+                     New-Object LDAPLookups -Property @{
+                                            try {
+                                                if( -not $AlreadyLookedUp.contains( $ClientIP ) ){
+                                                    $AlreadyLookedUp.$ClientIP = ( [System.Net.Dns]::GetHostByAddress( $ClientIP ).HostName )
+                                                }
+                                            }
+                                            catch {
+                                                $AlreadyLookedUp.$ClientIP = $ClientIP
+                                            }
+                                             $AlreadyLookedUp.$ClientIP
+                                        )
+                        &quot;Time&quot; = $_.TimeCreated.ToString( &quot;HH:mm:ss&quot; )
+                    }
+                }
+            } 
+    } 
+    End {
+        Remove-Variable -Scope Script -Name AlreadyLookedUp
+    }
+} 
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

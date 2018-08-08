@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Vince Ypma">
+    <title>Get-Sequence - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-Sequence</h1>
+<h3><a href="//scripts/6276.ps1">download</a></h3>
+<p>Emulates the Python functions: Map, Reduce and Filter.</p>
+<pre><code class="language-posh">#requires -Version 3
+
+function Get-Sequence
+{
+  &lt;#
+    .SYNOPSIS
+        Performs various transformations on the data.
+    .DESCRIPTION
+        Performs simple transformations on data without needing to define functions for each transformation.
+
+        Rather than declaring a function that describes how to transform each element, what if we could just
+        apply a simple transformation to each element that didn’t require a function definition?
+        This can be accomplished with lambda functions.
+
+        A lambda function is a nameless (i.e. anonymous) function that accepts arguments and returns the result
+        of a simple operation that doesn’t affect variables outside of its scope. In PowerShell lingo, a lambda
+        function is simply a script block with a ‘param’ declaration.
+    .EXAMPLE
+        $IntArray = @(1, 2, 3, 4, 5, 6)
+ 
+        $Double = { param($x) $x * 2 }
+        $Sum = { param($x, $y) $x + $y }
+        $Product = { param($x, $y) $x * $y }
+        $IsEven = { param($x) $x % 2 -eq 0 }
+ 
+        Get-Sequence -Map -Expression $Double -Sequence $IntArray
+    .EXAMPLE
+        Get-Sequence -Reduce -Expression $Sum -Sequence $IntArray
+    .EXAMPLE
+        Get-Sequence -Reduce $Product $IntArray
+    .EXAMPLE
+        Get-Sequence -Filter -Expression $IsEven -Sequence $IntArray
+    .NOTES
+        Matt Graeber is responsible for the guts of this code.
+
+    .LINK
+        http://www.powershellmagazine.com/2013/12/23/simplifying-data-manipulation-in-powershell-with-lambda-functions/
+  #&gt;
+    [CmdletBinding(DefaultParameterSetName='None')]
+    Param
+    (
+        # Applies a function to each element of a sequence. 
+        [Parameter(Mandatory, Position=0, ParameterSetName='Map Sequence')]
+        [switch]
+        $Map,
+
+        # Applies a function with two arguments cumulatively to a sequence of objects, ‘reducing’ the dataset to a single object.
+        [Parameter(Mandatory, Position=0, ParameterSetName='Reduce Sequence')]
+        [switch]
+        $Reduce,
+
+        # Returns a subset of objects from a sequence when a function evaluates to true.
+        [Parameter(Mandatory, Position=0, ParameterSetName='Filter Sequence')]
+        [switch]
+        $Filter,
+
+        # A script block with a ‘param’ declaration.
+        [Parameter(Mandatory, Position=1)]
+        [scriptblock]
+        $Expression,
+ 
+        # A dataset (An array of anything depending upon the given Expression.)
+        [Parameter(Mandatory, Position=2)]
+        [ValidateNotNullOrEmpty()]
+        [object[]]
+        $Sequence
+    )
+
+    Begin
+    {
+        Set-Variable -Option      Constant `
+                     -Name        PARAMETER_ERROR `
+                     -Value       &quot;Incorrect number of parameters in Expression.&quot; `
+                     -Description &quot;The Expression ([scriptblock]) specified the wrong number of parameters.&quot;
+
+        Set-Variable -Option      Constant `
+                     -Name        FUNCTIONS_ERROR `
+                     -Value       &quot;The Map, Reduce or Filter switch was not specified.&quot; `
+                     -Description &quot;The sub-function/switch (Map, Reduce or Filter) was not specified.&quot;
+    }
+    Process
+    {
+        switch ($PSCmdlet.ParameterSetName)
+        {
+            'Map Sequence'
+            {
+                if ($Expression.Ast.ParamBlock.Parameters.Count -eq 1)
+                {
+                    $Sequence | ForEach-Object { &amp;$Expression $_ }
+                }
+                else
+                {
+                    throw $PARAMETER_ERROR
+                }
+            }
+            'Reduce Sequence'
+            {
+                if ($Expression.Ast.ParamBlock.Parameters.Count -eq 2)
+                {
+                    $accumulatedValue = $Sequence[0]
+
+                    if ($Sequence.Length -gt 1)
+                    {
+                        $Sequence[1..($Sequence.Length - 1)] | ForEach-Object {
+                            $accumulatedValue = &amp;$Expression $accumulatedValue $_
+                        }
+                    }
+ 
+                    $accumulatedValue
+                }
+                else
+                {
+                    throw $PARAMETER_ERROR
+                }
+            }
+            'Filter Sequence'
+            {
+                if ($Expression.Ast.ParamBlock.Parameters.Count -eq 1)
+                {
+                    $Sequence | Where-Object { &amp;$Expression $_ -eq $true }
+                }
+                else
+                {
+                    throw $PARAMETER_ERROR
+                }
+            }
+            'Default'
+            {
+                throw $FUNCTIONS_ERROR
+            }
+        }
+    }
+    End
+    {
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

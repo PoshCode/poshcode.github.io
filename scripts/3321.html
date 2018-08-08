@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>File navigator - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>File navigator</h1>
+<h3><a href="//scripts/3321.ps1">download</a></h3>
+<p>This script demonstrates a creation a GUI file navigator.</p>
+<pre><code class="language-posh">$empty = &quot;&lt;NULL&gt;&quot;
+
+$itmType = &quot;Directory&quot;, &quot;File&quot;
+
+function LoadTreeView {
+  $nodes = [IO.Directory]::GetLogicalDrives()
+
+  $trvRoot.Nodes.Clear()
+
+  foreach ($nod in $nodes) {
+    $node = New-Object Windows.Forms.TreeNode
+    $node = $trvRoot.Nodes.Add($nod)
+    $node.Nodes.Add($empty)
+  }
+}
+
+function AddFolders {
+  $strPath = $_.Node.FullPath
+  $_.Node.Nodes.Clear()
+
+  trap {[Windows.Forms.MessageBox]::Show($_.Exception.Message, &quot;Error&quot;, `
+        [Windows.Forms.MessageBoxButtons]::OK, `
+        [Windows.Forms.MessageBoxIcon]::Exclamation); continue }
+  foreach ($strDir in [IO.Directory]::GetDirectories($strPath)) {
+    $newNode = $_.Node.Nodes.Add([IO.Path]::GetFileName($strDir))
+    $newNode.Tag = $itmType[0]
+    $newNode.Nodes.Add($empty)
+  }
+}
+
+function AddFiles {
+  $strPath = $_.Node.FullPath
+
+  $ErrorActionPreference = &quot;SilentlyContinue&quot;
+  foreach ($strFile in [IO.Directory]::GetFiles($strPath)) {
+    $newNode = $_.Node.Nodes.Add([IO.Path]::GetFileName($strFile))
+    $newNode.Tag = $itmType[1]
+  }
+}
+
+function ClearProperties {
+  $lblAttributes.Text = [String]::Empty
+  $lblCreationTime.Text = [String]::Empty
+  $lblLastAccessTime.Text = [String]::Empty
+  $lblLastWriteTime.Text = [String]::Empty
+  $lblExtension.Text = [String]::Empty
+  $lblFullName.Text = [String]::Empty
+  $lblName.Text = [String]::Empty
+  $lblParent.Text = [String]::Empty
+  $lblRoot.Text = [String]::Empty
+  $lblLength.Text = [String]::Empty
+}
+
+$trvRoot_OnBeforeExpand= {
+  AddFolders
+  AddFiles
+}
+
+$trvRoot_OnAfterSelect= {
+  if ($_.Node.Tag -eq $itmType[0]) {
+    $lblExtension.Text = [String]::Empty
+    $lblLength.Text = [String]::Empty
+
+    $lblLabel5.Enabled = $false
+    $lblLabel8.Enabled = $true
+    $lblLabel9.Enabled = $true
+    $lblLabel10.Enabled = $false
+
+    $di = [IO.DirectoryInfo]($_.Node.FullPath)
+    $lblAttributes.Text = $di.Attributes
+    $lblCreationTime.Text = $di.CreationTime
+    $lblLastAccessTime.Text = $di.LastAccessTime
+    $lblLastWriteTime.Text = $di.LastWriteTime
+    $lblFullName.Text = $di.FullName
+    $lblName.Text = $di.Name
+    $lblParent.Text = $di.Parent.Name
+    $lblRoot.Text = $di.Root.Name
+  }
+  elseif ($_.Node.Tag -eq $itmType[1]) {
+    $lblParent.Text = [String]::Empty
+    $lblRoot.Text = [String]::Empty
+
+    $lblLabel5.Enabled = $true
+    $lblLabel8.Enabled = $false
+    $lblLabel9.Enabled = $false
+    $lblLabel10.Enabled = $true
+
+    $fi = [IO.FileInfo]($_.Node.FullPath)
+    $lblAttributes.Text = $fi.Attributes
+    $lblCreationTime.Text = $fi.CreationTime
+    $lblLastAccessTime.Text = $fi.LastAccessTime
+    $lblLastWriteTime.Text = $fi.LastWriteTime
+    $lblExtension.Text = $fi.Extension
+    $lblFullName.Text = $fi.FullName
+    $lblName.Text = $fi.Name
+    $lblLength.Text = $fi.Length
+  }
+  else {
+    ClearProperties
+  }
+}
+
+$mnuRefresh_OnClick= {
+  LoadTreeView
+  ClearProperties
+}
+
+$frmMain_OnLoad= {
+  LoadTreeView
+}
+
+function ShowMainWindow {
+  [void][Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;)
+  [void][Reflection.Assembly]::LoadWithPartialName(&quot;System.Drawing&quot;)
+
+  [Windows.Forms.Application]::EnableVisualStyles()
+
+  $frmMain = New-Object Windows.Forms.Form
+  $mnuMain = New-Object Windows.Forms.MainMenu
+  $mnuFile = New-Object Windows.Forms.MenuItem
+  $mnuRefresh = New-Object Windows.Forms.MenuItem
+  $mnuExit = New-Object Windows.Forms.MenuItem
+  $mnuHelp = New-Object Windows.Forms.MenuItem
+  $mnuAbout = New-Object Windows.Forms.MenuItem
+  $trvRoot = New-Object Windows.Forms.TreeView
+  $lblLabel1 = New-Object Windows.Forms.Label
+  $lblLabel2 = New-Object Windows.Forms.Label
+  $lblLabel3 = New-Object Windows.Forms.Label
+  $lblLabel4 = New-Object Windows.Forms.Label
+  $lblLabel5 = New-Object Windows.Forms.Label
+  $lblLabel6 = New-Object Windows.Forms.Label
+  $lblLabel7 = New-Object Windows.Forms.Label
+  $lblLabel8 = New-Object Windows.Forms.Label
+  $lblLabel9 = New-Object Windows.Forms.Label
+  $lblLabel10 = New-Object Windows.Forms.Label
+  $lblAttributes = New-Object Windows.Forms.Label
+  $lblCreationTime = New-Object Windows.Forms.Label
+  $lblLastAccessTime = New-Object Windows.Forms.Label
+  $lblLastWriteTime = New-Object Windows.Forms.Label
+  $lblExtension = New-Object Windows.Forms.Label
+  $lblFullName = New-Object Windows.Forms.Label
+  $lblName = New-Object Windows.Forms.Label
+  $lblParent = New-Object Windows.Forms.Label
+  $lblRoot = New-Object Windows.Forms.Label
+  $lblLength = New-Object Windows.Forms.Label
+
+  #mnuMain
+  $mnuMain.MenuItems.AddRange(@($mnuFile, $mnuHelp))
+
+  #mnuFile
+  $mnuFile.MenuItems.AddRange(@($mnuRefresh, $mnuExit))
+  $mnuFile.Text = &quot;&amp;File&quot;
+
+  #mnuRefresh
+  $mnuRefresh.Shortcut = &quot;F5&quot;
+  $mnuRefresh.Text = &quot;&amp;Refresh&quot;
+  $mnuRefresh.Add_Click($mnuRefresh_OnClick)
+
+  #mnuExit
+  $mnuExit.Shortcut = &quot;CtrlX&quot;
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click( { $frmMain.Close() } )
+
+  #mnuHelp
+  $mnuHelp.MenuItems.AddRange(@($mnuAbout))
+  $mnuHelp.Text = &quot;&amp;Help&quot;
+
+  #mnuAbout
+  $mnuAbout.Text = &quot;About&quot;
+  $mnuAbout.Add_Click( { ShowAboutWindow } )
+
+  #trvRoot
+  $trvRoot.Anchor = &quot;Top, Bottom, Left, Right&quot;
+  $trvRoot.Location = New-Object Drawing.Point(8, 8)
+  $trvRoot.Size = New-Object Drawing.Size(392, 195)
+  $trvRoot.Add_BeforeExpand($trvRoot_OnBeforeExpand)
+  $trvRoot.Add_AfterSelect($trvRoot_OnAfterSelect)
+
+  #lblLabel1
+  $lblLabel1.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel1.Location = New-Object Drawing.Point(8, 210)
+  $lblLabel1.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel1.Text = &quot;Attributes:&quot;
+  $lblLabel1.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel2
+  $lblLabel2.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel2.Location = New-Object Drawing.Point(8, 234)
+  $lblLabel2.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel2.Text = &quot;Creation Time:&quot;
+  $lblLabel2.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel3
+  $lblLabel3.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel3.Location = New-Object Drawing.Point(8, 258)
+  $lblLabel3.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel3.Text = &quot;Last Access Time:&quot;
+  $lblLabel3.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel4
+  $lblLabel4.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel4.Location = New-Object Drawing.Point(8, 282)
+  $lblLabel4.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel4.Text = &quot;Last Write Time:&quot;
+  $lblLabel4.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel5
+  $lblLabel5.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel5.Location = New-Object Drawing.Point(8, 314)
+  $lblLabel5.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel5.Text = &quot;Extension:&quot;
+  $lblLabel5.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel6
+  $lblLabel6.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel6.Location = New-Object Drawing.Point(8, 338)
+  $lblLabel6.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel6.Text = &quot;Full Name:&quot;
+  $lblLabel6.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel7
+  $lblLabel7.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel7.Location = New-Object Drawing.Point(8, 362)
+  $lblLabel7.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel7.Text = &quot;Name:&quot;
+  $lblLabel7.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel8
+  $lblLabel8.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel8.Location = New-Object Drawing.Point(8, 386)
+  $lblLabel8.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel8.Text = &quot;Parent:&quot;
+  $lblLabel8.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel9
+  $lblLabel9.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel9.Location = New-Object Drawing.Point(8, 410)
+  $lblLabel9.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel9.Text = &quot;Root:&quot;
+  $lblLabel9.TextAlign = &quot;MiddleRight&quot;
+
+  #lblLabel10
+  $lblLabel10.Anchor = &quot;Bottom, Left&quot;
+  $lblLabel10.Location = New-Object Drawing.Point(8, 434)
+  $lblLabel10.Size = New-Object Drawing.Size(104, 23)
+  $lblLabel10.Text = &quot;Length:&quot;
+  $lblLabel10.TextAlign = &quot;MiddleRight&quot;
+
+  #lblAttributes
+  $lblAttributes.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblAttributes.BorderStyle = &quot;Fixed3D&quot;
+  $lblAttributes.Location = New-Object Drawing.Point(120, 211)
+  $lblAttributes.Size = New-Object Drawing.Size(280, 20)
+  $lblAttributes.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblCreationTime
+  $lblCreationTime.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblCreationTime.BorderStyle = &quot;Fixed3D&quot;
+  $lblCreationTime.Location = New-Object Drawing.Point(120, 235)
+  $lblCreationTime.Size = New-Object Drawing.Size(280, 20)
+  $lblCreationTime.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblLastAccessTime
+  $lblLastAccessTime.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblLastAccessTime.BorderStyle = &quot;Fixed3D&quot;
+  $lblLastAccessTime.Location = New-Object Drawing.Point(120, 259)
+  $lblLastAccessTime.Size = New-Object Drawing.Size(280, 20)
+  $lblLastAccessTime.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblLastWriteTime
+  $lblLastWriteTime.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblLastWriteTime.BorderStyle = &quot;Fixed3D&quot;
+  $lblLastWriteTime.Location = New-Object Drawing.Point(120, 283)
+  $lblLastWriteTime.Size = New-Object Drawing.Size(280, 20)
+  $lblLastWriteTime.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblExtension
+  $lblExtension.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblExtension.BorderStyle = &quot;Fixed3D&quot;
+  $lblExtension.Location = New-Object Drawing.Point(120, 315)
+  $lblExtension.Size = New-Object Drawing.Size(280, 20)
+  $lblExtension.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblFullName
+  $lblFullName.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblFullName.BorderStyle = &quot;Fixed3D&quot;
+  $lblFullName.Location = New-Object Drawing.Point(120, 339)
+  $lblFullName.Size = New-Object Drawing.Size(280, 20)
+  $lblFullName.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblName
+  $lblName.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblName.BorderStyle = &quot;Fixed3D&quot;
+  $lblName.Location = New-Object Drawing.Point(120, 363)
+  $lblName.Size = New-Object Drawing.Size(280, 20)
+  $lblName.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblParent
+  $lblParent.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblParent.BorderStyle = &quot;Fixed3D&quot;
+  $lblParent.Location = New-Object Drawing.Point(120, 387)
+  $lblParent.Size = New-Object Drawing.Size(280, 20)
+  $lblParent.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblRoot
+  $lblRoot.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblRoot.BorderStyle = &quot;Fixed3D&quot;
+  $lblRoot.Location = New-Object Drawing.Point(120, 411)
+  $lblRoot.Size = New-Object Drawing.Size(280, 20)
+  $lblRoot.TextAlign = &quot;MiddleLeft&quot;
+
+  #lblLength
+  $lblLength.Anchor = &quot;Bottom, Left, Right&quot;
+  $lblLength.BorderStyle = &quot;Fixed3D&quot;
+  $lblLength.Location = New-Object Drawing.Point(120, 435)
+  $lblLength.Size = New-Object Drawing.Size(280, 20)
+  $lblLength.TextAlign = &quot;MiddleLeft&quot;
+
+  #frmMain
+  $frmMain.ClientSize = New-Object Drawing.Size(408, 463)
+  $frmMain.Controls.AddRange(@($trvRoot, $lblLabel1, $lblLabel2, $lblLabel3, $lblLabel4, `
+                             $lblLabel5, $lblLabel6, $lblLabel7, $lblLabel8, $lblLabel9, `
+                             $lblLabel10, $lblAttributes, $lblCreationTime, $lblLastAccessTime, `
+                             $lblLastWriteTime, $lblExtension, $lblFullName, $lblName, `
+                             $lblParent, $lblRoot, $lblLength))
+  $frmMain.Menu = $mnuMain
+  $frmMain.StartPosition = &quot;CenterScreen&quot;
+  $frmMain.Text = &quot;File Navigator&quot;
+  $frmMain.Add_Load($frmMain_OnLoad)
+
+  [void]$frmMain.ShowDialog()
+}
+
+function ShowAboutWindow {
+  $frmAbout = New-Object Windows.Forms.Form
+  $lblInfo = New-Object Windows.Forms.Label
+  $btnExit = New-Object Windows.Forms.Button
+
+  #lblInfo
+  $lblInfo.Location = New-Object Drawing.Point(13, 23)
+  $lblInfo.Size = New-Object Drawing.Size(270, 50)
+  $lblInfo.Text = &quot;(C) 2012 Grigori Zakharov `n
+    This is just an example that you can make better.&quot;
+
+  #btnExit
+  $btnExit.Location = New-Object Drawing.Point(100, 80)
+  $btnExit.TabIndex = 0
+  $btnExit.Text = &quot;Close&quot;
+  $btnExit.Add_Click( { $frmAbout.Close() } )
+
+  #frmAbot
+  $frmAbout.ClientSize = New-Object Drawing.Size(280, 117)
+  $frmAbout.ControlBox = $false
+  $frmAbout.Controls.AddRange(@($lblInfo, $btnExit))
+  $frmAbout.FormBorderStyle = &quot;FixedSingle&quot;
+  $frmAbout.ShowInTaskbar = $false
+  $frmAbout.StartPosition = &quot;CenterScreen&quot;
+  $frmAbout.Text = &quot;About...&quot;
+
+  [void]$frmAbout.ShowDialog()
+}
+
+ShowMainWindow
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

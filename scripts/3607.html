@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Claudio Spizzi">
+    <title>Robocopy Wrapper - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Robocopy Wrapper</h1>
+<h3><a href="//scripts/3607.ps1">download</a></h3>
+<p>This function performs an ROBOCOPY command with the well known parameters <code>Source</code>, <code>Target</code>, <code>Files</code> and <code>Optinos</code>. The ROBOCOPY result is converted to a easy to read PSObject.</p>
+<pre><code class="language-posh">
+function Copy-Robocopy
+{
+	param
+	(
+		[Parameter(Position=0, Mandatory=$true)]
+		[String] $Source,
+		
+		[Parameter(Position=1, Mandatory=$true)]
+		[String] $Target,
+		
+		[Parameter(Position=2, Mandatory=$false)]
+		[String[]] $Files = @(&quot;*.*&quot;),
+		
+		[Parameter(Position=3, Mandatory=$false)]
+		[String] $Options = &quot;&quot;
+	)
+	
+	# Result
+	$Result = @{
+		&quot;Params&quot; = @{}
+		&quot;Timing&quot; = @{}
+		&quot;Result&quot; = @{}
+	}
+	
+	# Define Log File
+	$LogFile = $ENV:TEMP + &quot;\Robocopy.&quot; + (Get-Date -UFormat &quot;%Y%m%d.%H%M%S&quot;) + &quot;.&quot; + (Get-Random -Minimum 1000 -Maximum 9999) + &quot;.log&quot;
+	
+	# Remove Wrong Options
+	$Options = $Options.Replace('/NJH', &quot;&quot;)
+	$Options = $Options.Replace('/NJS', &quot;&quot;)
+	
+	# Start Process
+	$Duration = Measure-Command { Start-Process -FilePath 'ROBOCOPY' -ArgumentList ('&quot;' + $Source + '&quot; &quot;' + $Target + '&quot; &quot;' + [String]::Join('&quot; &quot;', $Files) + '&quot; ' + $Options) -RedirectStandardOutput $LogFile -NoNewWindow -Wait }
+	
+	# Import Robocopy Log
+	$Robocopy = Get-Content -Path $LogFile
+	
+	# Line Numbers
+	$LineHeaderFirst = (0..($Robocopy.Count - 1) | Where-Object { $Robocopy[$_] -eq &quot;-------------------------------------------------------------------------------&quot; })[0]
+	$LineHeaderLast  = (0..($Robocopy.Count - 1) | Where-Object { $Robocopy[$_] -eq &quot;------------------------------------------------------------------------------&quot; })[0]
+	$LineFooterFirst = (($Robocopy.Count - 1)..0 | Where-Object { $Robocopy[$_] -eq &quot;------------------------------------------------------------------------------&quot; })[0]
+	$LineFooterLast  = ($Robocopy.Count - 1)
+	
+	# Result Params
+	$Result[&quot;Params&quot;][&quot;Source&quot;]  = ([String]($Robocopy[$LineHeaderFirst + 5].Split(&quot;:&quot;, 2)[1].Trim()))
+	$Result[&quot;Params&quot;][&quot;Target&quot;]  = ([String]($Robocopy[$LineHeaderFirst + 6].Split(&quot;:&quot;, 2)[1].Trim()))
+	$Result[&quot;Params&quot;][&quot;Files&quot;]   = ([String]::Join(&quot;, &quot;, (($LineHeaderFirst + 8)..($LineHeaderLast - 4) | ForEach-Object { $Robocopy[$_].Split(&quot;:&quot;, 2)[-1].Trim() })))
+	$Result[&quot;Params&quot;][&quot;Options&quot;] = ([String]($Robocopy[$LineHeaderLast - 2].Split(&quot;:&quot;, 2)[1].Trim()))
+	
+	# Result Timing
+	$Result[&quot;Timing&quot;][&quot;Duration&quot;] = ([String]($Duration))
+	$Result[&quot;Timing&quot;][&quot;Started&quot;]  = ([String](Get-Date -Date $Robocopy[$LineHeaderFirst + 4].Split(&quot;:&quot;, 2)[1].Trim()))
+	$Result[&quot;Timing&quot;][&quot;Ended&quot;]    = ([String](Get-Date -Date $Robocopy[$LineFooterLast - 1].Split(&quot;:&quot;, 2)[1].Trim()))
+	
+	# Result Result
+	for ($Line = ($LineFooterFirst + 3); $Line -le ($LineFooterFirst + 6); $Line++)
+	{
+		$Key = $Robocopy[$Line].Substring(02,07).Trim()
+		$Result[&quot;Result&quot;][$Key] = @{}
+		
+		for ($Col = 10; $Col -le 60; $Col += 10)
+		{
+			$Title = $Robocopy[$LineFooterFirst + 2].Substring($Col, 10).Trim()
+			$Title = $Title.Substring(0,1).ToUpper() + $Title.Substring(1).ToLower()
+			
+			$Result[&quot;Result&quot;][$Key][$Title] = $Robocopy[$Line].Substring($Col, 10).Trim()
+		}
+	}
+	
+	# Return
+	return $Result
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

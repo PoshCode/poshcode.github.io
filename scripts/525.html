@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Oisin Grehan">
+    <title>Automount new PSDrives - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Automount new PSDrives</h1>
+<h3><a href="//scripts/525.ps1">download</a></h3>
+<p>This only works PowerShell v2.0 CTP2, and you’ll need to save it as AutoMount.psm1 in a directory under your documents folder like so (vista example):</p>
+<p>%userprofile%\documents\windowspowershell\packages\automount\automount.psm1</p>
+<p>You can then load it with the command:</p>
+<p>ps&gt; add-module automount</p>
+<p>I have this in my profile.  You can temporarily disable automount with the function Disable-AutoMount and reenable it at anytime with Enable-AutoMount. The module also exposes four new events for you to consume yourself. You could, for example, hook your own script to run anytime a device is added and/or removed. This is what I do myself in the module. I hook a WMI event once then forward 1 of 4 possible new events depending on the type of WMI event that was raised.</p>
+<p>NOTE: this particular flavour of WMI query only works in Vista and Windows 2003 it appears. I’m looking into getting it working with 2000/XP also.</p>
+<pre><code class="language-posh"># AutoMount.psm1 v1.0   
+# Oisin &quot;x0n&quot; Grehan (MVP)   
+  
+$query = new-object System.Management.WqlEventQuery   
+$query.EventClassName = &quot;__InstanceOperationEvent&quot;  
+  
+# default to every 2 seconds   
+$query.WithinInterval = new-object System.TimeSpan 0,0,2   
+  
+@@# this WMI is only available with Windows 2003 and Vista (not XP it appears).
+# this could be rewritten to use different WMI queries to support 2000/NT/XP also.   
+$query.QueryString = &quot;Select * from Win32_VolumeChangeEvent&quot;  
+  
+# attach a watcher   
+$watcher = new-object System.Management.ManagementEventWatcher $query  
+  
+# here we use -SupportEvent instead of -SourceIdentifier   
+# this prevents this event from being generally visible   
+# also note the use of the call operator to invoke a    
+# function in the scope of the module since this action   
+# occurs outside of module scope.   
+Register-ObjectEvent $watcher -EventName &quot;EventArrived&quot; `   
+    -SupportEvent &quot;WMI.VolumeChange&quot; -Action {   
+        &amp; (get-module automount) VolumeChangeCallback @args  
+    }   
+  
+# New PSEvents:   
+#   
+#     PowerShell.DeviceConfigurationChanged   
+#     PowerShell.DeviceArrived   
+#     PowerShell.DeviceRemoved   
+#     PowerShell.DeviceDocking   
+  
+# win32_volumechangeevent event types   
+$eventTypes = @{   
+    1 = &quot;ConfigurationChanged&quot;;   
+    2 = &quot;Arrived&quot;;   
+    3 = &quot;Removed&quot;;   
+    4 = &quot;Docking&quot;;   
+}   
+  
+# private module level callback function   
+function VolumeChangeCallback ($sender, $eventargs) {   
+    trap { write-warning $_ }   
+  
+    $driveName = $eventArgs.NewEvent.DriveName.TrimEnd(&quot;:&quot;)   
+    $eventType = [int]$eventArgs.NewEvent.EventType # was uint16   
+  
+    $forwardedEvent = &quot;Device$($eventTypes[$eventType])&quot;  
+       
+    # forward a new simpler event specific to device event type   
+    [void]( New-PSEvent &quot;PowerShell.$forwardedEvent&quot; -Sender $driveName `   
+        -EventArguments $eventargs )   
+}   
+  
+# hook up our psdrive mount / unmount events   
+# and start the WMI watcher   
+function Enable-AutoMount {   
+  
+    Register-PSEvent -SourceIdentifier &quot;PowerShell.DeviceArrived&quot; `   
+        -Action {               
+            new-psdrive -name $args[0] -psprovider `   
+                filesystem -root &quot;$args[0]:&quot;;   
+         }   
+  
+    Register-PSEvent -SourceIdentifier &quot;PowerShell.DeviceRemoved&quot; `   
+        -Action {   
+            remove-psdrive -name $args[0] -ea 0; # may not exist   
+        }   
+       
+    $watcher.Start()   
+}   
+  
+# tear down our psdrive mount / unmount events   
+# and stop the WMI watcher   
+function Disable-AutoMount {   
+  
+    Unregister-PSEvent -SourceIdentifier &quot;PowerShell.DeviceArrived&quot;  
+    Unregister-PSEvent -SourceIdentifier &quot;PowerShell.DeviceRemoved&quot;  
+       
+    $watcher.Stop()   
+}   
+  
+# export functions to control automount   
+Export-ModuleMember Enable-AutoMount, Disable-AutoMount   
+  
+# start watching and (un)mounting   
+Enable-AutoMount
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

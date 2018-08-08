@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="PhilB">
+    <title>Archive (ZIP) files - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Archive (ZIP) files</h1>
+<h3><a href="//scripts/6372.ps1">download</a></h3>
+<p>This script processes only files in the source directory with an ISO date (YYYY-MM-DD) as the first ten bytes of the file name.
+Based on that ISO date:
+a)	if the file date is equal to or older than the supplied archive age in days:
+compress all files with the same ISO date to a single .ZIP file,
+b)	if the file date is equal to or older than the supplied deletion age in days:
+delete the file. (Deletion can be disabled by changing the value of the variable $NoDel from 0.)
+A log file is produced and that is also sent via email to one or more recipients.</p>
+<p>DISCLAIMER:
+This was my very first attempt at PS scripting.
+It was written to solve a problem at work but built in my own time on my own system.
+There are probably much more elegant ways to do this but it works for me.
+There isn't much in the way of proper error handling - well, none really.
+There are a superfluous lines of code too but - did I mention it was my first attempt at PS.</p>
+<pre><code class="language-posh">#Requires -version 5.0
+&lt;#
+.SYNOPSIS
+	Archives and deletes files on the basis of an ISO 8601 date (YYYY-MM-DD) in the first ten bytes of the file name.
+.DESCRIPTION
+	This script processes only files in the source directory with an ISO date as the first ten bytes of the file name.
+	Based on that ISO date, :
+	a)	if the file date is equal to or older than the supplied archive age in days: 
+		compress all files with the same ISO date to a single .ZIP file, 
+	b)	if the file date is equal to or older than the supplied deletion age in days: 
+		delete the file. (Deletion can be disabled by changing the value of the variable $NoDel from 0.)
+	A log file is produced and that is also sent via email to one or more recipients.
+.PARAMETER SrcDir
+    Mandatory. 
+	The directory to be searched for files that are candidates for archiving and/or deletion.
+.PARAMETER DstDir
+    Mandatory. 
+	The directory where archives (.ZIP files) are to be written.
+.PARAMETER LogDir
+    Mandatory. 
+	The directory where script execution log file is to be written.
+.PARAMETER ArcAge
+    Mandatory. The age, in number of days prior to today, of files to be archived. 
+	Must be greater than or equal to 1 AND less than DelAge.
+.PARAMETER DelAge
+    Mandatory. The age, in number of days prior to today, of files to be deleted. 
+	Must be greater than ArcAge.
+.INPUTS
+    a)	One or more files, stored in SrcDir, with an ISO date (YYYY-MM-DD) beginning their file names.
+	b)	A file containing the addressees for the script log email. 
+.OUTPUTS
+    a)	One or more ZIP files, written to DstDir and named &quot;YYYY-MM-DD.zip&quot;;
+		where YYYY-MM-DD is the date of all files from SrcDir with a matching ISO date. 
+    b)	A log file, written to LogDir, named &quot;YYYY-MM-DD_HH-MM-SS.log&quot;;
+		where YYYY-MM-DD_HH-MM-SS is the start date and time.
+    c) 	Send an email with the contents of the log file to the addressees in DistList.
+.NOTES
+	Version:        	1.4
+	Author:         	PhilB
+	Creation Date:  	2015-08-30
+	Modification Date:	2016-01-01	Get email distribution list from DistList
+						2016-03-23	Restructure and add calls to 7zip to replace buggy Compress-Archive
+						2016-04-27	Remove dependency on external logging script; 
+									Add runtime and bytes archived to log file.
+						2016-05-01	Reinstated missing -mx1 parameter on the call to 7za; 
+									Reverted to compressing all files with the same date in one pass.
+    Performance Notes:
+	a)	For best performance, all files with the same $FileDate are processed with one invocation of the compression method.
+		Compressing one file at a time costs about 50% increase in run time. (It's commented out in the body of script.)
+		CODE:	$cmd = &quot;C:\PowerShell\7za.exe a -tzip $($DstDir + &quot;\&quot; + $FileDate) $($SrcDir + &quot;\&quot; + $FileDate.Name) -mx1&quot;; Invoke-Expression $cmd
+
+		An alternative to the $cmd/Invoke-Expression method used above: 
+		CODE:	Compress-Archive -Path $($SrcDir + &quot;\&quot; + $FileDate + &quot;*&quot;) -DestinationPath $($DstDir + &quot;\&quot; + $FileDate + &quot;.zip&quot;)
+		ISSUE:	This is purest/cleanest but, with PS v5.0
+				- won't work with files larger than about 1 GB 
+				- does not preserve original file Modified date and time within the ZIP file. 
+
+	b)	The Get-FileHash cmdlet must re-read file to generate a SHA-256 digest for it.  This adds to the overall script execution time.
+
+#&gt;
+
+# ---------------------------------------------------------[Initialisations]--------------------------------------------------------
+
+# Set priority to reduce CPU usage
+( [System.Diagnostics.Process]::GetCurrentProcess() ).PriorityClass = &quot;Idle&quot;
+
+# Set Error Action to Silently Continue
+$ErrorActionPreference = &quot;SilentlyContinue&quot;
+
+# ----------------------------------------------------------[Declarations]----------------------------------------------------------
+
+# Configuration parameters
+$SrcDir = &quot;D:\syslog\logs&quot;											# Location of files to archive or delete
+$DstDir = &quot;D:\syslog\SyslogArchives\ISOtimestamp&quot;					# Location of output archive files
+$LogDir = &quot;D:\syslog\logs&quot;											# Location of output log file
+$DistList = &quot;C:\PowerShell\DistList.txt&quot;								# Path and file name of the Distribution List for logs
+$ArcAge = [int] 1													# Age (in days) of files to be archived (1 = yesterday and earlier)
+$DelAge = [int] 10													# Age (in days) of files to be deleted
+$NoDelete = [int] 0													# Deletion of files is disabled if this is not = 0
+
+# Working variables
+$Errors = [int] 0													# Count of parameter errors 
+
+$StartTime = (Get-Date)												# Execution start time
+$Today = $StartTime.toString(&quot;yyyy-MM-dd&quot;)							# Today's date in ISO format
+$Now = $StartTime.toString(&quot;yyyy-MM-dd_HH-mm-ss&quot;)					# Date and time now in (almost) ISO format
+$LogName = $($Now + &quot;.log&quot;)											# Name of the log file for this run 
+$LogFile = $([string](Join-Path -Path $LogDir -ChildPath $LogName))	# Path and name of the log file for this run
+$Filter = &quot;20??-??-??*&quot;												# Only include files matching this pattern
+$Files = &quot;&quot;															# List of candidate files in source directory
+
+$ArcDate = (get-date).AddDays(-$ArcAge).toString(&quot;yyyy-MM-dd&quot;)		# Archive files &lt; or = this date
+$ArcCount = [int] 0													# Count of the number of files archived
+$ArcTotal = [int] 0													# Count of the number of bytes in files archived
+$DelDate = (get-date).AddDays(-$DelAge).toString(&quot;yyyy-MM-dd&quot;)		# Delete files &lt; or = this date
+$Delcount = [int] 0													# Count of the number of files deleted
+
+$FileDate  = &quot;&quot;														# Date of current file
+$PrevDate = &quot;&quot;														# Date of previous file
+$ArcFlag = [int] 0													# We just archived this file
+
+# Email parameters													# Set $EmailDist to &quot;&quot; to disable email log
+$EmailServer = &quot;mail.example.org&quot;
+$EmailFrom = $(&quot;Friendly Name &lt;friendly.name@mail.example.org&gt;&quot;)
+$EmailTo = $([string[]] (get-content $DistList))						# Email log to email addresses in $DistList.
+$EmailSubject = $($Today + &quot; Syslog Archive/Delete Report&quot;)
+
+# -----------------------------------------------------------[Check and Log Parameters]---------------------------------------------
+
+# Test that the log directory exists.  If it doesn't, log an error to screen.
+If (-not (Test-Path -Path $LogDir))
+	{
+	Write-Host $(&quot;Specified log path &quot; + $LogDir + &quot; does not exist!!!!!!!!!&quot;)
+	Exit
+	}
+
+# Open the log file
+	New-Item -Path $LogFile
+# Write banner
+	Add-Content -Path $LogFile $(&quot;***************************************************************************************************&quot;)
+	Add-Content -Path $LogFile $(&quot;Started processing at: $Now&quot;)
+	Add-Content -Path $LogFile $(&quot;***************************************************************************************************&quot;)
+	
+# Write to screen for debug mode
+	Write-Debug &quot;***************************************************************************************************&quot;
+	Write-Debug &quot;Started processing at: + $Now&quot; 
+	Write-Debug &quot;***************************************************************************************************&quot;
+ 
+# Test all other parameters and exit if there are any errors
+If (-not (Test-Path -Path $SrcDir))
+	{
+	Add-Content -Path $LogFile $(&quot;ERROR: Source directory does not exist&quot;)
+	Write-Host $(&quot;Specified source path &quot; + $SrcDir + &quot; does not exist!!!!!!!!!&quot;)
+	$Errors = ($Errors + 1)
+	}
+If (-not (Test-Path -Path $DstDir))
+	{
+	Add-Content -Path $LogFile $(&quot;ERROR: Destination directory does not exist&quot;)
+	Write-Host $(&quot;Specified destination path &quot; + $DstDir + &quot; does not exist!!!!!!!!!&quot;)
+	$Errors = ($Errors + 1)
+	}
+If ($ArcAge -lt 1)
+	{
+	Add-Content -Path $LogFile $(&quot;ERROR: Archive age must be greater than or equal to 1&quot;)
+	Write-Host $(&quot;ERROR: Archive age must be greater than or equal to 1&quot;)
+	$Errors = ($Errors + 1)
+	}
+If (-not ($DelAge -gt $ArcAge))
+	{
+	Add-Content -Path $LogFile $(&quot;ERROR: Delete age must be greater than Archive age&quot;)
+	Write-Host $(&quot;ERROR: Delete age must be greater than Archive age&quot;)
+	$Errors = ($Errors + 1)
+	}
+
+# Close the log and exit if there were any errors
+If ($Errors -gt 0)
+	{
+	Log-Finish -LogPath $LogFile
+	Exit
+	}
+
+# Log the running parameters
+Add-Content -Path $LogFile $(&quot;Source directory:      &quot; + $SrcDir)
+Add-Content -Path $LogFile $(&quot;Destination directory: &quot; + $DstDir)
+Add-Content -Path $LogFile $(&quot;Logging directory:     &quot; + $LogDir)
+Add-Content -Path $LogFile $(&quot;Archive Age (days):    &quot; + $ArcAge)
+Add-Content -Path $LogFile $(&quot;Deletion Age(days):    &quot; + $DelAge)
+
+# -------------------------------------------------------[Begin Processing]---------------------------------------------------------
+
+# Find all objects in the source directory that match the filter, exclude sub-directories and sort file list by name 
+$Files = Get-ChildItem -Path $SrcDir -Filter $Filter | where { !$_.PSIsContainer } | sort name
+
+# ------------------------------------------------------[Begin Archival Pass]-------------------------------------------------------
+
+Add-Content -Path $LogFile $(&quot;***************************************************************************************************&quot;)
+Add-Content -Path $LogFile $(&quot;Archiving files dated &quot; + $ArcDate + &quot; and earlier.&quot;)
+Add-Content -Path $LogFile $(&quot;***************************************************************************************************&quot;)
+
+ForEach ($File in $Files)
+	{
+	$FileDate = $File.name.substring(0,10)
+	if ($FileDate -ne $PrevDate)
+		{
+		$ArcFlag = 0
+		if ($FileDate -le $ArcDate)
+			{
+			if (-not (Test-Path $($DstDir + &quot;\&quot; + $FileDate + &quot;.zip&quot;)))
+				{
+				$ArcFlag = 1
+				$CompressAll = &quot;C:\PowerShell\7za.exe a -tzip $($DstDir + &quot;\&quot; + $FileDate) $($SrcDir + &quot;\&quot; + $FileDate + &quot;*&quot;) -mx1&quot;
+				Invoke-Expression $CompressAll
+				Add-Content -Path $LogFile $(&quot; &quot; )
+				Add-Content -Path $LogFile $(&quot;Created &quot; + $DstDir + &quot;\&quot; + $FileDate + &quot;.zip&quot;)
+				}
+			}
+		}
+	if ($ArcFlag -eq 1)
+		{
+# 		$CompressOne = &quot;C:\PowerShell\7za.exe a -tzip $($DstDir + &quot;\&quot; + $FileDate) $($SrcDir + &quot;\&quot; + $File.Name) -mx1&quot;
+# 		Invoke-Expression $CompressOne				
+		Add-Content -Path $LogFile $(&quot;        Added &quot; + $File.name)
+		Add-Content -Path $LogFile $(&quot;              File size:      &quot; + $(&quot;{0:N0}&quot; -f $File.length))
+		$LastWritten = $File.LastWriteTime.toString(&quot;yyyy-MM-dd HH:mm:ss&quot;)
+		Add-Content -Path $LogFile $(&quot;              Last modified:  &quot; + $LastWritten)
+		$FileHash = get-filehash -path $($SrcDir + &quot;\&quot; + $File.name)
+		Add-Content -Path $LogFile $(&quot;              SHA-256 digest: &quot; + $FileHash.hash)
+		$ArcTotal = $ArcTotal + $File.length
+		$ArcCount = $ArcCount + 1
+		}
+	$PrevDate = $FileDate
+	}
+	
+If ($ArcCount -eq 0)
+	{
+	Add-Content -Path $LogFile $(&quot; &quot; )
+	Add-Content -Path $LogFile $(&quot;  No files to archive!&quot;)
+	Add-Content -Path $LogFile $(&quot; &quot; )
+	}
+Else
+	{
+	Add-Content -Path $LogFile $(&quot; &quot; )
+	Add-Content -Path $LogFile $(&quot;Archived &quot; + $ArcCount + &quot; files containing a total of &quot; + $(&quot;{0:N0}&quot; -f $ArcTotal) + &quot; bytes&quot;)
+	Add-Content -Path $LogFile $(&quot; &quot; )
+	}
+# ------------------------------------------------------[Begin Deletion Pass]--------------------------------------------------------
+
+# Uses the same list of files obtained for the archival pass
+
+$PrevDate = &quot;&quot;
+ 	
+If ($NoDelete -eq 0)
+	{
+	Add-Content -Path $LogFile $(&quot;***************************************************************************************************&quot;)
+	Add-Content -Path $LogFile $(&quot;Deleting files dated &quot; + $DelDate + &quot; and earlier.&quot;)
+	Add-Content -Path $LogFile $(&quot;***************************************************************************************************&quot;)
+
+	ForEach ($File in $Files)
+		{
+		$FileDate = $File.name.substring(0,10)
+		if ($FileDate -le $DelDate)
+			{
+			if (Test-Path $($DstDir + &quot;\&quot; + $FileDate + &quot;.zip&quot;))
+				{
+				if ($FileDate -ne $PrevDate)
+					{
+					Add-Content -Path $LogFile $(&quot; &quot; )
+					Add-Content -Path $LogFile $(&quot;Deleting files from &quot; + $FileDate)
+					}
+				Remove-Item $($SrcDir + &quot;\&quot; + $File.name)
+				Add-Content -Path $LogFile $(&quot;   Deleted &quot; + $File.name)
+				$DelCount = $DelCount + 1
+				}			
+			else
+				{
+				Add-Content -Path $LogFile $(&quot;   No archive found for &quot; + $FileDate + &quot;. Not deleting &quot; + $File.name)
+				}
+			}
+		$PrevDate = $FileDate	
+		}
+	}
+Else
+	{
+	Add-Content -Path $LogFile $(&quot;***************************************************************************************************&quot;)
+	Add-Content -Path $LogFile $(&quot;Deletion of aged files is disabled!&quot;)
+	Add-Content -Path $LogFile $(&quot;***************************************************************************************************&quot;)
+	}
+	
+If ($DelCount -eq 0)
+	{
+	Add-Content -Path $LogFile $(&quot; &quot; )
+	Add-Content -Path $LogFile $(&quot;  No files to delete!&quot;)
+	Add-Content -Path $LogFile $(&quot; &quot; )
+	}
+Else
+	{
+	Add-Content -Path $LogFile $(&quot; &quot; )
+	Add-Content -Path $LogFile $(&quot;Deleted a total of &quot; + $DelCount + &quot; files.&quot;)
+	Add-Content -Path $LogFile $(&quot; &quot; )
+	}
+
+# ------------------------------------------------------[End Log File]--------------------------------------------------------------
+$EndTime = (Get-Date)
+$Elapsed = New-TimeSpan -Start $StartTime -End $EndTime
+$Now = $EndTime.toString(&quot;yyyy-MM-dd HH-mm-ss&quot;)
+
+Add-Content -Path $LogFile $(&quot;*************************************************************************************************&quot;)
+Add-Content -Path $LogFile $(&quot;Approximate run time (HH:MM:SS):   {0:hh}:{0:mm}:{0:ss}&quot; -f $Elapsed) 
+Add-Content -Path $LogFile $(&quot;*********************************************************************************** End of report&quot;)
+  
+# Write to screen for debug mode
+Write-Debug &quot;&quot;
+Write-Debug &quot;***************************************************************************************************&quot;
+Write-Debug &quot;Finished processing at: $Now&quot; 
+Write-Debug &quot;***************************************************************************************************&quot;
+
+# ------------------------------------------------------[Email Log File]------------------------------------------------------------
+
+$EmailBody = &quot;$(cat $LogFile|out-string)&quot;
+Send-Mailmessage -from $EmailFrom -to $EmailTo -subject $EmailSubject -body $EmailBody -smtpServer $EmailServer
+
+# ------------------------------------------------------[End Processing]------------------------------------------------------------
+
+Exit
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

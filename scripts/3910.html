@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="SJarvi">
+    <title>VCenter Reporting - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>VCenter Reporting</h1>
+<h3><a href="//scripts/3910.ps1">download</a></h3>
+<pre><code class="language-posh">&lt;# 	   .SYNOPSIS
+        Collects statistics and settings for Hosts, Datastores, and Virtual Machines
+		from multiple VCenters.
+	   .DESCRIPTION
+		Creates Excel spreadsheet report with separate worksheets for Hosts, Datastores, and 
+		Virtual Machines by VCenter.
+       .PARAMETER
+		none
+       .INPUTS
+	   .OUTPUTS
+	   .NOTES
+        Name: Get-SCE_VCenterStatisticsAndSettings.ps1
+        Author: Steve Jarvi
+        DateCreated: 10 Jan 2013
+	   .EXAMPLE
+    #&gt;
+
+
+
+
+#Load PowerCLI snap-ins
+Add-PSSnapin Vmware.VIMAutomation.Core
+
+Write-Host &quot;Getting first and last days of previous months...&quot;
+#Get the first and last days for the previous months.
+$startdate = (($currentdate = get-date).addmonths(-1) | % {$_.AddDays(-($_.day -1))}).ToString(&quot;d&quot;)
+$enddate = (($currentdate = get-date) | % {$_.adddays(-($_.day))}).ToString(&quot;d&quot;)
+
+Write-Host &quot;Start date is $startdate.&quot;
+Write-Host &quot;End date is $enddate.&quot;
+
+#VCenters list:
+$VCenters = &quot;vcenter1&quot;,&quot;vcenter2&quot;,&quot;vcenter3&quot;
+
+
+#New Excel ComObject, add workbook:
+$excel = New-Object -ComObject Excel.Application
+$excel.Visible = $true
+$workbook = $excel.Workbooks.Add()
+
+
+	#Loop through VCenters.
+	foreach ($VC in $VCenters){
+	#Connect to VCenter.
+	connect-viserver $VC
+	#Add worksheet named Guest by VCenter.
+	$currentsheet = $workbook.worksheets.add()
+	$currentsheet.name = &quot;Guest - &quot; + &quot;$VC&quot;
+	
+	#Get virtual machines in current VCenter.
+	$VMs = Get-VM | ?{$_.powerstate -eq &quot;PoweredOn&quot;}
+	#Create multidimensional array sized by number of VMs, plus 1 for header, and number of columns:
+	$MDArray = New-Object 'object[,]' ($vms.count+1),14
+	
+	$row = 1
+	$col = 0
+	#Enter column names for first row:
+	$MDArray[0,0] = &quot;VM Name&quot;
+	$MDArray[0,1] = &quot;Resource Pool&quot;
+	$MDArray[0,2] = &quot;Allocated CPU&quot;
+	$MDArray[0,3] = &quot;Avg. CPU (MHz)&quot;
+	$MDArray[0,4] = &quot;Allocated Mem (MB)&quot;
+	$MDArray[0,5] = &quot;Avg. Mem Usage (%)&quot;
+	$MDArray[0,6] = &quot;Mem Usage (MB)&quot;
+	$MDArray[0,7] = &quot;VMDK(s) / Capacity / Type&quot;
+	$MDArray[0,8] = &quot;VMDK Avg. (KBps)&quot;
+	$MDArray[0,9] = &quot;Nic Type&quot;
+	$MDArray[0,10] = &quot;Network Avg. (KBps)&quot;
+	$MDArray[0,11] = &quot;Hrdwr Ver.&quot;
+	$MDArray[0,12] = &quot;VMTools Ver.&quot;
+	$MDArray[0,13] = &quot;VM Operating System&quot;
+	
+	$vmnumber = 1
+	$vmcount = $vms.count
+		
+		#Loop through VMs in current VCenter:
+		foreach ($vm in $VMs){
+		
+		#Progress update:
+		Write-Host &quot;Currently building $vm's statistics into table.&quot;
+		Write-Host &quot;Working $vmnumber of $vmcount VMs.&quot;
+		
+		$vmnumber++
+		#Use PowerCLI's &quot;Get-Stat&quot; to pull VM statistics for the previous month.
+		$vmstats = Get-Stat -Entity $vm.name -Start $startdate -Finish $enddate -EA SilentlyContinue
+		#Set variables for statistics by type used:
+		$cpuuse = $vmstats | ?{$_.metricid -eq &quot;cpu.usagemhz.average&quot;}
+		$memuse = $vmstats | ?{$_.metricid -eq &quot;mem.usage.average&quot;}
+		$dskuse = $vmstats | ?{$_.metricid -eq &quot;disk.usage.average&quot;}
+		$netuse = $vmstats | ?{$_.metricid -eq &quot;net.usage.average&quot;}
+		#Build table of VMs' statistics and settings into multidimensional array:
+		$MDArray[$row,$col] = [string]($vm.name)
+		$col++
+		$MDArray[$row,$col] = [string]($vm.resourcepool.name)
+		$col++
+		$MDArray[$row,$col] = [string]($vm.NumCpu)
+		$col++
+		$MDArray[$row,$col] = [string]([Math]::Round((($cpuuse | Measure-Object Value -Average).Average),2))
+		$col++
+		$MDArray[$row,$col] = [string]$vm.MemoryMB
+		$col++
+		$MDArray[$row,$col] = [string]([Math]::Round((($memuse | Measure-Object Value -Average).Average),2))
+		$col++
+		$MDArray[$row,$col] = [string]$([math]::round((([Math]::Round((($memuse | Measure-Object Value -Average).Average),2))/100*($vm.memoryMB)),2))
+		$col++
+		
+			$HDDSize = Get-HardDisk $vm.name | Sort Name
+		
+			$HDDList = $null
+		
+				foreach ($HD in $HDDSize) { 
+					$DiskType = $HD.StorageFormat
+					$DiskName = $HD.Name
+					$DiskSize = $HD.CapacityKB / 1048576
+					$DiskSize = &quot;{0:N2}&quot; -f $DiskSize
+					$HDDList += &quot;$DiskName&quot;+&quot;/ &quot;+ &quot;$DiskSize&quot; + &quot;/ &quot; + &quot;$DiskType`r`n&quot;
+				}
+		
+		$MDArray[$row,$col] = [string]$HDDList
+		$col++
+	
+		$MDArray[$row,$col] = [string]([Math]::Round((($dskuse | Measure-Object Value -Average).Average),2))
+		$col++
+		$MDArray[$row,$col] = [string]$vm.NetworkAdapters.type
+		$col++
+		$MDArray[$row,$col] = [string]([Math]::Round((($netuse | Measure-Object Value -Average).Average),2))
+		$col++
+		$MDArray[$row,$col] = [string]$vm.version
+		$col++
+			
+			Try {
+				$MDArray[$row,$col] = ($vm.ExtensionData.guest.ToolsVersion.tostring())
+			}
+			Catch {
+				$MDArray[$row,$col] = &quot;Not Installed&quot;
+			}
+			
+		$col++
+		$MDArray[$row,$col] = [string]$vm.ExtensionData.guest.GuestFullName
+				
+		$col = 0
+		$row++
+		}
+	
+	#Create Excel interop object for aligning cell content:
+	[reflection.assembly]::loadWithPartialname(&quot;Microsoft.Office.Interop.Excel&quot;) | out-Null
+	$xlConstants = &quot;microsoft.office.interop.excel.Constants&quot; -as [type]
+	
+	#Create range of Excel cells to match multidimensional array
+	#and add array to sheet:
+	$cells = &quot;A1:N&quot; + ($vms.count+1)
+	$sheetname = &quot;Guest - &quot; + &quot;$VC&quot;
+	$worksheet = $workbook.Worksheets.Item(&quot;$sheetname&quot;)
+	$range = $worksheet.Range(&quot;$cells&quot;)
+	$range.Value2 = $MDArray
+	#Align and autofit cells:
+	$range.HorizontalAlignment = $xlConstants::xlCenter
+	$range.VerticalAlignment = $xlConstants::xlCenter
+	$range.Rows.AutoFit() | Out-Null
+	$range.Columns.AutoFit() | Out-Null
+	
+	#Get Hosts for current VCenter:
+	$VMHosts = Get-VMHost
+	#New worksheet for Hosts at current VCenter:
+	$currentsheet = $workbook.worksheets.add()
+	$currentsheet.name = &quot;Host - &quot; + &quot;$VC&quot;
+	#Create multidimensional array sized by number of Hosts, plus 1 for header, and number of columns:
+	$MDArray = New-Object 'object[,]' ($vms.count+1),7
+	
+	$row = 1
+	$col = 0
+	$MDArray[0,0] = &quot;Host Name&quot;
+	$MDArray[0,1] = &quot;CPU (MHz)&quot;
+	$MDArray[0,2] = &quot;CPU Used (MHz)&quot;
+	$MDArray[0,3] = &quot;% CPU Used&quot;
+	$MDArray[0,4] = &quot;Mem (GB)&quot;
+	$MDArray[0,5] = &quot;Host Memory(GB)&quot;
+	$MDArray[0,6] = &quot;% Mem Used&quot;
+	
+	$vmhostnum = $vmhosts.count
+	$count = 1
+		#Loop through Hosts at current VCenter:
+		
+		foreach ($vmhost in $vmhosts){
+			$name = $vmhost.name.split(&quot;.&quot;)[0]
+			#Progress update:
+			Write-Host &quot;Currently building $name's statistics into table.&quot;
+			Write-Host &quot;Working $count of $vmhostnum Hosts.&quot;
+			
+		
+			$hoststats = Get-Stat -Entity $vmhost -Start $startdate -Finish $enddate -EA SilentlyContinue
+			$cpuuse = $hoststats | ?{$_.metricid -eq &quot;cpu.usagemhz.average&quot;}
+			$cpupcnt = $hoststats | ?{$_.metricid -eq &quot;cpu.usage.average&quot;}
+			$memuse = $hoststats | ?{$_.metricid -eq &quot;mem.usage.average&quot;}
+			
+			$MDArray[$row,$col] = [string]$vmhost.name.split(&quot;.&quot;)[0]
+			$col++
+			$MDArray[$row,$col] = [string]$vmhost.cputotalmhz
+			$col++
+			$MDArray[$row,$col] = [string]$vmhost.cpuusagemhz
+			$col++
+			$MDArray[$row,$col] = [string]([Math]::Round((($cpuuse | Measure-Object Value -Average).Average),2))
+			$col++
+			$MDArray[$row,$col] = [string]([math]::Round((($vmhost.MemoryUsageMB)/1024),2))
+			$col++
+			$MDArray[$row,$col] = [string]([math]::Round((($vmhost.MemoryTotalMB)/1024),2))
+			$col++
+			$MDArray[$row,$col] = [string]([Math]::Round((($memuse | Measure-Object Value -Average).Average),2))
+			
+			$col = 0
+			$row++			
+			
+			$count++
+		}
+		
+		[reflection.assembly]::loadWithPartialname(&quot;Microsoft.Office.Interop.Excel&quot;) | out-Null
+		$xlConstants = &quot;microsoft.office.interop.excel.Constants&quot; -as [type]
+		
+		$cells = &quot;A1:G&quot; + ($vmhosts.count+1)
+		$sheetname = &quot;Host - &quot; + &quot;$VC&quot;
+		$worksheet = $workbook.Worksheets.Item(&quot;$sheetname&quot;)
+		$range = $worksheet.Range(&quot;$cells&quot;)
+		$range.Value2 = $MDArray
+		$range.HorizontalAlignment = $xlConstants::xlCenter
+		$range.VerticalAlignment = $xlConstants::xlCenter
+		$range.Rows.AutoFit() | Out-Null
+		$range.Columns.AutoFit() | Out-Null	
+		
+		
+		
+		$datastores = get-datastore
+		
+		$currentsheet = $workbook.worksheets.add()
+		$currentsheet.name = &quot;Datastores - &quot; + &quot;$VC&quot;
+	
+		$MDArray = New-Object 'object[,]' ($datastores.count+1),4
+		$row = 1
+		$col = 0
+		$MDArray[0,0] = &quot;Datastore&quot;
+		$MDArray[0,1] = &quot;Total Space (GB)&quot;
+		$MDArray[0,2] = &quot;Free Space (GB)&quot;
+		$MDArray[0,3] = &quot;% Free&quot;
+		
+			
+			foreach ($DS in $datastores){
+			$MDArray[$row,$col] = [string]$DS.name
+			$col++
+			$MDArray[$row,$col] = [string]([math]::round((($DS.capacitymb)/1024),2))
+			$col++
+			$MDArray[$row,$col] = [string]([math]::round((($DS.freespacemb)/1024),2))
+			$col++
+			$MDArray[$row,$col] = [string]([math]::round(($DS.freespacemb/$DS.capacitymb),2)*100) + &quot; %&quot;
+			
+			$col = 0
+			$row++			
+			}
+		
+		[reflection.assembly]::loadWithPartialname(&quot;Microsoft.Office.Interop.Excel&quot;) | out-Null
+		$xlConstants = &quot;microsoft.office.interop.excel.Constants&quot; -as [type]
+				
+		$cells = &quot;A1:D&quot; + ($datastores.count+1)
+		$sheetname = &quot;Datastores - &quot; + &quot;$VC&quot;
+		$worksheet = $workbook.Worksheets.Item(&quot;$sheetname&quot;)
+		$range = $worksheet.Range(&quot;$cells&quot;)
+		$range.Value2 = $MDArray
+		$range.HorizontalAlignment = $xlConstants::xlCenter
+		$range.VerticalAlignment = $xlConstants::xlCenter
+		$range.Rows.AutoFit() | Out-Null
+		$range.Columns.AutoFit() | Out-Null
+		
+		
+	
+	
+	Disconnect-VIServer $VC -Confirm:$false
+
+		 		 
+	}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

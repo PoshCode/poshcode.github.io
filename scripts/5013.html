@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DollarUnderscore">
+    <title>Home Automation Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Home Automation Module</h1>
+<h3><a href="//scripts/5013.ps1">download</a></h3>
+<p>This is an updated version of the home automation module. The main difference is that some output is removed (no news is good news...) if &quot;-Verbose&quot; is not used and that it has a separate cmdlet for connecting to Telldus Live! (Connect-TelldusLive) which uses a PSCredential.</p>
+<p>This removes the need of specififying credentials on all commands which helps a lot with both performance and usability.</p>
+<p>For more information see my blog at:
+http://dollarunderscore.azurewebsites.net</p>
+<pre><code class="language-posh">#========================================================================
+# Created By: Anders Wahlqvist
+# Website: DollarUnderscore (http://dollarunderscore.azurewebsites.net)
+#========================================================================
+
+
+function Connect-TelldusLive
+{
+    [cmdletbinding()]
+    param(
+          [Parameter(Mandatory=$True)]
+          [System.Management.Automation.PSCredential] $Credential)
+
+
+    $LoginPostURI=&quot;https://login.telldus.com/openid/server?openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&amp;openid.mode=checkid_setup&amp;openid.return_to=http%3A%2F%2Fapi.telldus.com%2Fexplore%2Fclients%2Flist&amp;openid.realm=http%3A%2F%2Fapi.telldus.com&amp;openid.ns.sreg=http%3A%2F%2Fopenid.net%2Fextensions%2Fsreg%2F1.1&amp;openid.sreg.required=email&amp;openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&amp;openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select#&quot;
+    $turnOffURI=&quot;http://api.telldus.com/explore/device/turnOff&quot;
+
+    $TelldusWEB = Invoke-WebRequest $turnOffURI -SessionVariable Global:Telldus
+
+    $form = $TelldusWEB.Forms[0]
+    $form.Fields[&quot;email&quot;] = $Credential.UserName
+    $form.Fields[&quot;password&quot;] = $Credential.GetNetworkCredential().Password
+
+    $TelldusWEB = Invoke-WebRequest -Uri $LoginPostURI -WebSession $Global:Telldus -Method POST -Body $form.Fields
+
+    $form = $null
+
+    [gc]::Collect()
+}
+
+function Get-TDDevice
+{
+    &lt;#
+    .SYNOPSIS
+    Retrieves all devices associated with a Telldus Live! account.
+
+    .DESCRIPTION
+    This command will list all devices associated with an Telldus Live!-account and their current status and other information.
+
+    .EXAMPLE
+    Get-TDDevice
+
+    .EXAMPLE
+    Get-TDDevice | Format-Table
+
+    #&gt;
+
+    if ($Telldus -eq $null) {
+        Write-Error &quot;You must first connect using the Connect-TelldusLive cmdlet&quot;
+        return
+    }
+
+    $PostActionURI=&quot;http://api.telldus.com/explore/doCall&quot;
+    $Action='list'
+    $SupportedMethods=19
+
+    $request = @{'group'='devices';'method'= $Action;'param[supportedMethods]'= $SupportedMethods;'responseAsXml'='xml'}
+
+    [xml] $ActionResults=Invoke-WebRequest -Uri $PostActionURI -WebSession $Global:Telldus -Method POST -Body $request
+
+    $Results=$ActionResults.devices.ChildNodes
+
+    foreach ($Result in $Results)
+    {
+        $PropertiesToOutput = @{
+                             'Name' = $Result.name;
+                             'State' = switch ($Result.state)
+                                       {
+                                             1 { &quot;On&quot; }
+                                             2 { &quot;Off&quot; }
+                                            16 { &quot;Dimmed&quot; }
+                                            default { &quot;Unknown&quot; }
+                                       }
+                             'DeviceID' = $Result.id;
+                             
+
+                             'Statevalue' = $Result.statevalue
+                             'Methods' = switch ($Result.methods)
+                                         {
+                                             3 { &quot;On/Off&quot; }
+                                            19 { &quot;On/Off/Dim&quot; }
+                                            default { &quot;Unknown&quot; }
+                                         }
+                             'Type' = $Result.type;
+                             'Client' = $Result.client;
+                             'ClientName' = $Result.clientName;
+                             'Online' = switch ($Result.online)
+                                        {
+                                            0 { $false }
+                                            1 { $true }
+                                        }
+                             }
+
+        $returnObject = New-Object -TypeName PSObject -Property $PropertiesToOutput
+
+        Write-Output $returnObject | Select-Object Name, DeviceID, State, Statevalue, Methods, Type, ClientName, Client, Online
+    }
+}
+
+function Set-TDDevice
+{
+
+    &lt;#
+    .SYNOPSIS
+    Turns a device on or off.
+
+    .DESCRIPTION
+    This command can set the state of a device to on or off through the Telldus Live! service.
+
+    .EXAMPLE
+    Set-TDDevice -DeviceID 123456 -Action turnOff
+
+    .EXAMPLE
+    Set-TDDevice -DeviceID 123456 -Action turnOn
+
+    .PARAMETER DeviceID
+    The DeviceID of the device to turn off or on. (Pipelining possible)
+
+    .PARAMETER Action
+    What to do with that device. Possible values are &quot;turnOff&quot; or &quot;turnOn&quot;.
+
+    #&gt;
+
+    [CmdletBinding()]
+    param(
+
+      [Parameter(Mandatory=$True, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+      [Alias('id')]
+      [string] $DeviceID,
+      [Parameter(Mandatory=$True)]
+      [ValidateSet(&quot;turnOff&quot;,&quot;turnOn&quot;)]
+      [string] $Action)
+
+
+    BEGIN {
+        if ($Telldus -eq $null) {
+            Write-Error &quot;You must first connect using the Connect-TelldusLive cmdlet&quot;
+            return
+        }
+
+        $PostActionURI = &quot;http://api.telldus.com/explore/doCall&quot;
+    }
+
+    PROCESS {
+
+        $request = @{'group'='device';'method'= $Action;'param[id]'= $DeviceID;'responseAsXml'='xml'}
+
+        [xml] $ActionResults=Invoke-WebRequest -Uri $PostActionURI -WebSession $Global:Telldus -Method POST -Body $request
+
+        $Results=$ActionResults.device.status -replace &quot;\s&quot;
+
+        Write-Verbose &quot;Doing action $Action on device $DeviceID. Result: $Results.&quot;
+    }
+}
+
+function Get-TDSensor
+{
+    &lt;#
+    .SYNOPSIS
+    Retrieves all sensors associated with a Telldus Live! account.
+
+    .DESCRIPTION
+    This command will list all sensors associated with an Telldus Live!-account and their current status and other information.
+
+    .EXAMPLE
+    Get-TDSensor
+
+    .EXAMPLE
+    Get-TDSensor | Format-Table
+
+    #&gt;
+
+    if ($Telldus -eq $null) {
+        Write-Error &quot;You must first connect using the Connect-TelldusLive cmdlet&quot;
+        return
+    }
+
+    $sensorListURI=&quot;http://api.telldus.com/explore/sensors/list&quot;
+    $PostActionURI=&quot;http://api.telldus.com/explore/doCall&quot;
+
+
+    $SensorList=Invoke-WebRequest -Uri $sensorListURI -WebSession $Global:Telldus
+    $SensorListForm=$SensorList.Forms
+
+    $ActionResults=$null
+
+    [xml] $ActionResults=Invoke-WebRequest -Uri $PostActionURI -WebSession $Global:Telldus -Method POST -Body $SensorListForm.Fields
+    [datetime] $TelldusDate=&quot;1970-01-01 00:00:00&quot;
+
+    $TheResults=$ActionResults.sensors.ChildNodes
+
+    foreach ($Result in $TheResults) {
+        $SensorInfo=$Result
+
+        $DeviceID=$SensorInfo.id.trim()
+        $SensorName=$SensorInfo.name.trim()
+        $SensorLastUpdated=$SensorInfo.lastupdated.trim()
+        $SensorLastUpdatedDate=$TelldusDate.AddSeconds($SensorLastUpdated)
+        $clientid=$SensorInfo.client.trim()
+        $clientName=$SensorInfo.clientname.trim()
+        $sensoronline=$SensorInfo.online.trim()
+
+        $returnObject = New-Object System.Object
+        $returnObject | Add-Member -Type NoteProperty -Name DeviceID -Value $DeviceID
+        $returnObject | Add-Member -Type NoteProperty -Name Name -Value $SensorName
+        $returnObject | Add-Member -Type NoteProperty -Name LocationID -Value $clientid
+        $returnObject | Add-Member -Type NoteProperty -Name LocationName -Value $clientName
+        $returnObject | Add-Member -Type NoteProperty -Name LastUpdate -Value $SensorLastUpdatedDate
+        $returnObject | Add-Member -Type NoteProperty -Name Online -Value $sensoronline
+
+        Write-Output $returnObject
+    }
+}
+
+function Get-TDSensorData
+{
+    &lt;#
+    .SYNOPSIS
+    Retrieves the sensordata of specified sensor.
+
+    .DESCRIPTION
+    This command will retrieve the sensordata associated with the specified ID.
+
+    .EXAMPLE
+    Get-TDSensorData -DeviceID 123456
+
+    .PARAMETER DeviceID
+    The DeviceID of the sensor which data you want to retrieve.
+
+    #&gt;
+
+    [CmdletBinding()]
+    param(
+
+      [Parameter(Mandatory=$True, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)] [Alias('id')] [string] $DeviceID)
+
+    BEGIN {
+        if ($Telldus -eq $null) {
+            Write-Error &quot;You must first connect using the Connect-TelldusLive cmdlet&quot;
+            return
+        }
+
+        $sensorDataURI=&quot;http://api.telldus.com/explore/sensor/info&quot;
+        $PostActionURI=&quot;http://api.telldus.com/explore/doCall&quot;
+    }
+
+    PROCESS {
+        $request = @{'group'='sensor';'method'= 'info';'param[id]'= $DeviceID;'responseAsXml'='xml'}
+
+        [xml] $ActionResults=Invoke-WebRequest -Uri $PostActionURI -WebSession $Global:Telldus -Method POST -Body $request
+        [datetime] $TelldusDate=&quot;1970-01-01 00:00:00&quot;
+
+        $SensorInfo=$ActionResults.sensor
+        $SensorData=$ActionResults.sensor.data
+
+        $SensorName=$SensorInfo.name.trim()
+        $SensorLastUpdated=$SensorInfo.lastupdated.trim()
+        $SensorLastUpdatedDate=$TelldusDate.AddSeconds($SensorLastUpdated)
+        $clientName=$SensorInfo.clientname.trim()
+        $SensorTemp=($SensorData | ? name -eq &quot;temp&quot;).value | select -First 1
+        $SensorHumidity=($SensorData | ? name -eq &quot;humidity&quot;).value | select -First 1
+
+        $returnObject = New-Object System.Object
+        $returnObject | Add-Member -Type NoteProperty -Name DeviceID -Value $DeviceID
+        $returnObject | Add-Member -Type NoteProperty -Name Name -Value $SensorName
+        $returnObject | Add-Member -Type NoteProperty -Name LocationName -Value $clientName
+        $returnObject | Add-Member -Type NoteProperty -Name Temperature -Value $SensorTemp
+        $returnObject | Add-Member -Type NoteProperty -Name Humidity -Value $SensorHumidity
+        $returnObject | Add-Member -Type NoteProperty -Name LastUpdate -Value $SensorLastUpdatedDate
+
+        Write-Output $returnObject
+    }
+}
+
+function Set-TDDimmer
+{
+    &lt;#
+    .SYNOPSIS
+    Dims a device to a certain level.
+
+    .DESCRIPTION
+    This command can set the dimming level of a device to through the Telldus Live! service.
+
+    .EXAMPLE
+    Set-TDDimmer -DeviceID 123456 -Level 89
+
+    .EXAMPLE
+    Set-TDDimmer -Level 180
+
+    .PARAMETER DeviceID
+    The DeviceID of the device to dim. (Pipelining possible)
+
+    .PARAMETER Level
+    What level to dim to. Possible values are 0 - 255.
+
+    #&gt;
+
+    [CmdletBinding()]
+    param(
+
+      [Parameter(Mandatory=$True,
+                 ValueFromPipeline=$true,
+                 ValueFromPipelineByPropertyName=$true,
+                 HelpMessage=&quot;Enter the DeviceID.&quot;)] [Alias('id')] [string] $DeviceID,
+
+      [Parameter(Mandatory=$True,
+                 HelpMessage=&quot;Enter the level to dim to between 0 and 255.&quot;)]
+      [ValidateRange(0,255)]
+      [int] $Level)
+
+
+    BEGIN {
+
+        if ($Telldus -eq $null) {
+            Write-Error &quot;You must first connect using the Connect-TelldusLive cmdlet&quot;
+            return
+        }
+
+        $PostActionURI=&quot;http://api.telldus.com/explore/doCall&quot;
+        $Action='dim'
+    }
+
+    PROCESS {
+
+        $request = @{'group'='device';'method'= $Action;'param[id]'= $DeviceID;'param[level]'= $Level;'responseAsXml'='xml'}
+
+        [xml] $ActionResults=Invoke-WebRequest -Uri $PostActionURI -WebSession $Global:Telldus -Method POST -Body $request
+
+        $Results=$ActionResults.device.status -replace &quot;\s&quot;
+
+        Write-Verbose &quot;Dimming device $DeviceID to level $Level. Result: $Results.&quot;
+    }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

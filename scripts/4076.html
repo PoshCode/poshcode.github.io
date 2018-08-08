@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="anonymous">
+    <title>Parse-ApacheRedirects - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Parse-ApacheRedirects</h1>
+<h3><a href="//scripts/4076.ps1">download</a></h3>
+<p>Parses an Apache redirect file to identify broken entries.
+All redirects will be followed and the final response code will be processed as follows:
+200 - OK
+401 - OK
+403 - Broken
+404 - Broken
+*** - Optionally remove with -RemoveUnknownErrors switch</p>
+<pre><code>Only Errors are written to the screen which include 403, 404, and unknown errors.
+If more verbosity is desired set the $VerbosePreference variable as follows:
+$VerbosePreference = 'Continue'
+
+Written for a Windows 8 system and hasn't been tested on anything else.
+</code></pre>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+    Parses an Apache redirect file to identify broken entries.
+.DESCRIPTION
+    All redirects will be followed and the final response code will be processed as follows:
+        200 - OK
+        401 - OK
+        403 - Broken
+        404 - Broken
+        *** - Optionally remove with -RemoveUnknownErrors switch
+
+    Only Errors are written to the screen which include 403, 404, and unknown errors.
+    If more verbosity is desired set the $VerbosePreference variable as follows:
+    $VerbosePreference = 'Continue'
+
+    Written for a Windows 8 system and hasn't been tested on anything else.
+.PARAMETER RedirectFile
+    Location of the Apache redirect file.
+.PARAMETER WebsiteDomain
+    Domain name of the website that uses the redirect file.
+.PARAMETER CreateNewFile
+    Will create a new redirect file by appending &quot;.Broken_Removed&quot; to the file name.
+    Entries which no longer work will be commented out with &quot;### BROKEN ###&quot;
+
+    Unknown Errors will NOT be removed unless the -RemoveUnknownErrors switch is used.
+.PARAMETER RemoveUnknownErrors
+    Can only be used if creating a new redirect file as it will 
+    comment out Unknown Errors
+.EXAMPLE
+    PS D:\&gt; .\Parse-ApacheRedirects.ps1 -RedirectFile D:\redirects.conf -WebsiteDomain website.domain.com -CreateNewFile -RemoveUnknownErrors
+    Line 2: ERROR Redirect 301 /somefile http://website.domain.com/newlocation.html
+    Line 3: ERROR Redirect 301 /anotherfile https://website2.domain.com/
+    Line 18: UNKNWN_ERROR: Redirect 301 /foo http://nothing.domain.com/
+    Line 18: SVR_RSPND:System.Net.WebException: The remote name could not be resolved: 'nothing.domain.com'
+    Line 18: Removing_From_New_Conf
+
+    New file available here:  D:\redirects.conf.Broken_Removed
+
+        Finished
+.NOTES
+    As mentioned in the Description, setting $VerbosePreference='Continue' will enable
+    all Write-Verbose commands in the script.
+
+    **This script was written on a Windows 8 system and hasn't been tested on anything else.**
+#&gt;
+
+Param(
+    [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][ValidateScript({Test-Path $_})][string]$RedirectFile,
+    [Parameter(Mandatory=$true)][ValidateNotNullOrEmpty()][ValidateScript({Resolve-DnsName $_})][string]$WebsiteDomain,
+    [switch]$CreateNewFile,
+    [switch]$RemoveUnknownErrors
+    )
+
+Function Invoke-ResourceRequest($Uri,[switch]$ReturnSC){
+    $RequestedWebsite = &quot;$WebsiteDomain$Uri&quot;
+    try{
+        $Response = Invoke-WebRequest -Uri $RequestedWebsite
+        if($Response.StatusCode -eq 200){ 
+            if($ReturnSC){ Return 200 }
+            else{ Return 0 }
+        }
+        else{ Return 1 }
+    }
+    Catch { 
+        [string]$eResponse = $_.Exception.ToString().split(&quot;`n&quot;)[0]
+        if($ReturnSC){ Return $eResponse }
+        else{
+            # allowing 401 and marking 403 &amp; 404 as failed
+            if($eResponse.Contains(&quot;(404) Not Found&quot;)){ Return 1 }
+            elseif($eResponse.Contains(&quot;(403) Forbidden&quot;)){ Return 1 }
+            elseif($eResponse.Contains(&quot;(401) Unauthorized&quot;)){ Return 0 }
+            # all other errors will issue another request to parse error
+            else{ Return 2 }
+        }
+    }
+} # End Invoke-ResourceRequest Function
+
+Function Parse-Uri([string]$LineObject,[int]$LineNumber){
+    if($LineObject.Contains(&quot;`&quot;&quot;)){
+        #Handle line with space(s)
+        $quotes = $LineObject.split(&quot;`&quot;&quot;).Count
+        if($quotes -eq 3){
+            #Only one set quoted
+            if($LineObject.IndexOf(&quot;`&quot;&quot;) -gt 13){ 
+                Write-Verbose &quot;Line $LineNumber`: Destination_Url_Quoted &quot;
+                Return $LineObject.Split(&quot; &quot;)[2]
+            }
+            else{ 
+                Write-Verbose &quot;Line $LineNumber`: Uri_Quoted &quot;
+                Return $LineObject.Split(&quot;`&quot;&quot;)[1]
+            }
+        }
+        elseif($quotes -eq 5){
+            Write-Verbose &quot;Line $LineNumber`: Uri_and_Destination_Url_Quoted &quot;
+            Return $LineObject.Split(&quot;`&quot;&quot;)[1]
+        }
+        else{ 
+            Write-Host &quot;Line $LineNumber`: QUOTE_ERROR_REMOVE_RULE&quot; -ForegroundColor Cyan
+            Write-Verbose &quot;Line $LineNumber`: Should_Only_Have_2_or_4_Quotes&quot;
+            Return &quot;&quot;
+        }
+    }
+    else{
+        Write-Verbose &quot;Line $LineNumber`: Normal &quot;
+        Return $LineObject.Split(&quot; &quot;)[2]
+    }
+} # End Parse-Uri Function
+
+# Process input parameters
+$RedirectContent = Get-Content -Path $RedirectFile
+
+if($CreateNewFile){ 
+    $NewFile = (Get-Item -Path $RedirectFile).FullName+&quot;.Broken_Removed&quot; 
+    if(Test-Path -Path $NewFile){
+        if((Read-Host &quot;New conf file exists. Overwrite? [y/n]&quot;).ToLower() -eq &quot;y&quot;){ Clear-Content -Path $NewFile }
+        else { 
+            Write-Host &quot;`n`tRename $NewFile and launch script again or choose `&quot;y`&quot; to overwrite.`n&quot; 
+            Exit
+        }
+    }
+}
+
+if((!($CreateNewFile)) -and ($RemoveUnknownErrors)){
+    Write-Host &quot;`n`tMust include the `&quot;CreateNewFile`&quot; switch if removing unknown errors.`n`tExiting script.`n&quot; -ForegroundColor Red
+    Exit
+}
+
+#Start main logic
+$i=1
+foreach($line in $RedirectContent){
+    [string]$RequestUri = &quot;&quot;
+    [int]$Check = 0
+    if($line.StartsWith(&quot;#&quot;)){ Write-Verbose &quot;Line $i`: Comment&quot; }
+    else{
+        if($line.Contains(&quot;Redirect&quot;)){
+            if($line.Substring(9,1) -eq &quot;3&quot;){
+                $RequestUri = Parse-Uri -LineObject $line -LineNumber $i
+            }
+            else{ # Need ficticious redirect number for parsing
+                $RequestUri = Parse-Uri -LineObject $line.tolower().Replace(&quot;redirect &quot;,&quot;redirect 000 &quot;) -LineNumber $i
+            }
+            if($RequestUri -eq &quot;&quot;){ $Check = 1 }
+        }
+        elseif($line.Length -le 3){
+            Write-Verbose &quot;Line $i`: Empty&quot;
+        }
+        else{
+            Write-Verbose &quot;Line $i`: NOT_REDIRECT_OR_EMPTY $line&quot;
+            Write-Verbose &quot;Line $i`: Rule_Was_NOT_Removed &quot;
+        }
+    }
+
+    if($RequestUri){ 
+        Write-Verbose &quot;Line $i`: Uri_found_making_request&quot;
+        $Check = Invoke-ResourceRequest -Uri $RequestUri 
+    }
+
+    if($Check -eq 2){ 
+        Write-Verbose &quot;Line $i`: Destination_Returned_an_Error &quot;
+        Write-Verbose &quot;Line $i`: Making_another_request_to_parse_response &quot;
+        $ResponseCode = Invoke-ResourceRequest -Uri $RequestUri -ReturnSC
+        Write-Host &quot;Line $i`: UNKNWN_ERROR`: $line&quot; -ForegroundColor Magenta
+        Write-Host &quot;Line $i`: SVR_RSPND`:$ResponseCode&quot; -ForegroundColor Magenta
+        if($RemoveUnknownErrors -and $CreateNewFile){ 
+            Write-Host &quot;Line $i`: Removing_From_New_Conf &quot; -ForegroundColor Magenta
+            $Check = 2
+        }
+        else{ $Check = $0 }
+    }
+    if($Check -eq 1){ Write-Host &quot;Line $i`: ERROR $line&quot; -ForegroundColor Red }
+
+    if($NewFile -ne $null){
+        if($Check -eq 0){ Out-File -FilePath $NewFile -InputObject $line -Append -Encoding ascii }
+        else{ Out-File -FilePath $NewFile -InputObject &quot;### BROKEN ### $line&quot; -Append -Encoding ascii }
+    }
+
+    $i++
+}
+if($NewFile){ Write-Host &quot;`nNew file available here: &quot;$NewFile -ForegroundColor Green }
+Write-Host &quot;`nFinished`n&quot; -ForegroundColor Green
+Exit
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

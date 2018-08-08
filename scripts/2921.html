@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Boe Prox">
+    <title>Get-FailingDrive - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-FailingDrive</h1>
+<h3><a href="//scripts/2921.ps1">download</a></h3>
+<p>Get-FailingDrive works with SMART to determine if your hard drive may be failing. If it determines that the hard drive might be failing, a warning is displayed along with a collection of information about the potentially failing drive. See my blog post for more details:
+http://learn-powershell.net/2011/08/20/checking-for-failing-hard-drives-using-s-m-a-r-t-and-powershell/</p>
+<pre><code class="language-posh">Function Get-FailingDrive {
+&lt;#
+.SYNOPSIS
+    Checks for any potentially failing drives and reports back drive information.
+    
+.DESCRIPTION
+    Checks for any potentially failing drives and reports back drive information. This only works
+    against local hard drives using SMART technology. Reason values and their meanings can be found
+    here: http://en.wikipedia.org/wiki/S.M.A.R.T#Known_ATA_S.M.A.R.T._attributes
+    
+.PARAMETER Computer
+    Remote or local computer to check for possible failed hard drive.
+    
+.PARAMETER Credential
+    Provide alternate credential to perform query.
+
+.NOTES
+    Author: Boe Prox
+    Version: 1.0
+    http://learn-powershell.net
+
+.EXAMPLE
+    Get-FailingDrive
+    
+    WARNING: ST9320320AS ATA Device may fail!
+
+
+    MediaType       : Fixed hard disk media
+    InterFace       : IDE
+    DriveName       : ST9320320AS ATA Device
+    Reason          : 1
+    SerialNumber    : 202020202020202020202020533531584e5a4d50
+    FailureImminent : True
+    
+    Description
+    -----------
+    Command ran against the local computer to check for potential failed hard drive.
+#&gt;
+    [cmdletbinding()]
+    Param (
+        [parameter(ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$Computername,
+        [parameter()]
+        [System.Management.Automation.PSCredential]$Credential
+    )
+    Begin {
+        $queryhash = @{}
+        $BadDriveHash = @{}
+    }
+    Process {
+        ForEach ($Computer in $Computername) {
+            If ($PSBoundParameters['Computer']) {
+                $queryhash['Computername'] = $Computer
+                $BadDriveHash['Computername'] = $Computer
+            } Else {
+                $queryhash['Computername'] = $Env:Computername
+                $BadDriveHash['Computername'] = $Env:Computername            
+            }
+            If ($PSBoundParameters['Credential']) {
+                $queryhash['Credential'] = $Credential
+                $BadDriveHash['Credential'] = $Credential
+            }            
+            Write-Verbose &quot;Creating SplatTable&quot;
+            $queryhash['NameSpace'] = 'root\wmi'
+            $queryhash['Class'] = 'MSStorageDriver_FailurePredictStatus'
+            $queryhash['Filter'] = &quot;PredictFailure='False'&quot;
+            $queryhash['ErrorAction'] = 'Stop'
+            $BadDriveHash['Class'] = 'win32_diskdrive'
+            $BadDriveHash['ErrorAction'] = 'Stop'
+            [regex]$regex = &quot;(?&lt;DriveName&gt;\w+\\[A-Za-z0-9_]*)\w+&quot;
+            Try {
+                Write-Verbose &quot;Checking for failed drives&quot;
+                Get-WmiObject @queryhash | ForEach {
+                    $drive = $regex.Matches($_.InstanceName) | ForEach {$_.Groups['DriveName'].value}
+                    Write-Verbose &quot;Gathering more information about failing drive&quot;
+                    $BadDrive = gwmi @BadDriveHash | Where {$_.PNPDeviceID -like &quot;$drive*&quot;}
+                    If ($BadDrive) {
+                        Write-Warning &quot;$($BadDriveHash['Computername']): $($BadDrive.Model) may fail!&quot;
+                        New-Object PSObject -Property @{
+                            DriveName = $BadDrive.Model
+                            FailureImminent  = $_.PredictFailure
+                            Reason = $_.Reason
+                            MediaType = $BadDrive.MediaType
+                            SerialNumber = $BadDrive.SerialNumber
+                            InterFace = $BadDrive.InterfaceType
+                            Partitions = $BadDrive.Partitions
+                            Size = $BadDrive.Size
+                            Computer = $BadDriveHash['Computername']
+                        }
+                    }
+                }
+            } Catch {
+                Write-Warning &quot;$($Error[0])&quot;
+            }
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

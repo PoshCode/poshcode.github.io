@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Kenneth C Mazie">
+    <title>DataStoreBalancer.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>DataStoreBalancer.ps1</h1>
+<h3><a href="//scripts/2552.ps1">download</a></h3>
+<p>Scans VM datastores and moves  a single VM from the most heavily loaded to the most lightly loaded.  See internal documentation for more.</p>
+<pre><code class="language-posh">#======================================================================================
+#              File Name : DataStoreBalancer.ps1
+#        Original Author : Kenneth C. Mazie 
+#            Description : Scans VM datastores and moves  a single VM from the most heavily
+#                        :   loaded to the most lightly loaded.
+#                        :
+#                  Notes : This script was cobbled together from various sources around the
+#                        :   Internet and adjusted to suit my purposes.  Original scripts at
+#                        :   http://poshcode.org/2449 and http://www.vcritical.com/2009/10/powershell-prevents-datastore-emergencies/
+#                        :
+#              Operation : Normal operation is with no command line options.  Script may be  
+#                        :   fed from Virtual Center alarms to automatically start clearing
+#                        :   VM guests from conjested datastores.  As written will run a single
+#                        :   time and exit.  May be looped via internal or external triggers
+#                        :   if desired, additional coding is required.
+#                        : The script creates a new Windows Application Event Log called
+#                        :   &quot;PowerShellScripts&quot; and writes status to it.  Also optional  
+#                        :   status to the screen is available. 
+#                        : To call from Virtual Center to automatically relocate a guest VM 
+#                        :   when a datastore goes into alarm set an alarm to run a program
+#                        :   and use a command line similar to the following:
+#                        :   &quot;c:\windows\system32\cmd.exe&quot; &quot;/c echo.|powershell.exe -nologo -noprofile -noninteractive c:\scripts\datastoremigrator.ps1&quot;
+#                        :   More on this at http://www.vcritical.com/2009/10/powershell-prevents-datastore-emergencies/
+#                        :
+#               Warnings : Remove the comment from the WHATIF to enable the move
+#                        : 
+#	               Legal : Public Domain.  Modify and redistribute freely.  No rights reserved.
+#              	         : SCRIPT PROVIDED &quot;AS IS&quot; WITHOUT WARRANTIES OR GUARANTEES OF ANY KIND.
+#                        : USE AT YOUR OWN RISK. NO TECHNICAL SUPPORT PROVIDED.
+#                        :
+#         Last Update by : Kenneth C. Mazie 
+#        Version History : v1.0 - 02-18-11 - Original 
+#         Change History : v1.1 - 00-00-00 -            
+#
+#=======================================================================================
+
+#--[ Clear the screen, disable error notification, and create the event log ]--
+Clear-Host 
+$ErrorActionPreference = &quot;SilentlyContinue&quot;
+New-EventLog Application PowerShellScripts
+$EventID = &quot;33333&quot;  #--[ Set whatever Event ID number here that you like ]--
+
+#--[ Load the VMWare snapin if not already ]--
+$out = Get-PSSnapin | Where-Object {$_.Name -like &quot;vmware.vimautomation.core&quot;}
+if ($out -eq $null){Add-PSSnapin vmware.vimautomation.core}
+
+#--[ Connect to the Virtual Center server ]--
+Connect-VIServer -Server &lt;YourVCenterServer&gt; -User &lt;UserName&gt; -Password &lt;Password&gt;
+
+#--[ Write status to Windows event log ]--
+#Write-Output &quot;`n$(Get-Date)- Script started`n&quot;
+Write-EventLog -LogName Application -Source PowerShellScripts -EntryType Information -EventId $EventID -Message &quot;`n$(Get-Date) - VMWare Datastore balancing script started`n&quot;
+
+#--[ Get the list of valid datastores and pick the ones with the most and least free space.
+$DataStores = Get-datastore | Sort-Object FreeSpaceMB | Where-Object {$_.Name -like &quot;A*&quot; -or $_.Name -like &quot;B*&quot; -and $_.Name -notmatch &quot;B202_Perf&quot;}
+$DSInfo = $DataStores | Select-Object Name,@{n=&quot;CapacityGB&quot;;e={[math]::round(($_.CapacityMB/1024))}},@{n=&quot;FreeSpaceGB&quot;;e={[math]::round(($_.FreeSpaceMB/1024))}},@{n=&quot;FreeSpacePercent&quot;;e={[math]::round(($_.FreeSpaceMB/$_.CapacityMB*100))}} | Sort-Object FreeSpacePercent
+$DSLeastFree = $DSInfo | Select-Object -first 1
+$DSMostFree  = $DSInfo | Select-Object -last  1
+
+#--[ Write status to Windows event log ]--
+#Write-Output $DSLeastFree #| Select-Object FreeSpacePercent
+#Write-Output $DSMostFree
+Write-EventLog -LogName Application -Source PowerShellScripts -EntryType Information -EventId $EventID -Message &quot;`n $(Get-Date) - The $(($DSLeastFree).Name) Datastore has the least free space and The $(($DSMostFree).Name) Datastore has the most free space available.`n&quot;
+
+#--[ Pick the largest VM on the datastore to relocate that does not match the exclusion ]--
+#--[ NOTE: Swap these lines to switch to using a datastore targeted from a VirtualCenter alarm. ]--
+$SourceVMToMove = Get-VM -Datastore $DSLeastFree | Where-Object {$_.Name -notlike &quot;P*&quot;} | select Name, @{ Name=&quot;Disks&quot;; Expression={ ($_ | get-harddisk | measure-object -property CapacityKB -sum).Sum }} | sort Disks -descending | Select -first 1 
+#$SourceVMToMove = Get-VM -Datastore $env:VMWARE_ALARM_TARGET_NAME | Where-Object {$_.Name -notlike &quot;P*&quot;} | select Name, @{ Name=&quot;Disks&quot;; Expression={ ($_ | get-harddisk | measure-object -property CapacityKB -sum).Sum }} | sort Disks -descending | Select -first 1 
+
+#--[ Write status to Windows event log ]--
+#Write-Output &quot;`n $(Get-Date)- Moving $($SourceVMToMove.Name) from $(($DSTLeastFree).Name) to $(($DSTMostFree).Name)`n&quot;
+Write-EventLog -LogName Application -Source PowerShellScripts -EntryType Information -EventId $EventID -Message &quot;`n $(Get-Date) - Moving $($SourceVMToMove.Name) from $(($DSLeastFree).Name) to $(($DSMostFree).Name)`n&quot;
+
+#--[ svMotion the VM to the datastore with the most free space ]--
+Move-VM -VM $SourceVMToMove.Name -Datastore ($DSMostFree).Name -Confirm:$false -whatif  #--[ Comment out the WHATIF to enable the move ]--
+
+#--[ Write status to Windows event log ]--
+#Write-Output &quot;`n$(Get-Date)- Script finished`n&quot;
+Write-EventLog -LogName Application -Source PowerShellScripts -EntryType Information -EventId $EventID -Message &quot;`n $(Get-Date) - VMWare Datastore balancing script completed`n&quot;
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

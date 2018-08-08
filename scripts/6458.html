@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="terran">
+    <title>Get-MacAddress - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-MacAddress</h1>
+<h3><a href="//scripts/6458.ps1">download</a></h3>
+<p>Found at <strong>https://github.com/gregzakh/alt-ps/blob/master/Get-MacAddress.ps1</strong></p>
+<pre><code class="language-posh">function Get-MacAddress {
+  &lt;#
+    .SYNOPSIS
+        Gets MAC address.
+    .NOTES
+        Alternative ways to do same.
+        
+        Example 1:
+        $asm = Add-Type -MemberDefinition @'
+          [DllImport(&quot;rpcrt4.dll&quot;)]
+          public static extern Int32 UuidCreateSequential(
+              out Guid guid
+          );
+        '@ -Name Uuid -NameSpace MacAddress -PassThru
+        $guid = New-Object Guid
+        
+        if (($res = $asm::UuidCreateSequential([ref]$guid)) -ne 0) {
+          (New-Object ComponentModel.Win32Exception($res)).Message
+          break
+        }
+        [Regex]::Replace(
+          $guid.Guid.Split('-')[-1], '.{2}', '$0-'
+        ).TrimEnd('-')
+        
+        Example 2:
+        Get-WmiObject Win32_NetworkAdapter | Where-Object {
+          $_.MacAddress
+        } | ForEach-Object {
+          New-Object PSObject -Property @{
+            Description = $_.Description
+            Service     = $_.ServiceName
+            MACAddress  = $_.MACAddress
+          }
+        } | Select-Object Description, Service, MACAddress
+        
+        Example 3:
+        Get-WmiObject Win32_NetworkAdapterConfiguration | Where-Object {
+          $_.MacAddress
+        } | ForEach-Object {
+          New-Object PSObject -Property @{
+            Description = $_.Description
+            Id          = $_.SettingID
+            MACAddress  = $_.MACAddress
+          }
+        } | Select-Object Description, Id, MACAddress
+        
+        Example 4:
+        $mac, $nic = (getmac /fo csv | Where-Object {
+          ![String]::IsNullOrEmpty($_) -and $_ -match '\w{2}\-'
+        }).Split(',') | ForEach-Object {$_.Trim('&quot;')}
+        New-Object PSObject -Property @{
+          Interface  = $nic.Substring(($$ = $nic.IndexOf('{')), $nic.Length - $$)
+          MACAddress = $mac
+        }
+        
+        Example 5:
+        $key = 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*'
+        Get-ItemProperty $key | Where-Object {
+          $_.DhcpIpAddress -and $_.DhcpIpAddress -ne '0.0.0.0'
+        } | Select-Object DhcpIpAddress | ForEach-Object {
+          New-Object PSObject -Property @{
+            IPAddress  = $_.DhcpIpAddress
+            MACAddress = ([Regex]'(\w{2}\-){5}\w{2}').Match((
+              nbtstat -a $_.DhcpIpAddress
+            )).Value
+          }
+        }
+        
+        Example 6:
+        ([Regex]'(\w{2}\-){5}\w{2}').Match((
+            ipconfig /all
+        )).Value
+        
+        Example 7:
+        ([Regex]'(\w{2}\s){6}').Match((
+            route print
+        )).Value.Trim().Replace([Char]32, '-')
+  #&gt;
+  
+  #there is no access denied error by path Global\.net clr networking
+  #in CLR v4 for limited user, so...
+  if (($clr = $PSVersionTable.CLRVersion.Major) -ge 4) {
+    [Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() |
+    Where-Object {
+      $_.OperationalStatus -eq [Net.NetworkInformation.OperationalStatus]::Up
+    } | ForEach-Object {
+      if (![String]::IsNullOrEmpty((
+        $$ = $_.GetPhysicalAddress().ToString()
+      ))) {
+        New-Object PSObject -Property @{
+          Id         = $_.Id
+          MACAddress = [Regex]::Replace($$, '.{2}', '$0-').TrimEnd('-')
+        }
+      }
+    } | Select-Object Description, Id, MACAddress | Format-List
+  }
+  elseif ($clr -eq 2) {
+    @(
+      [Runtime.InteropServices.CallingConvention],
+      [Runtime.InteropServices.Marshal],
+      [Reflection.BindingFlags],
+      [Reflection.Emit.OpCodes]
+    ) | ForEach-Object {
+      $keys = ($ta = [PSObject].Assembly.GetType(
+        'System.Management.Automation.TypeAccelerators'
+      ))::Get.Keys
+      $collect = @()
+    }{
+      if ($keys -notcontains $_.Name) {
+        $ta::Add($_.Name, $_)
+      }
+      $collect += $_.Name
+    }
+    
+    function Get-LastError {
+      param(
+        [Int32]$ErrorCode = [Marshal]::GetLastWin32Error()
+      )
+      
+      [PSObject].Assembly.GetType(
+        'Microsoft.PowerShell.Commands.Internal.Win32Native'
+      ).GetMethod(
+        'GetMessage', [BindingFlags]40
+      ).Invoke(
+        $null, @($ErrorCode)
+      )
+    }
+    
+    function private:Invoke-FreeLibrary {
+      param(
+        [Parameter(Mandatory=$true)]
+        [IntPtr]$ModuleHandle
+      )
+      
+      [void][Linq.Enumerable].Assembly.GetType(
+        'Microsoft.Win32.UnsafeNativeMethods'
+      ).GetMethod(
+        'FreeLibrary', [BindingFlags]40
+      ).Invoke($null, @($ModuleHandle))
+    }
+    
+    function private:Get-ProcAddress {
+      param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [ValidateNotNullOrEmpty()]
+        [String]$Module,
+        
+        [Parameter(Mandatory=$true, Position=1)]
+        [ValidateNotNullOrEmpty()]
+        [String]$Function
+      )
+      
+      [Data.Rule].Assembly.GetType(
+        'System.Data.Common.SafeNativeMethods'
+      ).GetMethods(
+        [BindingFlags]40
+      ) | Where-Object {
+        $_.Name -cmatch '\AGet(ProcA|ModuleH)'
+      } | ForEach-Object {
+        Set-Variable $_.Name $_
+      }
+      
+      if (($ptr = $GetModuleHandle.Invoke(
+        $null, @($Module)
+      )) -eq [IntPtr]::Zero) {
+        if (($mod = [Regex].Assembly.GetType(
+          'Microsoft.Win32.SafeNativeMethods'
+        ).GetMethod('LoadLibrary').Invoke(
+          $null, @($Module)
+        )) -eq [IntPtr]::Zero) {
+          Write-Warning &quot;$(Get-LastError)&quot;
+          break
+        }
+        $ptr = $GetModuleHandle.Invoke($null, @($Module))
+      }
+      
+      $GetProcAddress.Invoke($null, @($ptr, $Function)), $mod
+    }
+    
+    function private:Set-Delegate {
+      param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [ValidateScript({$_ -ne [IntPtr]::Zero})]
+        [IntPtr]$ProcAddress,
+        
+        [Parameter(Mandatory=$true, Position=1)]
+        [ValidateNotNullOrEmpty()]
+        [String]$Delegate
+      )
+      
+      $proto = Invoke-Expression $Delegate
+      $method = $proto.GetMethod('Invoke')
+      
+      $returntype = $method.ReturnType
+      $paramtypes = $method.GetParameters() |
+                                    Select-Object -ExpandProperty ParameterType
+      
+      $holder = New-Object Reflection.Emit.DynamicMethod(
+        'Invoke', $returntype, $paramtypes, $proto
+      )
+      $il = $holder.GetILGenerator()
+      0..($paramtypes.Length - 1) | ForEach-Object {
+        $il.Emit([OpCodes]::Ldarg, $_)
+      }
+      
+      switch ([IntPtr]::Size) {
+        4 { $il.Emit([OpCodes]::Ldc_I4, $ProcAddress.ToInt32()) }
+        8 { $il.Emit([OpCodes]::Ldc_I8, $ProcAddress.ToInt64()) }
+      }
+      $il.EmitCalli(
+        [OpCodes]::Calli, [CallingConvention]::StdCall, $returntype, $paramtypes
+      )
+      $il.Emit([OpCodes]::Ret)
+      
+      $holder.CreateDelegate($proto)
+    }
+    
+    $ptr, $mod = Get-ProcAddress iphlpapi SendARP
+    $SendARP = Set-Delegate $ptr `
+                              '[Func[UInt32, UInt32, [Byte[]], [Byte[]], Int32]]'
+    
+    $key = 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*'
+    Get-ItemProperty $key | Where-Object {
+      $_.DhcpIpAddress -and $_.DhcpIpAddress -ne '0.0.0.0'
+    } | ForEach-Object {
+      $inet_addr = [Regex].Assembly.GetType(
+        'System.Net.UnsafeNclNativeMethods+OSSOCK'
+      ).GetMethod('inet_addr', [BindingFlags]40)
+    }{
+      $adr = [BitConverter]::ToUInt32(
+        [BitConverter]::GetBytes(
+          $inet_addr.Invoke($null, @($_.DhcpIpAddress)
+        )), 0
+      )
+      $mac = New-Object Byte[] 6
+      $len = [BitConverter]::GetBytes($mac.Length)
+      
+      if (($ret = $SendARP.Invoke($adr, 0, $mac, $len)) -ne 0) {
+        Write-Warning &quot;$(Get-LastError $ret)&quot;
+        break
+      }
+      
+      New-Object PSObject -Property @{
+        Id         = $_.PSChildName
+        MACAddress = ($mac | ForEach-Object {'{0:X2}' -f $_}) -join '-'
+      }
+    }
+    
+    if ($mod) { Invoke-FreeLibrary $mod }
+    $collect | ForEach-Object { [void]$ta::Remove($_) }
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

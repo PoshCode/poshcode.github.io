@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="mtown_nerd">
+    <title>Map a Network Drive - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Map a Network Drive</h1>
+<h3><a href="//scripts/2058.ps1">download</a></h3>
+<p>A simple function for connecting a UNC path to a specified Windows drive letter.  Some other things I'd like to see added:</p>
+<ol>
+<li>Better error and exception handling</li>
+<li>Pre-process logic so it can handle input from the pipeline for better automation</li>
+<li>Logic to dynamically use the next available network drive when one isn't</li>
+</ol>
+<pre><code class="language-posh">function MapNetDrive 
+{
+    param(
+    
+    #Non-Boolean parameters (Values)
+    #
+    [Parameter(Position=0,Mandatory=$true)]
+    [string]$DriveLetter=&quot;Z:&quot;,
+    [Parameter(Position=1,Mandatory=$true)]
+    [string]$Path,
+    
+    #Boolean switches (On/Off)
+    #
+    [Parameter(Position=2,Mandatory=$false)]
+    [switch]$Credentials,
+    [Parameter(Position=3,Mandatory=$false)]
+    [switch]$Stay,
+    [Parameter(Position=4,Mandatory=$false)]
+    [switch]$Force
+    )
+    
+    #Creates new WScript.Network object called &quot;$map&quot; and allows it to access MapNetworkDrive(), EnumNetworkDrives(),
+    #and RemoveNetworkDrive() methods.
+    #
+    $map=New-Object -ComObject WScript.Network
+    
+    #Uses EnumNetworkDrives() and &quot;-contains&quot; operator to determine if specified drive already exists.  If so, and &quot;$Force&quot;
+    #parameter is not present to force an override, it outputs a message to the user.  Then uses &quot;Try/Catch&quot; statement to 
+    #catch any other general errors that might prevent removal of drive.
+    #
+    if($map.EnumNetworkDrives() -contains $DriveLetter) 
+    {
+        if(!$Force) 
+        {throw &quot;Can't map $driveLetter because it's already mapped.  Use -Force to override.&quot;}
+        
+        try 
+        {$map.RemoveNetworkDrive($DriveLetter,$Force.ToBool(),$Stay.ToBool())}
+            catch 
+            {
+            Write-Error -Exception $_.Exception.InnerException -Message &quot;Error removing '$driveLetter'
+                $($_.Exception.InnerException.InnerException.Message)&quot;
+            }
+    }   
+    
+    #Maps new network drive, checking first if &quot;$Credentials&quot; parameter is passed.  If so, a System.Management.Automation.PSCredential object
+    #called &quot;$creds&quot; is created and instantiated to result value of &quot;Get-Credential&quot; Cmdlet.  Because of its type, &quot;$creds&quot; has access to the
+    #individual &quot;UserName&quot; and &quot;Password&quot; property values when the user submits them at the prompt.
+    #
+    #&quot;$Stay&quot; is placeholder for &quot;bUpdateProfile&quot; argument of the MapNetworkDrive() method, which determines whether the new
+    #drive is saved as part of the user's profile.  It's value here is determined by the presence of the &quot;$Stay&quot; switch.
+    #    
+    if($Credentials) 
+    {
+       [System.Management.Automation.PSCredential]$creds=$(Get-Credential) #-Credential $($(Get-WmiObject -Class Win32_ComputerSystem).UserName)
+       $map.MapNetworkDrive($DriveLetter,$Path,$Stay.ToBool(),$creds.UserName,$creds.GetNetworkCredential().Password)
+    } 
+        else {$map.MapNetworkDrive($DriveLetter,$Path,$Stay.ToBool())} 
+       
+    #Opens newly created drive letter in Windows Explorer   
+    #
+    $explore=New-Object -ComObject Shell.Application
+    $explore.Open($DriveLetter)
+}   
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

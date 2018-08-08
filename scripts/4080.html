@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>ConvertFrom-Property 3.7 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ConvertFrom-Property 3.7</h1>
+<h3><a href="//scripts/4080.ps1">download</a> - <a href="//scripts/3546.md">parent</a></h3>
+<p>ConvertFrom-PropertyString 3.7 can convert ini files, property files, and other flat key-value data strings into PSObjects.</p>
+<ul>
+<li>v2 changed the output so that if there are multiple instances of the same key, we collect the values in an array.</li>
+<li>v3 offers the ability to instead automatically create a new object when we encounter a second instance of any key</li>
+<li>v3.5 improves parsing of RecordSeparators into a PSName property</li>
+<li>v3.7 is a minor update to support properties without values</li>
+</ul>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+   Converts data from flat or single-level property files into PSObjects
+.DESCRIPTION
+   Converts delimited string data such as .ini files, or the format-list output of PowerShell, into objects
+.EXAMPLE
+   netsh http show sslcert | join-string &quot;`n&quot; | 
+   ConvertFrom-PropertyString -ValueSeparator &quot; +: &quot; -AutomaticRecords |
+      Format-Table Application*, IP*, Certificate*
+            
+   Converts the output of netsh show into pseudo-objects, and then uses Format-Table to display them
+.EXAMPLE
+   ConvertFrom-PropertyString config.ini
+   
+   Reads in an ini file (which has key=value pairs), using the default settings
+
+   .EXAMPLE
+   @&quot;
+   ID:3468
+   Type:Developer
+   StartDate:1998-02-01
+   Code:SWENG3
+   Name:Baraka
+
+   ID:11234
+   Type:Management
+   StartDate:2005-05-21
+   Code:MGR1
+   Name:Jax
+   &quot;@ |ConvertFrom-PropertyString -sep &quot;:&quot; -RecordSeparator &quot;\r\n\s*\r\n&quot; | Format-Table
+
+
+   Code             StartDate       Name            ID              Type           
+   ----             ---------       ----            --              ----           
+   SWENG3           1998-02-01      Baraka          3468            Developer      
+   MGR1             2005-05-21      Jax             11234           Management     
+      
+   Reads records from a key:value string with records separated by blank lines.
+   NOTE that in this example you could also have used -AutomaticRecords or -Count 5 instead of specifying a RecordSeparator
+.EXAMPLE
+   @&quot;
+   Name=Fred
+   Address=Street1
+   Number=123
+   Name=Janet
+   Address=Street2
+   Number=345 
+   &quot;@ | ConvertFrom-PropertyString -RecordSeparator &quot;`n(?=Name=)&quot;
+
+   Reads records from a key=value string and uses a look-ahead record separator to start a new record whenever &quot;Name=&quot; is encountered
+   
+   NOTE that in this example you could have used -AutomaticRecords or -Count 3 instead of specifying a RecordSeparator 
+.EXAMPLE
+   ConvertFrom-PropertyString data.txt -ValueSeparator &quot;:&quot;
+   
+   Reads in a property file which has key:value pairs
+.EXAMPLE
+   Get-Content data.txt -RecordSeparator &quot;`r`n`r`n&quot; | ConvertFrom-PropertyString -ValueSeparator &quot;;&quot;
+   
+   Reads in a property file with key;value pairs, and records separated by blank lines, and converts it to objects
+.EXAMPLE
+   ls *.data | ConvertFrom-PropertyString
+   
+   Reads in a set of *.data files which have an object per file defined with key:value pairs of properties, one-per line.
+.EXAMPLE
+   ConvertFrom-PropertyString data.txt -RecordSeparator &quot;^;(.*?)\r*\n&quot; -ValueSeparator &quot;;&quot;
+   
+   Reads in a property file with key:value pairs, and sections with a header that starts with the comment character ';'
+   
+.NOTES
+   3.6   2013 Apr 6
+         - Add AllowEmptyValue parameter to supports data that just has a header and a list of properties (without values)
+   3.5   2012 July 26
+         - Changed defaults so that lines which don't have a -ValueSeparator in them don't get output
+         - Changed pipelining so that it works more the way I expect it to, nowadays
+         - Fixed some problems with -RecordSeparator getting truncated to a single character when you use a capture group and add it as a PSName property
+         Clearly I need to write some test cases around this to make sure that I'm not breaking functionality, because these changes felt like things that should have already worked...
+   3.0   2010 Aug 4 
+         - Renamed most of the parameters because I couldn't tell which did what from the Syntax help
+         - Added a -AutomaticRecords switch which creates new output objects whenevr it encounters a duplicated property
+         - Added a -SimpleOutput swicth which prevents the output of the PSChildName property
+         - Added a -CountOfPropertiesPerRecord parameter which allows splitting input by count instead of regex or automatic
+   2.0   2010 July 9 http://poshcode.org/get/1956
+         - changes the output so that if there are multiple instances of the same key, we collect the values in an array
+   1.0   2010 June 15 http://poshcode.org/get/1915
+         - Initial release
+#&gt;
+# function ConvertFrom-PropertyString {
+[CmdletBinding(DefaultParameterSetName=&quot;Data&quot;)]
+param(
+   # The text to be parsed
+   [Parameter(Position=99, Mandatory=$true, ValueFromPipeline=$true, ParameterSetName=&quot;Data&quot;)]
+   [Alias(&quot;Data&quot;,&quot;Content&quot;,&quot;IO&quot;)]
+   [AllowEmptyString()]
+   [string]$InputObject,
+
+   # A file containing text to be parsed (so you can pipeline files to be processed)
+   [Parameter(Position=0, Mandatory=$true, ValueFromPipelineByPropertyName=$true, ParameterSetName=&quot;File&quot;)]
+   [Alias(&quot;PSPath&quot;)]
+   [string]$FilePath,
+
+   # The value separator string used between name=value pairs. Allows regular expressions.
+   # Typical values are &quot;=&quot; or &quot;:&quot;
+   # Defaults to &quot;=&quot;   
+   [Parameter(ValueFromPipeline=$false, ValueFromPipelineByPropertyName=$false)]
+   [Alias(&quot;VS&quot;,&quot;Separator&quot;)]
+   [String]$ValueSeparator=&quot;\s*(?:=|:)\s*&quot;,
+
+   # The property separator string used between sets of name=value pairs. Allows regular expressions.
+   # Typical values are &quot;\n&quot; or &quot;\n\n&quot; or &quot;\n\s*\n&quot;
+   # Defaults to &quot;\n\s*\n?&quot;    
+   [Parameter(ValueFromPipeline=$false, ValueFromPipelineByPropertyName=$false)]
+   [Alias(&quot;PS&quot;,&quot;Delimiter&quot;)]
+   [String]$PropertySeparator='(?:\s*\n+\s*)+',
+
+   # The record separator string is used between records or sections in a text file.
+   # Typical values are &quot;\n\s*\n&quot; or &quot;\n\[(.*)\]\s*\n&quot;
+   # Defaults to &quot;(?:\n|^)\[([^\]]+)\]\s*\n&quot; (the correct value for ini files).
+   
+   # To support named sections or records, make sure to use a regular expression here that has a capture group defined.
+   [Parameter(ValueFromPipeline=$false, ValueFromPipelineByPropertyName=$false)]
+   [Alias(&quot;RS&quot;)]
+   [String]$RecordSeparator='(?:\n|^)\[([^\]]+)\]\s*\n',
+   
+   # Supports guessing when a new record starts based on the repetition of a property name. You can use this whenever your input has multiple records and the properties are always in the same order.
+   [Parameter(ParameterSetName=&quot;Data&quot;)]
+   [Alias(&quot;MultiRecords&quot;,&quot;MR&quot;,&quot;MultipleRecords&quot;,&quot;AR&quot;,&quot;AutoRecords&quot;)]
+   [Switch]$AutomaticRecords,
+   
+   # Separate the input into groups of a certain number of properties.
+   # If your input file has no specific record separator, you can usually match the first property by using a look-ahead expression *(See Example 2)*
+   # However, if the properties aren't in the same order each time or regular expressions make you queasy, and each of your records have the same number of properties on each record, you can use this to separate them by count.   
+   [Parameter()]
+   [int]$CountOfPropertiesPerRecord,
+   
+   # Prevent outputting the PSName parameter which indicates the source of the object when pipelineing file names
+   [Parameter()]
+   [Switch]$SimpleOutput,
+   
+   # Discard the first record, assuming that it is merely some lines of header introductory text
+   [Parameter()]
+   [Switch]$HasHeader,
+   
+   # Discard the last record, assuming that it is merely some lines of footer summary text
+   [Parameter()]
+   [Switch]$HasFooter,
+
+   # Allow Empty Values if there's no value separator
+   [switch]$AllowEmptyValue
+)
+begin {
+   function new-output {
+      [CmdletBinding()]
+      param(
+         [Switch]$SimpleOutput
+      ,
+         [AllowNull()][AllowEmptyString()]
+         [String]$Key
+      ,
+         [AllowNull()][AllowEmptyString()]
+         $FilePath
+      )
+      end {
+         if(!$SimpleOutput -and (&quot;&quot; -ne $Key))  { @{&quot;PSName&quot;=$key} }
+         elseif(!$SimpleOutput -and $FilePath)  { @{&quot;PSName&quot;=((get-item $FilePath).PSChildName)} }
+         else                                   { @{} }
+      }
+   }
+
+   function out-output {
+      [CmdletBinding()]
+      param([Hashtable]$output)
+      end {
+         ## If we made arrays out of single values, unwrap those
+         foreach($k in $Output.Keys | Where { @($Output.$_).Count -eq 1 } ) {
+            $Output.$k = @($Output.$k)[0]
+         }
+         if($output.Count) {
+            New-Object PSObject -Property $output
+         }
+      }
+   }
+   $OutputCount = 0
+   [String]$InputString = [String]::Empty
+
+   Write-Verbose &quot;Setting up the regular expressions: `n`tRecord:   '$RecordSeparator'  `n`tProperty: '$PropertySeparator'  `n`tValue:    '$ValueSeparator'&quot;
+   [Regex]$ReRecordSeparator   = New-Object Regex ([System.String]&quot;\s*$RecordSeparator\s*&quot;),   ([System.Text.RegularExpressions.RegexOptions]&quot;Multiline,IgnoreCase,Compiled&quot;)
+   [Regex]$RePropertySeparator = New-Object Regex ([System.String]&quot;\s*$PropertySeparator\s*&quot;), ([System.Text.RegularExpressions.RegexOptions]&quot;Multiline,IgnoreCase,Compiled&quot;)
+   [Regex]$ReValueSeparator    = New-Object Regex ([System.String]&quot;\s*$ValueSeparator\s*&quot;),    ([System.Text.RegularExpressions.RegexOptions]&quot;Multiline,IgnoreCase,Compiled&quot;)
+}
+process {
+   if($PSCmdlet.ParameterSetName -eq &quot;File&quot;) {
+      $AutomaticRecords = $true
+      $InputString += $(Get-Content $FilePath -Delimiter ([char]0)) + &quot;`n`n&quot;
+   } else {
+      $InputString += &quot;$InputObject`n&quot;
+   }
+}
+end {
+   ## some kind of PowerShell bug when expecting pipeline input:   
+   if(!&quot;$ReRecordSeparator&quot;){
+      Write-Verbose &quot;Setting up the record regex in the PROCESS block: '$RecordSeparator'&quot;
+      [Regex]$ReRecordSeparator   = New-Object Regex ([System.String]&quot;\s*$RecordSeparator\s*&quot;),   ([System.Text.RegularExpressions.RegexOptions]&quot;Multiline,IgnoreCase,Compiled&quot;)
+   }
+   if(!&quot;$RePropertySeparator&quot;){
+      Write-Verbose &quot;Setting up the property regex in the PROCESS block: '$PropertySeparator'&quot;
+      [Regex]$RePropertySeparator = New-Object Regex ([System.String]&quot;\s*$PropertySeparator\s*&quot;), ([System.Text.RegularExpressions.RegexOptions]&quot;Multiline,IgnoreCase,Compiled&quot;)
+   }
+   if(!&quot;$ReValueSeparator&quot;) {  
+      Write-Verbose &quot;Setting up the value regex in the PROCESS block: '$ValueSeparator'&quot;
+      [Regex]$ReValueSeparator    = New-Object Regex ([System.String]&quot;\s*$ValueSeparator\s*&quot;),    ([System.Text.RegularExpressions.RegexOptions]&quot;Multiline,IgnoreCase,Compiled&quot;)
+   }
+   Write-Verbose &quot;ParameterSet: $($PSCmdlet.ParameterSetName)&quot;
+   Write-Verbose &quot;ValueSeparator: $($ReValueSeparator)&quot;
+   $InputData = @{}
+   if($PSCmdlet.ParameterSetName -eq &quot;File&quot;) {
+      $AutomaticRecords = $true
+      $InputString = Get-Content $FilePath -Delimiter ([char]0)
+   }
+   
+   ## Separate RecordText with the RecordSeparator if the user asked us to:
+   if($PsBoundParameters.ContainsKey('RecordSeparator') -or $AutomaticRecords ) {
+      $Records = $ReRecordSeparator.Split( $InputString ) # | Where-Object { $_ }
+      ## Instead of using WhereObject and removing all the empty rows, allow empties AFTER record separators, but not before...
+      if(!@($Records)[0]) {
+         $Records = $Records[1..$($Records.Count-1)]
+      }
+      Write-Verbose &quot;There are $($ReRecordSeparator.GetGroupNumbers().Count) groups and $(@($Records).Count) records!&quot;
+      if($ReRecordSeparator.GetGroupNumbers().Count -gt 1 -and @($Records).Count -gt 1) {
+         if($HasHeader) {
+            $Records = $Records[2..$($Records.Count -1)]
+         }
+         if($HasFooter) {
+            $Records = $Records[0..$($Records.Count -3)]
+         }
+         while($Records) {
+            $Key,$Value,$Records = @($Records)
+            Write-Verbose &quot;RecordSeparator with grouping: $Key = $Value&quot;
+            $InputData.$Key += @($Value)
+         }
+      } elseif(@($Records).Count -gt 1) {
+         $InputData.&quot;&quot; = @($Records)
+         $InputString = $Records
+      } else {
+         $InputString = $Records
+      }
+   }
+      
+   ## Separate RecordText into properties and group them together by count if we were told a count
+   if($PsBoundParameters.ContainsKey('CountOfPropertiesPerRecord')) {   
+      $Properties = $RePropertySeparator.Split($InputString)
+      Write-Verbose &quot;Separating Records by Property count = $CountOfPropertiesPerRecord of $($Properties.Count)&quot;
+      for($Index = 0; $Index -lt $Properties.Count; $Index += $CountOfPropertiesPerRecord) {
+         $InputData.&quot;&quot; += @($Properties[($Index..($Index+$CountOfPropertiesPerRecord-1))] -Join ([char]0))
+         Write-Verbose &quot;Record ($Index..) $($Index/$CountOfPropertiesPerRecord) = $(@($Properties[($Index..($Index+$CountOfPropertiesPerRecord-1))] -Join ([char]0)))&quot;
+      }
+      ## We have to manually set the PropertySeparator because we can't generate text from your regex pattern to match your regex pattern
+      $SetPropertySeparator = $RePropertySeparator
+      [Regex]$RePropertySeparator = New-Object Regex ([System.String][char]0), ([System.Text.RegularExpressions.RegexOptions]&quot;Multiline,IgnoreCase,Compiled&quot;)
+   } 
+   if($InputData.Keys.Count -eq 0){
+      Write-Verbose &quot;Keyless entry enabled!&quot;
+      $InputData.&quot;&quot; = @($InputString)
+   }
+   
+   Write-Verbose &quot;InputData: $($InputData.GetEnumerator() | ft -auto -wrap| out-string)&quot;
+
+   ## Process each Record
+   foreach($key in $InputData.Keys) { foreach($record in $InputData.$Key) {
+      Write-Verbose &quot;Record($Key): $record&quot;
+      
+      $output = new-output -SimpleOutput:$SimpleOutput -Key:$Key -FilePath:$FilePath
+      
+      foreach($Property in $RePropertySeparator.Split(&quot;$record&quot;) | ? {$_}) {
+         if($ReValueSeparator.IsMatch($Property)) {
+            [string[]]$data = $ReValueSeparator.split($Property,2) | foreach { $_.Trim() } | where { $_ }
+            Write-Verbose &quot;Property: $Property --&gt; $($data -join ': ')&quot;
+            if($AutomaticRecords -and $Output.ContainsKey($Data[0])) {
+               out-output $output
+               $output = new-output -SimpleOutput:$SimpleOutput -Key:$Key -FilePath:$FilePath
+            }
+            switch($data.Count) {
+               1 { $output.($Data[0]) += @($null)    }
+               2 { $output.($Data[0]) += @($Data[1]) }
+            }
+         } elseif($AllowEmptyValue) {
+            $output.$Property = $true
+         }
+      }
+      out-output $output
+
+      
+   }  }
+   ## Put this back in case there's more input
+   $RePropertySeparator = $SetPropertySeparator
+}
+#}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

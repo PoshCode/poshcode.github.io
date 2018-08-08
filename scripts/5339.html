@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Environment - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Environment</h1>
+<h3><a href="//scripts/5339.ps1">download</a></h3>
+<p>Set environment variables stickily</p>
+<pre><code class="language-posh"># if you're running &quot;elevated&quot; we want to know that:
+$PSProcessElevated = ([System.Environment]::OSVersion.Version.Major -gt 5) -and ( # Vista and ...
+                                    new-object Security.Principal.WindowsPrincipal (
+                                    [Security.Principal.WindowsIdentity]::GetCurrent()) # current user is admin
+                                ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+function Set-EnvironmentVariable {
+    #.Synopsis
+    # Set an environment variable at the highest scope possible
+    [CmdletBinding()]
+    param(
+        [Parameter(Position=0)]
+        [String]$Name,
+
+        [Parameter(Position=1)]
+        [String]$Value,
+
+        [System.EnvironmentVariableTarget]
+        $Scope=&quot;Machine&quot;,
+
+        [Switch]$FailFast
+    )
+
+    Set-Content &quot;ENV:$Name&quot; $Value
+    $Success = $False
+    do {
+        try {
+            [System.Environment]::SetEnvironmentVariable(&quot;SPLUNK_HOME&quot;, $Value, $Scope)
+            Write-Verbose &quot;Set $Scope environment variable $Name = $Value&quot;
+            $Success = $True
+        }
+        catch [System.Security.SecurityException] 
+        {
+            if($FailFast) {
+                $PSCmdlet.ThrowTerminatingError( (New-Object System.Management.Automation.ErrorRecord (
+                    New-Object AccessViolationException &quot;Can't set environment variable in $Scope scope&quot;
+                ), &quot;FailFast:$Scope&quot;, &quot;PermissionDenied&quot;, $Scope) )
+            } else {
+                Write-Warning &quot;Cannot set environment variables in the $Scope scope&quot;
+            }
+            $Scope = [int]$Scope - 1
+        }
+    } while(!$Success -and $Scope -gt &quot;Process&quot;)
+}
+
+function Add-Path {
+    #.Synopsis
+    #  Add a folder to a path environment variable
+    #.Description
+    #  Gets the existing content of the path variable, splits it with the PathSeparator,
+    #  adds the specified paths, and then joins them and re-sets the EnvironmentVariable
+    [CmdletBinding()]
+    param(
+        [Parameter(Position=0, Mandatory=$True)]
+        [String]$Name,
+
+        [Parameter(Position=1)]
+        [String[]]$Append = @(),
+
+        [String[]]$Prepend = @(),
+
+        [System.EnvironmentVariableTarget]
+        $Scope=&quot;User&quot;,
+
+        [Char]
+        $Separator = [System.IO.Path]::PathSeparator
+    )
+
+    # Make the new thing as an array so we don't get duplicates
+    $Path = @($Prepend -split &quot;$Separator&quot; | %{ $_.TrimEnd(&quot;\/&quot;) } | ?{ $_ })
+    $Path += $OldPath = @([Environment]::GetEnvironmentVariable($Name, $Scope) -split &quot;$Separator&quot; | %{ $_.TrimEnd(&quot;\/&quot;) }| ?{ $_ })
+    $Path += @($Append -split &quot;$Separator&quot; | %{ $_.TrimEnd(&quot;\/&quot;) }| ?{ $_ })
+
+    # Dedup path
+    # If the path actually exists, use the actual case of the folder
+    $Path = $(foreach($Folder in $Path) {
+                if(Test-Path $Folder) {
+                    Get-Item ($Folder -replace '(?&lt;!:)(\\|/)', '*$1') | Where FullName -ieq $Folder | % FullName
+                } else { $Folder }
+            } ) | Select -Unique
+
+    # Turn them back into strings
+    $Path = $Path -join &quot;$Separator&quot;
+    $OldPath = $OldPath -join &quot;$Separator&quot;
+
+    # Path environment variables are kind-of a pain:
+    # The current value in the process scope is a combination of machine and user, with changes
+    # We need to fix the CURRENT path instead of just setting it
+    $OldEnvPath = @($(Get-Content &quot;ENV:$Name&quot;) -split &quot;$Separator&quot; | %{ $_.TrimEnd(&quot;\/&quot;) }) -join &quot;$Separator&quot;
+    if(&quot;$OldPath&quot;.Trim().Length -gt 0) {
+        Write-Verbose &quot;Old $Name Path: $OldEnvPath&quot;
+        $OldEnvPath = $OldEnvPath -Replace ([regex]::escape($OldPath)), $Path
+        Write-Verbose &quot;New $Name Path: $OldEnvPath&quot;
+    } else {
+        if($Append) {
+            $OldEnvPath = $OldEnvPath + &quot;$Separator&quot; + $Path
+        } else {
+            $OldEnvPath = $Path + &quot;$Separator&quot; + $OldEnvPath
+        }
+    }
+
+    Set-EnvironmentVariable $Name $($Path -join &quot;$Separator&quot;) -Scope $Scope -FailFast
+    if($?) {
+        # Set the path back to the normalized value
+        Set-Content &quot;ENV:$Name&quot; $OldEnvPath
+    }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

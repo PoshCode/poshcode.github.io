@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="glnsize">
+    <title>Build-TFSProjects - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Build-TFSProjects</h1>
+<h3><a href="//scripts/1059.ps1">download</a> - <a href="//scripts/1056.md">parent</a></h3>
+<p>moved source from Poshcomm http://powershellcommunity.org/Forums/tabid/54/aff/1/aft/3804/afv/topic/afpgj/2/Default.aspx#4926 to accelerate development, and because I was sick of fighting the WYSIWYG editor...</p>
+<p>Moved all the reporting to the debug/verbose pipeline, and cleaned up the logging.</p>
+<pre><code class="language-posh">#-------------------------------------------------------------------------    
+# Script that will: 
+# 1. Create a workspace. Workspacce Name: _Root
+# 2. Get the latest code from repository
+#-------------------------------------------------------------------------   
+Param(
+    [switch]
+    $CSRWEB,
+    [switch]
+    $CSRWS,
+    [switch]
+    $CSRServices,
+    [string]
+    $LogPath
+    [String]
+    $Outdir = &quot;C:\Application\CSR&quot;
+)
+Begin 
+{
+
+    $MSBUILD=&quot;c:\WINDOWS\Microsoft.NET\Framework\v3.5\MsBuild&quot;
+    $WEBPROJECTOUTPUTDIR=&quot;$OUTDIR\CSRWeb&quot;
+    $script:Log=@()
+    
+    #-------------------------------------------------------------------------    
+    Function SetTFS
+    {
+        $SCRIPT:tfsServer = &quot;172.29.4.179&quot;
+        $script:userName = [system.environment]::UserName; 
+        $script:computerName = [system.environment]::machinename
+        $script:workspaceName = $computerName + &quot;_&quot; + $userName +&quot;_WS&quot;   #Use 'WS' as an acronym for &quot;WorkSpace&quot;
+        $script:CSRDIR = &quot;C:\Brassring2\Application\&quot;; 
+        $script:WEBPROJECTOUTPUTDIR=&quot;$Outdir\CSRWeb&quot;
+        $script:WEBPROJECTOUTPUTDIR1=&quot;$Outdir\CSRWS&quot;
+        $script:WEBPROJECTOUTPUTDIR2=&quot;$Outdir\CSRServices&quot;
+        $script:REFPATH=&quot;referenceToAllAssembiesUsedInTheProjectSeperatedbySemiColon&quot;
+        $script:MSBUILD=&quot;c:\WINDOWS\Microsoft.NET\Framework\v3.5\MsBuild&quot;
+        $script:failed = $false
+
+        # Set up the TF Alias
+
+
+        # Find where VS is installed. 
+        $key = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\VisualStudio\9.0
+        $dir = [string] (Get-ItemProperty $key.InstallDir)
+        $script:tf = &quot;$dir\tf.exe&quot;
+    } # End SetTFS
+
+    #-------------------------------------------------------------------------    
+    Function CreateWorkspace
+    {
+        Begin 
+        {
+            Write-Debug &quot;Starting CreateWorkspace&quot;
+            
+            Function DeleteWorkspace
+            {
+                # Delete the workspace if it exists. 
+                Write-Verbose &quot;Deleting workspace (if exists): $workspaceName&quot; 
+                $log +=  &quot;Deleting workspace (if exists): $workspaceName&quot; 
+                
+                &amp;$TF workspace /delete  $workspaceName  /noprompt | out-null
+
+                Write-Verbose &quot;Done deleting workspace.&quot;
+                $log += &quot;Done deleting workspace.&quot;
+            } #END DeleteWorkspace
+        }
+        Process 
+        {
+            DeleteWorkspace
+        
+            # Create the folder
+            if (! (Test-Path $CSRDIR)) 
+            {
+                Write-Verbose &quot;Creating folder: $CSRDIR&quot;
+                $log += &quot;Creating folder: $CSRDIR&quot;
+                new-item -itemtype directory -path $CSRDIR -force | out-null
+                Write-Verbose &quot;Completed Creating folder: $CSRDIR&quot; 
+                $log += &quot;Completed Creating folder: $CSRDIR&quot; 
+            }
+            # Move to folder
+            cd $CSRDIR
+
+            # Create the workspace 
+            Write-Verbose &quot;Creating workspace: $workspaceName&quot;
+            $log +=  &quot;Creating workspace: $workspaceName&quot;
+
+            &amp;$TF workspace /new /computer:$computerName /server:$TFsServer /noprompt $workspaceName
+
+            Write-Verbose &quot;Done Creating workspace: $workspaceName&quot; 
+            $log += &quot;Done Creating workspace: $workspaceName&quot; 
+
+            # Get the latest
+            Write-Verbose &quot;Getting the latest code from: $TFsServer. This could take awhile...&quot;
+            $log += &quot;Getting the latest code from: $TFsServer. This could take awhile...&quot;
+            &amp;$TF get $/CSR/CSR /recursive
+
+            Write-Verbose &quot;Done getting latest.&quot;
+            $log += &quot;Done getting latest.&quot;
+
+            Write-Verbose &quot;Tree initialization is complete.&quot;
+            $log +=  &quot;Tree initialization is complete.&quot;
+        }
+        End 
+        {
+            Write-Debug &quot;CreateWorkspace Complete&quot;
+        } 
+    } #END CreateWorkspace
+   
+   
+    #-------------------------------------------------------------------------
+    # Get Next Label
+    #
+    # Labels are BL{major}.{minor}
+    # major = 1 - ???
+    # minor = 001 - 999
+    #-------------------------------------------------------------------------
+    Function GetNextLabel()
+    {
+        Begin 
+        {
+            Write-Debug &quot;Starting GetNextLabel&quot;
+        }
+        Process
+        {
+            $major = 1
+            $minor = 1
+           
+            $list = (&amp;$TF labels /format:brief |? { $_ -notmatch &quot;-.+&quot; -and $_ -notmatch &quot;Label.+Owner.+Date&quot;})
+            
+            if ($list -ne $null) {
+               
+                # Split label into major minor
+                $major,[int]$minor= (($list | Select-Object -last 1).split()).split(&quot;.&quot;)
+            
+                # Increment minor label
+                $minor++
+                
+                # Remove BL from string, and cast to int
+                [int]$major = $major.substring(2)
+                
+                # If minor gt 999 increment major and reset minor
+                if ($minor -gt 999) {
+                    $major++
+                    $minor = 1
+                }
+            }
+            
+            # return label
+            $label = &quot;BL{0}.{1:000}&quot; -f $major, $minor
+            
+            write-output $label
+        }
+        End
+        {
+            Write-Debug &quot;GetNextLabel Completed&quot;
+        }
+    }
+    
+    #-------------------------------------------------------------------------
+    Function MSBuild($outputdir, $webproject, $project, $ref)
+    {
+        Begin 
+        {
+            Write-Debug &quot;Starting MSBuild&quot;
+            Write-Debug &quot;outputdir: $outputdir webproject: $webproject project: $project ref: $ref&quot;
+        }
+        Process
+        {
+            # I think this can be cleaned up with where-object, but it's too important to play with
+            $failed = $false
+            &amp;$MSBUILD /p:Configuration=Release  /p:OutDir=$Outputdir /p:WebProjectOutputDir=$webproject $project |% {
+                    if ($_ -match &quot;Build FAILED&quot;) { $failed = $true } ; $_ 
+                }
+            if ($failed) { throw (new-object NullReferenceException) }    
+            
+            $failed = $false
+            &amp;$MSBUILD /p:Configuration=Release /t:ResolveReferences /p:OutDir=$Outputdir\bin\ /p:ReferencePath=$ref $project  |% {
+                    if ($_ -match &quot;Build FAILED&quot;) { $failed = $true } ; $_ 
+                }
+            if ($failed) { throw (new-object NullReferenceException) }    
+        }
+        End
+        {
+            Write-Debug &quot;MSBuild Completed&quot;
+        }
+    }
+
+    #-------------------------------------------------------------------------
+    # Create the Label
+    #-------------------------------------------------------------------------
+    Function ApplyLabel()
+    {
+        Write-verbose &quot;Create the Label&quot; 
+        $log +=  &quot;Create the Label&quot; 
+
+        $label = GetNextLabel
+            
+        &amp;$TF label  $label  $/CSR/CSR /recursive
+
+        &amp;$TF get /version:L$($label)
+
+        Write-verbose &quot;Applied label $label&quot; 
+        $log += &quot;Applied label $label&quot; 
+
+        return $Label    
+    } # END ApplyLabel
+} # End Begin
+Process 
+{
+    trap [Exception] 
+    {
+        write-verbose &quot;Build Failed&quot; 
+        $log += &quot;Build Failed&quot; 
+        exit 1;
+    }
+    . SetTFS
+    . CreateWorkspace
+    . ApplyLabel
+    
+    IF (!$CSRWS -AND !$CSRWEB -AND !$CSRServices)
+    {
+        Write-Debug &quot;No Options Found Setting ALL&quot;
+        $CSRWS = $TRUE
+        $CSRWEB = $TRUE
+        $CSRServices = $TRUE
+    }
+    
+    Switch (&quot;&quot;) 
+    {
+        {$CSRWEB}
+            {
+                Write-Verbose &quot;Building CSRWEB&quot; 
+                $log += &quot;Building CSRWEB&quot; 
+                
+                . MsBuild &quot;$Outdir\CSRWeb\&quot; $WEBPROJECTOUTPUTDIR &quot;$CSRDIR\CSR\CSR\CSRWeb\CSRWeb\CSRWeb.csproj&quot; $REFPATH
+                
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.ApplicationBlocks.Data.dll $CSRDIR\CSRWeb\bin\ -credential 
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.Practices.EnterpriseLibrary.Caching.dll $CSRDIR\CSRWeb\bin\ -credential 
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.Practices.ObjectBuilder.dll $CSRDIR\CSRWeb\bin\ -credential 
+
+                rm  $Outdir\CSRWeb\*.config -recurse
+                rm  $Outdir\CSRWeb\*.pdb -recurse
+                rm  $Outdir\CSRWeb\*.dll -recurse
+                rm  $Outdir\CSRWeb\*.xml -recurse
+                rm  $Outdir\CSRWeb\bin\*.pdb -recurse
+                rm  $Outdir\CSRWeb\bin\*.config -recurse
+                rm  $Outdir\CSRWeb\bin\*.xml -recurse
+                
+                Write-verbose &quot;Build CSRWEB Successful&quot;  
+                $log += &quot;Build CSRWEB Successful&quot;  
+            }
+        {$CSRWS}
+            {
+                Write-verbose &quot;Building CSRWS&quot; 
+                $log +=&quot;Building CSRWS&quot; 
+        
+                . MsBuild &quot;$Outdir\CSRWS\&quot; $WEBPROJECTOUTPUTDIR1 &quot;$CSRDIR\CSR\CSR\CSRWS\CSRWS\CSRWS.csproj&quot; $REFPATH
+                
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.ApplicationBlocks.Data.dll $CSRDIR\CSRWeb\bin\ -credential 
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.Practices.EnterpriseLibrary.Caching.dll $CSRDIR\CSRWeb\bin\ -credential 
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.Practices.ObjectBuilder.dll $CSRDIR\CSRWeb\bin\ -credential 
+
+                rm  $Outdir\CSRWS\*.config -recurse
+                rm  $Outdir\CSRWS\*.pdb -recurse
+                rm  $Outdir\CSRWS\*.dll -recurse
+                rm  $Outdir\CSRWS\*.xml -recurse
+                rm  $Outdir\CSRWS\bin\*.pdb -recurse
+                rm  $Outdir\CSRWS\bin\*.config -recurse
+                rm  $Outdir\CSRWS\bin\*.xml -recurse
+               
+                Write-verbose &quot;Build CSRWS Successful&quot; 
+                $log += &quot;Build CSRWS Successful&quot; 
+            }
+        {$CSRServices}
+            {
+                Write-verbose &quot;Building CSR Services&quot;
+                $Log += &quot;Building CSR Services&quot;
+            
+                . MsBuild &quot;$Outdir\CSRSERVICES\&quot; $WEBPROJECTOUTPUTDIR2 &quot;$CSRDIR\CSR\CSR\CSRSERVICES\CSRSERVICES\CSRSERVICES.csproj&quot; $REFPATH
+                
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.ApplicationBlocks.Data.dll $CSRDIR\CSRWeb\bin\ -credential 
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.Practices.EnterpriseLibrary.Caching.dll $CSRDIR\CSRWeb\bin\ -credential 
+                # copy-item C:\TFSMAIN\CSR\bin\Microsoft.Practices.ObjectBuilder.dll $CSRDIR\CSRWeb\bin\ -credential 
+
+                rm  $Outdir\CSRSERVICES\*.config -recurse
+                rm  $Outdir\CSRSERVICES\*.pdb -recurse
+                rm  $Outdir\CSRSERVICES\*.dll -recurse
+                rm  $Outdir\CSRSERVICES\*.xml -recurse
+                rm  $Outdir\CSRSERVICES\bin\*.pdb -recurse
+                rm  $Outdir\CSRSERVICES\bin\*.config -recurse
+                rm  $Outdir\CSRSERVICES\bin\*.xml -recurse
+                
+                Write-verbose &quot;Build CSR Services Successful&quot;
+                $Log += &quot;Build CSR Services Successful&quot;
+            }
+    } # End Switch
+} #End Process
+End 
+{
+    IF ($LogPath) 
+    {
+        $log | Out-file -FilePath $LogPath -Encoding ascii -Append
+    }
+} #END End
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

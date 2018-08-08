@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>chkhash.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>chkhash.ps1</h1>
+<h3><a href="//scripts/2829.ps1">download</a> - <a href="//scripts/2827.md">parent</a></h3>
+<p>ChkHash.ps1 will compute SHA512 hashes of specified files and save them in the specified .xml database, subsequently chkhash.ps1 will check if the SHA512 hash of the file has changed.  chkhash.ps1 has the ability to add to it's xml databases, so you can run it against your d:\ drive, add files to d:\data, then only add d:\data files to the xml database without having to re-add your whole drive's files.  Use &quot;chkhash.ps1 -h&quot; for help and usage. Added exclude directory option.</p>
+<pre><code class="language-posh"># calculate SHA512 of file.
+
+function Get-SHA512([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
+{
+  	$stream = $null;
+  	$cryptoServiceProvider = [System.Security.Cryptography.SHA512CryptoServiceProvider];
+  	$hashAlgorithm = new-object $cryptoServiceProvider
+  	$stream = $file.OpenRead();
+  	$hashByteArray = $hashAlgorithm.ComputeHash($stream);
+  	$stream.Close();
+
+  	## We have to be sure that we close the file stream if any exceptions are thrown.
+
+  	trap
+  	{
+   		if ($stream -ne $null)
+    		{
+			$stream.Close();
+		}
+  		break;
+	}	
+
+ 	foreach ($byte in $hashByteArray) { if ($byte -lt 16) {$result += “0{0:X}” -f $byte } else { $result += “{0:X}” -f $byte }}
+	return [string]$result;
+}
+
+function noequal ( $first, $second)
+{
+    foreach($s in $second)
+    {
+        if ($first -eq $s) {return $false}
+    }
+    return $true
+}
+
+#   chkhash.ps1 [file(s)/dir #1] [file(s)/dir #2] ... [file(s)/dir #3] [-u] [-h [path of .xml database]]
+#   -u updates the XML file database and exits
+#   otherwise, all files are checked against the XML file database.
+#   -h specifies location of xml hash database
+
+
+$hashespath=&quot;.\hashes.xml&quot;
+del variable:\args3 -ea 0
+del variable:\args2 -ea 0
+del variable:\xfiles -ea 0
+del variable:\files -ea 0
+del variable:\exclude -ea 0
+$args3=@()
+$args2=$args
+$nu = 0
+$errs = 0
+$fc = 0
+$upd = $false
+$create = $false
+
+for($i=0;$i -lt $args2.count; $i++)
+{
+    if ($args2[$i] -like &quot;-h*&quot;)                                             # -help specified?
+    {
+        &quot;Usage:    .\chkhash.ps1 [-h] [-u] [-c] [-x &lt;file path of hashes .xml database&gt;] [file(s)/dir #1] [file(s)/dir #2] ... [file(s)/dir #n] [-e &lt;Dirs&gt;]&quot;
+        &quot;Options:  -h - Help display.&quot;
+        &quot;          -c - Create hash database. If .xml hash database does not exist, -c will be assumed.&quot;
+        &quot;          -u - Update changed files and add new files to existing database.&quot;
+        &quot;          -x - specifies .xml database file path to use. Default is .\hashes.xml&quot;
+        &quot;          -e - exclude dirs. Put this after the files/dirs you want to check with SHA512 and needs to be fullpath (e.g. c:\users\bob not ..\bob).&quot;
+        &quot;&quot;
+        &quot;Examples: PS&gt;.\chkhash.ps1 c:\ d:\ -c -x c:\users\bob\hashes\hashes.xml&quot;
+        &quot;          PS&gt;.\chkhash.ps1 c:\users\alice\pictures\sunset.jpg -a -x c:\users\alice\hashes\pictureshashes.xml&quot;
+        &quot;          PS&gt;.\chkhash.ps1 c:\users\eve\documents d:\media\movies -x c:\users\eve\hashes\private.xml&quot;
+        &quot;          PS&gt;.\chkhash.ps1 c:\users\eve -x c:\users\eve\hashes\private.xml -e c:\users\eve\hashes&quot;
+        &quot;&quot;
+        &quot;Note:     files in subdirectories of any specified directory are automatically processed.&quot;
+        exit
+    }
+    if ($args2[$i] -like &quot;-u*&quot;) {$upd=$true;continue}                       # Update and Add new files to database?
+    if ($args2[$i] -like &quot;-c*&quot;) {$create=$true;continue}                    # Create database specified?
+    if ($args2[$i] -like &quot;-x*&quot;) {$i++;$hashespath=$args2[$i];continue}      # Get hashes xml database path    
+    if ($args2[$i] -like &quot;-e*&quot;)                                             # Exclude files, dirs
+    {
+        do {
+        $i++        
+        if ($i -ge $args2.count) {break}
+        $exclude+=@($args2[$i])                                             # collect array of excluded directories.
+        if (($i+1) -ge $args2.count) {break}
+        } while ($args2[$i+1] -notlike &quot;-*&quot;)
+        continue
+    }
+        
+    $args3+=@($args2[$i])                                                   # Add files/dirs
+}
+
+&quot;ChkHash.ps1 - .\chkhash.ps1 -h for usage.&quot;
+&quot;&quot;
+
+if ($args3.count -eq 0) {exit}
+
+# Get list of files and SHA512 hash them.
+&quot;Enumerating files from specified locations...&quot;
+
+$files=@(dir -literalpath $args3 -recurse -ea 0 | ?{$_.mode -notmatch &quot;d&quot;} | ?{noequal $_.directoryname $exclude})              # Get list of files
+
+if ($files.count -eq 0) {&quot;No files found. Exiting.&quot;; exit}
+
+if ($create -eq $true -or !(test-path $hashespath))                        # Create database?
+{       
+    # Create SHA512 hashes of files and write to new database
+    
+    $files = $files | %{write-host &quot;Hashing $($_.fullname) ...&quot;;add-member -inputobject $_ -name SHA512 -membertype noteproperty -value $(get-SHA512 $_.fullname) -passthru}
+    $files |export-clixml $hashespath    
+    &quot;Created $hashespath&quot;
+    &quot;$($files.count) file hash(es) saved. Exiting.&quot;
+    exit
+}
+
+$xfiles=@(import-clixml $hashespath)
+&quot;Loaded $($xfiles.count) file hash(es) from $hashespath&quot;
+    
+$hash=@{}
+for($x=0;$x -lt $xfiles.count; $x++)
+{
+    if ($hash.contains($xfiles[$x].fullname)) {continue}
+    $hash.Add($xfiles[$x].fullname,$x)   
+}
+     
+foreach($f in $files)
+{
+    $n=($hash.($f.fullname))
+    if ($n -eq $null)
+    {    
+        $nu++                                           # increment needs/needed updating count
+        if ($upd -eq $false) {&quot;Needs to be added: `&quot;$($f.fullname)`&quot;&quot;;continue}                 # if not updating, then  continue
+        
+        &quot;Hashing $($f.fullname) ...&quot;
+        
+        # Create SHA512 hash of file
+        
+        $f=$f |%{add-member -inputobject $_ -name SHA512 -membertype noteproperty -value $(get-SHA512 $_.fullname) -passthru}  
+        $xfiles+=@($f)                                  # then add file + hash to list
+        continue
+    }
+    
+    $f=$f |%{add-member -inputobject $_ -name SHA512 -membertype noteproperty -value $(get-SHA512 $_.fullname) -passthru}  
+    
+    # Update and continue is specified.
+                                                                      
+    $fc++                                               # increment files checked.
+    if ($xfiles[$n].SHA512 -eq $f.SHA512)               # Check SHA512 for mixmatch.
+    {
+        continue
+    }
+    $errs++                                             # increment mixmatches
+    if ($upd -eq $true) { $xfiles[$n]=$f; &quot;Updated `&quot;$($f.fullname)`&quot;&quot;;continue}                                                   
+    &quot;Bad SHA-512 found: `&quot;$($f.fullname)`&quot;&quot;
+}
+
+if ($upd -eq $true)                                     # if database updated
+{
+    $xfiles|export-clixml $hashespath                   # write xml database
+    &quot;Updated $hashespath&quot;
+    &quot;$nu file hash(es) added to database.&quot;
+    &quot;$errs file hash(es) updated in database.&quot;
+    exit
+}
+
+&quot;$errs SHA-512 mixmatch(es) found.&quot;
+&quot;$fc file(s) SHA512 matched.&quot; 
+if ($nu -ne 0) {&quot;$nu file(s) need to be added [run with -u option to Add file hashes to database].&quot;}    
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

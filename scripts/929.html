@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Andy Schneider">
+    <title>ONTAPI Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ONTAPI Module</h1>
+<h3><a href="//scripts/929.ps1">download</a></h3>
+<p>The beginnings of a module to manage a Netapp SAN
+Andy Schneider, http://get-powershell.com</p>
+<pre><code class="language-posh"># Requires Version 2.0
+# Requires ManageOntap.Dll
+# Plenty of room left for documentation
+# Andy Schneider - http://get-powershell.com
+# 3/10/2009
+
+
+$OnTapDll = (resolve-path $PSScriptRoot\ManageOntap.dll).Path
+[System.Reflection.Assembly]::LoadFile($onTapDll)
+
+
+function New-NTAPServer {
+param
+(
+[Parameter( Mandatory=$true,
+            Position=0,
+            ValueFromPipeline = $true)]
+[string]
+$filer,
+
+[Parameter( Mandatory=$true,
+            Position=1)]
+[System.Management.Automation.PSCredential]
+$credential
+
+)
+
+$username = $credential.GetNetworkCredential().UserName
+$password = $credential.GetNetworkCredential().Password
+$domain   = $credential.GetNetworkCredential().Domain
+if ($domain) {$username = &quot;$domain\$username&quot;}
+
+$NtapServer = New-Object NetApp.Manage.NaServer($filer,1,0)                                                                                      
+$NtapServer.SetAdminUser($username,$password)
+
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;system-get-info&quot;) 
+[xml]$sysinfo = $NtapServer.InvokeElem($NaElement)       
+$sysinfo.results.&quot;system-info&quot; | out-host
+return $NtapServer
+}
+
+
+Function Get-NTAPLun {
+param
+(
+[Parameter( Mandatory = $true,
+            Position  = 0)]
+[NetApp.Manage.NaServer]
+$server,
+
+[Parameter( Mandatory=$false,
+            Position=1,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[Alias(&quot;Path&quot;)]
+[String]
+$name = &quot;*&quot;
+)
+
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;lun-list-info&quot;)
+[xml]$result = $server.InvokeElem($NaElement)
+return $result.results.luns.&quot;lun-info&quot; | where {$_.path -like $name}
+}
+
+
+Function Set-NTAPLun {
+param
+(
+[Parameter( Mandatory = $true,
+            Position  = 0)]
+[NetApp.Manage.NaServer]
+$server,
+
+[Parameter( Mandatory=$false,
+            Position=1,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[Alias(&quot;Path&quot;)]
+[String]
+$name ,
+
+[Parameter( Mandatory=$false,
+            Position=2,
+            ValueFromPipeline = $false)]
+[int64]
+$size,
+
+[Parameter( Mandatory=$false,
+            Position=3)]
+[Alias(&quot;description&quot;)]
+[string]
+$comment
+
+)
+
+if($comment) {
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;lun-set-comment&quot;)
+$NaElement.AddNewChild('path',$name)
+$NaElement.AddNewChild('comment',$comment)
+[xml]$result = $server.InvokeElem($NaElement)
+$result.results.status
+}
+
+
+if ($size) {
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;lun-resize&quot;)
+$NaElement.AddNewChild('path',$name)
+$NaElement.AddNewChild('size',$size)
+[xml]$result = $server.InvokeElem($NaElement)
+$result.results.status
+
+}
+
+
+}
+
+
+Function New-NTAPLun {
+param
+(
+[Parameter( Mandatory = $true,
+            Position  = 0)]
+[NetApp.Manage.NaServer]
+$server,
+
+[Parameter( Mandatory=$false,
+            Position=1,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[Alias(&quot;Path&quot;)]
+[String]
+$name ,
+
+[Parameter( Mandatory=$false,
+            Position=2,
+            ValueFromPipeline = $false)]
+[int64]
+$size,
+
+[Parameter( Mandatory=$false,
+            Position=3,
+            ValueFromPipeline = $false)]
+[Alias(&quot;description&quot;)]
+[string]
+$comment
+)
+
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;lun-create-by-size&quot;)
+$NaElement.AddNewChild('path',$name)
+$NaElement.AddNewChild('size',$size)
+[xml]$result = $Server.InvokeElem($NaElement)
+$result.results.status
+
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;lun-set-comment&quot;)
+$NaElement.AddNewChild('path',$name)
+$NaElement.AddNewChild('comment',$size)
+[xml]$result = $Server.InvokeElem($NaElement)
+$result.results.status
+
+
+
+}
+
+Function Get-NTAPInitiator {
+param
+(
+[Parameter( Mandatory = $true,
+            Position  = 0)]
+[NetApp.Manage.NaServer]
+$server,
+
+[Parameter( Mandatory=$false,
+            Position=1,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[Alias(&quot;Initiator&quot;)]
+[String]
+$name = &quot;*&quot;
+)
+
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;iscsi-initiator-list-info&quot;)
+[xml]$result = $Server.InvokeElem($NaElement)
+return $result.results.&quot;iscsi-initiator-list-entries&quot;.&quot;iscsi-initiator-list-entry-info&quot; |
+where {$_.&quot;initiator-nodename&quot; -like $name}
+
+}
+
+Function Get-NTAPVolume {
+param
+(
+[Parameter( Mandatory = $true,
+            Position  = 0)]
+[NetApp.Manage.NaServer]
+$server,
+
+[Parameter( Mandatory=$false,
+            Position=1,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[Alias(&quot;Path&quot;)]
+[String]
+$name = &quot;*&quot;
+)
+
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;volume-list-info&quot;)
+[xml]$r = $server.InvokeElem($NaElement)
+return $r.results.volumes.&quot;volume-info&quot; |
+where {$_.name -like $name}
+
+}
+
+Function Set-NTAPVolume {
+param
+(
+
+[Parameter( Mandatory=$true,
+            Position=0)]
+[NetApp.Manage.NaServer]
+$server,
+
+[Parameter( Mandatory=$true,
+            Position=1,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[String]
+$name,
+
+[Parameter( Mandatory=$false,
+            Position=2,
+            ValueFromPipelineByPropertyName = $true)]
+[int64]
+$size,
+
+[Parameter( Mandatory=$false,
+            Position=3)]
+[ValidateSet(&quot;none&quot;, &quot;file&quot;, &quot;volume&quot;)]
+[String]
+$spaceReserveType = &quot;none&quot;,
+
+[Parameter( Mandatory=$true,
+            Position=4,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[String]
+$newName
+)
+
+if ($newname) {
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;volume-rename&quot;)
+$NaElement.AddNewChild('volume',$name)
+$NaElement.AddNewChild('new-volume-name',$newname)
+[xml]$result = $Server.InvokeElem($NaElement)
+$result.results.status
+}
+
+if ($size) {
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;volume-size&quot;)
+$NaElement.AddNewChild('volume',$name)
+$NaElement.AddNewChild('new-size',$size)
+[xml]$result = $Server.InvokeElem($NaElement)
+$result.results.status
+}
+
+if ($spaceReserveType) {
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;volume-set-option&quot;)
+$NaElement.AddNewChild('option-name','guarantee')
+$NaElement.AddNewChild('option-value',$spaceReserveType)
+[xml]$result = $Server.InvokeElem($NaElement)
+$result.results.status
+}
+
+}
+
+Function New-NTAPVolume {
+
+param
+(
+
+[Parameter( Mandatory = $true,
+            Position  = 0)]
+[NetApp.Manage.NaServer]
+$server,
+
+[Parameter( Mandatory=$false,
+            Position=1,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[String]
+$name = &quot;*&quot;,
+
+[Parameter( Mandatory=$false,
+            Position=2,
+            ValueFromPipelineByPropertyName = $true)]
+[int64]
+$size,
+
+[Parameter( Mandatory=$false,
+            Position=3,
+            ValueFromPipeline = $true)]
+[Alias(&quot;Path&quot;)]
+[String]
+$containingAggregate,
+
+[Parameter( Mandatory=$false,
+            Position=4)]
+[ValidateSet(&quot;none&quot;, &quot;file&quot;, &quot;volume&quot;)]
+[String]
+$spaceReserveType = &quot;none&quot;
+
+)
+
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;volume-create&quot;)
+$NaElement.AddNewChild('volume',$name)
+$NaElement.AddNewChild('size',$size)
+$NaElement.AddNewChild('containing-aggr-name',$containingaggregate)
+$NaElement.AddNewChild('space-reserve',$spaceReserveType)
+[xml]$result = $Server.InvokeElem($NaElement)
+$result.results.status
+
+}
+
+Function Get-NTAPAggregate {
+param
+(
+[Parameter( Mandatory = $true,
+            Position  = 0)]
+[NetApp.Manage.NaServer]
+$server,
+
+[Parameter( Mandatory=$false,
+            Position=1,
+            ValueFromPipeline = $true,
+            ValueFromPipelineByPropertyName = $true)]
+[Alias(&quot;Path&quot;)]
+[String]
+$name = &quot;*&quot;
+)
+
+$NaElement = New-Object Netapp.Manage.NaElement(&quot;aggr-list-info&quot;)
+[xml]$r = $server.InvokeElem($NaElement)
+return $r.results.aggregates.&quot;aggr-info&quot; |
+where {$_.name -like $name}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

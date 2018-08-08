@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chris">
+    <title>CSV-DVS - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>CSV-DVS</h1>
+<h3><a href="//scripts/1647.ps1">download</a></h3>
+<p>Takes a list of VMs from a CSV file, creates them, changes the NIC to vmxnet3 and connects them to a dVS switch</p>
+<pre><code class="language-posh">$vmlist = Import-Csv toolboxesx.csv
+
+#vsphere settings
+$vsphere_server = &quot;&quot;
+$cluster_name = &quot;&quot;
+
+#dvSwitch Names to connect each side to
+$prod_net = &quot;&quot;
+$aux_net = &quot;&quot;
+
+#Networks to temporarally add the vmxnet3 nics to before connecting to dvSwitch
+$prod_temp_net = &quot;&quot;
+$aux_temp_net = &quot;&quot;
+
+#Folder to add VM's to
+$folder_id = &quot;&quot;
+
+#Script Start
+$vsphere = Connect-VIServer $vsphere_server
+$cluster = Get-Cluster $cluster_name
+$datacenter = Get-Datacenter -cluster $cluster
+$folder = Get-Folder -Id $folder_id
+
+foreach($vm in $vmlist) {
+	$vmhost = $cluster | Get-VMHost | Sort-Object -Property MemoryUsageMB | Where-Object {$_.State -eq &quot;Connected&quot;}
+	if ($vmhost.length -gt 1) { $vmhost = $vmhost[0] }
+	$datastore = $vmhost | Get-Datastore  | Sort-Object -Property FreeSpaceMB -desc | Where-Object {$_.CapacityMB -gt 100000} | Where-Object {$_.FreeSpaceMB -gt 30000} #using 100gb as threshold for local storage vs san storage and not adding to any datastore with less than 30gb free space
+	if ($datastore.length -gt 1) { $datastore = $datastore[0] }
+	$vmdisk =[Math]::Round([Int32]::Parse($vm.Disk)*1024)
+	$esx = $vmhost | Get-View
+	Write-Host Finding Prod/Aux Switches on $vmhost
+	foreach($netMoRef in $esx.Network){
+		if($netMoRef.Type -eq &quot;DistributedVirtualPortGroup&quot;){
+			$net = Get-View -Id $netMoRef
+			if($net.Name -eq  $prod_net){
+				$prod_PGKey  = $net.MoRef.Value
+				$prod_Uuid = (Get-View -Id $net.Config.DistributedVirtualSwitch).Summary.Uuid
+			}
+			if($net.Name -eq  $aux_net){
+				$aux_PGKey  = $net.MoRef.Value
+				$aux_Uuid = (Get-View -Id $net.Config.DistributedVirtualSwitch).Summary.Uuid
+			}
+		}
+	}
+	Write-Host Creating $vm.Name on host $vmhost
+	New-VM -Debug -name $vm.Name -vmhost $vmhost -Location $folder -DiskStorageFormat thick -NumCpu 2 -DiskMB $vmdisk -memoryMB $vm.Memory -Datastore $datastore.Name -GuestID $vm.OS -Description $vm.Description
+	$adapter = Get-NetworkAdapter -VM $vm.Name
+	Remove-NetworkAdapter -NetworkAdapter $adapter -confirm:$false
+	$vm = Get-VM $vm.Name
+	New-NetworkAdapter -VM $vm -NetworkName $prod_temp_net -Type &quot;vmxnet3&quot; -StartConnected
+	New-NetworkAdapter -VM $vm -NetworkName $aux_temp_net -Type &quot;vmxnet3&quot; -StartConnected
+	$view = $vm | Get-View
+	$vmConfigSpec = New-Object VMware.Vim.VirtualMachineConfigSpec
+	foreach($tempdev  in $view.Config.Hardware.Device){
+		if($tempdev.DeviceInfo.Label -eq &quot;Network adapter 1&quot;){
+			Write-Host &quot;Connecting VM to Prod Switch $prod_net&quot;
+			$devSpec = New-Object VMware.Vim.VirtualDeviceConfigSpec
+			$dev = New-Object (&quot;VMware.Vim.&quot;  + $tempdev.GetType().Name)
+			$dev.deviceInfo = New-Object VMware.Vim.Description
+			$dev.deviceInfo.label = $tempdev.DeviceInfo.Label
+			$dev.deviceInfo.summary = $tempdev.DeviceInfo.Summary
+			$dev.Backing = New-Object VMware.Vim.VirtualEthernetCardDistributedVirtualPortBackingInfo
+			$dev.Backing.Port = New-Object VMware.Vim.DistributedVirtualSwitchPortConnection
+			$dev.Backing.Port.PortgroupKey = $prod_PGKey
+			$dev.Backing.Port.SwitchUuid = $prod_Uuid
+			$dev.Key = $tempdev.Key
+			$devSpec.Device = $dev
+			$devSpec.Operation = &quot;edit&quot;
+			$vmConfigSpec.deviceChange += $devSpec
+		}
+        if($tempdev.DeviceInfo.Label -eq &quot;Network adapter 2&quot;){
+			Write-Host &quot;Connecting VM to Aux Switch $aux_net&quot;
+			$devSpec = New-Object VMware.Vim.VirtualDeviceConfigSpec
+			$dev = New-Object (&quot;VMware.Vim.&quot;  + $tempdev.GetType().Name)
+			$dev.deviceInfo = New-Object VMware.Vim.Description
+			$dev.deviceInfo.label = $tempdev.DeviceInfo.Label
+			$dev.deviceInfo.summary = $tempdev.DeviceInfo.Summary
+			$dev.Backing = New-Object VMware.Vim.VirtualEthernetCardDistributedVirtualPortBackingInfo
+			$dev.Backing.Port = New-Object VMware.Vim.DistributedVirtualSwitchPortConnection
+			$dev.Backing.Port.PortgroupKey = $aux_PGKey
+			$dev.Backing.Port.SwitchUuid = $aux_Uuid
+			$dev.Key = $tempdev.Key
+			$devSpec.Device = $dev
+			$devSpec.Operation = &quot;edit&quot;
+			$vmConfigSpec.deviceChange += $devSpec
+		}
+	}
+    Write-Host &quot;Reconfiguring VM&quot;
+    foreach($v in $view){
+                    $v.ReconfigVM($vmConfigSpec)
+    }
+    $vm | Start-VM -Confirm:$false
+    Write-Host $vm.Name &quot;Done&quot;
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

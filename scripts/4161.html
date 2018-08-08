@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Leon Scheltema">
+    <title>quick capacity check - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>quick capacity check</h1>
+<h3><a href="//scripts/4161.ps1">download</a></h3>
+<p>check capacity of vSphere environment based on available CPU and MEM resources.</p>
+<pre><code class="language-posh"># Start of Settings
+$VC1 = &quot;VI server&quot;
+# Max CPU usage for non HA cluster
+$limitResourceCPUClusNonHA = 0.6 
+# Max MEM usage for non HA cluster
+$limitResourceMEMClusNonHA = 0.6 
+# End of Settings
+
+function Write-CustomOut ($Details){
+	$LogDate = Get-Date -Format T
+	Write-Host &quot;$($LogDate) $Details&quot;
+	#write-eventlog -logname Application -source &quot;Windows Error Reporting&quot; -eventID 12345 -entrytype Information -message &quot;Quick-capacity-check: $Details&quot;
+}
+
+# Adding PowerCLI core snapin
+if (!(get-pssnapin -name VMware.VimAutomation.Core -erroraction silentlycontinue)) {
+	add-pssnapin VMware.VimAutomation.Core
+}
+	
+Write-CustomOut &quot;Connecting to VI Server&quot;
+
+$VIConnection = Connect-VIServer $VC1
+if (-not $VIConnection.IsConnected) {
+	Write-Host &quot;Unable to connect to vCenter, please make sure you have entered/updated the vCenter server address correctly &quot;
+	Write-Host &quot; to specify a username and password edit the connection string in this file at $VIConnection$&quot;
+	break
+}
+
+Write-CustomOut &quot;Collecting Detailed Cluster Resources&quot;
+
+$clusviews = Get-View -ViewType ClusterComputeResource
+
+
+$capacityinfo = @()
+foreach ($cluv in ($clusviews | Sort Name)) {
+		$clucapacity = &quot;&quot; |Select ClusterName, &quot;Estimated VMs Left (Based on CPU)&quot;, &quot;Estimated VMs Left (Based on MEM)&quot;, &quot;vCPU/pCPU ratio&quot;, &quot;VM/VMHost ratio&quot;
+		if ( $cluv.Configuration.DasConfig.Enabled -eq $true ) {
+			$DasRealCpuCapacity = $cluv.Summary.EffectiveCpu - (($cluv.Summary.EffectiveCpu * $cluv.Configuration.DasConfig.FailoverLevel)/$cluv.Summary.NumEffectiveHosts)
+			$DasRealMemCapacity = $cluv.Summary.EffectiveMemory - (($cluv.Summary.EffectiveMemory * $cluv.Configuration.DasConfig.FailoverLevel)/$cluv.Summary.NumEffectiveHosts)
+		} else {
+			$DasRealCpuCapacity = $cluv.Summary.EffectiveCpu * $limitResourceCPUClusNonHA
+			$DasRealMemCapacity = $cluv.Summary.EffectiveMemory * $limitResourceMEMClusNonHA
+		}
+		
+		$cluvmlist = (Get-Cluster $cluv.name|Get-VM)
+		
+		#CPU
+			$CluCpuUsage = (get-view $cluv.ResourcePool).Summary.runtime.cpu.OverallUsage
+		$CluCpuUsageAvg = $CluCpuUsage
+		if ($cluvmlist -and $cluv.host -and $CluCpuUsageAvg -gt 0){
+			$VmCpuAverage = $CluCpuUsageAvg/(Get-Cluster $cluv.name|Get-VM).count
+			$CpuVmLeft = [math]::round(($DasRealCpuCapacity-$CluCpuUsageAvg)/$VmCpuAverage,0)
+		}
+		elseif ($CluCpuUsageAvg -eq 0) {$CpuVmLeft = &quot;N/A&quot;}
+		else {$CpuVmLeft = 0}
+		
+	
+		#MEM
+			$CluMemUsage = (get-view $cluv.ResourcePool).Summary.runtime.memory.OverallUsage
+		$CluMemUsageAvg = $CluMemUsage/1MB
+		if ($cluvmlist -and $cluv.host -and $CluMemUsageAvg -gt 100){
+			$VmMemAverage = $CluMemUsageAvg/(Get-Cluster $cluv.name|Get-VM).count
+			$MemVmLeft = [math]::round(($DasRealMemCapacity-$CluMemUsageAvg)/$VmMemAverage,0)
+		}
+		elseif ($CluMemUsageAvg -lt 100) {$CluMemUsageAvg = &quot;N/A&quot;}
+		else{$MemVmLeft = 0}
+	
+		$clucapacity.ClusterName = $cluv.name
+		$clucapacity.&quot;Estimated VMs Left (Based on CPU)&quot; = $CpuVmLeft
+		$clucapacity.&quot;Estimated VMs Left (Based on MEM)&quot; = $MemVmLeft
+		if ($cluvmlist){
+			$vCPUpCPUratio = [math]::round(($cluvmlist|Measure-Object -Sum -Property NumCpu).sum / $cluv.summary.NumCpuThreads,0)
+			$clucapacity.&quot;vCPU/pCPU ratio&quot; = $vCPUpCPUratio
+		}
+		else {$clucapacity.&quot;vCPU/pCPU ratio&quot; = &quot;0 (vCPU &lt; pCPU)&quot;}
+		if ($cluvmlist){
+			$clucapacity.&quot;VM/VMHost ratio&quot; = [math]::round(($cluvmlist).count/$cluv.summary.numEffectiveHosts,0)
+		}
+		else {$clucapacity.&quot;VM/VMHost ratio&quot; = 0}
+
+		$capacityinfo += $clucapacity
+}
+
+$capacityinfo | Sort ClusterName
+
+# Disconnect vCenter server
+Disconnect-VIServer -server &quot;$VC1&quot; -Force -Confirm:$false
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

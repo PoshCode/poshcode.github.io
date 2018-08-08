@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jason Ochoa">
+    <title>Netapp SDK - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Netapp SDK</h1>
+<h3><a href="//scripts/1323.ps1">download</a></h3>
+<p>Here is a handful of functions that I use to manage netapp appliances.  The code could be improved in several ways, but I think it is a good starting point and functions as a good set of examples for those interested in using the ontap SDK in powershell.</p>
+<pre><code class="language-posh">#Jason Ochoa 9/16/09
+#Set up NaServerObject
+$null = [reflection.assembly]::loadfile('C:\DotNet\ManageOntap.dll')
+$Toaster1 = new-Object netapp.manage.naserver('Toaster1',1,0)
+$Toaster1.setadminuser(&quot;admin&quot;,'password')
+
+
+#-------------------functions to be remade
+function global:Get-DF-s ($NaServer){#this data can be gathered directly from the volume-info package
+	$NaElement = New-Object NetApp.Manage.NaElement(”system-cli”)
+	$arg = New-Object NetApp.Manage.NaElement(”args”)
+	$arg.AddNewChild(’arg’,'df’)
+	$arg.AddNewChild(’arg’,'-s’)
+	$NaElement.AddChildElement($arg)
+	$results= $NaServer.InvokeElem($naelement).GetChildContent(”cli-output”)
+	$results = $results.Split(&quot;`n&quot;)
+	
+	$ResultsObj = $results| ?{$_ -match &quot;vol&quot;}| %{$null = $_ -match &quot;(?&lt;FileSystem&gt;(\S+))\s+(?&lt;used&gt;(\d+))\s+(?&lt;saved&gt;(\d+))\s+(?&lt;PercentSave&gt;(\d+))&quot;; 
+						$myobj = &quot;&quot; | Select-Object filesystem, usedGB, savedGB, percentsave;
+						$myobj.filesystem = $matches.Filesystem;
+						$myobj.usedGB = [Math]::Round([double]$matches.used /1mb, 2);
+						$myobj.savedGB = [Math]::Round([double]$matches.saved /1mb, 2);
+						$myobj.percentsave = [int]$matches.percentsave; 
+						,$myobj}
+	,($ResultsObj| Sort-Object filesystem)
+}
+#------------------------------sis functions
+function global:Get-SIS-Status ($NaServer){
+$naelement = New-Object netapp.manage.naelement(&quot;sis-status&quot;)
+$NaElement.AddNewChild('verbose','true')
+$Output = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.'sis-object'.'dense-status'
+$Output =  $output | Add-Member -MemberType NoteProperty -Name &quot;StartTime&quot; -Value $null -PassThru |
+					 Add-Member -MemberType NoteProperty -Name &quot;Duration&quot; -Value $null -PassThru 
+$Output|  %{$_.Duration =(((get-date -date 1/1/1970).addhours(-7)).addseconds($_.'last-operation-end-timestamp') - ((get-date -date 1/1/1970).addhours(-7)).addseconds($_.'last-operation-begin-timestamp') )}
+$Output|  %{$_.StartTime = (((get-date -date 1/1/1970).addhours(-7)).addseconds($_.'last-operation-begin-timestamp'))}
+$Output
+}
+function global:Get-SIS-LongJobs ($NaServer){
+$output = Get-SIS-Status ($NaServer)
+$output |Sort-Object State, duration -descending| Select-Object path, duration, schedule, 'last-operation-size', State| ft -AutoSize
+}
+function global:Set-SIS-config ($NaServer, $volume, $schedule){
+$naelement = New-Object netapp.manage.naelement(&quot;sis-set-config&quot;)
+$NaElement.AddNewChild('path',$volume)
+$NaElement.AddNewChild('schedule',$schedule)
+([xml]($NaServer.invokeelem($naelement)).tostring()).results.'sis-object'
+}
+function global:start-SIS ($NaServer, $volume){
+$naelement = New-Object netapp.manage.naelement(&quot;sis-start&quot;)
+$NaElement.AddNewChild('path',$volume)
+$null = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.'sis-object'
+}
+function global:stop-SIS ($NaServer, $volume){
+$naelement = New-Object netapp.manage.naelement(&quot;sis-stop&quot;)
+$NaElement.AddNewChild('path',$volume)
+$null = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.'sis-object'
+}
+function  global:Set-SIS-ON($NaServer, $volume, [switch]$SISOFF )
+{
+if (-not $SISOFF){
+	$naelement = New-Object netapp.manage.naelement(&quot;sis-enable&quot;)
+	$NaElement.AddNewChild('path',$volume)
+	$null = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.'sis-object'
+	}
+else{
+	$naelement = New-Object netapp.manage.naelement(&quot;sis-disable&quot;)
+	$NaElement.AddNewChild('path',$volume)
+	$null = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.'sis-object'
+	}
+}
+function global:Start-SIS-All ($NaServer, $MaxJobs = 4){
+$StartTime = get-date
+foreach ($path in (Get-SIS-status $NaServer|%{$_.path})){
+	while (@(Get-SIS-status $NaServer|?{$_.status -eq &quot;Active&quot;}).count -ge $MaxJobs){start-sleep 15; write-host &quot;.&quot; -nonewline}
+	write-host &quot;Starting $Path&quot;
+	start-sis $NaServer $Path
+	Start-Sleep 5}
+Write-Host &quot;This task took: $((get-date) - $StartTime)&quot;
+}
+
+#-----------------------Snapshot functions
+function global:get-Snap-AutoDeleteInfo ($NaServer)
+{
+	$naelement = New-Object netapp.manage.naelement(&quot;volume-list-info&quot;)
+	$volumes = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.volumes.'volume-info'
+	foreach ($vol in $volumes){
+		$naelement = New-Object netapp.manage.naelement(&quot;snapshot-autodelete-list-info&quot;)
+		$NaElement.AddNewChild('volume',$Vol.name)
+		$snapInfo = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.options.'snapshot-autodelete-info'
+		$myobj = &quot;&quot; | Select-Object Volume, state, commitment, trigger, target_free_space, delete_order, defer_delete, destroy_list
+		$myobj.Volume = $vol.name
+		foreach ($option in $snapInfo){$myobj.($option.'option-name') = $option.'option-value'}
+		$myobj
+	}
+}
+function global:set-Snap-AutoDeleteInfo ($NaServer, $volume, $state=&quot;on&quot;, $commitment=&quot;try&quot;, $trigger=&quot;volume&quot;, $targer_free_space=&quot;15&quot;, $delete_order=&quot;oldest_first&quot;, $defer_delete=&quot;user_created&quot;){
+	$Options = @($state, $commitment, $trigger, $targer_free_space, $delete_order, $defer_delete)
+	$OptionNames = @(&quot;state&quot;, &quot;commitment&quot;, &quot;trigger&quot;, &quot;target_free_space&quot;, &quot;delete_order&quot;, &quot;defer_delete&quot;)
+	foreach ($Counter in (0..5)){
+		$naelement = New-Object netapp.manage.naelement(&quot;snapshot-autodelete-set-option&quot;)
+		$NaElement.AddNewChild('volume',$volume)
+		$NaElement.AddNewChild('option-name', $OptionNames[$counter])
+		$NaElement.AddNewChild('option-value',$Options[$counter])
+		$null = $NaServer.invokeelem($naelement)
+		}	
+}
+function global:get-Snap-List ($NaServer)
+{
+	$naelement = New-Object netapp.manage.naelement(&quot;volume-list-info&quot;)
+	$volumes = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.volumes.'volume-info'
+	foreach ($vol in $volumes){
+		$naelement = New-Object netapp.manage.naelement(&quot;snapshot-list-info&quot;)
+		$NaElement.AddNewChild('target-type','volume’)
+		$NaElement.AddNewChild('target-name',$Vol.name)
+		$snapshots = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.snapshots.'snapshot-info'
+		foreach ($Snap in $snapshots){
+			$myobj = &quot;&quot; | Select-Object Volume, Name, accesstime, totalMB, CTotalMB, POfUsedB, CPOfUsedB
+			$myobj.Volume = $vol.name
+			$myobj.name = $Snap.name
+			$myobj.accesstime = ((get-date -date 1/1/1970).addhours(-7)).addseconds($Snap.'access-time')
+			$myobj.totalMB = [Math]::round($Snap.total / 1kb, 2)
+			$myobj.CTotalMB = [Math]::round($Snap.'cumulative-total' /1kb, 2)
+			$myobj.POfUsedB = $Snap.'percentage-of-used-blocks'
+			$myobj.CPOfUsedB = $Snap.'cumulative-percentage-of-used-blocks'
+			$myobj
+		}
+	}
+}
+function global:get-SnapList-Top-Total(){
+	$Snaps = (get-Snap-List $1504) + (get-Snap-List $1505)
+	&quot;Top 20 Large Snapshots&quot;
+	$Snaps|sort-object -prop totalMB -desc| select-object -first 20 | ft -AutoSize
+	&quot;Top 20 Snapshot footprint&quot;
+	$Snaps| Group-Object -Property volume|%{$_.group|sort-object -prop accesstime|select-object -First 1 }| sort-object -prop CtotalMB -desc| select-object -first 20|ft -AutoSize
+	&quot;Top 5 Oldest Snapshots&quot;
+	$Snaps| Group-Object -Property volume|%{$_.group|sort-object -prop accesstime|select-object -First 1 }| ?{$_.name -ne $null}|sort-object -prop accesstime| select-object -first 5 | ft -AutoSize
+}
+function global:rename-Snap($NaServer, $CurrentName, $newName, $volume){
+	$naelement = New-Object netapp.manage.naelement(&quot;snapshot-rename&quot;)
+	$NaElement.AddNewChild('current-name',$CurrentName)
+	$NaElement.AddNewChild('new-name',$newName)
+	$NaElement.AddNewChild('volume',$volume)
+	$null = $NaServer.invokeelem($naelement)
+}
+function global:remove-Snap($NaServer, $Snapshot, $volume){
+	$naelement = New-Object netapp.manage.naelement(&quot;snapshot-delete&quot;)
+	$NaElement.AddNewChild('snapshot',$Snapshot)
+	$NaElement.AddNewChild('volume',$volume)
+	$null = $NaServer.invokeelem($naelement)
+}
+function global:get-snap ($NaServer, $volume){
+	$naelement = New-Object netapp.manage.naelement(&quot;snapshot-list-info&quot;)
+	$NaElement.AddNewChild('target-type','volume’)
+	$NaElement.AddNewChild('target-name',$volume)
+	$snapshots = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.snapshots.'snapshot-info'
+	foreach ($Snap in $snapshots){
+			$myobj = &quot;&quot; | Select-Object Volume, Name, accesstime, totalMB, CTotalMB, POfUsedB, CPOfUsedB
+			$myobj.Volume = $volume
+			$myobj.name = $Snap.name
+			$myobj.accesstime = ((get-date -date 1/1/1970).addhours(-7)).addseconds($Snap.'access-time')
+			$myobj.totalMB = [Math]::round($Snap.total / 1kb, 2)
+			$myobj.CTotalMB = [Math]::round($Snap.'cumulative-total' /1kb, 2)
+			$myobj.POfUsedB = $Snap.'percentage-of-used-blocks'
+			$myobj.CPOfUsedB = $Snap.'cumulative-percentage-of-used-blocks'
+			$myobj
+		}
+}
+function global:New-Snap ($NaServer, $SnapPrefix, $volume, $MaxSave = 5){
+	if ([int]$MaxSave -lt 1) {return -1}
+	$CurrentSnaps = get-snap $NaServer $volume
+	$CurrentSnaps = @($CurrentSnaps| ?{$_.name -match &quot;^$SnapPrefix\.\d+$&quot;}| Sort-Object -Property accesstime )
+	#&quot;count: $($CurrentSnaps.count) - $MaxSave = $($CurrentSnaps.count  - $MaxSave)&quot;
+	if ($CurrentSnaps.count -gt $MaxSave-1 -and $CurrentSnaps.count -gt 0) {#remove Oldest Snap
+		#&quot;hit cleanup process&quot;
+		foreach ($i in 0..($CurrentSnaps.count  - $MaxSave )){
+			#&quot;Removing: $($CurrentSnaps[0].Name)&quot;
+			remove-snap $NaServer $CurrentSnaps[0].Name $volume
+			$CurrentSnaps = @($CurrentSnaps| ?{$_.name -ne $CurrentSnaps[0].Name})
+			}	
+	}
+	#&quot;current snaps after removals&quot;
+	#$CurrentSnaps|%{$_.name}
+	if ($CurrentSnaps -ne $null){
+		foreach ($Snap in $CurrentSnaps){
+				$null = $Snap.name -match &quot;^$SnapPrefix\.(?&lt;digit&gt;\d+)$&quot;
+				rename-snap $NaServer $Snap.name &quot;$SnapPrefix.$([int]$matches.digit+1)&quot; $volume
+				#&quot;Renaming: $($Snap.name) -&gt; $SnapPrefix.$([int]$matches.digit+1)&quot;
+			}
+		}
+	$naelement = New-Object netapp.manage.naelement(&quot;snapshot-create&quot;)
+	$NaElement.AddNewChild('snapshot',&quot;$SnapPrefix.0&quot;)
+	$NaElement.AddNewChild('volume',$volume)
+	$null = $NaServer.invokeelem($naelement)
+}
+# --------------- Lun functions
+function Set-LUN-Caption ($NaServer, $LUNpath, $Comment){
+	$naelement = New-Object netapp.manage.naelement(&quot;lun-set-comment&quot;)
+	$NaElement.AddNewChild('comment',$comment)
+	$NaElement.AddNewChild('path',$LUNpath)
+	$null = ($NaServer.invokeelem($naelement)).tostring()
+}
+function global:get-Lun-Info ($NaServer, $LUNpattern='.*'){
+	$naelement = New-Object netapp.manage.naelement(&quot;lun-list-info&quot;)
+	$LUNs = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.luns.'lun-info'
+	$LUNs| ?{$_.path -match $LUNpattern}| Sort-Object path
+}
+function global:Map-Lun ($NaServer, $LUNpath, $iGroup, $LUNid){
+	$naelement = New-Object netapp.manage.naelement(&quot;lun-map&quot;)
+	$NaElement.AddNewChild('path',$LUNpath)
+	$NaElement.AddNewChild('initiator-group',$iGroup)
+	$NaElement.AddNewChild('lun-id',$LUNid)
+	$null = ($NaServer.invokeelem($naelement)).tostring()
+}
+function global:Get-LUN-Map ($NaServer, $filter ='.*'){
+	$LUNs = get-Lun-Info $NaServer
+	$Maps = foreach ($LUN in $LUNs){
+		$naelement = New-Object netapp.manage.naelement(&quot;lun-map-list-info&quot;)
+		$NaElement.AddNewChild('path',$LUN.path)
+		$Groups = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.'initiator-groups'.'initiator-group-info'
+		$groups | Add-Member -MemberType noteproperty -Name path -Value $LUN.path -Force -PassThru
+	} 
+	$Maps| ?{$_.'initiator-group-name' -match $filter -or $_.path -match $filter}|Sort-Object path, 'lun-id'
+}
+function global:copy-LUN-Map ($NaServer, $SourceiGroup, $DestinationiGroup, $filter = '.*'){
+	$LUNmaps = Get-LUN-Map $NaServer $SourceiGroup $filter
+	foreach ($LUNmap in $LUNmaps){
+		Map-Lun $NaServer $LUNmap.path $DestinationiGroup $LUNmap.'lun-id'
+	}
+}
+#------------- Performance functions
+function list {$args}
+function global:Print-NaMatrix($values){
+	$c =list b c c c c d d d g g c d d d d g g g y y c d d d d g g g y y c d d d d g g g y y c d d d d g g g y y d g g g g y y y m m d g g g g y y y m m d g g g g y y y m m g y y y y m m m r r g y y y y m m m r r
+	$d = $c|%{ switch ($_) { &quot;b&quot; {&quot;cyan&quot;}; &quot;c&quot; {&quot;cyan&quot;}; &quot;d&quot; {&quot;darkgreen&quot;}; &quot;g&quot; {&quot;Green&quot;}; &quot;y&quot; {&quot;Yellow&quot;}; &quot;m&quot; {&quot;magenta&quot;}; &quot;r&quot; {&quot;Red&quot;}}}
+	$x=0;$values|%{$x=$x+$_}
+	1..100|%{if ($_ % 10 -eq 0){write-host (&quot;{0:P2}&quot; -f (($values[$_-1])/$x)) -for $d[$_-1]} else {write-host (&quot;{0:P2}&quot; -f (($values[$_-1])/$x)) -for $d[$_-1] -no}}
+}
+function global:Get-NaCounter($Filer, $counter){
+	$naelement = New-Object netapp.manage.naelement(&quot;perf-object-get-instances&quot;)
+	$NaElement.AddNewChild(’objectname’,'perf’)
+	$results = [xml]($Filer.invokeelem($naelement)).tostring()
+	$myobj = &quot;&quot; | Select-Object Value, Timestamp
+	$myobj.TimeStamp = ((get-date -date 1/1/1970).addhours(-7)).addseconds($results.results.timestamp)
+	$value = ($results.results.instances.'instance-data'.counters.'counter-data'|?{$_.name -eq $counter}).value
+	$myobj.Value = if ($value){$value} else{&quot;Missing Counter&quot;}
+	$myObj
+}
+function global:Get-NaCounter-TimeSlice($NaServer, $counter = 'disk_user_reads_latency_histogram', $timeSample = 10){
+	$values1 = (Get-NaCounter $NaServer $counter).Value
+	$values1= [regex]::split($values1,&quot;,&quot;)
+	Start-Sleep $timeSample
+	$values2 = (Get-NaCounter $NaServer $counter).Value
+	$values2= [regex]::split($values2,&quot;,&quot;)
+	$values =(0..($values1.count))|%{($values2[$_] - $values1[$_])}
+	$values
+}
+function global:Get-NaMatrix-Full($NaServer){
+	$values = (Get-NaCounter $NaServer 'cpu_disk_util_matrix').Value
+	$values= [regex]::split($values,&quot;,&quot;)
+	Print-NaMatrix $values
+}
+function global:Get-NaMatrix-TimeSlice($NaServer,$timeSample = 10){	
+	Print-NaMatrix (Get-NaCounter-TimeSlice $NaServer 'cpu_disk_util_matrix' $timeSample)
+}
+
+#------------- Get and Set netapp options functions
+
+function global:Set-NaOption ($NaServer, $OptionName, $OptionValue){
+	$naelement = New-Object netapp.manage.naelement(&quot;options-set&quot;)
+	$NaElement.AddNewChild('name',$OptionName)
+	$NaElement.AddNewChild('value',$OptionValue)
+	$null = [xml]($NaServer.invokeelem($naelement)).tostring()
+	Get-NaOption $NaServer &quot;^$OptionName&quot;
+}
+function global:Get-NaOption ($NaServer, $Search = '.*'){
+	$naelement = New-Object netapp.manage.naelement(&quot;options-list-info&quot;)
+	$Options = ([xml]($NaServer.invokeelem($naelement)).tostring()).results.options.'option-info'
+	$Options|?{$_.name -match $Search}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

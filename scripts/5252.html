@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Don Jones">
+    <title>Final: Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Final: Module</h1>
+<h3><a href="//scripts/5252.ps1">download</a></h3>
+<p>Final script module</p>
+<pre><code class="language-posh">function Get-OSInfo {
+&lt;#
+.SYNOPSIS
+Gets OS info.
+
+.DESCRIPTION
+Uses CIM, so PowerShell 3+ needs to be on all target nodes.
+
+.PARAMETER Computername
+The name of the computer. Duh.
+
+.PARAMETER ErrorLogFile
+Defaults to c:\errors.txt; this is the text file where
+the names of failed computers will be saved. This file
+will be deleted, if it exists, when the command runs.
+
+.EXAMPLE
+Get-OSInfo -Computername DC,S1
+This example gets Os info from two computers.
+
+.EXAMPLE
+&quot;s1&quot;,&quot;s2&quot; | Get-OSInfo
+This example gets OS info from two computers, but accepts
+their names from the pipeline.
+#&gt;
+    [CmdletBinding()]
+    param(
+
+        # One or more canonical computer names
+        [Parameter(Mandatory=$True,
+                   ValueFromPipeline=$True,
+                   ValueFromPipelineByPropertyName=$True,
+                   HelpMessage='Computer name to query')]
+        [ValidateNotNullOrEmpty()] #about_functions_advanced_parameters
+        [Alias('cn','hostname')]
+        [string[]]$ComputerName,
+
+        # Text file to log failed computer names
+        [Parameter(HelpMessage='Text file for failed computer names')]
+        [string]$ErrorLogFile = 'c:\errors.txt'
+    )
+
+    # This runs before anything else in the function
+    BEGIN {
+
+        # start with a fresh file each time
+        Write-Verbose &quot;Removing $ErrorLogFile&quot;
+        Remove-Item -Path $ErrorLogFile -ErrorAction SilentlyContinue
+
+    }
+
+    # When input is piped, this runs once for each piped object
+    # Otherwise this runs once with all info in parameters
+    PROCESS {
+
+        # enumerate computers
+        foreach ($computer in $computername) {
+            try {
+
+                # trapping connection fail on first query
+                Write-Verbose &quot;Connecting to $computer&quot;
+                $os = Get-CimInstance -Class Win32_OperatingSystem -Comp $Computer  -ErrorAction Stop
+                $compsys =Get-CimInstance -Class Win32_ComputerSystem -Comp $Computer
+
+                # translate mfgr name
+                switch ($compsys.Manufacturer) {
+                    'Microsoft ' { $mfgr = 'MS' }
+                    'Dell'       { $mfgr = 'Dell Computer' }
+                    default      { $mfgr = $compsys.Manufacturer }
+                }
+                Write-Verbose &quot;Manufacturer is now $mfgr, OS version is $($os.version)&quot;
+
+                # construct output properties
+                $output = @{'ComputerName' = $computer;
+                            'OSVersion'    = $os.version;
+                            'SPVersion'    = $os.ServicePackMajorVersion;
+                            'Mfgr'         = $mfgr;
+                            'Model'        = $compsys.Model}
+
+                # get the disks
+                $disks_array = @()
+                $disks = Get-CimInstance -ClassName Win32_LogicalDisk -ComputerName $Computer
+                foreach ($disk in $disks) {
+                    $disk_object_props = @{'DriveLetter'=$disk.DeviceID;
+                                           'Size'=$disk.Size;
+                                           'FreeSpace'=$disk.FreeSpace}
+                    $disk_object = New-Object -TypeName PSObject -Property $disk_object_props
+                    $disks_array += $disk_object
+                }
+
+                #append the disks to the output properties
+                $output.add('Disks',$disks_array)
+
+                # emit output object
+                $object = New-Object -TypeName PSObject -Property $output
+                $object.psobject.typenames.insert(0,'MyTools.OSInfo.Output.Thing')
+                Write-Output $object
+
+            } catch {
+
+                # display error and log failed
+                # computer name to file
+                $oops = $_
+                $Computer | out-file -FilePath $ErrorLogFile -Append
+                Write-Warning &quot;OMG, $computer failed&quot;
+                Write-Warning &quot;Apparently, $oops&quot;
+
+            }#trycatch
+        }#foreach computer
+    }#process
+}#function
+
+function Set-ServiceLogonPassword {
+    [CmdletBinding(SupportsShouldProcess=$True,ConfirmImpact='Medium')]
+    param(
+        [Parameter(Mandatory=$True,
+                   ValueFromPipeline=$True,
+                   ValueFromPipelineByPropertyName=$True)]
+        [Alias('DNSHostName')]
+        [string[]]$ComputerName,
+
+        [Parameter(Mandatory=$True)]
+        [string]$ServiceName,
+
+        [Parameter(Mandatory=$True)]
+        [string]$NewPassword
+    )
+    PROCESS {
+        
+        foreach ($computer in $computername) {
+
+            $rv = Get-CimInstance  -ClassName Win32_Service `
+                                   -Filter &quot;name='$servicename'&quot; `
+                                   -ComputerName $computer |
+                  Invoke-CimMethod -MethodName Change `
+                                   -Arguments @{'StartPassword'=$NewPassword}
+
+            if ($rv.returnvalue -ne 0) {
+                Write-warning &quot;It didn't work on $computer for $servicename. Panic.&quot;
+            }
+
+        }
+
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="oldsienna">
+    <title>VMware Lab Manager 4.x - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>VMware Lab Manager 4.x</h1>
+<h3><a href="//scripts/2263.ps1">download</a></h3>
+<p>Based on poshcode.org/753 - minor mods to support new mandatory authentication parameters in Lab Manager 4.x.</p>
+<p>Sample code to demonstrate PowerShell 2.0 integration with Lab Manager APIs. Majority of code can be omitted if properly signed SSL certificates are used.</p>
+<pre><code class="language-posh">function Ignore-SslErrors {
+	# Create a compilation environment
+	$Provider=New-Object Microsoft.CSharp.CSharpCodeProvider
+	$Compiler=$Provider.CreateCompiler()
+	$Params=New-Object System.CodeDom.Compiler.CompilerParameters
+	$Params.GenerateExecutable=$False
+	$Params.GenerateInMemory=$True
+	$Params.IncludeDebugInformation=$False
+	$Params.ReferencedAssemblies.Add(&quot;System.DLL&quot;) &gt; $null
+	$TASource=@'
+	  namespace Local.ToolkitExtensions.Net.CertificatePolicy {
+	    public class TrustAll : System.Net.ICertificatePolicy {
+	      public TrustAll() { 
+	      }
+	      public bool CheckValidationResult(System.Net.ServicePoint sp,
+	        System.Security.Cryptography.X509Certificates.X509Certificate cert, 
+	        System.Net.WebRequest req, int problem) {
+	        return true;
+	      }
+	    }
+	  }
+'@ 
+	$TAResults=$Provider.CompileAssemblyFromSource($Params,$TASource)
+	$TAAssembly=$TAResults.CompiledAssembly
+
+	## We now create an instance of the TrustAll and attach it to the ServicePointManager
+	$TrustAll=$TAAssembly.CreateInstance(&quot;Local.ToolkitExtensions.Net.CertificatePolicy.TrustAll&quot;)
+	[System.Net.ServicePointManager]::CertificatePolicy=$TrustAll
+}
+
+function New-ObjectFromProxy {
+	param($proxy, $proxyAttributeName, $typeName)
+
+	# Locate the assembly for $proxy
+	$attribute = $proxy | gm | where { $_.Name -eq $proxyAttributeName }
+	$str = &quot;`$assembly = [&quot; + $attribute.TypeName + &quot;].assembly&quot;
+	invoke-expression $str
+
+	# Instantiate an AuthenticationHeaderValue object.
+	$type = $assembly.getTypes() | where { $_.Name -eq $typeName }
+	return $assembly.CreateInstance($type)
+}
+
+function Connect-LabManager {
+	param
+    (
+        [string] $server, 
+        $credential,
+        [string] $organizationname = &quot;Default&quot;,
+        [string] $workspacename = &quot;Main&quot;
+    )
+        
+	# Log in to Lab Manager's web service.
+	$server = &quot;https://&quot; + $server + &quot;/&quot;
+	$endpoint = $server + &quot;LabManager/SOAP/LabManager.asmx&quot;
+	$proxy = new-webserviceproxy -uri $endpoint -cred $credential
+
+	# Before continuing we need to add an Authentication Header to $proxy.
+	$authHeader = New-ObjectFromProxy -proxy $proxy -proxyAttributeName &quot;AuthenticationHeaderValue&quot; -typeName &quot;AuthenticationHeader&quot;
+	$authHeader.username = $credential.GetNetworkCredential().UserName
+	$authHeader.password = $credential.GetNetworkCredential().Password
+    $authHeader.organizationname = $organizationname
+    $authHeader.workspacename = $workspacename
+	$proxy.AuthenticationHeaderValue = $authHeader
+	return $proxy
+}
+
+# Examples:
+# Run this command if your Lab Manager's certificate is untrusted but you want to connect.
+Ignore-SslErrors
+
+# Connect to Lab Manager.
+$labManager = Connect-LabManager -server &quot;demo.eng.vmware.com&quot; -credential (get-credential)
+
+# Find out what operations there are.
+$labManager | gm | where { $_.MemberType -eq &quot;Method&quot; }
+# See http://www.vmware.com/pdf/lm30_soap_api_guide.pdf for help on arguments.
+
+# List all library configurations.
+$labManager.ListConfigurations(1)
+
+# Find all machines deployed from any library configuration.
+$labManager.ListConfigurations(1) | foreach { write-host (&quot;For Configuration &quot; + $_.id + &quot;:&quot;); $labManager.ListMachines($_.id) }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

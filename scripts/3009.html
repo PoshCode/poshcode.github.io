@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>ActiveDirectoryFunctions - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ActiveDirectoryFunctions</h1>
+<h3><a href="//scripts/3009.ps1">download</a> - <a href="//scripts/3008.md">parent</a></h3>
+<p>A bunch of AD-related functions ... I'm only pasting this because I can't find another Get-ADComputer or Get-NTAccountName</p>
+<pre><code class="language-posh">#.SYNOPSIS
+#  Gets a directory entry from ActiveDirectory based on the login user name
+function Get-ADUser {
+[CmdletBinding()]
+param([string]$UserName=${Env:userName})
+   $ads = New-Object System.DirectoryServices.DirectorySearcher([ADSI]'')
+   $ads.filter = &quot;(&amp;(objectClass=Person)(samAccountName=$UserName))&quot;
+   $ads.FindAll().GetEnumerator() | %{ $_.GetDirectoryEntry() }
+}
+
+
+function Get-NTAccountName {
+[CmdletBinding()]
+param(
+	[Parameter(ValueFromPipelineByPropertyName=$true)]
+	[string]$Name
+)
+process {
+	$ads = New-Object System.DirectoryServices.DirectorySearcher([ADSI]'')
+	$ads.filter = &quot;(|(name=$Name)(samAccountName=$Name))&quot;
+	$distinguishedName = $ads.FindOne().Properties[&quot;distinguishedname&quot;]
+
+	# Use the NameTranslate object.
+	$objTrans = New-Object -comObject &quot;NameTranslate&quot;
+	$objNT = $objTrans.GetType()
+
+	# Invoke the Init method to Initialize NameTranslate by locating
+	# the Global Catalog. Note the constant 3 is ADS_NAME_INITTYPE_GC.
+	$objNT.InvokeMember(&quot;Init&quot;, &quot;InvokeMethod&quot;, $Null, $objTrans, (3, $Null))
+
+	# Use the Set method to specify the Distinguished Name of the current domain.
+	# Note the constant 1 is ADS_NAME_TYPE_1779.
+	$objNT.InvokeMember(&quot;Set&quot;, &quot;InvokeMethod&quot;, $Null, $objTrans, (1, &quot;$distinguishedName&quot;))
+
+	# Use the Get method to retrieve the NetBIOS name of the current domain.
+	# Note the constant 3 is ADS_NAME_TYPE_NT4.
+	# The value retrieved includes a trailing backslash.
+	$objNT.InvokeMember(&quot;Get&quot;, &quot;InvokeMethod&quot;, $Null, $objTrans, 3)
+}}
+
+
+function Get-SID {
+[CmdletBinding()]
+param(
+	[Parameter(ValueFromPipelineByPropertyName=$true)]
+	[string]$Name
+)
+process {
+	$ads = New-Object System.DirectoryServices.DirectorySearcher([ADSI]'')
+	$ads.filter = &quot;(|(name=$Name)(samAccountName=$Name))&quot;
+	new-object security.principal.securityidentifier $ads.FindOne().Properties[&quot;objectSID&quot;][0], 0
+}}
+
+
+#.SYNOPSIS
+#  Gets a directory entry from ActiveDirectory based on the computer name
+function Get-ADComputer {
+[CmdletBinding()]
+param(
+	[Parameter(ValueFromPipelineByPropertyName=$true)]
+	[string]$ComputerName=${Env:ComputerName}
+)
+   $ads = New-Object System.DirectoryServices.DirectorySearcher([ADSI]'')
+   $ads.filter = &quot;(&amp;(objectClass=Computer)(name=$ComputerName))&quot;
+   $ads.FindAll().GetEnumerator() | %{ 
+      $Computer = $_.GetDirectoryEntry()
+	  $Computer = Resolve-PropertyValueCollection -InputObject $Computer
+      Add-Member -InputObject $Computer -Type NoteProperty -Name SID -Value (new-object security.principal.securityidentifier $Computer.objectSID, 0)
+      Add-Member -InputObject $Computer -Type NoteProperty -Name GUID -Value (new-object GUID (,[byte[]]$Computer.objectGUID))
+      Add-Member -InputObject $Computer -Type NoteProperty -Name CreatorSID -Value (new-object security.principal.securityidentifier $Computer.&quot;mS-DS-CreatorSID&quot;, 0)
+      Add-Member -InputObject $Computer -Type NoteProperty -Name NTAccountName -Value (Get-NTAccountName $ComputerName)
+	  $Computer
+   }
+}
+
+#.SYNOPSIS
+#  Gets a directory entry from ActiveDirectory based on the group's friendly name
+function Get-ADGroup {
+[CmdletBinding()]
+param([string]$UserName)
+   $ads = New-Object System.DirectoryServices.DirectorySearcher([ADSI]'')
+   $ads.filter = &quot;(&amp;(objectClass=Group)(samAccountName=$UserName))&quot;
+   $ads.FindAll().GetEnumerator() | %{ $_.GetDirectoryEntry() }
+}
+
+
+#.SYNOPSIS
+#  Look up a DN from a user's (login) name 
+function Get-DistinguishedName { 
+[CmdletBinding()]
+param([string]$UserName)
+   (Get-ADUser $UserName).DistinguishedName
+}
+
+#.SYNOPSIS
+#  Get Active Directory group membership recursively
+#.EXAMPLE
+#  $groups = Get-GroupMembership (Get-DistinguishedName Jaykul)
+#.EXAMPLE
+#  $groups = Get-GroupMembership (Get-DistinguishedName Jaykul) -RecurseLimit 0
+#
+#  Gets the groups the user belongs to without recursing
+function Get-GroupMembership {
+[CmdletBinding()]
+param([string]$Name,[int]$RecurseLimit=-1)
+
+if(!$Name.StartsWith(&quot;CN=&quot;,&quot;InvariantCultureIgnoreCase&quot;)) {
+   $Name = Get-DistinguishedName $Name
+}
+
+   $groups = ([adsi]&quot;LDAP://$Name&quot;).MemberOf
+   if ($groups -and $RecurseLimit) {
+      Foreach ($gr in $groups) {
+         $groups += @(Get-GroupMembership $gr -RecurseLimit:$($RecurseLimit-1) |
+                    ? {$groups -notcontains $_})
+      }
+   }
+   return $groups | Convert-DistinguishedName
+}
+
+function Convert-DistinguishedName {
+[CmdletBinding()]
+param(
+   [Parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,Position=0)]
+   [string]$name
+)
+process {
+   if(!$Name.StartsWith(&quot;CN=&quot;,&quot;InvariantCultureIgnoreCase&quot;)) {
+      $Name = Get-DistinguishedName $Name
+   }
+   $name -replace &quot;CN=&quot;,&quot;Name=&quot; -replace &quot;DC=&quot;,&quot;Domain=&quot; -replace &quot;OU=&quot;,&quot;Org=&quot; | ConvertFrom-PropertyString -Delimiter &quot;,&quot; | ForEach { $_.Domain = $_.Domain -join &quot;.&quot;; $_ } | Add-Member NoteProperty DN $name -passthru
+}
+}
+
+function Resolve-PropertyValueCollection { 
+param(
+	[Parameter(ValueFromPipeline=$true)]
+	$InputObject
+)
+process {
+	$SingleMembers = @()
+	$MultiMembers = @()
+	$InputObject | Get-Member -Type Property | ForEach-Object {
+		$Name = $_.Name
+		if($InputObject.($Name).Count -le 1) {
+			$SingleMembers += $Name
+		} else {
+			$MultiMembers += $Name
+		}
+	}
+	
+	$OutputObject = Select-Object -InputObject $InputObject -Property $MultiMembers
+	foreach($member in $singleMembers) {
+		Add-Member -InputObject $OutputObject -Type NoteProperty -Name $Member -Value ($InputObject.$Member)[0]
+	}
+	$OutputObject
+}
+}
+
+
+#. SYNOPSIS
+#  Pretty-print the vitals on a user...
+function Select-UserInfo {
+[CmdletBinding()]
+param(
+   [Parameter(Mandatory=$true,Position=0,ParameterSetName=&quot;Input&quot;,ValueFromPipeline=$true)]
+   [System.DirectoryServices.DirectoryEntry[]]$InputObject
+,
+   [Parameter(Mandatory=$true,Position=0,ParameterSetName=&quot;Name&quot;,ValueFromPipelineByPropertyName=$true)]
+   [string[]]$name
+)
+process {
+   switch($PSCmdlet.ParameterSetName) {
+   &quot;Name&quot; {
+      foreach($n in $Name) {
+         Write-Verbose &quot;Getting $n User Info&quot;
+         Get-ADUser $n | Resolve-PropertyValueCollection
+      }
+   }
+   &quot;Input&quot; {
+      foreach($io in $InputObject) {
+         Write-Verbose &quot;Converting User Info for $($io.displayName)&quot;
+         Resolve-PropertyValueCollection -InputObject $io
+      }
+   }
+   }
+}
+}
+
+
+function Get-GroupMembers {
+[CmdletBinding()]
+param(
+[Parameter(Mandatory=$true,Position=0,ParameterSetName=&quot;Input&quot;,ValueFromPipeline=$true)]
+[string]$GroupName
+)
+process {
+   Foreach ($member in (Get-ADGroup $GroupName).Members() ) {
+      new-object System.DirectoryServices.DirectoryEntry $member | Resolve-PropertyValueCollection
+   }
+}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Andy Arismendi">
+    <title>Test-UserCredential - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Test-UserCredential</h1>
+<h3><a href="//scripts/2925.ps1">download</a> - <a href="//scripts/2924.md">parent</a></h3>
+<p>A function to test a user's credentials. Return true/false. Works for local or domain user accounts.</p>
+<pre><code class="language-posh">function Test-UserCredential {
+	[CmdletBinding(DefaultParameterSetName = &quot;set1&quot;)]
+	[OutputType(&quot;set1&quot;, [System.Boolean])]
+	[OutputType(&quot;PSCredential&quot;, [System.Boolean])]
+	param(
+		[Parameter(Mandatory=$true, ParameterSetName=&quot;set1&quot;, position=0)] 
+		[ValidateNotNullOrEmpty()]
+		[String] $Username,
+
+		[Parameter(Mandatory=$true, ParameterSetName=&quot;set1&quot;, position=1)] 
+		[ValidateNotNullOrEmpty()]
+		[System.Security.SecureString] $Password,
+		
+		[Parameter(Mandatory=$true, ParameterSetName=&quot;PSCredential&quot;, ValueFromPipeline=$true, position=0)] 
+		[ValidateNotNullOrEmpty()]
+		[Management.Automation.PSCredential] $Credential,
+		
+		[Parameter(position=2)]
+		[Switch] $Domain,
+		
+		[Parameter(position=3)]
+		[Switch] $UseKerberos
+	)
+	
+	Begin {
+		try { $assem = [system.reflection.assembly]::LoadWithPartialName('System.DirectoryServices.AccountManagement') }
+		catch { throw 'Failed to load assembly &quot;System.DirectoryServices.AccountManagement&quot;. The error was: &quot;{0}&quot;.' -f $_ }
+		
+		$system = Get-WmiObject -Class Win32_ComputerSystem
+		
+		if (0, 2 -contains $system.DomainRole) {
+			throw 'This computer is not a member of a domain.'
+		}
+	}
+	
+	Process {
+		try {
+			switch ($PSCmdlet.ParameterSetName) {
+				'PSCredential' {
+					if ($Domain) {
+						$Username = $Credential.UserName.TrimStart('\')
+					} else {
+						$Username = $Credential.GetNetworkCredential().UserName
+					}
+					$PasswordText = $Credential.GetNetworkCredential().Password
+				}
+				'set1' {
+						# Decrypt secure string.
+					$PasswordText = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+							[Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
+						)
+				}
+			}
+					
+			if ($Domain) {
+				$pc = New-Object -TypeName System.DirectoryServices.AccountManagement.PrincipalContext 'Domain', $system.Domain
+			} else {
+				$pc = New-Object -TypeName System.DirectoryServices.AccountManagement.PrincipalContext 'Machine', $env:COMPUTERNAME
+			}
+			
+			if ($Domain -and $UseKerberos) {
+				return $pc.ValidateCredentials($Username, $PasswordText)
+			} else {
+				return $pc.ValidateCredentials($Username, $PasswordText, [DirectoryServices.AccountManagement.ContextOptions]::Negotiate)
+			}
+		} catch {
+			throw 'Failed to test user credentials. The error was: &quot;{0}&quot;.' -f $_
+		} finally {
+			Remove-Variable -Name Username -ErrorAction SilentlyContinue
+			Remove-Variable -Name Password -ErrorAction SilentlyContinue
+		}
+	}
+	
+	&lt;#
+		.SYNOPSIS
+			Validates credentials for local or domain user.
+		
+		.PARAMETER  Username
+			The user's username.
+	
+		.PARAMETER  Password
+			The user's password.
+			
+		.PARAMETER  Credential
+			A PSCredential object created by Get-Credential. This can be pipelined to Test-UserCredential.
+			
+		.PARAMETER  UseKerberos
+			By default NTLM is used. Specify this switch to attempt kerberos authentication. 
+			
+			This is only used with the 'Domain' parameter.
+			
+			You may need to specify domain\user.
+	
+		.EXAMPLE
+			PS C:\&gt; Test-UserCredential -Username andy -password (Read-Host -AsSecureString)
+	
+		.EXAMPLE
+			PS C:\&gt; Test-UserCredential -Username 'mydomain\andy' -password (Read-Host -AsSecureString) -domain -UseKerberos
+
+		.EXAMPLE
+			PS C:\&gt; Test-UserCredential -Username 'andy' -password (Read-Host -AsSecureString) -domain
+			
+		.EXAMPLE
+			PS C:\&gt; Get-Credential | Test-UserCredential
+	
+		.INPUTS
+			None.
+	
+		.OUTPUTS
+			System.Boolean.
+	
+		.NOTES
+			Revision History
+				2011-08-21: Andy Arismendi - Created.
+				2011-08-22: Andy Arismendi - Add pipelining support for Get-Credential.
+				2011-08-22: Andy Arismendi - Add support for NTLM/kerberos switch.	
+	#&gt;
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jaykul">
+    <title>HuddledTricks - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>HuddledTricks</h1>
+<h3><a href="//scripts/1741.ps1">download</a> - <a href="//scripts/845.md">parent</a></h3>
+<p>I just added a bunch of tricks, including Ghosting windows (and unghosting), as well as messing with aero peek</p>
+<pre><code class="language-posh">#Requires -version 2.0
+## Stupid PowerShell Tricks
+###################################################################################################
+add-type @&quot;
+using System;
+using System.Runtime.InteropServices;
+public class Tricks {
+   [DllImport(&quot;user32.dll&quot;)]
+   private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+   
+   [DllImport(&quot;user32.dll&quot;, SetLastError = true)]
+   private static extern UInt32 GetWindowLong(IntPtr hWnd, int nIndex);
+
+   [DllImport(&quot;user32.dll&quot;)]
+   static extern int SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+   [DllImport(&quot;user32.dll&quot;)]
+   static extern bool SetLayeredWindowAttributes(IntPtr hwnd, uint crKey, byte bAlpha, uint dwFlags);
+
+   [DllImport(&quot;user32.dll&quot;)]
+   [return: MarshalAs(UnmanagedType.Bool)]
+   static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, SWP uFlags);   
+   
+   [DllImport(&quot;dwmapi.dll&quot;, PreserveSig = false)]
+   public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+   const int GWL_EXSTYLE = -20;
+   const int WS_EX_LAYERED = 0x80000;
+   const int WS_EX_TRANSPARENT = 0x20;
+   const int LWA_ALPHA = 0x2;
+   const int LWA_COLORKEY = 0x1;
+   
+   static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+   static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+   static readonly IntPtr HWND_TOP = new IntPtr(0);
+   static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
+   
+   [Flags]
+   enum SWP : uint {
+      NOSIZE = 0x0001,
+      NOMOVE = 0x0002,
+      NOZORDER = 0x0004,
+      NOREDRAW = 0x0008,
+      NOACTIVATE = 0x0010,
+      FRAMECHANGED = 0x0020,  /* The frame changed: send WM_NCCALCSIZE */
+      SHOWWINDOW = 0x0040,
+      HIDEWINDOW = 0x0080,
+      NOCOPYBITS = 0x0100,
+      NOOWNERZORDER = 0x0200,  /* Don't do owner Z ordering */
+      NOSENDCHANGING = 0x0400,  /* Don't send WM_WINDOWPOSCHANGING */
+   }
+   [Flags]
+   public enum DwmWindowAttribute
+   {
+      NCRenderingEnabled = 1,
+      NCRenderingPolicy,
+      TransitionsForceDisabled,
+      AllowNCPaint,
+      CaptionButtonBounds,
+      NonClientRtlLayout,
+      ForceIconicRepresentation,
+      Flip3DPolicy,
+      ExtendedFrameBounds,
+      HasIconicBitmap,
+      DisallowPeek,
+      ExcludedFromPeek,
+      Last
+   }
+
+   [Flags]
+   public enum DwmNCRenderingPolicy
+   {
+      UseWindowStyle,
+      Disabled,
+      Enabled,
+      Last
+   }
+
+	public static void ShowWindow(IntPtr hWnd) { ShowWindowAsync(hWnd,5); }
+	public static void HideWindow(IntPtr hWnd) { ShowWindowAsync(hWnd,0); }
+   public static void GhostWindow(IntPtr hWnd, int percent) {
+      SetWindowLong(hWnd, GWL_EXSTYLE, (IntPtr)(GetWindowLong(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED | WS_EX_TRANSPARENT));
+      // set transparency to X% (of 255)
+      if(percent &gt; 100) { percent = 100; }
+      byte alpha = (byte)(255 * (percent/100.0));
+      SetLayeredWindowAttributes(hWnd, 0, alpha, LWA_ALPHA);
+      SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOMOVE);
+   }
+   public static void UnGhostWindow(IntPtr hWnd) {
+      SetWindowLong(hWnd, GWL_EXSTYLE, (IntPtr)(GetWindowLong(hWnd, GWL_EXSTYLE) &amp;~WS_EX_LAYERED &amp;~WS_EX_TRANSPARENT));
+      SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP.NOSIZE | SWP.NOMOVE);
+   }
+   
+   public static void RemoveFromAeroPeek(IntPtr Hwnd) //Hwnd is the handle to your window
+   {
+      int renderPolicy = (int)DwmNCRenderingPolicy.Enabled;
+      DwmSetWindowAttribute(Hwnd, (int)DwmWindowAttribute.ExcludedFromPeek, ref renderPolicy, sizeof(int));
+   }
+   public static void RestoreToAeroPeek(IntPtr Hwnd) //Hwnd is the handle to your window
+   {
+      int renderPolicy = (int)DwmNCRenderingPolicy.Disabled;
+      DwmSetWindowAttribute(Hwnd, (int)DwmWindowAttribute.ExcludedFromPeek, ref renderPolicy, sizeof(int));
+   }
+}
+&quot;@
+
+$dictionary = [System.Collections.Generic.Dictionary``2]
+$list = [System.Collections.Generic.List``1]
+$string = [String]
+$intPtr = [IntPtr]
+
+$intPtrList = $list.AssemblyQualifiedName -replace &quot;1,&quot;,&quot;1[[$($intPtr.AssemblyQualifiedName)]],&quot;
+$windows = new-object ($dictionary.AssemblyQualifiedName -replace &quot;2,&quot;,&quot;2[[$($string.AssemblyQualifiedName)],[$intPtrList]],&quot;)
+
+
+
+function Remove-GhostWindow {
+&lt;#
+.SYNOPSIS
+   Un-ghost a window
+.PARAMETER Handle
+   The window handle to a specific window we want to hide.
+.PARAMETER Name
+   The name of a running process whos windows you want to hide.
+.EXAMPLE
+   Get-Process PowerShell | Hide-Window; Sleep 5; Show-Window
+   
+   Hides the PowerShell window(s) for 5 seconds
+#&gt;
+[CmdletBinding()]
+PARAM (
+   [Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;MainWindowHandle&quot;,&quot;Handle&quot;)]
+   [IntPtr]$WindowHandle=[IntPtr]::Zero
+,
+   [Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;ProcessName&quot;)]
+   [String]$Name
+)
+PROCESS { 
+	(Resolve-Window $WindowHandle $Name) | ForEach-Object { [Tricks]::UnGhostWindow( $_ ) }
+}
+}
+
+
+function Set-GhostWindow {
+&lt;#
+.SYNOPSIS
+   Make a window partially transparent and click-through
+.PARAMETER Handle
+   The window handle to a specific window we want to hide.
+.PARAMETER Name
+   The name of a running process whos windows you want to hide.
+.PARAMETER Percent
+   The percentage (from 0 to 100) of opacity you want to use (defaults to 80)
+.EXAMPLE
+   Get-Process PowerShell | Hide-Window; Sleep 5; Show-Window
+   
+   Hides the PowerShell window(s) for 5 seconds
+#&gt;
+[CmdletBinding()]
+PARAM (
+   [Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;MainWindowHandle&quot;,&quot;Handle&quot;)]
+   [IntPtr]$WindowHandle=[IntPtr]::Zero
+,
+   [Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;ProcessName&quot;)]
+   [String]$Name
+,
+   [Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [ValidateRange(0,100)]
+   [int]$Percent = 80
+)
+PROCESS { 
+	(Resolve-Window $WindowHandle $Name) | ForEach-Object { [Tricks]::GhostWindow( $_, $Percent ) }
+}
+}
+
+function Hide-Window {
+&lt;#
+.SYNOPSIS
+   Hide a window
+.DESCRIPTION
+   Hide a window by handle or by process name. Hidden windows are gone: they don't show up in alt+tab, or on the taskbar, and they're invisible. The only way to get them back is with ShowWindow.
+   Windows hidden by Hide-Window are pushed onto a stack so they can be retrieved by Show-Window. Since they're invisible, they're very hard to find otherwise.
+.NOTES
+   See also Show-Window
+.PARAMETER WindowHandle
+   The window handle to a specific window we want to hide.
+.PARAMETER Name
+   The name of a running process whos windows you want to hide.
+.EXAMPLE
+   Get-Process PowerShell | Hide-Window; Sleep 5; Show-Window
+   
+   Hides the PowerShell window(s) for 5 seconds
+#&gt;
+[CmdletBinding()]
+PARAM (
+   [Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;MainWindowHandle&quot;,&quot;Handle&quot;)]
+   [IntPtr]$WindowHandle=[IntPtr]::Zero
+,
+   [Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;ProcessName&quot;)]
+   [String]$Name
+)
+PROCESS { 
+	(Push-Window $WindowHandle $Name) | ForEach-Object { [Tricks]::HideWindow( $_ ) }
+}
+}
+
+function Show-Window {
+&lt;#
+.SYNOPSIS
+   Show a window
+.DESCRIPTION
+   Show a window by handle or by process name. If you call it without any parameters, will show all hidden windows.
+.NOTES
+   See also Hide-Window
+.PARAMETER WindowHandle
+   The window handle to a specific window we want to show.
+.PARAMETER Name
+   The name of a running process whos windows you want to show.
+.EXAMPLE
+   Get-Process PowerShell | Hide-Window; Sleep 5; Show-Window
+   
+   Hides the PowerShell window(s) for 5 seconds
+#&gt;
+[CmdletBinding()]
+
+PARAM (
+[Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+[Alias(&quot;MainWindowHandle&quot;,&quot;Handle&quot;)]
+[IntPtr]$WindowHandle=[IntPtr]::Zero
+,
+[Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true)]
+[Alias(&quot;ProcessName&quot;)]
+[String]$Name
+)
+PROCESS { 
+	(Pop-Window $WindowHandle $Name) | ForEach-Object { [Tricks]::ShowWindow( $_ ) }
+}
+}
+
+
+## PRIVATE
+FUNCTION Push-Window {
+   [CmdletBinding()]
+	PARAM ([IntPtr]$Handle,[String]$ProcessName)
+	if(!$ProcessName) { $ProcessName = &quot;--Unknown--&quot; }
+
+   $Handles = Resolve-Window $Handle $ProcessName
+
+	$windows[$ProcessName].AddRange($Handles)
+	write-output $Handles
+}
+
+FUNCTION Resolve-Window  {
+   [CmdletBinding()]
+	PARAM ([IntPtr]$Handle,[String]$ProcessName)
+	if(!$ProcessName) { $ProcessName = &quot;--Unknown--&quot; }
+	[IntPtr[]]$Handles = @($Handle)
+   
+	if(!$Windows.ContainsKey($ProcessName)) {
+		$windows.Add($ProcessName, (New-Object $intPtrList))
+	} 
+	if($Handle -eq [IntPtr]::Zero) {
+		[IntPtr[]]$Handles = @(Get-Process $ProcessName | % { $_.MainWindowHandle } )
+	}
+   return $Handles
+}
+
+## PRIVATE
+FUNCTION Pop-Window {
+   [CmdletBinding()]
+	PARAM ([IntPtr]$Handle,[String]$ProcessName)
+	
+	[IntPtr[]]$Handles = @($Handle)
+	if(!$ProcessName) { $ProcessName = &quot;--Unknown--&quot; }
+   
+	if(($Handle -eq [IntPtr]::Zero) -and $windows[$ProcessName] ) {
+		write-output $windows[$ProcessName]
+		$Null = $windows[$ProcessName].Clear()
+	} elseif($Handle -ne [IntPtr]::Zero){
+		$Null = $windows[$ProcessName].Remove( $Handle )
+	}
+
+	write-output $Handles
+}
+
+Add-Type -Assembly System.Windows.Forms
+function Wiggle-Mouse {
+&lt;#
+.SYNOPSIS
+   Wiggle the mouse until you Ctrl+Break to stop the script.
+.DESCRIPTION
+   Wiggle-Mouse randomly moves the mouse by a few pixels every few milliseconds until you stop the script.
+.PARAMETER Variation
+   The maximum distance to move the mosue in any direction.  Values that are too small aren't noticeable, and values that are too big make the user &quot;loose&quot; the mouse and they have no idea what happened.
+.PARAMETER Name
+   The name of a running process whos windows you want to hide.
+.EXAMPLE
+   Get-Process PowerShell | Hide-Window; Wiggle-Mouse -Duration 5;  Get-Process PowerShell | Show-Window
+   
+   Hides the PowerShell window and wiggle the mouse for five seconds ... :D
+#&gt;
+[CmdletBinding()]
+PARAM (
+[Parameter(Position=0)][Int]$Variation=80,
+[Parameter(Position=1)][Int]$Sleep=400,
+[Parameter(Position=2)][Int]$Duration=0
+)
+   if(!$Duration) { Write-Host &quot;Ctrl+C to stop wiggling :)&quot; }
+	$screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
+	$random = new-object Random
+   $Duration *= -1000
+	While($Duration -le 0) {
+		[Windows.Forms.Cursor]::Position =&quot;$(
+			$random.Next(	[Math]::Max( $screen.Left, ([System.Windows.Forms.Cursor]::Position.X - $Variation) ), 
+								[Math]::Min( $screen.Right, ([System.Windows.Forms.Cursor]::Position.X + $Variation) )	)
+							),$(
+			$random.Next(	[Math]::Max( $screen.Top, ([System.Windows.Forms.Cursor]::Position.Y - $Variation) ), 
+								[Math]::Min( $screen.Bottom, ([System.Windows.Forms.Cursor]::Position.Y + $Variation) )	)
+							)&quot; 
+		sleep -milli $Sleep
+      $Duration += $Sleep
+	} 
+}
+
+[Reflection.Assembly]::Load(&quot;UIAutomationClient, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35&quot;)
+function global:Select-Window {
+PARAM( [string]$Title=&quot;*&quot;, 
+       [string]$Process=&quot;*&quot;, 
+       [switch]$Recurse,
+       [System.Windows.Automation.AutomationElement]$Parent = [System.Windows.Automation.AutomationElement]::RootElement ) 
+PROCESS {
+   $search = &quot;Children&quot;
+   if($Recurse) { $search = &quot;Descendants&quot; }
+   
+   $Parent.FindAll( $search, [System.Windows.Automation.Condition]::TrueCondition ) | 
+   Add-Member -Type ScriptProperty -Name Title     -Value {
+               $this.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty)} -Passthru |
+   Add-Member -Type ScriptProperty -Name Handle    -Value {
+               $this.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NativeWindowHandleProperty)} -Passthru |
+   Add-Member -Type ScriptProperty -Name ProcessId -Value {
+               $this.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::ProcessIdProperty)} -Passthru |
+
+   Where-Object {
+      ((Get-Process -Id $_.ProcessId).ProcessName -like $Process) -and ($_.Title -like $Title)
+   }
+}}
+
+
+function Remove-AeroPeek {
+PARAM(
+   [string]$Title=&quot;*&quot;, 
+   [string]$Process=&quot;*&quot;
+)
+PROCESS {
+   Foreach($window in Select-Window -Process $Process -Title $Title) { 
+      [Tricks]::RemoveFromAeroPeek( $window.Handle ) 
+   }
+}
+}
+function Restore-AeroPeek {
+PARAM(
+   [string]$Title=&quot;*&quot;, 
+   [string]$Process=&quot;*&quot;
+)
+PROCESS {
+   Foreach($window in Select-Window -Process $Process -Title $Title) { 
+      [Tricks]::RestoreToAeroPeek( $window.Handle ) 
+   }
+}
+}
+# Remove-AeroPeek &quot;Miranda IM&quot;
+# Remove-AeroPeek -Process Rainlendar2
+
+Export-ModuleMember Select-Window, Show-Window, Hide-Window, Wiggle-Mouse, Set-GhostWindow, Remove-GhostWindow, Remove-AeroPeek
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

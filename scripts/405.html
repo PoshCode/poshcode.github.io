@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Select-Grid - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Select-Grid</h1>
+<h3><a href="//scripts/405.ps1">download</a> - <a href="//scripts/404.md">parent</a></h3>
+<p>A visual grid with percent-of-max bars to let you visually and manually select a few items
+NOTE: The script returns the selected items (from the visual window), so you can pipe it's output!</p>
+<pre><code class="language-posh">#requires -version 2.0
+### Import the WPF assemblies
+Add-Type -AssemblyName PresentationFramework
+Add-Type -AssemblyName PresentationCore
+Set-PSDebug -Strict
+
+## Select-Grid
+##   Displays objects in a grid view and returns (only) the selected ones when closed.
+########################################################################################################################
+## Usage:
+##   ls | Select-Grid Name, Length, Mode, LastWriteTime
+##   ps | Select-Grid ProcessName, Id, VM, WS, PM, Product, Path
+##   Select-Grid Name, Length, Mode, LastWriteTime -Input (ls)
+##  
+## Take advantage of the graphing:
+##   ls | Select-Grid Name,Length,LastModifiedTime,Mode -Title $pwd -Sort Length -Graph Length
+## Kill the selected processes:
+##   ps | Select-Grid ProcessName, Id, VM, WS, PM, Product, Path -Title &quot;Processes&quot; -Sort WS -Graph VM,WS,PM | kill
+########################################################################################################################
+## History:
+## v3.1 - Fixed a bug with not passing the graph parameter
+## v3.0 - Added CellTemplate for graphing (first release to PowerShellCentral.com/scripts)
+## v2.5 - Added Multi-select and made it output the selected items
+## v2.3 - Added Title and made columns dragable
+## v2.2 - Fixed pipeline problems
+## v2.1 - Added &quot;Get-Default&quot; to populate blank rows
+## v2.0 - Added clickable headers and sorting 
+##     -- broken on columns with blanks?
+## v1.0 - Basic grid with data-binding 
+##     -- broken on pipeline
+########################################################################################################################
+Cmdlet Select-Grid -ConfirmImpact low -snapin Huddled.WPF
+{
+   Param (
+      [Parameter(Position=0)][string[]]$Properties,
+      [Parameter(Position=1)][string[]]$Title,
+      [Parameter(Position=2)][string[]]$Sort,
+      [Parameter(Position=3)][string[]]$Graph,
+      [Parameter(Mandatory=$true, ValueFromPipeline=$true)] $InputObjects
+   )
+   BEGIN {   
+      if ($CommandLineParameters.ContainsKey(&quot;InputObjects&quot;)) {
+         $outputObjects = @(,$InputObjects)
+      } else {
+         $outputObjects = @()
+      }      
+   }
+   PROCESS {
+      ### Collect together all input objects
+      $outputObjects += $InputObjects
+   }
+   END {
+      ### Create our window and listview
+      $window = New-Object System.Windows.Window
+      $window.SizeToContent = &quot;WidthAndHeight&quot;
+      $window.SnapsToDevicePixels = $true
+      $window.Content = New-Object System.Windows.Controls.ListView
+      if($Title) {
+         $window.Title = $Title
+      } else { 
+         $window.Title = $outputObjects[-1].GetType().Name
+      }
+      ### The ListView takes ViewBase object which controls the layout and appearance
+      ### We'll use a GridView
+      $window.Content.View = New-Object System.Windows.Controls.GridView
+      $window.Content.View.AllowsColumnReorder = $true
+
+      $columns = Get-PropertyTypes $outputObjects ([ref]$Properties)
+      
+      ### Make columns (use Properties instead of Columns.Keys to preserve order)
+      foreach($Name in $Properties) {
+         ### Try to ensure that every object has _some_ value for each column (so sorting works)
+         $outputObjects | add-member -Type NoteProperty -Name $Name -value (Get-DefaultValue($columns[$name])) -ea SilentlyContinue
+
+         ## For each property, make a column         
+         $gvc = New-Object System.Windows.Controls.GridViewColumn
+         ## And bind the data ... 
+         $gvc.DisplayMemberBinding = New-Object System.Windows.Data.Binding $Name
+         ## In order to add sorting, we need to create the header ourselves
+         $gvc.Header = New-Object System.Windows.Controls.GridViewColumnHeader
+         $gvc.Header.Content = $Name
+   
+         ## Add a click handler to enable sorting ...
+         $gvc.Header.add_click({
+            $view = [System.Windows.Data.CollectionViewSource]::GetDefaultView( $outputObjects )
+            $sd = new-object System.ComponentModel.SortDescription $this.Content, $(
+               if($view.SortDescriptions[0].PropertyName -eq $this.Content)  {
+                  switch($view.SortDescriptions[0].Direction) {
+                     &quot;Ascending&quot;  { &quot;Descending&quot; } &quot;Descending&quot; { &quot;Ascending&quot;  }
+                  }} else { &quot;Ascending&quot; } )
+            $view.SortDescriptions.Clear()
+            $view.SortDescriptions.Add($sd)
+            # if($view.SortDescriptions.Count -gt 2) { $view.SortDescriptions.RemoveAt(2) }
+            $view.Refresh()
+         })
+         # Format-Column-Conditionally $obj, $Name, $gvc
+         ## Use that column in the view
+         $window.Content.View.Columns.Insert($window.Content.View.Columns.Count,$gvc)
+      }
+
+      $Graph = @($Graph | Where-Object { $Properties -contains $_ })
+      if( $Graph.Count -gt 0 ) { 
+         FormatColumn-Percent $outputObjects $window.Content.View $Graph
+      }
+      
+      ## Databind the argument
+      $window.Content.ItemsSource = $outputObjects
+      
+      ## Add an initial sort ...
+      $sd = new-object System.ComponentModel.SortDescription
+      $sd.PropertyName = &amp;{ if($Sort) { $Sort }else{ $Properties[0] } }
+      $sd.Direction = &quot;Descending&quot;
+      [System.Windows.Data.CollectionViewSource]::GetDefaultView( $outputObjects ).SortDescriptions.Add($sd)
+
+      ## Show the window
+      $Null = $window.ShowDialog()
+      $window.Content.SelectedItems
+   }
+}
+
+## return a hash of property names and maximum values for each
+function Get-Max($collection,$properties) {
+   $max = @{}
+   $collection | Measure-Object $properties -Max | ForEach-Object { $max[$($_.Property)] = $($_.Maximum)}
+   return $max
+}
+
+## a quick and easy function to create default-value instances of any type
+function Get-DefaultValue([type]$type) {
+   if( $type.IsValueType) { 
+      [Activator]::CreateInstance($type)
+   } else { 
+      $null 
+   }
+}
+
+function Get-PropertyTypes($outputObjects, [ref]$Properties) {
+   ### Collect the columns we're going to use 
+   $columns = @{}
+   ### if we have a list, use all the items on the list that are defined
+   if($Properties.Value) {
+      $Properties.Value = $outputObjects | Get-Member $Properties.Value -type Properties | ForEach-Object { $_.Name }
+   } else {
+      ### if we don't have a list, make one, from all the items...
+      $Properties.Value = $outputObjects | Get-Member -type Properties | ForEach-Object { $_.Name }
+   }
+   ### Figure out the types
+   ForEach($Name in $Properties.Value) { 
+   $columns[$name] = $Null
+      ForEach($obj in $outputObjects) { 
+         if( $obj.($Name) ) {
+            $columns[$name] = $obj.($Name).GetType()  
+            break;
+         }
+      }
+   }
+   return $columns
+}
+
+#############################################################
+## Conditionally format the columns ...
+function FormatColumn-Percent( $outputObjects, $gridview,  $properties)
+{
+   # Calculate the max values 
+   $max = Get-Max $outputObjects $properties
+   # And finally, set the CellTemplace on those columns...
+   foreach($property in $properties) {
+      # And then calculate the percentages, based on that...
+      # $outputObjects.Value | Add-Member ScriptProperty &quot;$($property)Percent&quot; {(`$this.${property} -as [int]) / $($max.($property))}
+      # $outputObjects | Add-Member ScriptProperty &quot;$($property)Percent&quot; $executioncontext.InvokeCommand.NewScriptBlock(
+                                                                       # &quot;(`$this.$($property) -as [double]) / $($max.($property))&quot;)
+      foreach($obj in $outputObjects) {
+         Add-Member NoteProperty &quot;$($property)Percent&quot; (($($obj.$($property)) -as [double]) / $($max.($property))) -input $obj
+      }
+
+      $column = @($gridview.Columns | ? { $_.Header.Content -eq $property })[0];
+      ## dump the binding and use a template instead... (this shouldn't be necessary)...
+      $column.DisplayMemberBinding = $null
+      $column.CellTemplate = `
+      [Windows.Markup.XamlReader]::Load( 
+         (New-Object System.Xml.XmlNodeReader (
+         [Xml]&quot;&lt;DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'&gt;
+                  &lt;Grid&gt;
+                     &lt;Rectangle Margin='-6,0' VerticalAlignment='Stretch' RenderTransformOrigin='0,1' &gt;
+                        &lt;Rectangle.Fill&gt;
+                           &lt;LinearGradientBrush StartPoint='0,0' EndPoint='1,0'&gt;
+                              &lt;GradientStop Color='#FFFF4500' Offset='0' /&gt;
+                              &lt;GradientStop Color='#FFFF8585' Offset='1' /&gt;
+                           &lt;/LinearGradientBrush&gt;
+                        &lt;/Rectangle.Fill&gt;
+               			&lt;Rectangle.RenderTransform&gt;
+                           &lt;ScaleTransform ScaleX='{Binding $($property)Percent}' ScaleY='1' /&gt;
+                   		&lt;/Rectangle.RenderTransform&gt;              
+                     &lt;/Rectangle&gt;              
+                     &lt;TextBlock Width='100' Margin='-6,0' TextAlignment='Right' Text='{Binding $property}' /&gt;
+                  &lt;/Grid&gt;
+               &lt;/DataTemplate&gt;&quot;)))
+   }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

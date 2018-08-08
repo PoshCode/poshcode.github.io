@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DBAWithABeard">
+    <title>Disk Check &amp; Email &amp; Log - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Disk Check &amp; Email &amp; Log</h1>
+<h3><a href="//scripts/5571.ps1">download</a></h3>
+<p>&lt;#
+.Synopsis
+Disk Check and email alert for Servers
+.DESCRIPTION
+Author - Rob Sewell
+Date - 29/10/2014</p>
+<p>This script will iterate through the list of servers in the $Servers variable and check the disk space
+for every disk.</p>
+<p>There are three warning levels currently set at 15%,5% and 1%</p>
+<p>If the free disk space for any disk is below a warning level, the script will check for
+the existence of a unique to the disk named text file located in the path of the $location
+variable, presuming one does not exist, the script will create a text file and then send email</p>
+<p>If the script finds a text file it will not email</p>
+<p>Once the free space increases above the warning level the script will remove the text file</p>
+<p>.EXAMPLE
+The script is designed to run under a scheduled agent job on the SQL Server and will run every
+5 minutes</p>
+<p>.NOTES</p>
+<p>The script will log to the file located at $LogFile location which will be deleted</p>
+<p>#&gt;</p>
+<pre><code class="language-posh">&lt;#
+.Synopsis
+   Disk Check and email alert for Servers
+.DESCRIPTION
+    Author - Rob Sewell
+    Date - 29/10/2014
+
+   This script will iterate through the list of servers in the $Servers variable and check the disk space
+   for every disk.
+
+   There are three warning levels currently set at 15%,5% and 1%
+
+   If the free disk space for any disk is below a warning level, the script will check for
+   the existence of a unique to the disk named text file located in the path of the $location 
+   variable, presuming one does not exist, the script will create a text file and then send email
+
+   If the script finds a text file it will not email
+
+   Once the free space increases above the warning level the script will remove the text file
+
+.EXAMPLE
+    The script is designed to run under a scheduled agent job on the SQL Server and will run every 
+    5 minutes
+    
+.NOTES
+
+   The script will log to the file located at $LogFile location which will be deleted
+
+#&gt;
+#Set variables
+$Servers = Get-Content 'PATH\TO\Servers.txt'
+ $WarningLevel = '15'
+$ErrorLevel = '5'
+$SevereLevel = '1'
+$Date = Get-Date
+$Location = 'PATHTOLOGFILEFOLDER\' #trailing slash
+$Logdate = Get-Date -Format yyyyMMdd
+$LogFile = $Location + 'logfile' + $LogDate+ '.txt'
+
+# if daily log file does not exist create one
+if(!(Test-Path $LogFile)) 
+ {
+New-Item $Logfile -ItemType File
+}
+
+# any logfiles older than 7 days delete
+Get-ChildItem -Path $Location *logfile* |Where-Object {$_.LastWriteTime -gt (Get-Date).AddDays(7) }|Remove-Item -Force 
+
+
+foreach($Server in $Servers)
+{
+# get disk information
+$Disks = Get-WmiObject win32_logicaldisk -ComputerName $Server | Where-Object {$_.drivetype -eq 3} -ErrorAction SilentlyContinue
+
+foreach($Disk in $Disks)
+{
+$ServerName = $Disk.__SERVER
+$VolumeName = $Disk.VolumeName
+$DriveLetter = $Disk.DeviceID.Chars(0)
+
+$TotalSpace=[math]::Round(($Disk.Size/1073741824),2) # change to gb and 2 decimal places
+$FreeSpace=[Math]::Round(($Disk.FreeSpace/1073741824),2)# change to gb and 2 decimal places
+$UsedSpace = $TotalSpace - $FreeSpace
+$PercentFree = [Math]::Round((($FreeSpace/$TotalSpace)*100),2)# change to gb and 2 decimal places
+
+# set variables for unique check file per server and disk
+$CheckFile = $Location + $Server + '_' + $DriveLetter + '_Warning.txt' 
+$CheckFileError = $Location + $Server + '_' + $DriveLetter + '_Error.txt'
+$CheckFileSevere = $Location + $Server + '_' + $DriveLetter + '_Severe.txt'
+
+# Check if percent free below warning level
+if ($PercentFree -le $SevereLevel) 
+ {
+
+# if text file has been created (ie email should already have been sent) do nothing
+if(Test-Path $CheckFileSevere)
+{
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree +' -- ' + $CheckFileSevere + ' File Already Created - No Action Taken'
+Add-Content -Value $Log -Path $Logfile
+} 
+# if percent free below warning level and text file doesnot exist create text file and email
+else 
+{
+
+# Create File
+New-Item $CheckFileSevere -ItemType File
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree +' -- File Created'
+Add-Content -Value $Log -Path $Logfile
+#Create Email Body
+$EmailBody = ''
+$EmailBody += &quot;&lt;html&gt; &lt;head&gt;  &lt;title&gt; $Date DiskSpace Report&lt;/title&gt;&quot;
+$EmailBody += &quot;&lt;STYLE TYPE=`&quot;text/css`&quot;&gt; &lt;!-- td { font-family: Tahoma; font-size: 11px; border-top: 1px solid #999999; border-right: 1px solid #999999; border-bottom: 1px solid #999999; border-left: 1px solid #999999; padding-top: 0px; padding-right: 0px; padding-bottom: 0px; padding-left: 0px; } body { margin-left: 5px; margin-top: 5px; margin-right: 0px; margin-bottom: 10px;  table { border: thin solid #000000; } --&gt; &lt;/style&gt; &lt;/head&gt; &lt;body&gt;&quot; 
+$EmailBody += &quot;&lt;table width='100%'&gt;&lt;tbody&gt;&quot;
+
+$EmailBody += &quot;&lt;tr&gt;&quot;
+$EmailBody += &quot;&lt;td width='100%' colSpan=6&gt;&lt;font face='tahoma' color='#003399' size='2'&gt; $Date &lt;BR&gt;&lt;BR&gt;Dear Service Desk,&lt;BR&gt;&lt;BR&gt; This email has been generated as&lt;font face='tahoma' color='#003399' size='2'&gt;&lt;strong&gt; $DriveLetter drive labelled $VolumeName on  $ServerName &lt;/strong&gt;&lt;/font&gt; in  has &lt;font face='tahoma' color='#FF0000' size='2'&gt;&lt;strong&gt;free space which has fallen below $SevereLevel% &lt;/strong&gt;&lt;/font&gt;&lt;br&gt;&lt;BR&gt; Please raise an incident and assign to the appropriate team and IMMEDIATELY contact them&lt;BR&gt;&lt;BR&gt; Regards,&lt;BR&gt;&lt;BR&gt; The Automatic  Monitoring System&lt;BR&gt;&lt;BR&gt;&lt;/font&gt;&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+$EmailBody += &quot;&lt;tr bgcolor='#FF0000'&gt;&quot;
+$EmailBody += &quot;&lt;td width='100%' align='center' colSpan=6&gt;&lt;font face='tahoma' color='#003399' size='2'&gt;&lt;strong&gt; $ServerName &lt;/strong&gt;&lt;/font&gt;&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+$EmailBody += &quot;&lt;tr bgcolor=#CCCCCC&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Drive&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='25%' align='center'&gt;Drive Label&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Total Capacity(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Used Capacity(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Free Space(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Freespace %&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+$EmailBody += &quot;&lt;tr&gt;&quot;
+$EmailBody += &quot;&lt;td bgcolor='#FF0000' align=center&gt;$DriveLetter&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td bgcolor='#FF0000' align=center&gt;$VolumeName&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td bgcolor='#FF0000' align=center&gt;$TotalSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td bgcolor='#FF0000' align=center&gt;$UsedSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td bgcolor='#FF0000' align=center&gt;$FreeSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td bgcolor='#FF0000' align=center&gt;$PercentFree&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+#Send Email
+$smtpServer = &quot;&quot;
+$To = &quot;&quot;
+$From = &quot;&quot;
+$Sender = &quot;&quot;
+$Subject = &quot;URGENT Disk Space Alert 1%&quot;
+$Body = $EmailBody
+$msg = new-object Net.Mail.MailMessage
+$smtp = new-object Net.Mail.SmtpClient($smtpServer)
+$smtp.port = '25'
+$msg.From = $From
+$msg.Sender = $Sender
+$msg.To.Add($To)
+$msg.Subject = $Subject
+$msg.Body = $Body
+$msg.IsBodyHtml = $True
+$smtp.Send($msg)
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree +' -- Severe Email Sent'
+Add-Content -Value $Log -Path $Logfile
+}
+
+}
+
+# Check if percent free below warning level
+elseif ($PercentFree -le $ErrorLevel) 
+ {
+
+# if text file has been created (ie email should already have been sent) do nothing
+if(Test-Path $CheckFileError)
+{
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree +' --' + $CheckFileError + ' File Already Created - No Action Taken'
+Add-Content -Value $Log -Path $Logfile
+} 
+
+# if percent free below warning level and text file doesnot exist create text file and email
+else 
+{
+# Create File
+New-Item $CheckFileError -ItemType File
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree +' -- File Created'
+Add-Content -Value $Log -Path $Logfile
+
+# Create Email Body
+$EmailBody = ''
+$EmailBody += &quot;&lt;html&gt; &lt;head&gt;  &lt;title&gt; $Date DiskSpace Report&lt;/title&gt;&quot;
+$EmailBody += &quot;&lt;STYLE TYPE=`&quot;text/css`&quot;&gt; &lt;!-- td { font-family: Tahoma; font-size: 11px; border-top: 1px solid #999999; border-right: 1px solid #999999; border-bottom: 1px solid #999999; border-left: 1px solid #999999; padding-top: 0px; padding-right: 0px; padding-bottom: 0px; padding-left: 0px; } body { margin-left: 5px; margin-top: 5px; margin-right: 0px; margin-bottom: 10px;  table { border: thin solid #000000; } --&gt; &lt;/style&gt; &lt;/head&gt; &lt;body&gt;&quot; 
+$EmailBody += &quot;&lt;table width='100%'&gt;&lt;tbody&gt;&quot;
+
+$EmailBody += &quot;&lt;tr&gt;&quot;
+$EmailBody += &quot;&lt;td width='100%' colSpan=6&gt;&lt;font face='tahoma' color='#003399' size='2'&gt; $Date &lt;BR&gt;&lt;BR&gt;Dear Service Desk,&lt;BR&gt;&lt;BR&gt; This email has been generated as $DriveLetter drive labelled $VolumeName on $ServerName in  has free space which has fallen below $WarningLevel%&lt;br&gt;&lt;BR&gt; Please raise an incident and assign to the appropriate team &lt;BR&gt;&lt;BR&gt; Regards,&lt;BR&gt;&lt;BR&gt; The Automatic  Monitoring System&lt;BR&gt;&lt;BR&gt;&lt;/font&gt;&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+$EmailBody += &quot;&lt;tr bgcolor='#CCCCCC'&gt;&quot;
+$EmailBody += &quot;&lt;td width='100%' align='center' colSpan=6&gt;&lt;font face='tahoma' color='#003399' size='2'&gt;&lt;strong&gt; $ServerName &lt;/strong&gt;&lt;/font&gt;&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+$EmailBody += &quot;&lt;tr bgcolor=#CCCCCC&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Drive&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='25%' align='center'&gt;Drive Label&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Total Capacity(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Used Capacity(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Free Space(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Freespace %&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+
+$EmailBody += &quot;&lt;tr&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$DriveLetter&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$VolumeName&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$TotalSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$UsedSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$FreeSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td bgcolor='#FF0000' align=center&gt;$PercentFree&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+#Send Email
+$smtpServer = &quot;&quot;
+$To = &quot;&quot;
+$From = &quot;&quot;
+$Sender = &quot;&quot;
+$Subject = &quot; Disk Space Alert 5%&quot;
+$Body = $EmailBody
+$msg = new-object Net.Mail.MailMessage
+$smtp = new-object Net.Mail.SmtpClient($smtpServer)
+$smtp.port = '25'
+$msg.From = $From
+$msg.Sender = $Sender
+$msg.To.Add($To)
+$msg.Subject = $Subject
+$msg.Body = $Body
+$msg.IsBodyHtml = $True
+$smtp.Send($msg)
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree + ' -- Error Email Sent'
+Add-Content -Value $Log -Path $Logfile
+}
+
+
+
+}
+# Check if percent free below warning level
+elseif ($PercentFree -le $WarningLevel) 
+ {
+
+# if text file has been created (ie email should already have been sent) do nothing
+if(Test-Path $CheckFile)
+{
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree + ' --' + $CheckFile + ' File Already Created - No Action Taken'
+Add-Content -Value $Log -Path $Logfile
+}
+
+# if percent free below warning level and text file doesnot exist create text file and email
+else 
+{
+# Create File
+New-Item $CheckFile -ItemType File
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree +' -- File Created'
+Add-Content -Value $Log -Path $Logfile
+#Create Email Body
+$EmailBody = ''
+$EmailBody += &quot;&lt;html&gt; &lt;head&gt;  &lt;title&gt; $Date DiskSpace Report&lt;/title&gt;&quot;
+$EmailBody += &quot;&lt;STYLE TYPE=`&quot;text/css`&quot;&gt; &lt;!-- td { font-family: Tahoma; font-size: 11px; border-top: 1px solid #999999; border-right: 1px solid #999999; border-bottom: 1px solid #999999; border-left: 1px solid #999999; padding-top: 0px; padding-right: 0px; padding-bottom: 0px; padding-left: 0px; } body { margin-left: 5px; margin-top: 5px; margin-right: 0px; margin-bottom: 10px;  table { border: thin solid #000000; } --&gt; &lt;/style&gt; &lt;/head&gt; &lt;body&gt;&quot; 
+$EmailBody += &quot;&lt;table width='100%'&gt;&lt;tbody&gt;&quot;
+
+$EmailBody += &quot;&lt;tr&gt;&quot;
+$EmailBody += &quot;&lt;td width='100%' colSpan=6&gt;&lt;font face='tahoma' color='#003399' size='2'&gt; $Date &lt;BR&gt;&lt;BR&gt;Dear Service Desk,&lt;BR&gt;&lt;BR&gt; This email has been generated as  $DriveLetter drive labelled $VolumeName on $ServerName in  has free space which has fallen below $WarningLevel%&lt;br&gt;&lt;BR&gt; Please raise an incident and assign to the appropriate team &lt;BR&gt;&lt;BR&gt; Regards,&lt;BR&gt;&lt;BR&gt; The Automatic  Monitoring System&lt;BR&gt;&lt;BR&gt;&lt;/font&gt;&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+$EmailBody += &quot;&lt;tr bgcolor='#CCCCCC'&gt;&quot;
+$EmailBody += &quot;&lt;td width='100%' align='center' colSpan=6&gt;&lt;font face='tahoma' color='#003399' size='2'&gt;&lt;strong&gt; $ServerName &lt;/strong&gt;&lt;/font&gt;&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+$EmailBody += &quot;&lt;tr bgcolor=#CCCCCC&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Drive&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='25%' align='center'&gt;Drive Label&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Total Capacity(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Used Capacity(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Free Space(GB)&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td width='15%' align='center'&gt;Freespace %&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+
+$EmailBody += &quot;&lt;tr&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$DriveLetter&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$VolumeName&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$TotalSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$UsedSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td align=center&gt;$FreeSpace&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;td bgcolor='#FBB917' align=center&gt;$PercentFree&lt;/td&gt;&quot;
+$EmailBody += &quot;&lt;/tr&gt;&quot;
+
+#Send Email
+$smtpServer = &quot;&quot;
+$To = &quot;&quot;
+$From = &quot;&quot;
+$Sender = &quot;&quot;
+$Subject = &quot;Disk Space Alert&quot;
+$Body = $EmailBody
+$msg = new-object Net.Mail.MailMessage
+$smtp = new-object Net.Mail.SmtpClient($smtpServer)
+$smtp.port = '25'
+$msg.From = $From
+$msg.Sender = $Sender
+$msg.To.Add($To)
+$msg.Subject = $Subject
+$msg.Body = $Body
+$msg.IsBodyHtml = $True
+$smtp.Send($msg)
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree + ' -- Warning Email Sent'
+Add-Content -Value $Log -Path $Logfile
+}
+
+
+
+}
+# If Percent free above warning level - remove text files so that next time it drops below an email is sent again
+else 
+ {
+if(Test-Path $CheckFileError)
+{
+Remove-Item $CheckFileError -Force
+  $logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree + ' -- File Removed'
+Add-Content -Value $Log -Path $Logfile
+}
+  if(Test-Path $CheckFile)
+{
+Remove-Item $CheckFile -Force
+  $logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree +' --  File Removed'
+Add-Content -Value $Log -Path $Logfile
+}
+if(Test-Path $CheckFileSevere)
+{
+Remove-Item $CheckFileSevere -Force
+  $logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree + ' -- File Removed'
+Add-Content -Value $Log -Path $Logfile
+}
+
+$logentrydate = (Get-Date).DateTime
+$Log = $logentrydate + ' ' + $ServerName + ' ' +  $DriveLetter + ' ' +  $VolumeName + ' ' + $PercentFree + ' -- Checked No Action Taken'
+Add-Content -Value $Log -Path $Logfile
+}
+
+}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

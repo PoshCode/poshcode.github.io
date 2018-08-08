@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Archdeacon">
+    <title>SearchZIP.psm1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SearchZIP.psm1</h1>
+<h3><a href="//scripts/3260.ps1">download</a> - <a href="//scripts/3248.md">parent</a></h3>
+<p>In any directory containing a large number of ZIP/RAR compressed Web Page files this procedure will search each individual file name for simple text strings, listing both the source RAR/ZIP file and the individual file name containing the string.
+Please ensure that this file is saved with the .psm1 extension and placed in the ‘Module’ directory.</p>
+<pre><code class="language-posh">function SearchZIPfiles {
+&lt;#
+.SYNOPSIS 
+Search for (filename) strings inside compressed ZIP or RAR files (V2.8).
+.DESCRIPTION
+In any directory containing a large number of ZIP/RAR compressed Web Page files 
+this procedure will search each individual file name for simple text strings, 
+listing both the source RAR/ZIP file and the individual file name containing
+the string. The relevant RAR/ZIP can then be subsequently opened in the usual
+way.
+Using the '-Table' (or alias '-GridView') switch will show the results with the 
+Out-GridView display.
+.EXAMPLE
+extract -find 'library' -path d:\scripts
+
+Searching for 'library' - please wait... (Use CTRL+C to quit)
+[Editor.zip] Windows 7 Library Procedures.mht
+[Editor.rar] My Library collection from 1974 Idi Amin.html
+[Test2.rar] Playlists from library - Windows 7 Forums.mht
+[Test3.rar] Module library functions UserGroup.pdf
+Folder 'D:\Scripts' contains 4 matches for 'library' in 4 file(s).
+.EXAMPLE
+extract -find 'backup' -path doc
+
+Searching for 'backup' - please wait... (Use CTRL+C to quit)
+[Web.zip] How To Backup User and System Files.mht
+[Pages.rar] Create an Image Backup.pdf
+Folder 'C:\Users\Sam\Documents' contains 2 matches for 'backup' in 2 file(s).
+.EXAMPLE
+extract pdf desk
+
+Searching for 'pdf' - please wait... (Use CTRL+C to quit)
+[Test1.rar] VirtualBox_ Guest Additions package.pdf
+[Test2.rar] W8 How to Install Windows 8 in VirtualBox.pdf
+[Test2.rar] W8 Install Windows 8 As a VM with VirtualBox.pdf
+Folder 'C:\Users\Sam\Desktop' contains 3 matches for 'pdf' in 2 file(s).
+
+This example uses the 'extract' alias to find all 'pdf' files on the desktop.
+.NOTES
+The first step will find any lines containing the selected pattern (which can
+be anywhere in the line). Each of these lines will then be split into 2 
+headings: Source and Filename.
+Note that there may be the odd occasion where a 'non-readable' character in the
+returned string slips through the net! 
+.LINK
+Web Address Http://www.SeaStarDevelopment.BraveHost.com
+#&gt;
+   [CmdletBinding()]
+   param([string][string][Parameter(Mandatory=$true)]$Find,
+         [string][ValidateNotNullOrEmpty()]$path = $pwd,
+         [switch][alias(&quot;GRIDVIEW&quot;)]$table)
+
+   Set-StrictMode -Version 2
+   switch -wildcard ($path) {
+      'desk*' { 
+         $path = Join-Path $home 'desktop\*' ; break
+      }
+      'doc*' {
+         $docs = [environment]::GetFolderPath(&quot;mydocuments&quot;)  
+         $path = Join-Path $docs '*'; break
+      }
+      default { 
+         $xpath = Join-Path $path '*' -ea 0
+         if (!($?) -or !(Test-Path $path)) {
+            Write-Warning &quot;Path '$path' is invalid - resubmit&quot;
+            return
+         }
+         $path = $xpath
+      }
+   }
+   
+   Get-ChildItem $path -include '*.rar','*.zip' |
+      Select-String -SimpleMatch -Pattern $find |
+         foreach-Object `
+            -begin {
+                [int]$count = 0
+                $container = @{}
+                $folder = $path.Replace('*','')
+                $lines = @{}
+                $regex = '(?s)^(?&lt;zip&gt;.+?\.(?:zip|rar)):(?:\d+):.*(\\|/)(?&lt;file&gt;.*\.(mht|html?|pdf))(.*)$'
+                Write-Host &quot;Searching for '$find' - please wait... (Use CTRL+C to quit)&quot; 
+            } `
+            -process {
+                if ( $_ -match $regex ) {
+                   $container[$matches.zip] +=1      #Record the number in each.
+                   $source = $matches.zip -replace [regex]::Escape($folder)
+                   $file   = $matches.file
+                   $file = $file -replace '\p{S}|\p{Cc}',' '   #Some 'Dingbats'.
+                   $file = $file -replace '\s+',' '         #Single space words.
+                   if ($table) {
+                      $key = &quot;{0:D4}&quot; -f $count
+                      $lines[&quot;$key $source&quot;] = $file       #Create a unique key.
+                   }
+                   else {
+                      Write-Host &quot;[$source] $file&quot;
+                   }
+                   $count++ 
+                }
+            } `
+            -end { 
+                $total = &quot;in $($container.count) file(s).&quot; 
+                $title = &quot;Folder '$($path.Replace('\*',''))' contains $($count) matches for '$find' $total&quot;
+                if ($table -and $count -gt 0) {        
+                   $lines.GetEnumerator() | 
+                      Select-Object @{name = 'Source';expression = {$_.Key.SubString(5)}},
+                                    @{name = 'Match' ;expression = {$_.Value}} |
+                         Sort-Object Match |
+                            Out-GridView -Title $title
+                }
+                else {
+                   if ($count -eq 0) {
+                      $title = &quot;Folder '$($path.Replace('\*',''))' contains no matches for '$find'.&quot;   
+                   }
+                   Write-Host $title
+                } 
+            }
+} #End function.
+
+New-Alias extract SearchZIPfiles    -Description 'Find Web files inside ZIP/RAR'
+Export-ModuleMember -Function SearchZIPfiles -Alias Extract
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

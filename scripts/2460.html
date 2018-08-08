@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-ODataServiceProxy - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-ODataServiceProxy</h1>
+<h3><a href="//scripts/2460.ps1">download</a> - <a href="//scripts/2043.md">parent</a></h3>
+<p>A wrapper for DataSvcUtil to generate web service proxies in-memory for OData services like NetFlix (which are not handled correctly by PowerShell's built-in New-WebServiceProxy).</p>
+<p>Also includes a type cache, because if you call it again with the same url it was throwing an error. NOTE: calling it with the same URL will generate a NEW context object (this is important to know if you start really working with this -- we're not caching the context, just the type information).</p>
+<p>This release fixed a bug in the help documentation and changes the function so it never actually outputs the proxy object (to avoid unintended calls to all the properties at once, which can take a very long time).</p>
+<p>REQUIRES AT LEAST .Net 3.5 SP1 with the Data Services Update &quot;for Windows 7/2008 R2&quot;:http://support.microsoft.com/kb/982307 or &quot;Windows XP/Vista/Server 2003/2008&quot;:http://support.microsoft.com/kb/982306/</p>
+<p>Note that this ships in the box with .Net Framework 4, but unless you've modified PoweShell's app.config, or are using &quot;PoshConsole&quot;:http://PoshConsole.CodePlex.com, you can't really use that, therefore:</p>
+<p>To use this module with PowerShell.exe you will <em>need at least</em> the latest 3.5 SP1 <em>plus</em> the &quot;Data Services Update&quot;:http://support.microsoft.com/kb/982307</p>
+<pre><code class="language-posh">function New-ODataServiceProxy {
+#.Synopsis
+#  Creates a proxy class for an odata web service and assigns it to the specified variable.
+#  DOES NOT output the proxy on the pipleline, and you should not do so either!
+#.Description 
+#  Uses the data service client utility (DataSvcUtil.exe) to generate a proxy class (and types for all objects) for an OData web service.
+#  WARNING: Outputting this object to the PowerShell host will result in queriying all the object collections on the service.
+#  NOPTE: kb982307 is required to use this with .Net 3.5, see links/notes
+#.Parameter URI
+#  The URI for the web service
+#.Parameter Name
+#  The name of the global variable to store the OData WebService proxy object in (defaults to &quot;ODataServiceProxy&quot;)
+#.Parameter Passthru
+#  Causes the method to output all of the types defined by the service metadata
+#.Example
+#  New-ODataServiceProxy http://odata.netflix.com/Catalog/
+#  $AdventuresInOdyssey = $ODataServiceProxy.Titles.AddQueryOption('$filter',&quot;substringof('Adventures in Odyssey',Name)&quot;)
+#  $AdventuresInOdyssey | Format-List Name, ReleaseYear, Url, Synopsis
+#.Example
+# function Get-Films {
+# param($Name)
+#    New-ODataServiceProxy http://odata.netflix.com/Catalog/ -Name NetFlix
+#    if($Name -match &quot;\*&quot;) {
+#       $sName = $Name -replace &quot;\*&quot; 
+#       # Note the substring PLUS a Where -like filter to pull off wildcard matching which isn't supported by NetFlix
+#       $Global:Films = $proxy.Titles.AddQueryOption('$filter',&quot;substringof('$sName',Name)&quot;) | Where { $_.Name -like $Name }
+#    } else {
+#       $Global:Films = $proxy.Titles.AddQueryOption('$filter',&quot;'$Name' eq Name&quot;)
+#    }
+#    $Films | Format-List Name, ReleaseYear, AverageRating, Url, Synopsis
+#    Write-Host &quot;NOTE: This data is cached in `$Films&quot; -Fore Yellow
+# }
+# 
+# C:\PS&gt;Get-Films Salt
+#
+#.Example
+#  New-ODataServiceProxy http://packages.nuget.org/v1/FeedService.svc/ NuGet
+#  $NuGet.Packages.AddQueryOption('$filter',&quot;startswith(Title,'O') eq true&quot;) | Format-Table Id, Version, Authors, Description -Wrap -Auto
+#
+#.Link 
+#  Data Services Update for .Net 3.5 SP1: http://support.microsoft.com/kb/982307
+#  ADO.NET Data Service Client Utility: http://msdn.microsoft.com/en-us/library/ee383989.aspx
+#  AddQueryOption: http://msdn.microsoft.com/en-us/library/cc646860.aspx
+#  NetFlix Catalog Documentation: http://developer.netflix.com/docs/oData_Catalog
+#.Notes
+#  I can't stress enough that you should not output the proxy object, or any property that returns a System.Data.Services.Client.DataServiceQuery[T] without a filter unless you're sure that's what you want.
+#  A kb patch is required for .Net 3.5 SP1 to get the Data Services to 2.0 so you can use most of the OData services you will see on the web: http://support.microsoft.com/kb/982307
+#
+#  VERSION HISTORY:
+#  v1.0    - 2010 Aug 02 - First Version http://poshcode.org/2039
+#  v1.1    - 2010 Aug 03 - Simple Caching http://poshcode.org/2040
+#          - Added a type cache to make it easier to find proxies you've already compiled (because we can't recompile them)
+#  v1.2    - 2010 Aug 03 - Examples
+#          - Added additional examples 
+#  v1.3    - 2010 Aug 03 - Language fix
+#          - Removed the Language parameter from Add-Type when on .Net4 (setting it explicitly results in downgrading to 3, and having multiple assembly references!?)
+#  v1.4    - 2011 Jan 17 - Stop output
+#          - Changed output to just be the variable that gets set, so it's properties don't all get called resulting in huge web service calls.
+#  v1.5    - 2011 Jan 17 - Clean up examples
+#          - Add Example for calling NuGet service
+#          - Clean up Links, Re-document that you need the DataServices update for .Net 3.5 
+param(
+[Parameter(Mandatory=$true)]
+[Alias(&quot;Uri&quot;,&quot;WSU&quot;)]
+[String]$WebServiceUri = &quot;http://odata.netflix.com/Catalog/&quot;, 
+[Alias(&quot;Name&quot;,&quot;VN&quot;)]
+[String]$VariableName = &quot;ODataServiceProxy&quot;,
+[switch]$Passthru
+)
+
+if(!(Test-Path Variable::Global:ODataServices)){
+   ## You can only use this on .Net 4 or .Net 3.5 SP1 
+   ## For .Net 3.5 SP1 you need to download http://support.microsoft.com/kb/982307
+   ## If you don't have it, this won't succeed
+   [Reflection.Assembly]::Load(&quot;System.Data.Services.Client, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089&quot;) | Out-Null
+   $global:ODataServices = @{}
+}
+
+$normalized = ([uri]$WebServiceUri).AbsoluteUri.TrimEnd(&quot;/&quot;) 
+
+if($global:ODataServices.ContainsKey($normalized)) {
+   New-Object $global:ODataServices.$normalized.ContextType $WebServiceUri
+   if($Passthru) {
+      $global:ODataServices.$normalized.OtherTypes
+   }
+   return
+}
+
+## Find the right DataSvcUtil for this version of .Net
+switch($PSVersionTable.ClrVersion.Major) {
+   4 { # PoshConsole and modded .Net4 PowerShell_ISE etc.
+      Set-Alias Get-ODataServiceDefinition (Get-ChildItem ([System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory())  DataSvcUtil.exe)
+      break
+   }
+   2 { # PowerShell.exe and everyone else
+      $FrameworkPath = [System.Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory() | Split-Path
+      Set-Alias Get-ODataServiceDefinition (Get-ChildItem $FrameworkPath\v3.5\DataSvcUtil.exe)
+      break
+   }
+   default { throw &quot;This script is out of date, please fix it and upload a new one to PoshCode!&quot; }   
+}
+## Get the service definition into a string via a temp file
+$temp = [IO.Path]::GetTempFileName()
+Get-ODataServiceDefinition -out:$temp -uri:$WebServiceUri -nologo | tee -var output | out-null
+if(!$?) {
+   Write-Error ($output -join &quot;`n&quot;)
+   return
+}
+$code = @(Get-Content $temp) -join &quot;`n&quot; # -Delim ([char]0)
+Remove-Item $temp
+
+switch($PSVersionTable.ClrVersion.Major) {
+   4 { 
+         $Types = Add-Type $code -Reference &quot;System.Data.Services.Client, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089&quot;, &quot;System.Core&quot; -Passthru
+   }
+   2 {
+         $Types = Add-Type $code -Reference &quot;System.Data.Services.Client, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089&quot; -Passthru -Language CSharpVersion3 
+   }
+   default { throw &quot;This script is out of date, please fix it and upload a new one to PoshCode!&quot; }   
+}
+
+if(!$Types) { return }
+
+$ContextType = $Types | Where-Object { $_.BaseType -eq [System.Data.Services.Client.DataServiceContext] }
+$global:ODataServices.$normalized = New-Object PSObject -Property @{ContextType=$ContextType; OtherTypes=$([Type[]]($Types|Where-Object{$_.BaseType -ne [System.Data.Services.Client.DataServiceContext]}))}
+$ctx = new-object $ContextType $WebServiceUri
+
+$VariableName = $VariableName.Split(&quot;:&quot;)[-1]
+if(Test-Path Variable:$VariableName) { Remove-Variable $VariableName -Force }
+Set-Variable -Name &quot;Global:$VariableName&quot; -Value $ctx -Description &quot;An OData WebService Proxy to $WebServiceUri&quot; -Option ReadOnly, AllScope -Passthru
+if($Passthru) { Write-Output $types }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

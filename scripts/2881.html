@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>ELIM (Event Log IM) 1.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ELIM (Event Log IM) 1.0</h1>
+<h3><a href="//scripts/2881.ps1">download</a></h3>
+<p>Event Log Instant Messaging (ELIM) is a quick little wrapper for the *EventLog cmdlets and the Register-ObjectEvent as a way of showing off how to work with them.  You can, however, really actually use this as a light-weight instant messenger.</p>
+<p>Features:</p>
+<ul>
+<li>Use your event logs for fun conversations</li>
+<li>Use any computer as a Server if you can get an administrator of that computer to set up users using New-ELIMUser</li>
+<li>Custom highlighting of important messages</li>
+<li>Rotating username highlighting (ie: different users text shows up in different colors)</li>
+<li>Gives your sysamdins something new to freak out about!</li>
+</ul>
+<pre><code class="language-posh">$ELIMServer  = $Env:ComputerName
+$ELIMChannel = &quot;ELIM&quot;
+$ELIMUser    = $Env:UserName
+
+function New-ELIMUser {
+#.Synopsis
+#  Send a message to the ELIM (Event Log Instant Messaging) Log
+[CmdletBinding()]
+param ( 
+# The Computer whose event logs will be used for instant messaging
+[String]$Server   = $ELIMServer,
+# The Log Name to use for instant messaging
+[Alias(&quot;To&quot;)]
+[String]$Channel  = $ELIMChannel,
+# The &quot;Source&quot; for messages that you will send
+[Alias(&quot;As&quot;)]
+[String]$UserName = $ELIMUser
+)
+
+    New-EventLog -LogName $Channel -Source $UserName -ComputerName $Server -EA 0 -EV Failed
+    if($Failed -and $Failed[0].Exception.Message.StartsWith( &quot;The `&quot;$UserName`&quot; source is already registered&quot; )) {
+        
+    }
+    sleep -milli 500
+    if(!(Get-EventLog -ComputerName $Server -list |where {$_.Log -eq $Channel })) {
+        throw &quot;Failed to register on server, please check server and username and try again:`n`n$Failed&quot;
+    }
+    Set-ELIMDefaults @PSBoundParameters
+}
+
+function Set-ELIMDefaults {
+#.Synopsis
+#  Set your default username for the ELIM (Event Log Instant Messaging) Log
+#.Description
+#  Normally your current computer ($Env:ComputerName), UserName ($Env:UserName), and the &quot;ELIM&quot; log are used unless you overwrite it on the console.
+#  This allows you to override those defaults
+param ( 
+# The Computer whose event logs will be used for instant messaging
+[String]$Server   = $ELIMServer,
+# The Log Name to use for instant messaging
+[Alias(&quot;To&quot;)]
+[String]$Channel  = $ELIMChannel,
+# The &quot;Source&quot; for messages that you will send
+[Alias(&quot;As&quot;)]
+[String]$UserName = $ELIMUser
+)
+$script:ELIMServer  = $Server
+$script:ELIMChannel = $Channel
+$script:ELIMUser    = $UserName
+}
+
+function Send-ELIMMessage {
+#.Synopsis
+#  Send a message to the ELIM (Event Log Instant Messaging) Log
+[CmdletBinding()]
+param(
+# The message to send
+[Parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,Position=0)]
+[String]$Message,
+# The Computer whose event logs will be used for instant messaging
+[String]$Server   = $ELIMServer,
+# The Log Name to use for instant messaging
+[Alias(&quot;To&quot;)]
+[String]$Channel  = $ELIMChannel,
+# The &quot;Source&quot; for messages that you will send
+[Alias(&quot;As&quot;)]
+[String]$UserName = $ELIMUser
+)
+process {
+    Write-Verbose &quot;Write-EventLog -ComputerName $Server -LogName $Channel -Source $UserName -EventID 1 -Message '$Message'&quot;
+    Write-EventLog -ComputerName $Server -LogName $Channel -Source $UserName -EventID 1 -Message $Message
+}
+}
+
+
+Set-Alias Msg Send-ELIMMessage
+
+function Start-ELIM {
+[CmdletBinding()]
+param(
+# The Computer whose event logs will be used for instant messaging
+[String]$Server   = $ELIMServer,
+# The Log Name to use for instant messaging
+[Alias(&quot;To&quot;)]
+[String]$Channel  = $ELIMChannel,
+# The &quot;Source&quot; for messages that you will send
+[Alias(&quot;As&quot;)]
+[String]$UserName = $ELIMUser,
+# Time stamp format for output
+$TimeStampFormat = &quot;dd-MM hh:mm:ss&quot;,
+# The default background color for instant messages
+$Background = &quot;Black&quot;,
+# The highlight color for instant messages
+$HighlightBackground = &quot;White&quot;,
+# The regular expression for highlighting (defaults to your username)
+$HighlightRegex = &quot;.*${UserName}.*&quot;,
+# Available colors for user names. You can use any of &quot;Black&quot;, &quot;DarkBlue&quot;, &quot;DarkGreen&quot;, &quot;DarkCyan&quot;, &quot;DarkRed&quot;, &quot;DarkMagenta&quot;, &quot;DarkYellow&quot;, &quot;Gray&quot;, &quot;DarkGray&quot;, &quot;Blue&quot;, &quot;Green&quot;, &quot;Cyan&quot;, &quot;Red&quot;, &quot;Magenta&quot;, &quot;Yellow&quot;, &quot;White&quot; -- but you want to exclude any of them which aren't readable.
+[ConsoleColor[]]$Colors = $(&quot;DarkGreen&quot;, &quot;DarkCyan&quot;, &quot;DarkRed&quot;, &quot;DarkYellow&quot;, &quot;Gray&quot;, &quot;DarkGray&quot;, &quot;Blue&quot;, &quot;Green&quot;, &quot;Cyan&quot;, &quot;Red&quot;, &quot;Magenta&quot;, &quot;Yellow&quot;, &quot;White&quot;),
+[Switch]$Force
+)
+end { 
+
+    Set-ELIMDefaults -Server $Server -Channel $Channel -UserName $UserName
+
+try {
+    $exists = [System.Diagnostics.EventLog]::SourceExists($UserName, $Server)
+} catch {}
+
+if(!$exists) {
+    Write-Warning &quot;Your user name ($UserName) doesn't exist on '$Server', you won't be able to send messages until you run New-ELIMUser in an elevated console&quot;
+} else {
+    $RealChannel = [System.Diagnostics.EventLog]::LogNameFromSourceName($UserName,$Server)
+    if($Channel -ne $RealChannel -and !$Force) {
+        throw &quot;Your username is registered to SEND to '$RealChannel' not '$Channel', if you want to LISTEN to '$Channel' anyway, use -Force&quot;
+    }
+}
+
+$elim = Get-EventLog -ComputerName $Server -list | where { $_.Log -eq $Channel }
+
+if(!$elim) {
+    throw &quot;Failed to connect to the '$Channel' channel on the server ($Server).&quot;
+} else {
+    Register-ObjectEvent $elim EntryWritten -Action {
+        if($Event.Entry.Source -ceq $Event.MessageData.UserName) { return }
+
+        $Message =  &quot;[{0:$($Event.MessageData.TimeStampFormat)}] {1}: {2}&quot; -f $EventArgs.Entry.TimeGenerated, $EventArgs.Entry.Source, $EventArgs.Entry.Message
+        $Color = $Event.MessageData.Colors[(([int[]][char[]]&quot;$($EventArgs.Entry.Source)&quot; | measure -sum ).Sum % $Event.MessageData.Colors.Count)]
+
+        Write-Host &quot;$(([int[]][char[]]&quot;$($EventArgs.Entry.Source)&quot; | measure -sum ).Sum) % $($Event.MessageData.Colors.Count) = $(([int[]][char[]]&quot;$($EventArgs.Entry.Source)&quot; | measure -sum ).Sum % $Event.MessageData.Colors.Count) = $Color&quot;
+        if($Message -match $Event.MessageData.HighlightRegex) {
+            Write-Host $Message -ForegroundColor $Color -BackgroundColor $Event.MessageData.HighlightBackground
+        } else {
+            Write-Host $Message -ForegroundColor $Color -BackgroundColor $Event.MessageData.Background
+        }
+    } -MessageData @{
+        Server = $Server
+        Channel = $Channel
+        UserName = $UserName
+        TimeStampFormat = $TimeStampFormat
+        Background = $Background
+        HighlightBackground = $HighlightBackground
+        HighlightRegex = $HighlightRegex
+        Colors = $Colors
+    }
+}
+}
+}
+
+Export-ModuleMember -Function * -Alias * 
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>DefaultParameterValues - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>DefaultParameterValues</h1>
+<h3><a href="//scripts/3255.ps1">download</a> - <a href="//scripts/2990.md">parent</a></h3>
+<p>For PowerShell 3: Export and Import DefaultParameterValues, optionally overwrite existing ones</p>
+<pre><code class="language-posh">
+function Export-DefaultParameter {
+#.Synopsis
+#  Exports the current default parameter values
+[CmdletBinding()]
+param(
+   # The path to export default parameter values to (defaults to &quot;DefaultParameterValues.clixml&quot; in your profile directory)
+   [String]$Path = $(Join-Path (Split-Path $Profile.CurrentUserAllHosts -Parent) DefaultParameterValues.clixml)
+)
+   Export-CliXml -InputObject $Global:PSDefaultParameterValues -Path $Path
+}
+
+function Import-DefaultParameter {
+#.Synopsis
+#  Imports new default parameter values
+[CmdletBinding()]
+param(
+   # The path to import default parameter values from (defaults to &quot;DefaultParameterValues.clixml&quot; in your profile directory)
+   [String]$Path = $(Join-Path (Split-Path $Profile.CurrentUserAllHosts -Parent) DefaultParameterValues.clixml),
+   # If set, overwrite current values (otherwise, keep current values)
+   [Switch]$Force
+)
+
+   $TempParameterValues = $Global:PSDefaultParameterValues
+   if(Test-Path $Path) {
+      [System.Management.Automation.DefaultParameterDictionary]$NewValues = 
+            Import-CliXml  -Path ${ProfileDir}\DefaultParameterValues.clixml
+      
+      foreach($key in $NewValues.Keys) {
+         if($Global:PSDefaultParameterValues.ContainsKey($key)) {
+            if($Force) {
+               $Global:PSDefaultParameterValues.$Key = $NewValues.$key
+            } else {
+               Write-Warning (&quot;Key already defined, use -Force to overwrite:`n{0} = {1}&quot; -f $Key, $NewValues.$key)
+            }
+         } else {
+            $Global:PSDefaultParameterValues.$Key = $NewValues.$key
+         }
+      }
+   } else {
+      Write-Warning &quot;Default Parameter file not found: '$Path'&quot;
+   }
+}
+
+function Set-DefaultParameter {
+#.Synopsis
+#  Sets a default parameter value for a command
+#.Description
+#  Safely sets the default parameter value for a command, making sure that you've correctly typed the command and parameter combination
+[CmdletBinding(DefaultParameterSetName=&quot;Colonated&quot;)]
+param(
+   # The command that you want to change the default value of a parameter for
+   [parameter(Position=0,Mandatory=$true)]
+   $command,
+   # The name of the parameter that you want to change the default value for
+   [parameter(Position=1,Mandatory=$true,ParameterSetName=&quot;SeparateInputs&quot;)]
+   $parameter,
+   # The new default parameter value
+   [parameter(Position=2,Mandatory=$true)]
+   $value
+)
+
+   if($PSCmdlet.ParameterSetName -eq &quot;Colonated&quot;) {
+      $parameter = $command -split &quot;:&quot;
+   }
+   if($parameter.StartsWith(&quot;-&quot;)) {
+      $parameter = $parameter.TrimStart(&quot;-&quot;)
+   }
+ 
+   ## Resolve the parameter to be sure
+   $cmd = Get-Command $command
+   $parameters = $cmd.ParameterSets | Select -expand Parameters
+   $param = @($parameters | Where-Object { $_.Name -match $parameter -or $_.Aliases -match $parameter} | Select -Expand Name -Unique)
+   if($param.Count -eq 1) {
+      Write-Verbose &quot;Parameter $parameter =&gt; $($param[0])&quot;
+      $Global:PSDefaultParameterValues[&quot;${Command}:$($param[0])&quot;] = $Value
+   }
+}
+
+function Disable-DefaultParameter {
+#.Synopsis
+#  Turns OFF default parameters
+#.Description
+#  By setting $PSDefaultParameterValues[&quot;Disable&quot;] to $true, we make sure that NONE of our default parameter values will be used
+[CmdletBinding()]
+param()
+   $Global:PSDefaultParameterValues[&quot;Disable&quot;]=$true
+}
+
+function Enable-DefaultParameter {
+#.Synopsis
+#  Turns ON default parameters
+#.Description
+#  By setting $PSDefaultParameterValues[&quot;Disable&quot;] to $false, we make sure that all of our default parameter values will be used
+[CmdletBinding()]
+param()
+   $Global:PSDefaultParameterValues[&quot;Disable&quot;]=$false
+}
+Set-Alias Add-DefaultParameter Set-DefaultParameter -ErrorAction SilentlyContinue
+Import-DefaultParameter
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="karaszmiklos">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/1387.ps1">download</a></h3>
+<p>I like using runas.exe to elevate a process (like su in unix/linux) but runas /savecred and saving credentials can be &quot;disabled&quot; by policy. That's why i use su.ps1 through su.bat instead of runas.exe. Several idea has been implemented from other posts. Thank you for their/your help:
+http://halr9000.com/article/531		http://blogs.microsoft.co.il/blogs/ScriptFanatic/</p>
+<pre><code class="language-posh">param (
+	$UserName,
+	$FilePath,
+	[switch]$SaveCredential=$False,
+	[switch]$RdpSaveCredential=$False,
+	[switch]$DeleteCredential=$False,
+	[switch]$Help=$False
+)
+
+$ScriptFilenam	= $MyInvocation.MyCommand.Name # ScriptFilename wo path.
+$ScriptUnbArgs	= $MyInvocation.UnboundArguments # UnNamed Arguments of the PowerShell Script ($Args) 
+$CredDir	= $env:UserProfile # sotres credential files
+$RdpFilenam	= $env:UserProfile + &quot;\My Documents\Default.rdp&quot;
+
+function Get-ScriptHelp {
+Write-Host -ForegroundColor:White &quot;
+Usage:`t`t version 2009.10.07 ,karaszmiklos@gmail.com
+$ScriptFilenam [-UserName:]UserName [[-FilePath:]program [arg1] ['arg 2'] [arg...]] [-SaveCredential] [-RdpSaveCredential] [-DeleteCredential] [-Help]
+-UserName:
+  Required parameter! There is no default value.
+  1st position if parameter name is not defined.
+  Predefined user aliases:
+    SU		Local Admin  (SID ending with 500)
+    EMA		Domain Admin (UserDomain\uEMAsername)
+    Alias1	Default alias for context menus.
+  You can define aliases by runing: su AliasName -SaveCred
+-FilePath:
+  Executable files. Default value:cmd.exe
+  2nd position if parameter name is not defined.
+-SaveCredential
+  Switch parameter. Default value:$False
+  Force asking and saving credential into efs encrypted file.
+-RdpSaveCredential
+  Switch parameter. Default value:$False
+  Force saving the specified credential into RDP profile:default.rdp
+-DeleteCredential
+  Switch parameter. Default value:$False
+  Forcing deletion of the specified credential.
+-Help
+  Switch parameter. Default value:$False
+  
+.\ means current directory.
+Use 'single quotes' for programs and arguments containing spaces.
+Partial paramter names can be used while they are not ambiguous.
+
+Examples:
+su SU
+su EMA
+su EMA -Save
+su EMA -Rdp
+su EMA -Save -RdpSave
+su Alias1 -SaveCred
+su Alias1 -DeleteCred
+su Domain\Username cmd
+powershell.exe $ScriptFilenam SU cmd.exe
+su SU sc.exe stop ccmexec
+powershell.exe $ScriptFilenam SU sc.exe stop ccmexec
+su.bat SU 'c:\Directory with spaces\procexp.exe' /t /p:r -accepteula
+&quot;
+}
+
+function Export-PSCredential { #http://halr9000.com/article/531
+	param ( $Credential = (Get-Credential), $Path = &quot;credentials.enc.xml&quot; )
+	# Look at the object type of the $Credential parameter to determine how to handle it
+	switch ( $Credential.GetType().Name ) {
+		# It is a credential, so continue
+		PSCredential		{ continue } 
+		# It is a string, so use that as the username and prompt for the password
+		String				{ $Credential = Get-Credential -credential:$Credential }
+		# In all other cases, throw an error and exit
+		default				{ Throw &quot;You must specify a credential object to export to disk.&quot; }
+	}		
+	$export = New-Object PSObject # Create temporary object to be serialized to disk
+	Add-Member -InputObject $export -Name:Username -Value:$Credential.Username -MemberType:NoteProperty 
+	# Encrypt SecureString password using Data Protection API
+	$EncryptedPassword = $Credential.Password | ConvertFrom-SecureString
+	Add-Member -InputObject:$export -Name:EncryptedPassword -Value:$EncryptedPassword -MemberType:NoteProperty
+	$export.PSObject.TypeNames.Insert(0,’ExportedPSCredential’)	# Give object a type name which can be identified later
+	$export | Export-Clixml $Path # Export using the Export-Clixml cmdlet
+	Write-Host -foregroundcolor:Green &quot;Credential saved to: &quot;
+	Get-Item -Force $Path	# Return FileInfo object referring to saved credentials
+}
+
+function Import-PSCredential { #http://halr9000.com/article/531
+	param ( [string]$Path = &quot;credentials.enc.xml&quot;, [string]$CredentialVariable ) 	#to create a global credential with a specified name	
+	$import = Import-Clixml $Path # Import credential file
+	# Test for valid import
+	if ( !$import.UserName -or !$import.EncryptedPassword ) {
+		Throw &quot;Input is not a valid ExportedPSCredential object, exiting.&quot;
+	}
+	$Username = $import.Username
+	$SecurePass = $import.EncryptedPassword | ConvertTo-SecureString	# Decrypt the password and store as a SecureString object for safekeeping
+	$PsCredential = New-Object System.Management.Automation.PSCredential $Username, $SecurePass	# Build the new credential object
+	if ($CredentialVariable) {
+		New-Variable -Name:$CredentialVariable -Scope:Global -Value:$PsCredential
+	} else {
+		return $PsCredential
+	}
+}
+
+if ( $Help ) {
+	Get-ScriptHelp
+	exit 0;
+}
+
+switch ($UserName) {
+	$null {
+		Write-Host -ForegroundColor:Red &quot;UserName is not defined. Exiting...&quot;
+		Get-ScriptHelp
+		exit 1;
+	}
+	&quot;SU&quot;	{
+		$CredUsrExpr = '(Get-WmiObject -Query &quot;SELECT * FROM Win32_Account WHERE LocalAccount = True AND SID LIKE &quot;&quot;S-1-5-21-%-500&quot;&quot;&quot;).Caption'
+		$CredFilenam = Join-Path -Path:$CredDir -ChildPath:$($env:COMPUTERNAME+&quot;_S-1-5-21--500&quot;)
+	}
+	&quot;EMA&quot;	{
+		$CredUsrExpr = '$env:UserDomain + &quot;\&quot; + $env:UserName[0] + &quot;ema&quot; + $env:UserName.Remove(0,1)'
+		$CredFilenam = Join-Path -Path:$CredDir -ChildPath:$($env:UserDomain+&quot;_S-1-5-21--ema&quot;)
+	}
+	default {
+		$CredUsrExpr = '$UserName'
+		$CredFilenam = Join-Path -Path:$CredDir -ChildPath:$UserName.Replace(&quot;\&quot;,&quot;_&quot;)
+	}
+}
+
+
+#Test Credential Directory
+if ( -not(Test-Path $CredDir) ) {
+	New-Item &quot;$CredDir&quot; -Type:Directory -Force -Confirm -Verbose
+	if ( -not(Test-Path $CredDir) ) {
+		Write-Warning &quot;Credential directory &quot;&quot;$CredDir&quot;&quot; doesn't exist. Exiting...&quot;
+		exit 82; # 82 	The directory or file cannot be created.
+	}
+}
+
+if ( $DeleteCredential ) {
+	if ( Test-Path $CredFilenam) {
+		Write-Host &quot;Deleting credential:&quot;&quot;$CredFilenam&quot;&quot; ...&quot; -ForegroundColor:Yellow
+		Remove-Item -Path $CredFilenam -Force -Confirm -Verbose	
+		if ( -not(Test-Path $CredFilenam) ) {
+			Write-Host -ForegroundColor:Green &quot;$CredFilenam is deleted.&quot;
+		} else {
+			Write-Host -ForegroundColor:Yellow &quot;$CredFilenam has not been deleted.&quot;
+		}
+		exit 0;
+	} else {
+		Write-Warning &quot;Credential does not exist:$CredFilenam&quot;
+		exit 2; # 2 	The system cannot find the file specified.
+	}
+}
+
+if ( $SaveCredential -or !(Test-Path $CredFilenam) ) {
+	try {
+		$PsCred = Get-Credential -Credential:(Invoke-Expression $CredUsrExpr)
+	}
+	catch {
+		&quot;$($Error[0])&quot;	
+	}
+} else {
+	#Import Credential from encrypted file (if exists).
+	if (Test-Path $CredFilenam) {
+		$PsCred = Import-PSCredential -Path:&quot;$CredFilenam&quot;
+	} 
+}
+if ( !$PsCred ) {
+	Write-Warning &quot;Credential is not defined. Exiting...&quot;
+	exit 1326; # 1326 	Logon failure: unknown user name or bad password.
+}
+
+try {
+	#Setup arguments of Start-Process based on Script parameters
+	if ( $FilePath ) {
+		if ( $ScriptUnbArgs ) {
+			if ( ( &quot;.exe&quot;,&quot;.com&quot;,&quot;.bat&quot;,&quot;.cmd&quot; | Foreach-Object { $FilePath.EndsWith($_) } ) -contains $True ) {
+				Start-Process -LoadUserProfile -Credential:$PsCred -FilePath:$FilePath -ArgumentList:$ScriptUnbArgs
+			} else {
+				Start-Process -LoadUserProfile -Credential:$PsCred -FilePath:Cmd.exe -ArgumentList:&quot;/C start &quot;&quot;PS_Process_Starter&quot;&quot; /B &quot;&quot;$FilePath&quot;&quot; $ScriptUnbArgs&quot;
+			}
+		} else { # No args
+			if ( ( &quot;.exe&quot;,&quot;.com&quot;,&quot;.bat&quot;,&quot;.cmd&quot; | Foreach-Object { $FilePath.EndsWith($_) } ) -contains $True ) {
+				Start-Process -LoadUserProfile -Credential:$PsCred -FilePath:$FilePath
+			} else {
+				Start-Process -LoadUserProfile -Credential:$PsCred -FilePath:Cmd.exe -ArgumentList:&quot;/C start &quot;&quot;PS_Process_Starter&quot;&quot; /B &quot;&quot;$FilePath&quot;&quot;&quot;
+			}
+		}
+	} else {
+		Start-Process -LoadUserProfile -Credential:$PsCred -FilePath:Cmd.exe -ArgumentList:&quot;/K Title $($PsCred.UserName):  $($MyInvocation.Line)&quot;
+	}
+}
+catch {
+	#Error handling...
+	Write-Host -ForegroundColor:Red &quot;runas:$($PsCred.UserName):`t $($MyInvocation.Line)&quot;
+	&quot;$($Error[0])&quot;
+	#Password has been changed...
+	if ( ($Error[0] -match &quot;Logon failure: unknown user name or bad password&quot;) -and !$SaveCredential ) {
+		if ( Test-Path $CredFilenam ) {
+			Write-Host -ForegroundColor:Yellow &quot;Deleting invalid credential. Use -SaveCredential next time to save it again.&quot;
+			Remove-Item -Path $CredFilenam -Force -Confirm -Verbose	
+			if ( -not(Test-Path $CredFilenam) ) {
+				Write-Host -ForegroundColor:Green &quot;$CredFilenam is deleted. Exiting...&quot;
+			} else {
+				Write-Host -ForegroundColor:Yellow &quot;$CredFilenam has not been deleted.&quot;
+			}
+			exit 1326; # Logon failure: unknown user name or bad password.
+		}
+	} else {
+		exit 1;
+	}
+
+}
+
+if ( !$Error ) { # There were not errors:
+	Write-Host -ForegroundColor:Green &quot;runas:$($PsCred.UserName):`t $($MyInvocation.Line)&quot;
+	#Export credential:
+	if ( $SaveCredential ) {
+		Write-Host &quot;Saving credential:&quot;&quot;$CredFilenam&quot;&quot; ...&quot;
+		Export-PSCredential -Credential $PsCred -Path &quot;$CredFilenam&quot;
+		try { (Get-Item -Force $CredFilenam).Encrypt() }
+		catch {
+			&quot;$($Error[0])&quot;
+		}
+		if ((Get-Item -Force $CredFilenam).Attributes -match &quot;Encrypted&quot;) {
+			Write-Host -ForegroundColor:Green &quot;$((Get-Item -Force $CredFilenam).Attributes)&quot;
+		} else {
+			Write-Warning &quot;$CredFilenam is not encrypted. Deleting...&quot;
+			Remove-Item -Path &quot;$CredFilenam&quot; -Force -Confirm -Verbose
+		}
+	}
+	if ( $RdpSaveCredential ) {
+		if (Test-Path $RdpFilenam) {
+			Write-Host &quot;Saving credential:&quot;&quot;$RdpFilenam&quot;&quot; $((Get-Item -Force $RdpFilenam).Attributes) ...&quot;
+			if ( (Get-Item -Force $RdpFilenam).Attributes -notmatch &quot;Encrypted&quot; ) { # ReadOnly, Archive, Encrypted
+				(Get-Item -Force $RdpFilenam).Attributes = &quot;Archive&quot;
+				try {
+					(Get-Item -Force $RdpFilenam).Encrypt()
+				}
+				catch {
+					&quot;$($Error[0])&quot;
+				}
+			}	# if $RdpFilenam not Encrypted
+			(Get-Item -Force $RdpFilenam).Attributes = &quot;ReadOnly, Archive, Encrypted&quot;
+			if ( (Get-Item -Force $RdpFilenam).Attributes -notmatch &quot;Encrypted&quot; ) {
+				Write-Warning &quot;$RdpFilenam is not encrypted!&quot;
+			}
+			Write-Host &quot;Creating backup:&quot;
+			$RdpFileBak = $RdpFilenam + $(Get-Date -Format:_yyyyMMdd_HHmmss)
+			Copy-Item $RdpFilenam $RdpFileBak -Force -Confirm
+			if ( Test-Path $RdpFileBak ) {
+				if ( !$PsCred.GetNetworkCredential().Domain ) { $PsCred.GetNetworkCredential().Domain = $env:ComputerName }
+				$RdpFileLines = switch -regex -File:&quot;$RdpFilenam&quot; {
+					&quot;username:s:*&quot;		{ }
+					&quot;domain:s:*&quot;		{ }
+					&quot;password 51:b:*&quot;	{ }
+					default				{ $_ }
+				}
+				[array] $RdpFileLines	+= &quot;username:s:&quot;	+ $($PsCred.GetNetworkCredential().UserName)
+				$RdpFileLines			+= &quot;domain:s:&quot;		+ $($PsCred.GetNetworkCredential().Domain)
+				$RdpFileLines			+= &quot;password 51:b:&quot;	+ $($PsCred.Password | ConvertFrom-SecureString)
+				Set-Content -Value:$RdpFileLines -Path:$RdpFilenam -Force
+				Write-Host &quot;Credential saved:&quot;&quot;$RdpFilenam&quot;&quot;`t $((Get-Item -Force $RdpFilenam).Attributes)&quot; -ForegroundColor:Green
+				$RdpFileLines | Select-Object -Last:3
+			}	# if ( Test-Path $RdpFileBak )
+		} else {
+			Write-Warning &quot;File does not exist:&quot;&quot;$RdpFilenam&quot;&quot;. Generate an RDP profile first.&quot;
+			exit 2; # 2 	The system cannot find the file specified.
+		}	# if (Test-Path $RdpFilenam)
+	}	# if ( $RdpSaveCredential )
+	Start-Sleep -Milliseconds 2000
+	} else {
+	exit 1;
+}	# if ( !$Error )
+
+
+# su.ps1 runs on powershell 2.0 only!	http://connect.microsoft.com/PowerShell
+# Put su.ps1 and su.bat to a directory listed in PATH environment variables.
+# content of su.bat: (without hashmarks of course :)
+#
+#@echo off
+#PowerShell.exe -ExecutionPolicy RemoteSigned su.ps1 %*
+#if NOT [%ErrorLevel%] == [0] (
+#	if [%ErrorLevel%] == [9009] (
+#		echo PowerShell.exe is not under %%Path%% or Poweshell 2.0 has not been installed.
+#		echo http://www.microsoft.com/powershell
+#	)
+#
+#	if NOT [%1] == [] ( echo For usage type su -Help )
+#	pause
+#)
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

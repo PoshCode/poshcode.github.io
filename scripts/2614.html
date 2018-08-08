@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Levon Becker">
+    <title>ConvertTo-ASCII - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ConvertTo-ASCII</h1>
+<h3><a href="//scripts/2614.ps1">download</a> - <a href="//scripts/2613.md">parent</a></h3>
+<p>Here is a quick script I created to convert files to ASCII character set. This came about because I found Out-File was creating files as Unicode and Add-Content was writing ASCII (Even though the help says it defaults to Unicode). So writing to the files with Add-Content would use the wrong encoding and add garbage to the log files. I changed all my code to include the -Encoding ASCII parameter, but had thousands of files encoded as Unicode. (Note: To see what format it is, open in Notepad and select Save As... it will be listed at the bottom). It replaces the file with a new ASCII encoded file so I also added some logic to capture and set the original file timestamps. This is my first draft so I'm sure there is room for improvements. Such as error handling and adjustments so the input parameters don't have to be so exact, but it works and thought I would share. -=Levon</p>
+<pre><code class="language-posh">#requires -version 2.0
+
+#region Help
+
+&lt;#
+.SYNOPSIS
+	Automation script for file character set format conversion to ASCII encoding.
+.DESCRIPTION
+	Script for automating the conversion of files to ASCII format.  Good for if you've used Out-File without specifying the
+	encoding. Which would make a Unicode formatted file by default.  If you then used Add-Content to append data to that
+	file it would have garbage characters because even though it states it defaults to Unicode it will write ASCII/ANSI.
+.INPUTS
+	Full Path to files to convert.
+.OUTPUTS
+	Replacement files in ASCII format.
+.NOTES
+	AUTHOR:     Levon Becker
+	TITLE:      ConvertTo-Ascii
+	VERSION:    1.001
+	DATE:       4/13/2011
+	ENV:        Powershell v2
+	TOOLS:      PowerGUI Script Editor, RegexBuddy
+.EXAMPLE
+	.\ConvertTo-Ascii -path &quot;C:\Folder1\Folder2\*&quot; -include &quot;*.txt&quot;
+	Will convert all of the files with a TXT file extension in the directory named Folder2.
+.EXAMPLE
+	.\ConvertTo-Ascii -path &quot;C:\Folder1\Folder2\*&quot; -include &quot;filename.txt&quot;
+	Will convert a single file named filename.txt in the directory named Folder2
+.EXAMPLE
+	.\ConvertTo-Ascii -path &quot;C:\Folder1\Folder2\*&quot; -include &quot;*.txt&quot; -recursive $true
+	Will convert all of the files with a TXT file extension in the directory named Folder2 and any subdirectories.
+.EXAMPLE
+	.\ConvertTo-Ascii -path &quot;C:\Folder1\Folder2\*&quot; -include &quot;filename.txt&quot; -recursive $true
+	Will convert a single file named filename.txt in the directory named Folder2 and any subdirectories.
+.PARAMETER path
+	Full path to file/s to process. Standard wild cards are excepted. Be sure to put in quotation marks.
+	It should work without a trailing backslash or asterisk, but it's recommended to simply include.
+	See examples
+.PARAMETER include
+	File name filtering option. Standard wild cards are excepted. Be sure to put in quotation marks.
+.PARAMETER recursive
+	Specifies if the script should look in sub-folders off the path provided. Default is False (Do not do recursive).
+	Use -recursive $true to enable.
+.LINK
+#&gt;
+
+#endregion Help
+
+#region Changelog
+
+&lt;#
+04/12/2011: Created
+04/13/2011: Added time-stamp capture and write in order to keep the replacement files with the same time information as the original.
+			Cleaned up comments and regions.
+#&gt;
+
+#endregion Changelog
+
+#region Sources
+
+&lt;#
+http://rosettacode.org/wiki/File_modification_time#PowerShell
+http://www.powergui.org
+http://www.regexbuddy.com
+#&gt;
+
+#endregion Sources
+
+#region Parameters
+
+[CmdletBinding()]
+    Param (
+        [parameter(Mandatory=$true)][string]$path,
+		[parameter(Mandatory=$true)][string]$include,
+		[parameter(Mandatory=$false)][string]$recursive = &quot;$false&quot;
+       )
+
+#endregion Parameters
+
+#region Variables
+
+$scriptver = '1.001'
+$originaltitle = $Host.UI.RawUI.WindowTitle
+$title = &quot;File Convert to ASCII Script v$scriptver by Levon Becker&quot;
+$count = $null
+$file = $null
+
+#endregion Variables
+
+Clear
+$Host.UI.RawUI.WindowTitle = $title
+
+#region Check Parameters
+
+If ((Test-Path -Path $path) -eq $false) {
+	Write-Host &quot;ERROR:	PATH NOT FOUND ($path)&quot; -BackgroundColor Red -ForegroundColor White
+	Break
+}
+
+#endregion Check Parameters
+
+#region Main Process
+
+# Check that \* is at the end of the path
+$regex = '\b\\\*'
+# If not then add \* to the end of the path
+If ($path -notmatch $regex) {
+	$path = $path + '\*'
+}
+# Get list of filenames
+If ($recursive -eq $true) {
+	$filelist = Get-ChildItem -path $path -Include $include -Recurse
+}
+Else {
+	$filelist = Get-ChildItem -path $path -Include $include
+}
+
+Foreach ($file in $filelist) {
+	$count++
+	
+	# Get File Information
+	$fullname = ($file.FullName)
+	$creationtime = ($file.CreationTime)
+	$creationtimeutc = ($file.CreationTimeUtc)
+	$lastwritetime = ($file.LastWriteTime)
+	$lastwritetimeutc = ($file.LastWriteTimeUtc)
+	$lastaccesstime = ($file.LastAccessTime)
+	$lastaccesstimeutc = ($file.LastAccessTimeUtc)
+	
+	# Get File Contents
+	$content = Get-Content $fullname
+	
+	# Replace file with corrected character set
+	Out-File -FilePath $fullname -Encoding ASCII -Force -InputObject $content
+	
+	# Set original time stamp information on new file
+	Set-ItemProperty -Path $fullname -Name CreationTime ($creationtime)
+	Set-ItemProperty -Path $fullname -Name CreationTimeUtc ($creationtimeutc)
+	Set-ItemProperty -Path $fullname -Name LastWriteTime ($lastwritetime)
+	Set-ItemProperty -Path $fullname -Name LastWriteTimeUtc ($lastwritetimeutc)
+	Set-ItemProperty -Path $fullname -Name LastAccessTime ($lastaccesstime)
+	Set-ItemProperty -Path $fullname -Name LastAccessTimeUtc ($lastaccesstimeutc)
+
+	Write-Host $file
+
+}
+
+#endregion Main Process
+
+#region Conclusion Information
+
+Write-Host '----------------------------------------------------------------------'
+Write-Host ''
+Write-Host &quot;Total Converted: &quot; -ForegroundColor Green -NoNewline
+Write-Host $count
+Write-Host ''
+Write-Host '-------------' -ForegroundColor Green
+Write-Host '| COMPLETED |' -ForegroundColor Green
+Write-Host '-------------' -ForegroundColor Green
+Write-Host ''
+
+#endregion Conclusion Information
+
+$Host.UI.RawUI.WindowTitle = $title + ' (COMPLETED)'
+Sleep -Seconds 1
+$Host.UI.RawUI.WindowTitle = $originaltitle
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

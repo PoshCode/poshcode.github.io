@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="A Stone">
+    <title>Print Cluster Comparison - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Print Cluster Comparison</h1>
+<h3><a href="//scripts/2823.ps1">download</a></h3>
+<p>Script to compare the printers on two Windows print clusters.  Great for verifying a migration or a backup cluster.  It performs basic comparisons on several printer attributes including name, share name, location, driver, and port information and outputs the results to the console.</p>
+<pre><code class="language-posh">&lt;#################################################################
+#          Print Cluster - Printer Comparison                   #
+#                                                               #
+# This script does a comparison between two print clusters and  #
+# looks for differences between the source and destination.  It  #
+# has been tested with printer clusters running Server 2003 and #
+# 2008.  The prompts will ask for the cluster name and then the #
+# resource identifier for the cluster resource.  You'll have to #
+# get those yourself or code something in to loop through the   #
+# registry and guess.                                           #
+#                                                               #
+# Note: The script will not report extra printers on the        #
+# destination.                                                  #
+#                                                               #
+#                                       -Alex Stone 7/25/2011   #
+#################################################################&gt;
+
+
+#Set initial variables and collect source server information as well as destination cluster identifier.
+
+#Turns the code interpreter into a syntax Nazi
+Set-StrictMode -Version Latest
+
+#Source/Destination Servers and cluster reg keys.
+$sserver = Read-Host &quot;Please enter the source server name and press enter:&quot;
+$shive = Read-Host &quot;Please enter the cluster resource hive of the source server:&quot;
+$dserver = Read-Host &quot;Please enter the destination server name and press enter:&quot;
+$dhive = Read-Host &quot;Please enter the cluster resource hive of the destination server:&quot;
+
+#Open remote registries and collect Local Machine key.
+$sbase = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey(&quot;LocalMachine&quot;, $sserver)
+$dbase = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey(&quot;LocalMachine&quot;, $dserver)
+
+#Store &quot;Printer&quot; subkey for each.
+$sprinters = $sbase.OpenSubKey(&quot;Cluster&quot;).OpenSubKey(&quot;Resources&quot;).OpenSubKey($shive).OpenSubKey(&quot;Parameters&quot;).OpenSubKey(&quot;Printers&quot;)
+$dprinters = $dbase.OpenSubKey(&quot;Cluster&quot;).OpenSubKey(&quot;Resources&quot;).OpenSubKey($dhive).OpenSubKey(&quot;Parameters&quot;).OpenSubKey(&quot;Printers&quot;)
+
+
+#Outer loop to run through printers on the source.
+foreach ($sprnname in $sprinters.GetSubKeyNames())
+    {
+        #Open each printer subkey and then work store the attributes to be used in the inner loop.
+        $sprinter = $sprinters.OpenSubKey($sprnname)
+       
+            $cname = $sprinter.GetValue(&quot;Name&quot;)
+            $cdriver = $sprinter.GetValue(&quot;Printer Driver&quot;)
+            $cshare = $sprinter.GetValue(&quot;Share Name&quot;)
+            $clocation = $sprinter.GetValue(&quot;Location&quot;)
+            $cproc = $sprinter.GetValue(&quot;Print Processor&quot;)
+            $cport = $sprinter.GetValue(&quot;Port&quot;)
+            
+            #Set initial name match to key the rest of the comparisons
+            $namematch = $false
+                     
+                #Inner loop to work through the destination printers.
+                foreach ($dprnname in $dprinters.GetSubKeyNames())
+                {
+                   #Open each printer subkey and then work store the attributes to be used in the inner loop.
+                   $dprinter = $dprinters.OpenSubKey($dprnname)
+                   
+                    $dname = $dprinter.GetValue(&quot;Name&quot;)
+                    $ddriver = $dprinter.GetValue(&quot;Printer Driver&quot;)
+                    $dshare = $dprinter.GetValue(&quot;Share Name&quot;)
+                    $dlocation = $dprinter.GetValue(&quot;Location&quot;)
+                    $dproc = $dprinter.GetValue(&quot;Print Processor&quot;)
+                    $dport = $dprinter.GetValue(&quot;Port&quot;)
+                   
+                   #Comparison to determine printer name match.
+                   if ($cname -eq $dname) 
+                   {
+                   
+                   #Set the name match flag to true.
+                   $namematch = $true
+                   
+                   #Set initial boolean values to false.
+                   $drivermatch = $false
+                   $sharematch = $false
+                   $locmatch = $false
+                   $procmatch = $false
+                   $portmatch = $false
+                   
+                        #Because of name match execute remaining comparisons.
+                        
+                            #Driver comparison - This is a very basic comparison that counts the total number of words in the drivers names from each server.
+                            #It then determines which is longer and loops through that one and looks for matches with the other.  It creates a running count of the matches.
+                            #If the number of matches divided into the total number of words results in a ratio of .7 or higher, it considers it a match.  The ratio can be adjusted below.
+                            $cdrivera = $cdriver.split(&quot; &quot;)
+                            $ddrivera = $ddriver.split(&quot; &quot;)
+                            $drvtot = $cdrivera.count + $ddrivera.count
+                            $drvscore = 0
+                            if ($cdrivera.count -ge $ddrivera.count) {$longdrive = $cdrivera } else {$longdrive = $ddrivera}
+                            if ($cdrivera.count -ge $ddrivera.count) {$shortdrive = $ddrivera } else {$shortdrive = $cdrivera}
+                            
+                            for ($i=0; $i -le $longdrive.count; $i++)
+                            {
+                                for ($c=0; $c -le $shortdrive.count; $c++)
+                                {
+                                    if ($longdrive[$i] -match $shortdrive[$c]) {$drvscore++}
+                                }
+                                
+                            }
+                            
+                            if (($drvscore*2)/($drvtot) -ge .7) {$drivermatch = $true}
+                            
+                            
+                            #Share Name Comparison
+                            if ($cshare -eq $dshare) {$sharematch = $true}
+                            
+                            #Location Comparison
+                            if ($clocation -eq $dlocation) {$locmatch = $true}
+                            
+                            #Processor Comparison
+                            if ($cproc -eq $dproc) {$procmatch = $true}
+                            
+                            #Port Match
+                            if ($cport -match &quot;IP_&quot;) {$cport = $cport.Substring(3,$cport.Length-3)}
+                            if ($dport -match &quot;IP_&quot;) {$dport = $dport.Substring(3,$dport.Length-3)}
+                            if ($cport -eq $dport) {$portmatch = $true}
+                           
+                   
+                        }
+                }
+                #Output line.  If we didn't find a matching printer let the user know otherwise present the comparison results.
+                if ($namematch -eq $false) {$cname + &quot; is missing from the destination!&quot;} else {$cname+&quot; Driver: &quot;+$drivermatch+&quot;  Share: &quot;+$sharematch+&quot;  Location: &quot;+$locmatch+&quot;  Processor: &quot;+$procmatch+&quot;  Port: &quot;+$portmatch}
+                
+                #Reset name match flag.
+                $namematch = $false
+            
+            
+        
+     }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

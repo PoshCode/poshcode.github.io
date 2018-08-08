@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Async Sockets - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Async Sockets</h1>
+<h3><a href="//scripts/2454.ps1">download</a> - <a href="//scripts/1382.md">parent</a></h3>
+<p>Derived from Oisin's &quot;New-ScriptBlockCallback&quot;:http://poshcode.org/1382, this is an example of how to do asynchronous sockets in PowerShell.  The two functions below enable simple &quot;expect&quot; scripting of socket communications.</p>
+<pre><code class="language-posh">if (-not (&quot;CallbackEventBridge&quot; -as [type])) {
+   Add-Type @&quot;
+      using System;
+      
+      public sealed class CallbackEventBridge
+      {
+          public event AsyncCallback CallbackComplete = delegate { };
+
+          private CallbackEventBridge() {}
+
+          private void CallbackInternal(IAsyncResult result)
+          {
+              CallbackComplete(result);
+          }
+
+          public AsyncCallback Callback
+          {
+              get { return new AsyncCallback(CallbackInternal); }
+          }
+
+          public static CallbackEventBridge Create()
+          {
+              return new CallbackEventBridge();
+          }
+      }
+&quot;@ }
+
+
+function Open-Socket {
+#.Synopsis
+#  Open an Internet Socket
+#.Parameter Server
+#  The name of the server to connect to
+#.Parameter Port
+#  The port to connect to on the remote server
+#.Parameter SocketType
+#  The type of socket to open.
+#  Valid values include Stream, Dgram, Raw, Seqpacket, etc.
+#
+#  Default value                Stream
+#.Parameter ProtocolType
+#  The protocol to use over the socket.
+#  Valid values include Tcp, Udp, Icmp, Ipx, etc.
+#
+#  Default value                Tcp
+#.Example
+#  $socket = Open-Socket google.com 80
+param(
+   [Parameter(Mandatory=$true, Position=0)]
+   [Alias(&quot;Host&quot;)]
+	[string]$Server
+, 
+   [Parameter(Mandatory=$true, Position=1)]
+   [int]$Port
+, 
+   [Parameter()]
+   [System.Net.Sockets.SocketType]$SocketType = &quot;Stream&quot;
+,
+   [Parameter()]
+   [System.Net.Sockets.ProtocolType]$ProtocolType = &quot;Tcp&quot;
+)
+end {
+	$socket = new-object System.Net.Sockets.Socket &quot;InterNetwork&quot;, $SocketType, $Protocol
+	$socket.Connect($Server, $Port)
+   Write-Output $socket
+}
+}
+
+
+function Expect-String {
+#.Synopsis
+#  Read data from an open socket asynchronously (using BeginRead/EndRead).
+#.Description
+#  Reads data from an open socket in an async manner, allowing the script to continue and even to cancel reading.
+#  Provides an advanced system for reading up to an expected string with buffering and regex matching.
+#.Parameter Socket
+#  The socket to read from
+#.Parameter Expect
+#  One or more patterns to match on (regex syntax supported)
+#  Note: a null value will match all remaining output from the socket
+#.Parameter SendFirst
+#  Text to send through the socket before reading. For example, a telnet command or http GET request.
+#.Parameter BufferLength
+#  The size buffer to use when reading from the socket
+#
+#  Default value                100
+#.Parameter OutputBuffer
+#  A List[String] for the output. Defaults to an empty collection, but you can pass in an existing collection to append to.
+#  This is primarily for use when piping the output of Expect-String back to Expect-String to build up multiple results.
+#.Parameter Wait
+#  The number of seconds to wait for the socket reads to finish.
+#.Notes
+#  Expect-String doesn't close the socket, in case you need to call Expect-String on it again
+#.Example
+#  $socket = Open-Socket www.xerox.com 80
+#  C:\PS&gt;$State = Expect-String -Socket $socket -Send &quot;GET / HTTP/1.1`r`nHost: www.xerox.com`r`n`r`n&quot; -Wait 30 -Expect &quot;.*(?=&lt;)&quot;,&quot;.*(?=&lt;body&gt;)&quot;,&quot;&lt;/body&gt;&quot;,$null
+#  C:\PS&gt;$socket.Close()
+#  C:\PS&gt;Write-Host &quot;Headers:&quot; $State.Output[0]
+#  C:\PS&gt;Write-Host &quot;Body:&quot; $State.Output[2]
+#
+#  Description
+#  -----------
+#  This calls Expect-String with four expectations, which means there will be four items in $State.Output if they all match.  The 3rd item (index 2) will show the entire body of the Xerox homepage.  Notice that the first two are using regular expression positive lookaheads (the parenthesis and ?= enclosing some text) to match up to but not including the tags.  The four expectations specified result in the http headers, the html up to (but not including) the body tag, the whole body, and anything else that comes after the body (&lt;/html&gt;) being in Output, because putting $null as the last expectation copies all remaining data until the end of the stream. We then close the socket.
+#
+#  NOTE: Using -Wait causes Expect-String not to return until either all expectations are met, we reach the end of the data, or we timeout. Otherwise, Expect-String returns immediately, but you have to manually check $State.Complete
+#
+#.Example
+#  $State = Open-Socket localhost 80 | 
+#           Expect-String -Send &quot;GET /xsm57/ui/home.aspx HTTP/1.1`r`nHost: localhost`r`n`r`n&quot;
+#  while(!$State.Complete) { write-host $State.Output.Length &quot;characters so far.&quot; }  
+#
+#  Description
+#  -----------
+#  Without the -Wait parameter, this will return instantly, but the data may not have started arriving yet.  Note that on a fast server, once the data starts arriving, it arrives so fast that the Write-Host line may never write anything but zeros, and since we're not -Expecting anything, it should just return everything as a single string in $State.Output
+
+param(
+   [Parameter(Mandatory=$true, Position=1, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   [System.Net.Sockets.Socket]$Socket
+,
+   [Parameter(Position=0,ValueFromPipelineByPropertyName=$true)]
+   [String[]]$Expect = @()
+,
+   [String]$SendFirst
+,
+   [Parameter(ValueFromPipelineByPropertyName=$true)]
+   [Int]$BufferLength = 100
+,
+   [Parameter(ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Output&quot;)]
+   [System.Collections.Generic.List[String]]$OutputBuffer = $(New-Object System.Collections.Generic.List[String])
+,
+   [double]$Wait
+)
+begin {
+   if($SendFirst) {
+      $Socket.Send(([char[]]$SendFirst)) | Out-Null
+   }
+   $Expecting = $Expect -as [bool]
+   
+   New-Object PSObject @{
+      Bridge = [CallbackEventBridge]::create()
+      Buffer = New-Object System.Byte[] $BufferLength
+      BufferLength = $BufferLength
+      Received = New-Object System.Text.StringBuilder
+      Output = $OutputBuffer
+      Socket = $Socket
+      Complete = $false
+      Expecting = $Expect
+   } | Tee-Object -Variable State
+}
+
+process {
+   Trap [System.ObjectDisposedException] {
+      Write-Warning &quot;The socket was forcibly closed&quot;
+   }
+   
+  
+   Register-ObjectEvent -input $State.Bridge -EventName CallbackComplete -action {
+		param($AsyncResult) 
+      
+      Trap [System.ObjectDisposedException] {
+         Write-Warning &quot;The socket was forcibly closed&quot;
+         $as.Complete = &quot;ERROR: The socket was forcibly closed&quot;
+      }
+      
+      $as = $AsyncResult.AsyncState
+      
+      $read = $as.Socket.EndReceive( $AsyncResult )
+      Write-Verbose &quot;Reading $read&quot;
+      if($read -gt 0) {
+         $as.Received.Append( ([System.Text.Encoding]::ASCII.GetString($as.Buffer, 0, $read)) ) | Out-Null
+      }
+      
+      ## This is the &quot;Expect&quot; logic which aborts reading when we get what we wanted ...
+      if(($as.Expecting.Count -gt $as.Output.Count) -and $as.Received.Length -gt $as.Expecting[$as.Output.Count].Length -and $as.Expecting[$as.Output.Count]) {
+         $Expecting = $as.Expecting[$as.Output.Count]
+         Write-Verbose &quot;Expecting $Expecting&quot;
+         # Speeds up matching if the results are large
+         $StartIndex = [Math]::Max(($as.Received.Length - [Math]::Max(($as.BufferLength * 2), $Expecting.Length)), 0)
+         $Length = $as.Received.Length - $StartIndex
+         
+         $match = [regex]::Match( $as.Received.ToString( $StartIndex, $Length ), $Expecting )
+         if( $match.Success ) {
+            $match | Out-String | Write-Verbose 
+            $matchEnd = $StartIndex + $match.Index + $match.Length
+            $as.Output += $as.Received.ToString(0, $matchEnd)
+            $as.Received = New-Object System.Text.StringBuilder $as.Received.ToString($matchEnd, $as.Received.Length - $matchEnd)
+            ## If there's nothing left to expect, then ... don't
+            if($as.Expecting.Count -eq $as.Output.Count) {
+               $as.Complete = &quot;Success: All matches found&quot;
+               $read = 0 # Finish reading for now ...
+            }
+         }
+      }
+      
+      ## It is more correct to keep trying until we get 0 bytes, but some servers never respond when they have 0 to send.
+      # if($read -gt 0) { 
+      if($read -eq $as.BufferLength) {
+         # Keep reading ...
+         $as.Socket.BeginReceive( $as.Buffer, 0, $as.BufferLength, &quot;None&quot;, $as.Bridge.Callback, $as ) | Out-Null
+      } else {
+         # If we weren't &quot;expecting&quot; or if the last expectation is null (or empty)
+         # put everything we've received into the output buffer
+         if($as.Expecting.Count -eq 0 -or $as.Expecting[-1].Length -eq 0) {
+            $as.Output += $as.Received.ToString()
+            $as.Received = New-Object System.Text.StringBuilder
+         }
+         $as.Complete  = $true
+      }
+	} | Out-Null
+
+   Write-Verbose &quot;Begin Receiving&quot;
+   $State.Socket.BeginReceive( $State.Buffer, 0, $State.BufferLength, &quot;None&quot;, $State.Bridge.Callback, $State ) | Out-Null # | Select * -Expand AsyncState | Format-List | Out-String | Write-Verbose
+}
+end {
+   if($Wait) {
+      while($Wait -gt 0 -and !$State.Complete) {
+         Sleep -milli 500
+         $Wait -= 0.5
+         Write-Progress &quot;Waiting to Receive&quot; &quot;Still Expecting Output $Expect&quot; -SecondsRemaining $Wait
+      }
+   }
+}
+}
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

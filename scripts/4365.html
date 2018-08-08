@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="dethompson71">
+    <title>New-BulkMailboxMoveReq - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-BulkMailboxMoveReq</h1>
+<h3><a href="//scripts/4365.ps1">download</a> - <a href="//scripts/4361.md">parent</a></h3>
+<p>Move mailboxes from one mailbox database to another mailbox database or balance them across a group of mailbox databases.
+Created by Dethompson71
+http://powershellatwork.blogspot.com/2013/08/new-bulk-mailbox-move-request.html</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+		Move mailboxes from one mailbox database to another mailbox database
+		or balance them across a group of mailbox databases. 
+		Requires Quest AD Tools: 
+		http://www.quest.com/powershell/activeroles-server.aspx
+
+.DESCRIPTION
+		Move mailboxes from one mailbox database to another mailbox database
+		or balance them across a group of mailbox databases.
+
+		Requires Quest AD Tools: 
+		http://www.quest.com/powershell/activeroles-server.aspx
+		
+		Options to move a subset of people based on size. Size is determined
+		by adding TotalItemSize and TotalDeletedItemSize.
+
+		All mailbox moves are created in a suspended state. If you'd like
+		to have the process run, choose the -Monitor switch.
+		
+		You have the choice to work on Primary or Archive mailboxes.
+		
+.PARAMETER SourceDB
+		The mailbox database to used as a source of mailboxes to move.
+			
+.PARAMETER TargetDB
+		The mailbox database to use as a destination for mailboxes to move.
+		If TargetDB is a collection of mailbox databases, 
+		choose the smallest one in the set for each person moved. This takes
+		into account the size of any mailboxes already added.
+		
+		Default is all mailbox databases.
+		
+		You can create a filter in the parameter section, for example:
+		
+		parameter(ValueFromPipeline = $false, Mandatory = $false)] 
+		[array]$TargetDB = (get-mailboxdatabase | ?{$_.Recovery -eq $False -and $-Name -notmatch &quot;Mailbox&quot;})
+
+.PARAMETER Archive
+		The mailboxes to move are Personal Archive mailboxes.
+		
+.PARAMETER Disabled
+		The mailboxes to move are mailboxes for disabled accounts.
+		
+.PARAMETER BatchName
+		A name to identify this group of moves. 
+		Default: The name of the Source Mailbox Database
+			
+.PARAMETER NumberToMove
+		How many mailboxes from the SourceDB to move. When using this
+		parameter, the &quot;select -first $NumberToMove&quot; is used.
+		Default: 1
+
+.PARAMETER MRSServer
+		Specify a particular CAS server to use as this job's 'Mailbox 
+		Replication Server.'
+		
+		This MRSServer will be used for all the moves specified.
+		TargetDB and MRSServer should be in the same AD site.
+		
+.PARAMETER Descending
+		Move the largest mailboxes first. Sorts the mailboxes by size,
+		desending, before selecting the number of mailboxes to move. To
+		move many mailboxes quick the sort is done with the smallest mailbox
+		being the 1st mailbox to move.
+		Default: False
+		
+.PARAMETER SizeLessThan
+		Select the mailbox less than &lt;Number&gt; in size. Number should be in MB
+		
+.PARAMETER RemoveCompletedMoves
+		Before starting a new set of mailbox moves, clear the completed moves 
+		for this batchname.
+		
+.PARAMETER Monitor
+		After the moves have started, monitor their status until all have 
+		completed for this BatchName.
+		
+.PARAMETER MonitorWaitTime
+		Time in seconds to Pause before another monitor cycle.
+		Default: 120
+
+.PARAMETER Notify
+		Send a notice when the Monitor is finished.
+		
+.EXAMPLE
+		New-BulkMailboxMoveRequest -SourceDB 'MBX01A' -TargetDB (get-mailboxdatabase MBX02*)
+	
+		Description
+		-----------	
+		Moves the smallestprimary mailbox from MBX01A to the smallest Mailbox 
+		Database returned in the results of get-mailboxdatabase MBX02*
+
+.EXAMPLE
+		New-BulkMailboxMoveRequest -SourceDB 'Arch01A' -TargetDB (get-mailboxdatabase arch02*) -Desending -Archive
+	
+		Description
+		-----------	
+		Moves the largest archive mailbox from Arch01A to the smallest Mailbox 
+		Database returned in the results of get-mailboxdatabase arch02*	
+		
+.EXAMPLE
+		New-BulkMailboxMoveRequest -SourceDB 'Arch01A' -TargetDB Arch10B -NumberToMove 25 -Archive
+			
+		Description
+		-----------	
+		Moves the smallest 25 archive mailboxes from Arch01A to the Arch10B 
+		Mailbox Database 
+		
+.EXAMPLE
+		New-BulkMailboxMoveRequest -SourceDB 'MBX01A' -TargetDB (get-mailboxdatabase MBX02*) -NumberToMove 25 -SizeLessThan 1000
+			
+		Description
+		-----------	
+		Moves the smallest 25 archive mailboxes from MBX01A to the the collection,
+		but only those under 1GB (1000MB)
+		of mailbox databases returned by (get-mailboxdatabase MBX02*) 
+		The mailboxes are balanced across all the mailbox databases based on Size.
+
+.Notes		Created by Dethompson71 ar gmail dot com
+		http://powershellatwork.blogspot.com/2013/08/new-bulk-mailbox-move-request.html
+		
+		Search for &lt;mydomain&gt; and make your changes, also smtpserver
+
+			
+#&gt;
+
+[CmdletBinding()]
+Param (
+		[parameter(Mandatory = $true, HelpMessage=&quot;No Source Mailbox Database name specified&quot;)]
+		[ValidateNotNullOrEmpty()]
+		[string]$SourceDB,
+		[parameter(ValueFromPipeline = $false, Mandatory = $false)] 
+		[array]$TargetDB = (get-mailboxdatabase | ?{$_.Recovery -eq $False -and $_.Name -notmatch &quot;Mailbox&quot;}),
+		[switch]$Archive,
+		[switch]$Disabled,
+		[switch]$LitHold,
+		[string]$BatchName = $SourceDB,
+		[int]$NumberToMove	= 1,
+		[string]$MRSServer,
+		[switch]$Descending,
+		[int]$SizeLessThan,
+		[switch]$RemoveCompletedMoves,
+		[switch]$Monitor,
+		[int]$MonitorWaitTime = 120,
+		[switch]$Notify
+)
+Function Find-ArchiveDBUSers {
+	param (
+			[string]$SourceDB,
+			[switch]$Statistics
+	)
+	
+	# this took less than 1.5 seconds on 25000 mailboxes and 2000 archives
+	# Get-QADUser -IncludedProperties msexcharchivedatabaselink -SizeLimit 0 -LdapFilter &quot;(msexcharchivedatabaselink=CN=Arch104D,CN=Databases,CN=Exchange Administrative Group (FYDIBOHF23SPDLT),CN=Administrative Groups,CN=&lt;mydomain&gt;,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=&lt;mydomain&gt;,DC=com)&quot;
+
+	# this took 46 second on 25000 mailboxes, and 2000 archives
+	# get-mailbox -Archive -ResultSize Unlimited | ?{$_.ArchiveDatabase -match &quot;^$SourceDB$&quot;}	
+
+	$FilteredDB = &quot;(msexcharchivedatabaselink=CN=&quot; + $SourceDB + &quot;,CN=Databases,CN=Exchange Administrative Group (FYDIBOHF23SPDLT),CN=Administrative Groups,CN=&lt;mydomain&gt;,CN=Microsoft Exchange,CN=Services,CN=Configuration,DC=&lt;mydomain&gt;,DC=com)&quot;
+	$user = Get-QADUser -IncludedProperties msexcharchivedatabaselink -SizeLimit 0 -LdapFilter &quot;$FilteredDB&quot;
+	if($Statistics) {
+		$user | %{get-mailboxstatistics $_.mail -archive}
+	} Else {
+		$user | %{get-mailbox $_.mail -archive}
+	}
+}
+#===============================================================================
+# -Notify implies -Monitor
+if(($Notify) -and (-not ($Monitor))){
+	Write-Verbose &quot;-Notify implies -Monitor; Setting -Monitor...&quot;
+	$Monitor=$True
+}
+
+#===============================================================================
+# get source mailbox database information
+Write-Verbose &quot;Collecting Mailbox Information in Source Mailbox Database...&quot;
+if ($Archive) {
+	Write-Verbose &quot;Collecting Personal Archive Mailboxes&quot;
+	$SrcMBX = Find-ArchiveDBUSers $SourceDB
+
+	If($SrcMBX){
+		If ($SrcMBX.Count) {
+			&quot;Found {0} Personal Archive mailboxes in {1} database.&quot; -f ($SrcMBX.Count),($SourceDB)
+		} Else {
+			&quot;Found 1 Personal Archive mailbox in {0} database.&quot; -f ($SourceDB)
+		}
+	} Else {
+		Write-Output &quot;There are no Personal Archive mailboxes to move.&quot;
+		Exit
+	}
+} Elseif  ($Disabled) {
+	Write-Verbose &quot;Collecting Disabled Mailboxes&quot;
+	# find all mailboxes in the source where account is disabled
+	$SrcMBX = get-mailboxdatabase $SourceDB | get-mailbox | ?{$_.ExchangeUserAccountControl -match &quot;AccountDisabled&quot;}
+	If ($SrcMBX.Count) {
+		If ($SrcMBX.Count) {
+			&quot;Found {0} Disabled mailboxes in {1} database.&quot; -f ($SrcMBX.Count),($SourceDB)
+		} Else {
+			&quot;Found 1 Disabled mailbox in {0} database.&quot; -f ($SourceDB)
+		}
+		
+	} Else {
+		Write-Output &quot;There are no Disabled mailboxes to move.&quot;
+		Exit
+	}
+} Elseif  ($LitHold) {
+	Write-Verbose &quot;Collecting Disabled Mailboxes&quot;
+	# find all mailboxes in the source where account is on Litigation hold
+	$SrcMBX = get-mailboxdatabase $SourceDB | get-mailbox | ?{$_.LitigationHoldEnabled}
+
+	If ($SrcMBX.Count) {
+		If ($SrcMBX.Count) {
+			&quot;Found {0} Disabled mailboxes in {1} database.&quot; -f ($SrcMBX.Count),($SourceDB)
+		} Else {
+			&quot;Found 1 Disabled mailbox in {0} database.&quot; -f ($SourceDB)
+		}
+		
+	} Else {
+		Write-Output &quot;There are no Litigation Hold mailboxes to move.&quot;
+		Exit
+	}	
+} Else {
+	Write-Verbose &quot;Collecting Primary Mailboxes&quot;
+	$SrcMBX = get-mailbox -Database $SourceDB -ResultSize Unlimited
+	If($SrcMBX){
+		If ($SrcMBX.Count) {
+			&quot;Found {0} Primary mailboxes in {1} database.&quot; -f ($SrcMBX.Count),($SourceDB)
+		} Else {
+			&quot;Found 1 Primary mailbox in {0} database.&quot; -f ($SourceDB)
+		}
+	} Else {
+		Write-Output &quot;There are no Primary mailboxes to move.&quot;
+		Exit
+	}
+}
+
+
+#===============================================================================
+# get destination mailbox database information
+Write-Verbose &quot;Collecting Destination Mailbox Database Information...&quot;
+$MBDBStats = @()
+$TargetDB | %{
+	$tmp = $null
+	$tmp = Get-Mailboxdatabase ($_) -Status
+	if($tmp){
+		#Write-Verbose &quot;`tWorking on Database $($tmp.Identity.ToString())&quot;
+		#$tmp | fl
+		$tmpobj = New-Object PSObject
+		$tmpObj | Add-Member -type NoteProperty -name Name -value ($($tmp.AdminDisplayName))
+		#$tmpObj | Add-Member -type NoteProperty -name Size -value ($tmp.DatabaseSize.ToMB() - $tmp.AvailableNewMailboxSpace.ToMB())
+		$tmpObj | Add-Member -type NoteProperty -name Size -value ($tmp.DatabaseSize.ToMB())
+		$MBDBStats += $tmpobj
+	}
+}
+
+If(-not $MBDBStats) {
+	Write-Error &quot;Destination Mailbox Database not found.&quot;
+	Exit
+}
+
+#===============================================================================
+# get mailbox database information to move
+Write-Verbose &quot;Collecting Mailbox Statistics...&quot;
+	
+$MBXStats = @()
+if($Archive) {
+	$MBX = $SrcMBX | Get-MailboxStatistics -Archive -EA 0
+} Else {
+	$MBX = $SrcMBX | Get-MailboxStatistics -EA 0
+}
+
+#===============================================================================
+# get all the mailbox data 
+$MBX | %{
+
+	$tmpobj = New-Object PSObject
+	$tmpObj | Add-Member -type NoteProperty -name DisplayName -value ((get-mailbox $_.LegacyDN).DisplayName)
+	$tmpObj | Add-Member -type NoteProperty -name TotalSize -value ($($_.TotalItemSize.Value.ToMB() + $_.TotalDeletedItemSize.Value.ToMB()))
+	$tmpObj | Add-Member -type NoteProperty -name TargetDB -value (&quot;TBD&quot;)
+	$MBXStats += $tmpobj
+}
+
+#===============================================================================
+# and reduce size of the collection of need be
+if($SizeLessThan){$MBXStats = $MBXStats | ?{$_.TotalSize -lt $SizeLessThan}}
+$MBXStats = $MBXStats | select -First $NumberToMove
+
+#===============================================================================
+# calculate the Target mailbox:
+Write-Host &quot;There are $(cc $MBXStats) mailboxes selected.&quot;
+if($MBXStats.Count) {
+	for($i=0;$i -lt $MBXStats.Count; ++$i) {
+		$MBDBStats = $MBDBStats | Sort Size	
+		#$MBDBStats | ft
+		$MBXStats[$i].TargetDB = $(($MBDBStats | Select -First 1).Name)
+		#$MBXStats  | ft
+		($MBDBStats | Select -First 1).Size +=  $MBXStats[$i].TotalSize
+	}
+} Else {
+	if ($MBXStats) {
+		$MBDBStats = $MBDBStats | Sort Size	
+		$MBXStats.TargetDB = $(($MBDBStats | Select -First 1).Name)	
+	}
+}
+
+
+#===============================================================================
+#sort if we need to
+If($Descending) {
+	$MBXStats = $MBXStats | sort TotalSize -Descending
+} Else {
+	$MBXStats = $MBXStats | sort TotalSize
+}
+
+If($MBXStats) {
+	Write-Output &quot;Mailboxes to move...&quot;
+	$TotalMoveSize = ($MBXStats | measure -Property TotalSize -Sum).Sum
+	$MBXStats | ft -AutoSize
+
+	Write-Output &quot;`tTotal size of moves: $($TotalMoveSize)`n&quot;
+	# pause here if you will please - ask for confirmation?
+	$ans = Read-Host &quot;Are you sure you want to continue? (y/n)&quot; 
+	If( -not ($ans.ToUpper() -eq &quot;Y&quot; -or $ans.toUpper() -eq &quot;YES&quot;)) { Exit }
+	$StartTime = Get-Date
+	
+} Else {
+	Write-Output &quot;The commandline options did not select any mailboxes for moving.&quot;
+	Exit
+}
+
+#===============================================================================
+# get rid of any completed requests with the same batchname 
+if($RemoveCompletedMoves) {
+	Write-Verbose &quot;Trying to remove Completed Requests...&quot;
+	if($BatchName) {
+		Get-MoveRequest -BatchName $BatchName -MoveStatus Completed | 
+		Remove-MoveRequest -Confirm:$false
+	}
+}
+
+
+#===============================================================================
+# create the move requests 
+#
+ForEach ($MBXStat in $MBXStats) {
+    # find current smallest database - after sort the topmost mailboxdatabase
+	# will always be the smallest
+	Write-Verbose &quot;Destination Mailbox Database Count: $($MBDBStats.Count)&quot;
+	Write-Verbose &quot;Working on $($MBXStat.DisplayName)&quot;
+			
+	$mbx = get-mailbox $MBXStat.DisplayName
+	Write-verbose &quot;$($mbx.DisplayName) size $($MBXStat.TotalSize) moving to $($MBXStat.TargetDB)&quot;
+	
+	if ($Archive) {
+		if ($MRSServer) {
+	    	$mbx | New-MoveRequest -ArchiveOnly -ArchiveTargetDatabase $MBXStat.TargetDB  -BatchName $BatchName -Suspend -MRSServer $MRSServer -BadItemLimit 49
+		} Else {
+			$mbx | New-MoveRequest -ArchiveOnly -ArchiveTargetDatabase $MBXStat.TargetDB -BatchName $BatchName -Suspend -BadItemLimit 49
+		}
+	} else {
+		if ($MRSServer) {
+	    	$mbx | New-MoveRequest -PrimaryOnly -TargetDatabase $MBXStat.TargetDB -BatchName $BatchName -Suspend -MRSServer $MRSServer -BadItemLimit 49
+		} Else {
+			$mbx | New-MoveRequest -PrimaryOnly -TargetDatabase $MBXStat.TargetDB -BatchName $BatchName -Suspend -BadItemLimit 49
+		}
+	}
+	
+	
+}
+
+
+if($Monitor) {
+	#===============================================================================
+	# Monitor -- loop until all jobs are complete
+	# maybe send a notice?
+
+	# Just because i am paranoid... ;) also to give the last New-MoveRequest time to breathe
+	Write-Verbose &quot;Resuming Mailbox Moves...&quot;
+	Sleep -seconds 10
+	Get-MoveRequest -BatchName $BatchName -MoveStatus 'Suspended' | Resume-MoveRequest 
+	Write-Verbose &quot;Starting Mailbox Move Monitoring...&quot;
+	Do {
+		# fl does not work correctly in a Do While loop for some reason
+		# write-output seems to have issues too
+		Write-Verbose &quot;Collecting Move Stats...&quot;
+		$stats = Get-MoveRequest -BatchName $BatchName | Get-MoveRequestStatistics
+		$stats = $stats | Sort DisplayName
+		$out = &quot;`n{0,-30}{1,16}{2,16}{3,10}&quot; -f &quot;DisplayName&quot;,&quot;TargetDB&quot;,&quot;PercentComplete&quot;,&quot;Size (MB)&quot;
+		Write-host $out
+		$out = &quot;{0,-30}{1,16}{2,16}{3,10}&quot;   -f &quot;-----------&quot;,&quot;-------------&quot;,&quot;---------------&quot;,&quot;---------&quot;
+		Write-Host $out
+		foreach ($Stat in $stats) {
+			$out = &quot;{0,-30}{1,16}{2,16}{3,10}&quot; -f ($stat.Displayname), ($stat.TargetArchiveDatabase),($stat.PercentComplete),($stat.TotalMailboxSize.ToMB())
+			Write-Host $out
+		}
+		Write-Host &quot;`n&quot;
+		# point in time reference - in case this get 'hung'
+		$CurTime = (Get-Date) - ($StartTime)
+		$out = &quot;{0}`tElasped Time: {1}h {2}m {3}s&quot; -f (Get-Date -Format 'MMM dd yyyy HH:mm'), ($CurTime.Hours),($CurTime.Minutes),($CurTime.Seconds)
+		Write-Host $out
+		Write-Verbose &quot;Time to snooze...&quot;
+	    sleep -seconds $MonitorWaitTime
+		#Write-Output &quot;`n&quot;
+	} While ((Get-MoveRequest -BatchName $BatchName | ?{$_.Status -ne 'Completed' -and $_.Status -ne 'Failed'}))
+	
+	
+	if ($Notify) {
+		$Subject  = &quot;Mailbox Database Bulk Move Complete: $BatchName&quot;
+		$To       = 'admin@&lt;mydomain&gt;.com'
+		$From	  = 'BulkMoveRequest@&lt;mydomain&gt;.com'
+		$Body     =  $(Get-MoveRequest -BatchName $BatchName) | Out-String
+		# Send a quick notice that the job is finished
+		Send-MailMessage -Body $Body -To $To -From $From -SmtpServer 'smtpserver.&lt;mydomain&gt;.com' -Subject $Subject #-BodyAsHtml
+	}
+	
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jeff Patton">
+    <title>Get-SiSReport - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-SiSReport</h1>
+<h3><a href="//scripts/2774.ps1">download</a></h3>
+<p>This function returns the sisadmin /v status and basic disk information for a given disk.</p>
+<pre><code class="language-posh">Function New-LocalUser
+	{
+		&lt;#
+			.SYNOPSIS
+				Create a new user account on the local computer.
+			.DESCRIPTION
+				This function will create a user account on the local computer.
+			.PARAMETER Computer
+				The NetBIOS name of the computer that you will create the account on.
+			.PARAMETER User
+				The user name of the account that will be created.
+			.PARAMETER Password
+				The password for the account, this must follow password policies enforced
+				on the destination computer.
+			.PARAMETER Description
+				A description of what this account will be used for.
+			.NOTES
+				You will need to run this with either UAC disabled or from an elevated prompt.
+			.EXAMPLE
+                New-LocalUser -ComputerName MyComputer -User MyUserAccount -Password MyP@ssw0rd -Description &quot;Account.&quot;
+                
+                Description
+                -----------
+                Creates a user named MyUserAccount on MyComputer.
+			.LINK
+				http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#New-LocalUser
+		#&gt;
+		Param
+			(
+				[Parameter(Mandatory=$true)]
+				[string]$ComputerName = (&amp; hostname),
+				[Parameter(Mandatory=$true)]
+				[string]$User,
+				[Parameter(Mandatory=$true)]
+				[string]$Password,
+				[string]$Description
+			)
+
+        Begin
+        {
+        }
+        
+        Process
+        {
+            Try
+            {
+                $objComputer = [ADSI](&quot;WinNT://$($ComputerName)&quot;)
+                $objUser = $objComputer.Create(&quot;User&quot;, $User)
+                $objUser.SetPassword($password)
+                $objUser.SetInfo()
+                $objUser.description = $Description
+                $objUser.SetInfo()
+                Return $?
+                }
+            Catch
+            {
+                Return $Error[0].Exception.InnerException.Message.ToString().Trim()
+                }
+        }
+        
+        End
+        {
+        }
+	}
+Function Set-Pass
+	{
+		&lt;#
+			.SYNOPSIS
+				Change the password of an existing user account.
+			.DESCRIPTION
+				This function will change the password for an existing user account. 
+			.PARAMETER ComputerName
+				The NetBIOS name of the computer that you will add the account to.
+			.PARAMETER UserName
+				The user name of the account that will be created.
+			.PARAMETER Password
+				The password for the account, this must follow password policies enforced
+				on the destination computer.
+			.NOTES
+				You will need to run this with either UAC disabled or from an elevated prompt.
+			.EXAMPLE
+				Set-Pass -ComputerName MyComputer -UserName MyUserAccount -Password N3wP@ssw0rd
+			.LINK
+				http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Set-Pass
+		#&gt;
+		Param
+        (
+            [Parameter(Mandatory=$true)]
+            [string]$ComputerName = (&amp; hostname),
+            [Parameter(Mandatory=$true)]
+            [string]$UserName,
+            [Parameter(Mandatory=$true)]
+            [string]$Password
+        )
+
+        Begin
+        {
+        }
+        
+        Process
+        {
+            Try
+                {
+            		$User = [adsi](&quot;WinNT://$ComputerName/$UserName, user&quot;)
+            		$User.psbase.invoke(&quot;SetPassword&quot;, $Password)
+                    
+                    Return &quot;Password updated&quot;
+                    }
+            Catch
+                {
+                    Return $Error[0].Exception.InnerException.Message.ToString().Trim()
+                    }
+        }
+        
+        End
+        {
+        }
+	}	
+Function Add-LocalUserToGroup
+	{
+		&lt;#
+			.SYNOPSIS
+				Add an existing user to a local group.
+			.DESCRIPTION
+				This function will add an existing user to an existing group.
+			.PARAMETER Computer
+				The NetBIOS name of the computer that you will add the account to.
+			.PARAMETER User
+				The user name of the account that will be created.
+			.PARAMETER Group
+				The name of an existing group to add this user to.
+			.NOTES
+				You will need to run this with either UAC disabled or from an elevated prompt.
+			.EXAMPLE
+				Add-LocalUserToGroup -ComputerName MyComputer -User MyUserAccount -Group Administrators
+			.LINK
+				http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Add-LocalUserToGroup
+		#&gt;
+		Param
+			(
+				[Parameter(Mandatory=$true)]
+				[string]$ComputerName = (&amp; hostname),
+				[Parameter(Mandatory=$true)]
+				[string]$User,
+				[Parameter(Mandatory=$true)]
+				[string]$Group
+			)
+
+        Begin
+        {
+        }
+        
+        Process
+        {
+            Try
+            {
+                $objComputer = [ADSI](&quot;WinNT://$($ComputerName)/$($Group),group&quot;)
+                $objComputer.add(&quot;WinNT://$($ComputerName)/$($User),group&quot;)
+                Return $?
+                }
+            Catch
+            {
+                Return $Error[0].Exception.InnerException.Message.ToString().Trim()
+                }
+        }
+        
+        End
+        {
+        }
+	}
+Function New-ScheduledTask
+	{
+		&lt;#
+		.SYNOPSIS
+			Create a Scheduled Task on a computer.
+		.DESCRIPTION
+			Create a Scheduled Task on a local or remote computer. 
+		.PARAMETER TaskName
+			Specifies a name for the task.
+		.PARAMETER TaskRun
+			Specifies the program or command that the task runs. Type 
+			the fully qualified path and file name of an executable file, 
+			script file, or batch file. If you omit the path, SchTasks.exe 
+			assumes that the file is in the Systemroot\System32 directory. 
+		.PARAMETER TaskSchedule
+			Specifies the schedule type. Valid values are 
+				MINUTE
+				HOURLY
+				DAILY
+				WEEKLY
+				MONTHLY
+				ONCE
+				ONSTART
+				ONLOGON
+				ONIDLE
+		.PARAMETER StartTime
+			Specifies the time of day that the task starts in HH:MM:SS 24-hour 
+			format. The default value is the current local time when the command 
+			completes. The /st parameter is valid with MINUTE, HOURLY, DAILY, 
+			WEEKLY, MONTHLY, and ONCE schedules. It is required with a ONCE 
+			schedule. 
+		.PARAMETER StartDate
+			Specifies the date that the task starts in MM/DD/YYYY format. The 
+			default value is the current date. The /sd parameter is valid with all 
+			schedules, and is required for a ONCE schedule. 
+		.PARAMETER TaskUser
+			Runs the tasks with the permission of the specified user account. By 
+			default, the task runs with the permissions of the user logged on to the 
+			computer running SchTasks.
+		.PARAMETER Server
+			The NetBIOS name of the computer to create the scheduled task on.
+		.NOTES
+			You will need to run this with either UAC disabled or from an elevated prompt.
+			The full syntax of the command can be found here:
+				http://technet.microsoft.com/en-us/library/bb490996.aspx
+		.EXAMPLE
+			New-ScheduledTask -TaskName &quot;Reboot Computer&quot; -TaskRun &quot;shutdown /r&quot; -TaskSchedule ONCE `
+            -StartTime &quot;18:00:00&quot; -StartDate &quot;03/16/2011&quot; -TaskUser SYSTEM -Server MyDesktopPC
+		.LINK
+			http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#New-ScheduledTask
+		#&gt;
+		
+		Param
+			(
+				[Parameter(Mandatory=$true)]
+				[string]$TaskName,
+				[Parameter(Mandatory=$true)]
+				[string]$TaskRun,
+				[Parameter(Mandatory=$true)]
+				[string]$TaskSchedule,
+				[Parameter(Mandatory=$true)]
+				[string]$StartTime,
+				[Parameter(Mandatory=$true)]
+				[string]$StartDate,
+				[Parameter(Mandatory=$true)]
+				[string]$TaskUser,
+				[Parameter(Mandatory=$true)]
+				[string]$Server	
+			)
+
+		schtasks /create /tn $TaskName /tr $TaskRun /sc $TaskSchedule /st $StartTime /sd $StartDate /ru $TaskUser /s $Server
+	}
+Function Remove-UserFromLocalGroup
+	{
+		&lt;#
+			.SYNOPSIS
+				Removes a user/group from a local computer group.
+			.DESCRIPTION
+				Removes a user/group from a local computer group.
+			.PARAMETER Computer
+				Name of the computer to connect to.
+			.PARAMETER User
+				Name of the user or group to remove.
+			.PARAMETER GroupName
+				Name of the group where that the user/group is a member of.
+			.NOTES
+				You will need to run this with either UAC disabled or from an elevated prompt.
+			.EXAMPLE
+				Remove-UserFromLocalGroup -ComputerName MyComputer -UserName RandomUser
+                
+                Description
+                -----------
+                This example removes a user from the local administrators group.
+            .Example
+                Remove-UserFromLocalGroup -ComputerName MyComputer -UserName RandomUser -GroupName Users
+                
+                Description
+                -----------
+                This example removes a user from the local users group.
+			.LINK
+				http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Remove-UserFromLocalGroup
+		#&gt;
+		
+		Param
+			(
+				[Parameter(Mandatory=$true)]
+				[string]$ComputerName = (&amp; hostname),
+				[Parameter(Mandatory=$true)]
+				[string]$UserName,
+				[Parameter(Mandatory=$true)]
+				[string]$GroupName=&quot;Administrators&quot;
+			)
+		
+		$Group = $Computer.psbase.children.find($GroupName)
+		$Group.Remove(&quot;WinNT://$Computer/$User&quot;)
+	}
+Function Get-Services
+	{
+		&lt;#
+			.SYNOPSIS
+				Get a list of services
+			.DESCRIPTION
+				This function returns a list of services on a given computer. This list can be filtered based on the
+				given StartMode  (ie. Running, Stopped) as well as filtered on StartMode (ie. Auto, Manual).
+			.PARAMETER State
+				Most often this will be either Running or Stopped, but possible values include
+					Running
+					Stopped
+					Paused
+			.PARAMETER StartMode
+				Most often this will be either Auto or Manual, but possible values include
+					Auto
+					Manual
+					Disabled
+			.PARAMETER Computer
+				The NetBIOS name of the computer to retrieve services from
+			.NOTES
+				Depending on how you are setup you may need to provide credentials in order to access remote machines
+				You may need to have UAC disabled or run PowerShell as an administrator to see services locally
+			.EXAMPLE
+				Get-Services |Format-Table -AutoSize
+
+				ExitCode Name                 ProcessId StartMode State   Status
+				-------- ----                 --------- --------- -----   ------
+					   0 atashost                  1380 Auto      Running OK
+					   0 AudioEndpointBuilder       920 Auto      Running OK
+					   0 AudioSrv                   880 Auto      Running OK
+					   0 BFE                       1236 Auto      Running OK
+					   0 BITS                       964 Auto      Running OK
+					   0 CcmExec                   2308 Auto      Running OK
+					   0 CryptSvc                  1088 Auto      Running OK
+				
+				Description
+				-----------
+				This example shows the default options in place
+			.EXAMPLE
+				Get-Services -State &quot;stopped&quot; |Format-Table -AutoSize
+
+				ExitCode Name                           ProcessId StartMode State   Status
+				-------- ----                           --------- --------- -----   ------
+					   0 AppHostSvc                             0 Auto      Stopped OK
+					   0 clr_optimization_v4.0.30319_32         0 Auto      Stopped OK
+					   0 clr_optimization_v4.0.30319_64         0 Auto      Stopped OK
+					   0 MMCSS                                  0 Auto      Stopped OK
+					   0 Net Driver HPZ12                       0 Auto      Stopped OK
+					   0 Pml Driver HPZ12                       0 Auto      Stopped OK
+					   0 sppsvc                                 0 Auto      Stopped OK
+				
+				Description
+				-----------
+				This example shows the output when specifying the state parameter
+			.EXAMPLE
+				Get-Services -State &quot;stopped&quot; -StartMode &quot;disabled&quot; |Format-Table -AutoSize
+
+				ExitCode Name                           ProcessId StartMode State   Status
+				-------- ----                           --------- --------- -----   ------
+					1077 clr_optimization_v2.0.50727_32         0 Disabled  Stopped OK
+					1077 clr_optimization_v2.0.50727_64         0 Disabled  Stopped OK
+					1077 CscService                             0 Disabled  Stopped OK
+					1077 Mcx2Svc                                0 Disabled  Stopped OK
+					1077 MSSQLServerADHelper100                 0 Disabled  Stopped OK
+					1077 NetMsmqActivator                       0 Disabled  Stopped OK
+					1077 NetPipeActivator                       0 Disabled  Stopped OK
+				
+				Description
+				-----------
+				This example shows how to specify a different state and startmode.
+			.EXAMPLE
+				Get-Services -Computer dpm -Credential &quot;Domain\Administrator&quot; |Format-Table -AutoSize
+
+				ExitCode Name                   ProcessId StartMode State   Status
+				-------- ----                   --------- --------- -----   ------
+					   0 AppHostSvc                  1152 Auto      Running OK
+					   0 BFE                          564 Auto      Running OK
+					   0 CryptSvc                    1016 Auto      Running OK
+					   0 DcomLaunch                   600 Auto      Running OK
+					   0 Dhcp                         776 Auto      Running OK
+					   0 Dnscache                    1016 Auto      Running OK
+					   0 DPMAMService                1184 Auto      Running OK
+				
+				Description
+				-----------
+				This example shows how to specify a remote computer and credentials to authenticate with.
+			.LINK
+				http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Get-Services
+		#&gt;
+		
+		Param
+			(
+				[string]$Computer = (&amp; hostname),
+				$Credential,
+				[string]$State = &quot;Running&quot;,
+				[string]$StartMode = &quot;Auto&quot;
+			)
+		
+		If ($Computer -eq (&amp; hostname))
+			{		
+				$Services = Get-WmiObject win32_service -filter &quot;State = '$State' and StartMode = '$StartMode'&quot;
+			}
+		Else
+			{
+				If ($Credential -eq $null)
+					{
+						$Credential = Get-Credential
+					}
+				$Services = Get-WmiObject win32_service -filter &quot;State = '$State' and StartMode = '$StartMode'&quot; `
+							-ComputerName $Computer -Credential $Credential
+			}
+		
+		Return $Services
+	}
+Function Get-NonStandardServiceAccounts()
+	{
+		&lt;#
+			.SYNOPSIS
+				Return a list of services using Non-Standard accounts.
+			.DESCRIPTION
+				This function returns a list of services from local or remote coputers that have non-standard
+				user accounts for logon credentials.
+			.PARAMETER Computer
+				The NetBIOS name of the computer to pull services from.
+			.PARAMETER Credentials
+				The DOMAIN\USERNAME of an account with permissions to access services.
+			.PARAMETER Filter
+				This is a pipe (|) seperated list of accounts to filter out of the returned services list.
+			.EXAMPLE
+				Get-NonStandardServiceAccounts
+
+				StartName                         Name                             DisplayName
+				---------                         ----                             -----------
+				.\Jeff Patton                     MyService                        My Test Service
+				
+				Description
+				-----------
+				This example shows no parameters provided
+			.EXAMPLE
+				Get-NonStandardServiceAccounts -Computer dpm -Credentials $Credentials
+
+				StartName                         Name                             DisplayName
+				---------                         ----                             -----------
+				.\MICROSOFT$DPM$Acct              MSSQL$MS$DPM2007$                SQL Server (MS$DPM2007$)
+				.\MICROSOFT$DPM$Acct              MSSQL$MSDPM2010                  SQL Server (MSDPM2010)
+				NT AUTHORITY\NETWORK SERVICE      MSSQLServerADHelper100           SQL Active Directory Helper S...
+				NT AUTHORITY\NETWORK SERVICE      ReportServer$MSDPM2010           SQL Server Reporting Services...
+				.\MICROSOFT$DPM$Acct              SQLAgent$MS$DPM2007$             SQL Server Agent (MS$DPM2007$)
+				.\MICROSOFT$DPM$Acct              SQLAgent$MSDPM2010               SQL Server Agent (MSDPM2010)
+				
+				Description
+				-----------
+				This example shows all parameters in use
+			.EXAMPLE
+				Get-NonStandardServiceAccounts -Computer dpm -Credentials $Credentials `
+				-Filter &quot;localsystem|NT Authority\LocalService|NT Authority\NetworkService|NT AUTHORITY\NETWORK SERVICE&quot;
+
+				StartName                         Name                             DisplayName
+				---------                         ----                             -----------
+				.\MICROSOFT$DPM$Acct              MSSQL$MS$DPM2007$                SQL Server (MS$DPM2007$)
+				.\MICROSOFT$DPM$Acct              MSSQL$MSDPM2010                  SQL Server (MSDPM2010)
+				.\MICROSOFT$DPM$Acct              SQLAgent$MS$DPM2007$             SQL Server Agent (MS$DPM2007$)
+				.\MICROSOFT$DPM$Acct              SQLAgent$MSDPM2010               SQL Server Agent (MSDPM2010)
+				
+				Description
+				-----------
+				This example uses the Filter parameter to filter out NT AUTHORITY\NETWORK SERVICE account from the
+				preceeding example. 
+				
+				The back-tick (`) was used for readability purposes only.
+			.NOTES
+				Powershell may need to be run elevated to run this script.
+				UAC may need to be disabled to run this script.
+			.LINK
+				http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Get-NonStandardServiceAccounts
+		#&gt;
+		
+		Param
+			(
+				[string]$Computer = (&amp; hostname),
+				$Credentials,
+				[string]$Filter = &quot;localsystem|NT Authority\LocalService|NT Authority\NetworkService&quot;
+			)
+			
+		$Filter = $Filter.Replace(&quot;\&quot;,&quot;\\&quot;)
+		
+		If ($Computer -eq (&amp; hostname))
+			{
+				$Services = Get-WmiObject win32_service |Select-Object __Server, StartName, Name, DisplayName
+			}
+		Else
+			{
+				$Result = Test-Connection -Count 1 -Computer $Computer -ErrorAction SilentlyContinue
+				
+				If ($result -ne $null)
+					{
+						$Services = Get-WmiObject win32_service -ComputerName $Computer -Credential $Credentials `
+									|Select-Object __Server, StartName, Name, DisplayName
+					}
+				Else
+					{
+						#	Should do something with unreachable computers here.
+					}
+			}
+
+		$Suspect = $Services |Where-Object {$_.StartName -notmatch $Filter}
+		Return $Suspect
+	}
+Function Remove-LocalUser
+    {
+        &lt;#
+            .SYNOPSIS
+                Delete a user account from the local computer.
+            .DESCRIPTION
+                This function will delete a user account from the local computer
+            .PARAMETER ComputerName
+                The NetBIOS name of the computer the account is found on
+            .PARAMETER UserName
+                The username to delete
+            .EXAMPLE
+                Remove-LocalUser -ComputerName Desktop -UserName TestAcct
+                
+                Description
+                -----------
+                Basic syntax of the command.
+            .NOTES
+                The user context the script is run under must be able to delete accounts on the remote computer
+            .LINK
+                http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Remove-LocalUser
+        #&gt;
+        
+        Param
+            (
+                [Parameter(Mandatory=$true)]
+                $ComputerName = (&amp; hostname),
+                [Parameter(Mandatory=$true)]
+                $UserName
+            )
+
+        $isAlive = Test-Connection -ComputerName $ComputerName -Count 1 -ErrorAction SilentlyContinue
+        
+        if ($isAlive -ne $null)
+            {
+                $ADSI = [adsi]&quot;WinNT://$ComputerName&quot;
+                $Users = $ADSI.psbase.children |Where-Object {$_.psBase.schemaClassName -eq &quot;User&quot;} |Select-Object -ExpandProperty Name
+                foreach ($User in $Users)
+                    { 
+                        if ($User -eq $UserName)
+                            {
+                                $ADSI.Delete(&quot;user&quot;, $UserName)
+                                $Return = &quot;Deleted&quot;
+                            }
+                        else
+                            {
+                                $Return = &quot;User not found&quot;
+                            }
+                    }
+            }
+        else
+            {
+                $Return = &quot;$ComputerName not available&quot;
+            }
+
+        Return $Return
+    }
+Function Get-LocalUserAccounts
+    {
+        &lt;#
+            .SYNOPSIS
+                Return a list of local user accounts.
+            .DESCRIPTION
+                This function returns the Name and SID of any local user accounts that are found
+                on the remote computer.
+            .PARAMETER ComputerName
+                The NetBIOS name of the remote computer
+            .EXAMPLE
+                Get-LocalUserAccounts -ComputerName Desktop-PC01
+
+                Name                                                      SID                                                                                  
+                ----                                                      ---                                                                                  
+                Administrator                                             S-1-5-21-1168524473-3979117187-4153115970-500
+                Guest                                                     S-1-5-21-1168524473-3979117187-4153115970-501
+                
+                Description
+                -----------
+                This example shows the basic usage
+            .EXAMPLE
+                Get-LocalUserAccounts -ComputerName citadel -Credentials $Credentials
+
+                Name                                                      SID
+                ----                                                      ---
+                Administrator                                             S-1-5-21-1168524473-3979117187-4153115970-500
+                Guest                                                     S-1-5-21-1168524473-3979117187-4153115970-501
+                
+                Description
+                -----------
+                This example shows using the optional Credentials variable to pass administrator credentials
+            .NOTES
+                You will need to provide credentials when running this against computers in a diffrent domain.
+            .LINK
+                http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Get-LocalUserAccounts
+        #&gt;
+        
+        Param
+            (
+                [string]$ComputerName = (&amp; hostname),
+                [System.Management.Automation.PSCredential]$Credentials
+            )
+
+        $Filter = &quot;LocalAccount=True&quot;
+        $ScriptBlock = &quot;Get-WmiObject Win32_UserAccount -Filter $Filter&quot;
+        $isAlive = Test-Connection -ComputerName $ComputerName -Count 1 -ErrorAction SilentlyContinue
+        
+        if ($isAlive -ne $null)
+            {
+                $ScriptBlock += &quot; -ComputerName $ComputerName&quot;
+                if ($Credentials)
+                    {
+                        if ($isAlive.__SERVER.ToString() -eq $ComputerName)
+                            {}
+                        else
+                            {
+                                $ScriptBlock += &quot; -Credential `$Credentials&quot;
+                            }
+                    }
+            }
+        else
+            {
+                Return &quot;Unable to connect to $ComputerName&quot;
+            }
+
+        Return Invoke-Expression $ScriptBlock |Select-Object Name, SID
+    }
+Function Get-PendingUpdates
+    {
+        &lt;#
+            .SYNOPSIS
+                Retrieves the updates waiting to be installed from WSUS
+            .DESCRIPTION
+                Retrieves the updates waiting to be installed from WSUS
+            .PARAMETER ComputerName
+                Computer or computers to find updates for.
+            .EXAMPLE
+                Get-PendingUpdates 
+                Description
+                -----------
+                Retrieves the updates that are available to install on the local system
+            .NOTES
+                Author: Boe Prox
+                Date Created: 05Mar2011
+                RPC Dynamic Ports need to be enabled on inbound remote servers.
+            .LINK
+                http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Get-PendingUpdates
+        #&gt; 
+
+        Param
+            (
+                [Parameter(ValueFromPipeline = $True)]
+                [string]$ComputerName
+            )
+        
+        Begin 
+            {
+            }
+        Process 
+            {
+                ForEach ($Computer in $ComputerName) 
+                    {
+                        If (Test-Connection -ComputerName $Computer -Count 1 -Quiet) 
+                            {
+                                Try 
+                                {
+                                    $Updates =  [activator]::CreateInstance([type]::GetTypeFromProgID(&quot;Microsoft.Update.Session&quot;,$Computer))
+                                    $Searcher = $Updates.CreateUpdateSearcher() 
+                                    $searchresult = $Searcher.Search(&quot;IsInstalled=0&quot;)     
+                                }
+                                Catch 
+                                {
+                                Write-Warning &quot;$($Error[0])&quot;
+                                Break
+                                } 
+                            }
+                    }
+            }
+        End 
+            {
+                Return $SearchResult.Updates
+            }
+    }
+
+Function Get-ServiceTag
+{
+    &lt;#
+        .SYNOPSIS
+            Get the serial number (Dell ServiceTag) from Win32_BIOS
+        .DESCRIPTION
+            This function grabs the SerialNumber property from Win32_BIOS for the 
+            provided ComputerName
+        .PARAMETER ComputerName
+            The NetBIOS name of the computer.
+        .EXAMPLE
+            Get-ServiceTag -ComputerName Desktop-01
+
+            SerialNumber
+            ------------
+            1AB2CD3
+
+            Description
+            -----------
+            An example showing the only parameter.
+        .NOTES
+            This space intentionally left blank.
+        .LINK
+            http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Get-ServiceTag
+    #&gt;
+    
+    Param
+    (
+        $ComputerName
+    )
+    
+    Begin
+    {
+        $ErrorActionPreference = &quot;SilentlyContinue&quot;
+    }
+    
+    Process
+    {
+        Try
+        {
+            $null = Test-Connection -ComputerName $ComputerName -Count 1 -quiet
+            $Return = New-Object PSObject -Property @{
+                ComputerName = $ComputerName
+                SerialNumber = (Get-WmiObject -Class Win32_BIOS -ComputerName $ComputerName -Credential $Credentials).SerialNumber 
+            }
+        }
+        Catch
+        {
+            $Return = New-Object PSObject -Property @{
+                ComputerName = $ComputerName
+                SerialNumber = &quot;Offline&quot;
+            }
+        }
+    }
+    
+    End
+    {
+        Return $Return
+    }
+}
+
+Function Backup-EventLogs
+{
+    &lt;#
+        .SYNOPSIS
+            Backup Eventlogs from remote computer
+        .DESCRIPTION
+            This function copies event log files from a remote computer to a backup location.
+        .PARAMETER ComputerName
+            The NetBIOS name of the computer to connect to.
+        .PARAMETER LogPath
+            The path to the logs you wish to backup. The default logpath &quot;C:\Windows\system32\winevt\Logs&quot;
+            is used if left blank.
+        .PARAMETER BackupPath
+            The location to copy the logs to.
+        .EXAMPLE
+            Backup-EventLogs -ComputerName dc1
+        .NOTES
+            May need to be a user with rights to access various logs, such as security on remote computer.
+        .LINK
+            http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Backup-EventLogs
+    #&gt;
+    
+    Param
+    (
+        [string]$ComputerName,
+        [string]$LogPath = &quot;C:\Windows\system32\winevt\Logs&quot;,
+        [string]$BackupPath = &quot;C:\Logs&quot;
+    )
+    
+    Begin
+    {
+        $EventLogs = &quot;\\$($Computername)\$($LogPath.Replace(&quot;:&quot;,&quot;$&quot;))&quot;
+        If ((Test-Path $BackupPath) -ne $True)
+        {
+            New-Item $BackupPath -Type Directory |Out-Null
+            }
+        }
+
+    Process
+    {
+        Try
+        {
+            Copy-Item $EventLogs -Destination $BackupPath -Recurse
+            }
+        Catch
+        {
+            Return $Error
+            }
+        }
+
+    End
+    {
+        Return $?
+        }
+}
+
+Function Export-EventLogs
+{
+    &lt;#
+        .SYNOPSIS
+            Export Eventlogs from remote computer
+        .DESCRIPTION
+            This function backs up all logs on a Windows computer that have events written in them. This
+            log is stored as a .csv file in the current directory, where the filename is the ComputerName+
+            Logname+Date+Time the backup was created.
+        .PARAMETER ComputerName
+            The NetBIOS name of the computer to connect to.
+        .EXAMPLE
+            Export-EventLogs -ComputerName dc1
+        .NOTES
+            May need to be a user with rights to access various logs, such as security on remote computer.
+        .LINK
+            http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Export-EventLogs
+    #&gt;
+    
+    Param
+    (
+        [string]$ComputerName
+    )
+    
+    Begin
+    {
+        $EventLogs = Get-WinEvent -ListLog * -ComputerName $ComputerName
+        }
+
+    Process
+    {
+        Foreach ($EventLog in $EventLogs)
+        {
+            If ($EventLog.RecordCount -gt 0)
+            {
+                $LogName = ($EventLog.LogName).Replace(&quot;/&quot;,&quot;-&quot;)
+                $BackupFilename = &quot;$($ComputerName)-$($LogName)-&quot;+(Get-Date -format &quot;yyy-MM-dd HH-MM-ss&quot;).ToString()+&quot;.csv&quot;
+                Get-WinEvent -LogName $EventLog.LogName -ComputerName $ComputerName |Export-Csv -Path &quot;.\$($BackupFilename)&quot;
+                }
+            }
+        }
+
+    End
+    {
+        Return $?
+        }
+}
+
+Function Get-SiSReport
+{
+    &lt;#
+        .SYNOPSIS
+            Get the overall SIS usage information.
+        .DESCRIPTION
+            This function uses the sisadmin command to get the usage
+            information for a SIS enabled drive.
+        .PARAMETER SisDisk
+            The drive letter of a disk that has SiS enabled
+        .EXAMPLE
+            Get-SiSReport -SisDisk o
+
+            LinkFiles             : 20004
+            Used                  : 442378481664
+            Disk                  : o
+            InaccessibleLinkFiles : 0
+            CommonStoreFiles      : 6678
+            SpaceSaved            : 7708860 KB
+            Free                  : 0
+            
+            Description
+            -----------
+            This example shows the basic usage of the command
+
+        .NOTES
+            This function will return nothing if the drive being analyzed does not have SiS enabled
+            This function will return a message if the sisadmin command returns any error
+        .LINK
+            http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet#Get-SiSReport
+    #&gt;
+    
+    Param
+    (
+    $SisDisk = &quot;c&quot;
+    )
+
+    Begin
+    {
+        $SisAdmin = &quot;&amp; sisadmin /v $($SisDisk):&quot;
+        Try
+        {
+            $SisResult = Invoke-Expression $SisAdmin
+            }
+        Catch
+        {
+            Return &quot;Single Instance Storage is not available on this computer&quot;
+            }
+        }
+
+    Process
+    {
+        If ($SisResult.Count)
+        {
+            $ThisDisk = Get-PSDrive $SisDisk
+            $SisReport = New-Object -TypeName PSObject -Property @{
+                Disk = $SisDisk
+                Used = $ThisDisk.Used
+                Free = $ThisDisk.Free
+                CommonStoreFiles = ($SisResult[($SisResult.Count)-4]).TrimStart(&quot;Common store files:&quot;)
+                LinkFiles = ($SisResult[($SisResult.Count)-3]).TrimStart(&quot;Link files:&quot;)
+                InaccessibleLinkFiles = ($SisResult[($SisResult.Count)-2]).TrimStart(&quot;Inaccessible link files:&quot;)
+                SpaceSaved = ($SisResult[($SisResult.Count)-1]).TrimStart(&quot;Space saved:&quot;)
+                }
+            }
+        }
+
+    End
+    {
+        Return $SisReport
+        }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

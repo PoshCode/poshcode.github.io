@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Rich Kusak">
+    <title>ResetOutlookLivePassword - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ResetOutlookLivePassword</h1>
+<h3><a href="//scripts/2947.ps1">download</a></h3>
+<p>The Reset-OutlookLivePassword function resets an Outlook Live (Live@edu) acccount password.
+A remote session is opened to the Outlook Live service. Connecting to the remote service requires administrative credentials to
+Outlook Live. The function optionally stores the credential for subsequent use with the SaveCredential parameter.
+The stored credential is protected using the Windows Data Protection API (DPAPI).</p>
+<pre><code class="language-posh">function Reset-OutlookLivePassword {
+&lt;#
+	.SYNOPSIS
+		Resets an Outlook Live account password.
+
+	.DESCRIPTION
+		The Reset-OutlookLivePassword function resets an Outlook Live (Live@edu) acccount password.
+		A remote session is opened to the Outlook Live service. Connecting to the remote service requires administrative credentials to
+		Outlook Live. The function optionally stores the credential for subsequent use with the SaveCredential parameter.
+		The stored credential is protected using the Windows Data Protection API (DPAPI).
+
+	.PARAMETER Identity
+		Specifies the identity of the Outlook Live user account. Acceptable values include:
+		
+		* User principal name (UPN)
+
+	.PARAMETER Password
+		Specifies a new password for the account.
+		A plain text string may be supplied or by not specifing the parameter a prompt for secure entry will appear.
+
+	.PARAMETER ResetPasswordOnNextLogon
+		Specifies that the user will be forced to reset their password at next logon.
+	
+	.PARAMETER Credential
+		Specifies a credential for connecting to the Outlook Live remote session.
+
+	.PARAMETER SaveCredential
+		Specifies that the credential provided to connect to the Outlook Live remote session will be saved for subsequent use.
+		The Windows Data Protection API (DPAPI) is used to encrypt the password string representation.
+
+	.EXAMPLE
+		Reset-OutlookLivePassword unique.name@mydomain.edu
+		Resets the Outlook Live password on the account unique.name@mydomain.edu to the password specified in a secure entry prompt.
+
+	.EXAMPLE
+		Reset-OutlookLivePassword unique.name@mydomain.edu -Password HelloDave
+		Resets the Outlook Live password on the account unique.name@mydomain.edu to the password HelloDave.
+
+	.EXAMPLE
+		Reset-OutlookLivePassword unique.name@mydomain.edu -Password HelloDave -SaveCredential
+		Resets the Outlook Live password on the account unique.name@mydomain.edu to the password HelloDave and saves the remote session credential.
+
+	.INPUTS
+		System.String, System.Security.SecureString
+
+	.OUTPUTS
+		None
+
+	.NOTES
+		Name: Reset-OutlookLivePassword
+		Author: Rich Kusak
+		Created: 2010-07-30
+		LastEdit: 2011-08-28 16:27
+		Version: 2.0.0.0
+
+	.LINK
+		http://outlookliveanswers.com/forums/p/10/15.aspx
+
+#&gt;
+
+	[CmdletBinding(DefaultParameterSetName='Default', SupportsShouldProcess=$true)]
+	param (
+		[Parameter(Position=0, Mandatory=$true, ValueFromPipeline=$true)]
+		[string]$Identity,
+		
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[ValidateScript({
+			if ($_ -is [System.String] -or $_ -is [System.Security.SecureString]) {$true} else {
+				throw &quot;The argument '$_' is not of type System.String or System.Security.SecureString.&quot;
+			}
+		})]
+		$Password = (Read-Host 'Enter New Password' -AsSecureString),
+		
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[switch]$ResetPasswordOnNextLogon,
+		
+		[Parameter(ParameterSetName='Default', ValueFromPipelineByPropertyName=$true)]
+		[Parameter(ParameterSetName='Save', Mandatory=$true, ValueFromPipelineByPropertyName=$true)]
+		[System.Management.Automation.PSCredential]$Credential,
+		
+		[Parameter(ParameterSetName='Save', ValueFromPipelineByPropertyName=$true)]
+		[switch]$SaveCredential
+	)
+	
+	begin {
+		
+		function Save-Credential {
+			param ($Path, $Credential)
+			
+			if (Test-Path $Path) {
+				$attribs = [IO.FileAttributes]('Normal')
+				Set-ItemProperty $Path -Name Attributes -Value $attribs -Force
+			}
+			
+			New-Object PSObject -Property @{
+				'UserName' = $Credential.UserName
+				'Password' = $Credential.Password | ConvertFrom-SecureString
+			} | Export-Csv $Path -NoTypeInformation -Force
+
+			$attribs = [IO.FileAttributes]('Hidden', 'ReadOnly')
+			Set-ItemProperty $Path -Name Attributes -Value $attribs -Force
+		} # function Save-Credential
+		
+		# The location where a credential will be saved
+		$psFolder = Split-Path $PROFILE
+		$credFile = Join-Path $psFolder -ChildPath 'b94437da-2522-4bd4-903f-4b3f8ec7132a.csv'
+		
+		if (Test-Path $credFile) {
+			if ($Credential -and $SaveCredential) {
+				Write-Warning 'A saved credential already exists.'
+
+				do {
+					$prompt = Read-Host 'Do you want to overwrite the saved credential? (Y)es or (N)o.'
+				} until ('^Yes$|^No$' -match $prompt)
+			}
+
+			switch ($prompt) {
+				{$_ -match 'Y'} {
+					Write-Debug &quot;Performing operation 'Save-Credential' on target '$credFile'.&quot;
+					Save-Credential -Path $credFile -Credential $Credential
+					$importedCredFile = Import-Csv $credFile
+					$liveUserName = $importedCredFile.UserName
+					$livePassword = $importedCredFile.Password | ConvertTo-SecureString
+					break
+				}
+
+				{$_ -match 'N'} {
+					$liveUserName = $Credential.UserName
+					$livePassword = $Credential.Password
+					break
+				}
+
+				default {
+					$importedCredFile = Import-Csv $credFile
+					$liveUserName = $importedCredFile.UserName
+					$livePassword = $importedCredFile.Password | ConvertTo-SecureString
+				}
+			} # switch
+			
+			$liveCred = New-Object System.Management.Automation.PSCredential($liveUserName, $livePassword)
+
+		} else {
+			if (-not $Credential) {
+				try {
+					$Credential = Get-Credential -ErrorAction Stop
+				} catch {
+					throw $_
+				}
+			}
+			
+			$liveCred = New-Object System.Management.Automation.PSCredential($Credential.UserName, $Credential.Password)
+
+			if ($SaveCredential) {
+				if (-not (Test-Path $psFolder)) {
+					New-Item $psFolder -ItemType Directory -Force | Out-Null
+				}
+
+				Write-Debug &quot;Performing operation 'Save-Credential' on target '$credFile'.&quot;
+				Save-Credential -Path $credFile -Credential $Credential
+			}
+		}
+		
+		# Remote session parameters
+		$connectionUri = 'https://ps.outlook.com/powershell/'
+		$newPSSessionParameters = @{
+			'ConfigurationName' = 'Microsoft.Exchange'
+			'ConnectionUri' = $connectionUri
+			'Credential' = $liveCred
+			'Authentication' = 'Basic'
+			'AllowRedirection' = $true
+		}
+		
+		try {
+			Write-Debug &quot;Performing operation 'New-PSSession' on target '$connectionUri'.&quot;
+			$session = New-PSSession @newPSSessionParameters -ErrorAction Stop
+			Write-Verbose &quot;Successfully opened new remote session to '$connectionUri'.&quot;
+			if ($PSBoundParameters['Verbose']) {
+				$session
+				Write-Host
+			}
+		} catch {
+			throw $_
+		}
+		
+	} # begin
+	
+	process {
+		
+		if ($Password -is [System.String]) {
+			Write-Debug &quot;Performing operation 'ConvertTo-SecureString' on target 'Password'.&quot;
+			$Password = $Password | ConvertTo-SecureString -AsPlainText -Force
+		}
+		
+		if ($PSBoundParameters['WarningAction']) {
+			$WarningAction = $PSBoundParameters['WarningAction']
+		} else {
+			$WarningAction = $WarningPreference
+		}
+			
+		if ($PSBoundParameters['WhatIf']) {
+			$WhatIf = $PSBoundParameters['WhatIf']
+		} else {
+			$WhatIf = $WhatIfPreference
+		}
+		
+		$setMailboxParameters = @{
+			'Identity' = $Identity
+			'Password' = $Password
+			'ResetPasswordOnNextLogon' = $ResetPasswordOnNextLogon
+			'WarningAction' = $WarningAction
+			'WhatIf' = $WhatIf
+		}
+
+		try {
+			Write-Debug &quot;Performing operation 'Invoke-Command' on target '$($session.ComputerName)'.&quot;
+			# Invoke remote command to set a new password
+			Invoke-Command -Session $session -ArgumentList $setMailboxParameters -ErrorAction Stop -ScriptBlock {
+				param ($setMailboxParameters)
+				Set-Mailbox @setMailboxParameters
+			}
+
+		} catch {
+			return Write-Error $_
+		}
+	} # process
+	
+	end {
+		
+		Write-Debug &quot;Performing operation 'Remove-PSSession' on target '$($session.ComputerName)'.&quot;
+		# Close the remote session
+		Remove-PSSession $session -ErrorAction Stop -WhatIf:$false
+		Write-Verbose &quot;Successfully removed remote session to '$connectionUri'.&quot;
+	} # end
+} # function Reset-OutlookLivePassword
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

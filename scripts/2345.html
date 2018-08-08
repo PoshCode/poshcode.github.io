@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>Findup - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Findup</h1>
+<h3><a href="//scripts/2345.cs">download</a> - <a href="//scripts/2344.md">parent</a></h3>
+<p>Findup - Find Duplicates, and optionall delete them. C# version of the powershell script FindDupe.ps1, C# version is probably 100 times faster though.
+Findup.exe -help for usage information and options. How it works: Specifiy files (e.g. c:\users\alice\documents\test.doc c:\users\bob\documents\report.doc), file specifications (e.g. c:\users*.txt .*.doc) and/or directories (e.g. c:\users d:\backups) with options to recurse for directories and file specifications (-recurse) and delete files (-delete, with -noprompt if you want deleting without prompting).  It will take every file specified and check it against every other file specified, first comparing length, then comparing hash of the first 1KB (Hash algorithm is SHA512), then finally if those two match, hash the entire file.  Added a byte for byte option (-b4b) and 512-bit salt for SHA-512.</p>
+<pre><code class="language-csharp">using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+using System.Security.Cryptography;
+using System.Runtime.InteropServices;
+using Microsoft.Win32;
+using System.IO;
+
+namespace Findup
+{
+
+    public class FileInfoExt
+    {
+        public FileInfoExt(FileInfo fi)
+        {
+            FI = fi;
+        }
+        public byte[] SHA512_1st1K = new byte[64];
+        public byte[] SHA512_All = new byte[64];
+
+        public FileInfo FI { get; private set; }
+        public bool Checked { get; set; }
+        public bool SHA512_1st1KSet { get; set; }
+        public bool SHA512_AllSet { get; set; }                  
+    }
+
+
+    class Recurse                               // Add FileInfoExt objects of files matching filenames, file specifications (E.G. *.txt), and in directories in pathRec, to returnList
+    {
+        public void Recursive(string[] pathRec, string searchPattern, Boolean recursiveFlag, List&lt;FileInfoExt&gt; returnList)
+        {
+
+            foreach (string d in pathRec)
+            {
+                Recursive(d, searchPattern, recursiveFlag, returnList);
+            }
+            return;
+        }
+
+        public void Recursive(string pathRec, string searchPattern, Boolean recursiveFlag, List&lt;FileInfoExt&gt; returnList)
+        {
+            if (File.Exists(pathRec))
+            {
+                try
+                {
+                    returnList.Add(new FileInfoExt(new FileInfo(pathRec)));
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(&quot;Add file error: &quot; + e.Message);
+                }
+            }
+            else if (Directory.Exists(pathRec))
+            {
+                try
+                {
+                    DirectoryInfo Dir = new DirectoryInfo(pathRec);
+                    foreach (FileInfo addf in (Dir.GetFiles(searchPattern)))
+                    {
+                        returnList.Add(new FileInfoExt(addf));
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(&quot;Add files from Directory error: &quot; + e.Message);
+                }
+
+                if (recursiveFlag == true)
+                {
+                    try
+                    {
+                        foreach (string d in (Directory.GetDirectories(pathRec)))
+                        {
+                            Recursive(d, searchPattern, recursiveFlag, returnList);
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(&quot;Add Directory error: &quot; + e.Message);
+                    }
+                }
+            }
+            else
+            {
+                try
+                {
+                    string filePart = Path.GetFileName(pathRec);
+                    string dirPart = Path.GetDirectoryName(pathRec);
+
+                    if (filePart.IndexOfAny(new char[] { '?', '*' }) &gt;= 0)
+                    {
+                        if ((dirPart == null) || (dirPart == &quot;&quot;))
+                            dirPart = Directory.GetCurrentDirectory();
+                        if (Directory.Exists(dirPart))
+                        {
+                            Recursive(dirPart, filePart, recursiveFlag, returnList);
+                        }
+                        else
+                        {
+                            Console.WriteLine(&quot;Invalid file path, directory path, file specification, or program option specified: &quot; + pathRec);
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine(&quot;Invalid file path, directory path, file specification, or program option specified: &quot; + pathRec);
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(&quot;Parse error on: &quot; + pathRec);
+                    Console.WriteLine(&quot;Make sure you don't end a directory with a \\ when using quotes. The console arg parser doesn't accept that.&quot;);
+                    Console.WriteLine(&quot;Exception: &quot; + e.Message);
+                    return;
+                }
+            }
+            return;
+        }
+    }
+
+
+    class Findup
+    {
+        public static void Main(string[] args)
+        {
+
+            Console.WriteLine(&quot;Findup.exe v1.0 - use -help for usage information. Created in 2010 by James Gentile.&quot;);
+            Console.WriteLine(&quot; &quot;);
+
+            string[] paths = new string[0];
+            System.Boolean recurse = false;
+            System.Boolean delete = false;
+            System.Boolean noprompt = false;
+            System.Boolean b4b = false;
+            List&lt;FileInfoExt&gt; fs = new List&lt;FileInfoExt&gt;();
+            long bytesInDupes = 0;                              // bytes in all the duplicates
+            long numOfDupes = 0;                                // number of duplicate files found.
+            long bytesRec = 0;                                  // number of bytes recovered.
+            long delFiles = 0;                                  // number of files deleted.
+            int c = 0;
+            int i = 0;
+            string deleteConfirm;        
+
+            for (i = 0; i &lt; args.Length; i++)
+            {
+                if ((System.String.Compare(args[i], &quot;-help&quot;, true) == 0) || (System.String.Compare(args[i], &quot;-h&quot;, true) == 0))
+                {
+                    Console.WriteLine(&quot;Usage:    findup.exe &lt;file/directory #1&gt; &lt;file/directory #2&gt; ... &lt;file/directory #N&gt; [-recurse] [-delete] [-noprompt]&quot;);
+                    Console.WriteLine(&quot; &quot;);
+                    Console.WriteLine(&quot;Options:  -help     - displays this help infomration.&quot;);
+                    Console.WriteLine(&quot;          -recurse  - recurses through subdirectories.&quot;);
+                    Console.WriteLine(&quot;          -delete   - deletes duplicates with confirmation prompt.&quot;);
+                    Console.WriteLine(&quot;          -noprompt - when used with -delete option, deletes files without confirmation prompt.&quot;);
+                    Console.WriteLine(&quot;          -b4b      - do a byte-for-byte comparison, instead of SHA-512 hashing. Might be much slower, but most secure.&quot;);
+                    Console.WriteLine(&quot; &quot;);
+                    Console.WriteLine(&quot;Examples: findup.exe c:\\finances -recurse&quot;);
+                    Console.WriteLine(&quot;          findup.exe c:\\users\\alice\\plan.txt d:\\data -recurse -delete -noprompt&quot;);
+                    Console.WriteLine(&quot;          findup.exe c:\\data .\\*.txt c:\\reports\\quarter.doc -recurse -b4b&quot;);
+                    Console.WriteLine(&quot; &quot;);
+                    return;
+                }
+                if (System.String.Compare(args[i], &quot;-recurse&quot;, true) == 0)
+                {
+                    recurse = true;
+                    continue;
+                }
+                if (System.String.Compare(args[i], &quot;-delete&quot;, true) == 0)
+                {
+                    delete = true;
+                    continue;
+                }
+                if (System.String.Compare(args[i], &quot;-noprompt&quot;, true) == 0)
+                {
+                    noprompt = true;
+                    continue;
+                }
+                if (System.String.Compare(args[i], &quot;-b4b&quot;, true) == 0)
+                {
+                    b4b = true;
+                    continue;
+                }
+                Array.Resize(ref paths, paths.Length + 1);                
+                paths[c] = args[i];                
+                c++;
+            }
+
+            if (paths.Length == 0)
+            {
+                Console.WriteLine(&quot;No files specified, try findup.exe -help&quot;);
+                return;
+            }
+
+            Recurse recurseMe = new Recurse();
+            recurseMe.Recursive(paths, &quot;*.*&quot;, recurse, fs);
+
+            if (fs.Count &lt; 2)
+            {
+                Console.WriteLine(&quot;Findup.exe needs at least 2 files to compare. try findup.exe -help&quot;);
+                return;
+            }
+
+            RNGCryptoServiceProvider rng = new RNGCryptoServiceProvider();
+            rng.GetBytes(randomNumber);                                                     // get 512-bit SHA-512 salt.            
+
+            for (i = 0; i &lt; fs.Count; i++)
+            {
+                if (fs[i].Checked == true)                                                  // If file was already matched, then skip to next.
+                    continue;
+
+                for (c = i + 1; c &lt; fs.Count; c++)
+                {
+                    if (fs[c].Checked == true)                                              // skip already matched inner loop files.
+                        continue;
+                    if (fs[i].FI.Length != fs[c].FI.Length)                                 // If file size matches, then check hash.
+                        continue;
+                    if (System.String.Compare(fs[i].FI.FullName, fs[c].FI.FullName, true) == 0) // don't count the same file as a match.
+                        continue;
+                    if (fs[i].SHA512_1st1KSet == false)                                         // check/hash first 1K first.                    
+                        if (Compute1KHash(fs[i]) == false)
+                            continue;                    
+                    if (fs[c].SHA512_1st1KSet == false)                    
+                        if (Compute1KHash(fs[c]) == false)
+                            continue;                    
+                    if (CompareHash(fs[i].SHA512_1st1K, fs[c].SHA512_1st1K) == false)                           // if the 1st 1K has the same hash..
+                        continue;
+                    if (b4b == true)                                                        // byte for byte comparison specified?
+                    {
+                        if (B4b(fs[i].FI.FullName, fs[c].FI.FullName) == false)             // call the byte for byte comparison function
+                            continue;
+                    }
+                    else if (fs[i].FI.Length &gt; 1024)                                        // skip hashing the file again if &lt; 1024 bytes.
+                    {
+                        if (fs[i].SHA512_AllSet == false)                                        // check/hash the rest of the files.
+                            if (ComputeFullHash(fs[i]) == false)
+                                continue;
+                        if (fs[c].SHA512_AllSet == false)
+                            if (ComputeFullHash(fs[c]) == false)
+                                continue;
+                        if (CompareHash(fs[i].SHA512_All, fs[c].SHA512_All) == false)
+                            continue;
+                    }
+
+                    Console.WriteLine(&quot;Match  : &quot; + fs[i].FI.FullName);
+                    Console.WriteLine(&quot;with   : &quot; + fs[c].FI.FullName);
+
+                    fs[c].Checked = true;                                                   // do not check or match against this file again.                                 
+                    numOfDupes++;                                                           // increase count of matches.
+                    bytesInDupes += fs[c].FI.Length;                                        // accumulate number of bytes in duplicates.
+
+                    if (delete != true)                                                     // if delete is specified, try to delete the duplicate file.
+                        continue;
+                    if (noprompt == false)
+                    {
+                        Console.Write(&quot;Delete the duplicate file &lt;Y/n&gt;?&quot;);
+                        deleteConfirm = Console.ReadLine();
+                        if ((deleteConfirm[0] != 'Y') &amp;&amp; (deleteConfirm[0] != 'y'))
+                            continue;
+                    }
+                    try
+                    {
+                        File.Delete(fs[c].FI.FullName);
+                        Console.WriteLine(&quot;Deleted: &quot; + fs[c].FI.FullName);
+                        bytesRec += fs[c].FI.Length;
+                        delFiles++;
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine(&quot;File delete error: &quot; + e.Message);
+                    }
+                }
+            }
+
+            Console.WriteLine(&quot; &quot;);
+            Console.WriteLine(&quot;Files checked      : {0:N0}&quot;, fs.Count);
+            Console.WriteLine(&quot;Duplicate files    : {0:N0}&quot;, numOfDupes);
+            Console.WriteLine(&quot;Duplicate bytes    : {0:N0}&quot;, bytesInDupes);
+            Console.WriteLine(&quot;Duplicates deleted : {0:N0}&quot;, delFiles);
+            Console.WriteLine(&quot;Recovered bytes    : {0:N0}&quot;, bytesRec);
+            return;
+        }
+
+        private static Boolean B4b(string path1, string path2)
+        {
+            try
+            {
+                using (var stream = File.OpenRead(path1))
+                {
+                    using (var stream2 = File.OpenRead(path2))
+                    {
+                        System.Boolean EOF = false;
+                        do
+                        {
+                            var length = stream.Read(largeBuf, 0, largeBuf.Length);
+                            var length2 = stream2.Read(largeBuf2, 0, largeBuf2.Length);
+                            if (length != length2)
+                                return false;
+                            if (length != largeBuf.Length)
+                                EOF = true;
+                            int i = 0;
+                            while (i &lt; length)
+                            {
+                                if (largeBuf[i] != largeBuf2[i])
+                                    return false;
+                                i++;
+                            }      
+                        } while (EOF == false);
+                    }
+                }
+                return true;
+
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(&quot;Byte for Byte comparison failed: &quot; + e.Message);
+                return false;
+            }
+
+        }
+
+        private static Boolean CompareHash(byte[] hash1, byte[] hash2)
+        {
+            int i = 0;
+            while (i &lt; hash1.Length)
+            {
+                if (hash1[i] != hash2[i])
+                    return false;
+                i++;
+            }
+            return true ;
+        }
+
+        private static readonly byte[] readBuf = new byte[1024 + 64];        
+        private static readonly byte[] largeBuf = new byte[10240 + 64];
+        private static readonly byte[] largeBuf2 = new byte[10240 + 64];
+        private static readonly byte[] randomNumber = new byte[64];
+        private static byte[] hash = new byte[64];
+
+        private static bool Compute1KHash(FileInfoExt path)
+        {
+            Buffer.BlockCopy(randomNumber, 0, readBuf, 0, randomNumber.Length);            
+            try
+            {
+                using (var stream = File.OpenRead(path.FI.FullName))
+                {
+                    var length = stream.Read(readBuf, hash.Length, readBuf.Length - hash.Length);
+                    hash = SHA512.Create().ComputeHash(readBuf, 0, length + hash.Length);
+                    Buffer.BlockCopy(hash, 0, path.SHA512_1st1K, 0, hash.Length);
+                    path.SHA512_1st1KSet = true;
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(&quot;Hash Error: &quot; + e.Message);
+                return false;
+            }
+        }
+
+        private static bool ComputeFullHash(FileInfoExt path)
+        {
+            Buffer.BlockCopy(randomNumber, 0, largeBuf, 0, randomNumber.Length);
+            try
+            {
+                var _SHA = SHA512.Create();
+                using (var stream = File.OpenRead(path.FI.FullName))
+                {
+                    System.Boolean EOF = false;
+                    while (EOF == false)
+                    {
+                        var length = stream.Read(largeBuf, hash.Length, largeBuf.Length - hash.Length);
+                        if (length != (largeBuf.Length - hash.Length))
+                            EOF = true;
+                        hash = _SHA.ComputeHash(largeBuf, 0, length + hash.Length);
+                        Buffer.BlockCopy(hash, 0, largeBuf, 0, hash.Length);
+                    }                    
+                }
+                Buffer.BlockCopy(hash, 0, path.SHA512_All, 0, hash.Length);
+                path.SHA512_AllSet = true;
+                return true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(&quot;Hash error: &quot; + e.Message);
+                return false;
+            }
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

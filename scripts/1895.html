@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="glnsize">
+    <title>dvSwitchNetworkAdapter - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>dvSwitchNetworkAdapter</h1>
+<h3><a href="//scripts/1895.ps1">download</a></h3>
+<p>A simple module to temporarily replace the stock PowerCLI networkadapter cmdlets until they work with vdSwitches. Based off LucD's functions http://www.lucd.info/2010/03/04/dvswitch-scripting-part-8-get-and-set-network-adapters/</p>
+<pre><code class="language-posh">&lt;#
+    .SYNOPSIS
+        Retrieves the virtual network adapters  available on a vSphere server.
+    .DESCRIPTION
+        A replacement for the default cmdlet will work with either a standard vSwitch or a dvSwitch. 
+        Retrieves the virtual network adapters  available on a vSphere server.
+    .PARAMETER VM
+        Specify the virtual machines from which you want to retrieve virtual network adapters.
+    .EXAMPLE
+        Get-VM | Get-dvSwitchNetworkAdapter
+    .OUTPUTS
+        PSObject
+    .LINK
+        Set-dvSwitchNetworkAdapter
+#&gt;
+Function Get-dvSwitchNetworkAdapter
+{
+    [cmdletbinding()]
+    param(
+        [parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [VMware.VimAutomation.Client20.VirtualMachineImpl[]]
+        $VM
+    )
+    process 
+    {
+        Foreach ($VirtualMachine in (get-view -VIObject $VM -Property &quot;Config.Hardware.Device&quot;,&quot;Network&quot;)) 
+        {
+            $VirtualVmxnets = $VirtualMachine.Config.Hardware.Device |
+                Where-Object {&quot;VirtualEthernetCard&quot;,&quot;VirtualVmxnet&quot; -contains $_.GetType().BaseType.Name}
+            Foreach ($VirtualVmxnet in $VirtualVmxnets) 
+            {
+                New-Object PSObject -Property @{
+                    MacAddress = $VirtualVmxnet.MacAddress
+                    WakeOnLanEnabled = $VirtualVmxnet.WakeOnLanEnabled
+                    NetworkName = switch ($VirtualVmxnet.Backing.GetType().Name) 
+                        {
+                            &quot;VirtualEthernetCardNetworkBackingInfo&quot; 
+                            {
+                                Get-View $VirtualVmxnet.Backing.network -Property 'Name'|
+                                    Select-Object -ExpandProperty 'Name'
+                            }
+                            Default 
+                            {
+                              Get-view -ID $VirtualMachine.Network -Property 'Name','Key' |
+                                Where-Object {$_.Key -eq $VirtualVmxnet.Backing.Port.PortgroupKey} |
+                                Select-Object -ExpandProperty 'Name'
+                            }
+                        }
+                    Type = $VirtualVmxnet.GetType().Name
+                    ParentId = $VirtualMachine.MoRef.Type + &quot;-&quot; + $VirtualMachine.MoRef.Value
+                    ConnectionState = New-Object PSObject -Property @{
+                        Connected = $VirtualVmxnet.Connectable.Connected
+                        StartConnected = $VirtualVmxnet.Connectable.StartConnected
+                    }
+                    Id = &quot;{0}-{1}/{2}&quot; -f $VirtualMachine.MoRef.Type,$VirtualMachine.MoRef.Value, $VirtualVmxnet.Key
+                    Name = $VirtualVmxnet.DeviceInfo.Label
+                }
+            }
+        }
+    }
+}
+
+&lt;#
+    .SYNOPSIS
+         Changes the configuration of the virtual network adapter.
+    .DESCRIPTION
+        A replacement for the default cmdlet will work with either a standard vSwitch or a dvSwitch. 
+        Changes the configuration of the virtual network adapter.
+    .PARAMETER NetworkAdapter
+        Specify the name of the network to which you want to connect the virtual network adapter.
+        NetworkName must be globally unique within vSphere.
+    .PARAMETER NetworkName
+        Specify the virtual network adapter you want to configure.
+    .PARAMETER StartConnected
+        If the value is $true, the virtual network adapter starts connected when its associated 
+        virtual machine powers on. If the value is $false, it starts disconnected.  If Nothing is
+        Supplied than nothing will be changed.
+    .PARAMETER Connected
+        If the value is $true, the virtual network adapter is connected after its creation. If the 
+        value is $false, it is disconnected.  If Nothing is Supplied than nothing will be changed.
+    .RunAsync
+        If supplied then the cmdlet will not wait for the completion of the network reconfiguration.  
+        Instead a Task object will be returned and the cmdlet will process the next object in the
+        pipeline.
+    .EXAMPLE
+        Get-VM | Get-dvSwitchNetworkAdapter | Where-object{$_.NetworkName -eq &quot;192.168.1.0&quot;}| Set-dvSwitchNetworkAdapter -NetworkName &quot;dvSwitch0_192.168.1.0&quot;
+    .EXAMPLE
+        Get-VM | Get-dvSwitchNetworkAdapter | Set-dvSwitchNetworkAdapter -StartConnected $True
+    .OUTPUTS
+        PSObject
+    .LINK
+        Get-dvSwitchNetworkAdapter
+#&gt;
+Function Set-dvSwitchNetworkAdapter
+{
+    [cmdletbinding(SupportsShouldProcess=$true)]
+    param(
+        [parameter(Mandatory = $true, ValueFromPipeline = $true)]
+        [PSCustomObject[]]
+        $NetworkAdapter
+    ,
+        [parameter(Mandatory = $false)]
+        [string]
+        $NetworkName
+    ,
+        [parameter()]
+        [bool]
+        $StartConnected
+    ,
+        [parameter()]
+        [bool]
+        $Connected
+    ,
+        [parameter()]
+        [switch]
+        $RunAsync
+    )
+    process 
+    {
+        Foreach ($netAdapter in $NetworkAdapter) 
+        {
+            $VirtualMachine = Get-View $netAdapter.ParentId -Property 'Runtime.Host','Config.Hardware.Device','Name'
+            $HostSystem = Get-View -ID $VirtualMachine.Runtime.Host -Property 'Network','Name'
+           
+
+            $VirtualDeviceConfigSpec = New-Object VMware.Vim.VirtualDeviceConfigSpec
+            $VirtualDeviceConfigSpec.operation = &quot;edit&quot;
+            Try 
+            {
+                $VirtualDeviceConfigSpec.device = $VirtualMachine.Config.Hardware.Device |
+                    Where-Object {$_.GetType().Name -eq $netAdapter.Type -and $_.MacAddress -eq $netAdapter.MacAddress}
+            }
+            Catch
+            {
+                write-warning &quot;$($netAdapter.Name) not found on $($VirtualMachine.name)&quot;
+                break;
+            }
+           
+            $Msg = &quot;&quot;
+            if ($NetworkName) 
+            {
+                $Network = Get-View -Id $HostSystem.Network -Property 'Name','Config' |
+                    Where-Object { $_.Name -eq $NetworkName }
+                if ($Network) 
+                {
+                    $Msg += &quot;Connecting $($netAdapter.Name) to $($NetworkName) &quot;
+                    # Determine backing type
+                    switch($Network.GetType().Name) 
+                    {
+                        &quot;Network&quot; 
+                        {
+                            $VirtualDeviceConfigSpec.device.backing = New-Object VMware.Vim.VirtualEthernetCardNetworkBackingInfo
+                            $VirtualDeviceConfigSpec.device.backing.deviceName = $NetworkName
+                        }
+                        &quot;DistributedVirtualPortgroup&quot; 
+                        {
+                            $VirtualDeviceConfigSpec.device.Backing = New-Object VMware.Vim.VirtualEthernetCardDistributedVirtualPortBackingInfo
+                            $VirtualDeviceConfigSpec.device.backing.port = New-Object VMware.Vim.DistributedVirtualSwitchPortConnection
+                            $VirtualDeviceConfigSpec.device.backing.port.switchUuid = (Get-View $Network.Config.DistributedVirtualSwitch).Uuid
+                            $VirtualDeviceConfigSpec.device.backing.port.portgroupKey = $Network.Config.Key
+                        }
+                    }
+                }
+                Else 
+                {
+                    Write-Warning &quot;$($NetworkName) was not found on $($HostSystem.Name)&quot;
+                }
+            }
+           
+            if ($PSCmdlet.MyInvocation.BoundParameters.Connected -ne $null) 
+            {
+                $Msg += &quot;Connected:$($Connected) &quot;
+                $VirtualDeviceConfigSpec.Device.Connectable.Connected = $Connected
+            }
+            Else {
+                $VirtualDeviceConfigSpec.Device.Connectable.Connected = $netAdapter.ConnectionState.Connected
+            }
+           
+            if ($PSCmdlet.MyInvocation.BoundParameters.StartConnected -ne $null) 
+            {
+                $Msg += &quot;StartConnected:$($StartConnected) &quot;
+                $VirtualDeviceConfigSpec.Device.Connectable.StartConnected = $StartConnected
+            }
+            Else 
+            {
+                $VirtualDeviceConfigSpec.Device.Connectable.StartConnected = $netAdapter.ConnectionState.StartConnected
+            }
+               
+            $VirtualMachineConfigSpec = New-Object VMware.Vim.VirtualMachineConfigSpec
+            $VirtualMachineConfigSpec.deviceChange += $VirtualDeviceConfigSpec
+           
+            IF ($PSCmdlet.ShouldProcess($VirtualMachine.Name,$Msg)) 
+            {
+                $Task = Get-VIObjectByVIView -MORef $VirtualMachine.ReconfigVM_Task($VirtualMachineConfigSpec)
+               
+                if (-Not $RunAsync) 
+                {
+                    Wait-Task -Task $Task | Out-Null
+                    $returnNetworkAdapter = $netAdapter
+                    $returnNetworkAdapter.NetworkName = $NetworkName
+                    $returnNetworkAdapter.ConnectionState.StartConnected = $VirtualDeviceConfigSpec.Device.Connectable.StartConnected
+                    $returnNetworkAdapter.ConnectionState.Connected = $VirtualDeviceConfigSpec.Device.Connectable.Connected
+                    $returnNetworkAdapter
+                }
+                else 
+                {
+                    $task
+                }           
+            }
+        }
+    }
+}
+
+New-Alias -Name Get-NetworkAdapter -Value Get-dvSwitchNetworkAdapter
+New-Alias -Name Set-NetworkAdapter -Value Set-dvSwitchNetworkAdapter
+
+Export-ModuleMember -Function Get-dvSwitchNetworkAdapter, Set-dvSwitchNetworkAdapter -Alias Get-NetworkAdapter,Set-NetworkAdapter
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

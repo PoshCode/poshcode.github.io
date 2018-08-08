@@ -1,0 +1,1321 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chris Weislak">
+    <title>Get-ComputerReport - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-ComputerReport</h1>
+<h3><a href="//scripts/5476.ps1">download</a></h3>
+<p>Get a Full HTML computer Report from a list of computers or just one. The OutPath is the folder to store the report. It includes scheduled tasks, applications, services and more...</p>
+<pre><code class="language-posh">Function Get-ComputerReport {
+	[CmdletBinding()]
+	Param (
+		[Parameter(ValueFromPipeline=$true,
+			ValueFromPipelineByPropertyName=$false)]
+		[String[]]$ComputerNames = $env:ComputerName,
+		[Parameter(ValueFromPipeline=$false,
+			ValueFromPipelineByPropertyName=$false)]
+		[String]$OutputPath
+	)
+	Begin {
+		#Region Check Network Connection
+		Function check-ping {
+			Param (
+				$ComputerName
+			)
+			Process {
+				[regex]$regex = &quot;\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}&quot;
+				if ($regex.Matches($ComputerName)){
+					$ipaddress = $ComputerName
+					$DNSinfo = $null
+				} else {
+					try {
+						$DNSinfo = [System.Net.Dns]::GetHostByName($ComputerName)
+					}
+					catch {
+						$message = &quot;No DNS record found for {0}&quot; -f $ComputerName
+						Write-Warning -Message $message
+						$DNSinfo = $null
+					}
+				}
+				if ($DNSinfo -ne $null){
+					$ping = New-Object System.Net.NetworkInformation.Ping
+					$pingOptions = New-Object System.Net.NetworkInformation.PingOptions
+					$pingOptions.DontFragment = $true
+					$buffer = [System.Text.Encoding]::ASCII.GetBytes(&quot;aaaaaaaaaaaaaaaaa&quot;)
+					$timeout = 120
+					$addresslist = $DNSinfo.AddressList
+					foreach ($ipaddress in $addresslist){
+						try {
+							$pingStatus = $ping.Send($ipaddress.IPAddressToString,$timeout,$buffer,$pingOptions)
+							if ($pingStatus.Status -eq &quot;Success&quot;){
+								Write-Output $true
+							} elseif ($pingStatus.Status -eq &quot;Failure&quot;){
+								Write-Output $false
+							} else {
+								Write-Output $false
+							}
+						}
+						Catch {
+							$message = &quot;Failed to ping {0}&quot; -f $ComputerName
+							Write-Warning -Message $message
+							Write-Output $false
+						}
+					}
+				} elseif ($ipaddress -ne $null){
+					$ping = New-Object System.Net.NetworkInformation.Ping
+					$pingOptions = New-Object System.Net.NetworkInformation.PingOptions
+					$pingOptions.DontFragment = $true
+					$buffer = [System.Text.Encoding]::ASCII.GetBytes(&quot;aaaaaaaaaaaaaaaaa&quot;)
+					$timeout = 120
+					try {
+							$pingStatus = $ping.Send($ipaddress,$timeout,$buffer,$pingOptions)
+							if ($pingStatus.Status -eq &quot;Success&quot;){
+								Write-Output $true
+							} elseif ($pingStatus.Status -eq &quot;Failure&quot;){
+								Write-Output $false
+							} else {
+								Write-Output $false
+							}
+						}
+						Catch {
+							$message = &quot;Failed to ping {0}&quot; -f $ComputerName
+							Write-Warning -Message $message
+							Write-Output $false
+						}
+				} else {
+					Write-Output $false
+				}
+			}
+		}
+		#endRegion
+		#Region Get WMI INFO
+		Function workgetcomputerinfo {
+			Param (
+				[String]$ComputerName,
+				[String]$wmiQuery,
+				[switch]$TestWMI
+			)
+			Process {
+				#use the .Net Assembly accellorator to get WMI information
+				$NameSpace = &quot;Root\CIMV2&quot;
+				$wmi = [WMISearcher]&quot;&quot;
+				$wmi.options.timeout = &quot;0:0:30&quot; #set timeout to 30 seconds
+				Switch ($ComputerName){
+					$env:ComputerName	{$wmi.scope.path = &quot;$NameSpace&quot;}
+					Default				{$wmi.scope.path = &quot;\\$ComputerName\$NameSpace&quot;}
+				}
+				#$wmi.scope.path = &quot;\\$ComputerName\$NameSpace&quot;
+				$wmi.query = $wmiQuery
+				TRY {
+					$canconnectwmi=$True
+					$WMIResult = $wmi.Get()
+				}
+				Catch {
+					Write-Warning &quot;WMI failed to connect to $($ComputerName.ToUpper())&quot;
+					$canconnectwmi = $false
+				}
+				if ($TestWMI){
+					Write-Output $canconnectwmi
+				} else {
+					Write-Output $WMIResult
+				}
+			}
+		}
+		#endregion
+		#Region Get Local Groups
+		Function Get-LocalGroupMember {
+			Param(
+				[String]$ComputerName,
+				$Groups
+			)
+			Begin {
+				$NameSpace = &quot;Root\CIMV2&quot;
+				$wmi = [WMISearcher]&quot;&quot;
+				$wmi.options.timeout = &quot;0:0:30&quot;
+			}
+			Process {
+				Switch ($ComputerName){
+					$env:ComputerName	{$wmi.scope.path = &quot;$NameSpace&quot;}
+					Default				{$wmi.scope.path = &quot;\\$ComputerName\$NameSpace&quot;}
+				}
+				Foreach ($G in $GroupData){
+					$Name = $G.Name
+					$GroupUserQuery = &quot;Select * from Win32_GroupUser where GroupComponent=`'Win32_Group.Domain=`&quot;$ComputerName`&quot;,Name=`&quot;$Name`&quot;`'&quot;
+					$wmi.query = $GroupUserQuery
+					$WMIResult = $wmi.Get()
+					if ($WMIResult -ne $null){
+						$Members = Foreach ($u in $WMIResult){
+							$user = ($u.PartComponent).Split(&quot;&quot;&quot;&quot;)
+							$member = $user[1] + &quot;\&quot; + $user[3]
+							Write-Output $member
+						}
+						$data = @{'GroupName'=$Name;'Members'=$Members}
+						$LocalGroupMembers = New-Object -TypeName PSObject -Property $data
+						Write-Output $LocalGroupMembers
+					}
+				}
+			}
+		}
+		#EndRegion
+		#Region Get Remote Programs
+		Function Get-RemoteProgram {
+			[CmdletBinding()]
+			param(
+				[string]$ComputerName,
+				[string]$OSType
+			)
+			Switch ($ComputerName){
+				$env:ComputerName	{$RegBase = [Microsoft.Win32.Registry]::LocalMachine}
+				Default				{$RegBase = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,$ComputerName)}
+			}
+			If ($OSType -eq &quot;x86-based PC&quot;){
+				$keypaths = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+			} else {
+				$keypaths = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+			}
+			Foreach ($Path in $keypaths){
+				try {
+					$RegUninstall = $RegBase.OpenSubKey($Path)
+					$RegUninstall.GetSubKeyNames() | 
+					ForEach-Object {
+						$DisplayName = ($RegBase.OpenSubKey(&quot;$Path\$_&quot;)).GetValue('DisplayName')
+						if ($DisplayName) {
+							$DisplayVersion = ($RegBase.OpenSubKey(&quot;$Path\$_&quot;)).GetValue('DisplayVersion')
+							$InstallLocation = ($RegBase.OpenSubKey(&quot;$Path\$_&quot;)).GetValue('InstallLocation')
+							$Publisher = ($RegBase.OpenSubKey(&quot;$Path\$_&quot;)).GetValue('Publisher')
+							New-Object -TypeName PSCustomObject -Property @{
+								Name = $DisplayName;
+								Version = $DisplayVersion;
+								InstallLocation = $InstallLocation;
+								Publisher = $Publisher
+							}
+						}
+					}
+				}
+				catch {
+					Write-Output $null
+				}
+			}
+		}
+		#EndRegion
+			#Region Get installed components
+		Function Get-installedComponents {
+			[CmdletBinding()]
+			param(
+				[string]$ComputerName,
+				[string]$OSType
+			)
+			
+			if ((Get-WmiObject -ComputerName $ComputerName -Class Win32_OperatingSystem -Property Caption |Select-Object -ExpandProperty Caption) -like &quot;*2003*&quot;){
+				Switch ($ComputerName){
+					$env:ComputerName	{$RegBase = [Microsoft.Win32.Registry]::LocalMachine}
+					Default				{$RegBase = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,$ComputerName)}
+				}
+				If ($OSType -eq &quot;x86-based PC&quot;){
+					$keypaths = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\Oc Manager\Subcomponents'
+				} else {
+					$keypaths = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Setup\Oc Manager\Subcomponents','SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Setup\Oc Manager\Subcomponents'
+				}
+				Foreach ($Path in $keypaths){
+					try {
+						$Reg_Key = $RegBase.OpenSubKey($Path)
+						$names = $Reg_Key.GetValueNames() 
+						Foreach ($Name in $names){
+							$value = $Reg_Key.GetValue($Name)
+							if ($value -gt 0){
+								$components_installed +=@($Name)
+							}
+						}
+						$Reg_Key.Close()
+						$RegBase.Close()
+						
+					}
+					catch {
+						Write-Output $null
+					}
+				}
+			} else {
+				$features = Get-WmiObject -Class Win32_ServerFeature -ComputerName $ComputerName
+				foreach ($feature in $features){
+					$components_installed +=@($feature.name)
+				}
+			}
+			Write-Output ($components_installed |Sort-Object)
+		}
+		#EndRegion
+		#Region Get SNMP Settings
+		Function Get-SNMPSettings {
+			[CmdletBinding()]
+			param(
+				[string]$ComputerName
+			)
+			Switch ($ComputerName){
+				$env:ComputerName	{$RegBase = [Microsoft.Win32.Registry]::LocalMachine}
+				Default				{$RegBase = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,$ComputerName)}
+			}
+			$PermittedManagers = 'SYSTEM\CurrentControlSet\services\SNMP\Parameters\PermittedManagers'
+			$ValidCommunities = 'SYSTEM\CurrentControlSet\services\SNMP\Parameters\ValidCommunities'
+			try {
+				$Reg = $RegBase.OpenSubKey($PermittedManagers)
+				$pManager = $Reg.GetValueNames()|foreach ($_){$Reg.GetValue($_)}
+				if ($pManager.Count -gt 1){
+					$pManager = [System.String]::Join(&quot;, &quot;,$pManager)
+				}
+				$Reg = $RegBase.OpenSubKey($ValidCommunities)
+				$Communities = $Reg.GetValueNames()
+				$vCommunities = foreach ($community in $Communities){
+					$permission = Switch ($Reg.GetValue($community)){
+						1 {&quot;None&quot;}
+						2 {&quot;Notify&quot;}
+						4 {&quot;Read&quot;}
+						8 {&quot;Write&quot;}
+						16 {&quot;Create&quot;}
+					}
+					$data = &quot;$community - $permission&quot;
+					Write-output $data
+				}
+				if ($vCommunities.Count -gt 1){
+					$vCommunities = [System.String]::Join(&quot;; &quot;,$vCommunities)
+				}
+				$data = @{'CommunityPermission'=$vCommunities;
+					'PermittedManagers'=$pManager}
+				$SNMPSETTINGS = New-Object -TypeName PSObject -Property $data
+				Write-Output $SNMPSETTINGS
+			}
+			catch {
+				Write-Output $null
+			}
+		}
+		#EndRegion
+		#Region Run Application
+		Function Start-extCMD {
+			Param (
+				$cmdexe,
+				$Arguments
+			)
+			Begin {}
+			Process {
+				$Startinfo = New-Object System.Diagnostics.ProcessStartinfo
+				$Startinfo.FileName = $cmdexe
+				$Startinfo.Arguments = $Arguments
+				$Startinfo.UseShellExecute = $false
+				$Startinfo.CreateNoWindow = $true
+				$Startinfo.RedirectStandardError = $true
+				$Startinfo.RedirectStandardOutput = $true
+				$process = New-Object System.Diagnostics.Process
+				$process.StartInfo = $Startinfo
+				$process.Start() | Out-Null
+				$stdout = $process.StandardOutput.ReadToEnd()
+				$stderr = $process.StandardError.ReadToEnd()
+				if ($stderr -eq &quot;&quot;){
+					Write-output $stdout
+				} else {
+					Write-output $stderror
+				}
+			}
+			End {}
+		}
+		#EndRegion
+		#Region Get Scheduled Tasks
+		Function Get-SchTasks {
+			Param (
+				$ComputerName
+			)
+			Begin {}
+			Process {
+				Switch ($ComputerName){
+					$env:ComputerName	{$arg = &quot;/Query /V /FO LIST&quot;}
+					Default				{$arg = &quot;/Query /S {0} /V /FO LIST&quot; -f $ComputerName}
+				}
+				$tasklist = Start-extCMD -cmdexe schtasks -Arguments $arg
+				$taskarray = $tasklist.Split(&quot;`n&quot;)
+				foreach ($line in $taskarray){
+					if ($line.StartsWith(&quot;HostName:&quot;)){
+						$data = @{}
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;TaskName:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$tname = $item[1].Split(&quot;\&quot;)
+						$value = $tname.Get($tname.Count -1)
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Next Run Time:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = &quot;{0}&quot; -f ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = &quot;{0}&quot; -f ($line.TrimStart(&quot;Next Run Time:&quot;)).Trim()
+					}elseif ($line.StartsWith(&quot;Status:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Logon Mode:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Last Run Time:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = &quot;{0}&quot; -f ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = &quot;{0}&quot; -f ($line.TrimStart(&quot;Last Run Time:&quot;)).Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Last Result:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Author:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Task To Run:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Start In:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Comment:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Scheduled Task State:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Idle Time:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Power Management:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Run As User:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Delete Task If Not Rescheduled:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Stop Task If Runs X Hours and X Mins:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Schedule:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Schedule Type:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Start Time:&quot;)){
+						$item = $line.Split(&quot;:&quot;)		
+						$title = &quot;{0}&quot; -f ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = &quot;{0}&quot; -f ($line.TrimStart(&quot;Start Time:&quot;)).Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Start Date:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;End Date:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Days:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Months:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[1].Trim()
+						$data.Add($title,$value)
+					}elseif($line.StartsWith(&quot;Repeat: Every:&quot;)){ 
+						$item = $line.Split(&quot;:&quot;)
+						$title = &quot;{0}{1}&quot; -f ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;),($item[1].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[2].Trim()
+					}elseif ($line.StartsWith(&quot;Repeat: Until: Time:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = &quot;{0}{1}{2}&quot; -f ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;),($item[1].Trim()).Replace(&quot; &quot;,&quot;&quot;),($item[2].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[3].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Repeat: Until: Duration:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = &quot;{0}{1}{2}&quot; -f ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;),($item[1].Trim()).Replace(&quot; &quot;,&quot;&quot;),($item[2].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[3].Trim()
+						$data.Add($title,$value)
+					}elseif ($line.StartsWith(&quot;Repeat: Stop If Still Running:&quot;)){
+						$item = $line.Split(&quot;:&quot;)
+						$title = &quot;{0}{1}&quot; -f ($item[0].Trim()).Replace(&quot; &quot;,&quot;&quot;),($item[1].Trim()).Replace(&quot; &quot;,&quot;&quot;)
+						$value = $item[2].Trim()
+						$data.Add($title,$value)
+						$task = New-Object -TypeName PSObject -Property $data
+						Write-Output $task
+					}
+				}
+			}
+			End {}
+		}
+		#EndRegion
+		#Region Get IP Address
+		function getip($ComputerName) {
+			#if there are multiple IP's on a system it will check to see if one is in DNS and use that as the main IP
+			if(!(Test-Connection -ComputerName $ComputerName -Count 2 -Quiet)){
+				$IPaddresses = [System.Net.Dns]::GetHostAddresses($ComputerName) | Select-Object -ExpandProperty IPAddressToString
+				Foreach ($IP in $IPaddresses){
+					if (Test-Connection -ComputerName $IP -Count 1 -Quiet){
+						Write-Output $IP
+					}
+				}
+			}
+		}
+		#EndRegion
+	}
+	Process {
+		Foreach ($ComputerName in $ComputerNames){
+			if (($ComputerName -eq &quot;&quot;) -or ($ComputerName -eq $null) -or ($ComputerName -eq $env:ComputerName) -or ($ComputerName -eq &quot;.&quot;)){
+				$ComputerName = $env:ComputerName
+			}
+			$ReportTitle = $ComputerName
+			$OutputPath = $OutputPath.TrimEnd(&quot;\&quot;)
+			$outfile = $OutputPath + &quot;\&quot; + $ComputerName + &quot;.html&quot;
+			#Region WMI Query Strings
+			$BIOSQuery = 'Select BiosCharacteristics, SMBIOSBIOSVersion, SMBIOSMajorVersion, SMBIOSMinorVersion, Version, SerialNumber from Win32_BIOS'
+			$CDROMDriveQuery = 'Select Drive, Manufacturer, Name from Win32_CDROMDrive'
+			$ComputerSystemQuery = 'Select * from Win32_ComputerSystem'
+			#$ComputerSystemQuery = 'Select Domain, DomainRole, Name, TotalPhysicalMemory,SystemType, Manufacturer, Model, Status, NumberOfLogicalProcessors, NumberOfProcessors from Win32_ComputerSystem'
+			$ComputerSystemProductQuery = 'Select Vendor, Name, IdentifyingNumber from Win32_ComputerSystemProduct'
+			$DiskDriveQuery = 'Select * From Win32_Logicaldisk Where Drivetype=3'
+			$GroupQuery = &quot;Select Name from Win32_Group Where Domain=`'$ComputerName`'&quot;
+			$IP4RouteTableQuery = 'Select Destination, Mask, NextHop from Win32_IP4RouteTable'
+			$NetworkAdapterConfigurationQuery = 'SELECT * FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = True'
+			$NTEventLogFileQuery = 'Select LogFileName, MaxFileSize, Name, OverwritePolicy from Win32_NTEventLogFile'
+			$OperatingSystemsQuery = 'Select * from Win32_OperatingSystem'
+			#$OperatingSystemsQuery = 'Select CSName,Caption, CSDVersion, InstallDate, LastBootupTime, OSLanguage, Version, WindowsDirectory, OSArchitecture from Win32_OperatingSystem'
+			$PageFileQuery = 'Select Drive, InitialSize, MaximumSize from Win32_PageFile'
+			$PhysicalMemoryQuery = 'Select BankLabel, Capacity, FormFactor, MemoryType from Win32_PhysicalMemory'
+			$PrinterQuery = 'Select DriverName, Name, PortName from Win32_Printer Where ServerName = Null'
+			$ProcessQuery = 'Select Caption, ExecutablePath from Win32_Process'
+			$ProcessorQuery = 'Select Description, ExtClock, L2CacheSize, Name, MaxClockSpeed, SocketDesignation from Win32_Processor'
+			$ProductQuery = 'Select Name, Vendor, Version, InstallDate from Win32_Product WHERE Name &lt;&gt; Null'
+			$RegistryQuery = 'Select CurrentSize, MaximumSize from Win32_Registry'
+			$ServicesQuery = &quot;Select Name, DisplayName, Started, StartMode, StartName, State, PathName from Win32_Service&quot;
+			$ShareQuery = 'Select Name, Description, Path, Type from Win32_Share'
+			$SoundDeviceQuery = 'Select Name, Manufacturer from Win32_SoundDevice'
+			$StartupCommandQuery = 'Select Command, Name, User from Win32_StartupCommand'
+			$SystemEnclosureQuery = 'Select ChassisTypes from Win32_SystemEnclosure'
+			$TapeDriveQuery = 'Select Name, Description, Manufacturer from Win32_TapeDrive'
+			$TimeZoneQuery = 'Select Description from Win32_TimeZone'
+			$QuickFixEngineeringQuery = &quot;Select Description, HotFixID, InstalledOn from Win32_QuickFixEngineering Where HotfixID &lt;&gt; 'File 1' And HotfixID &lt;&gt; 'Q147222'&quot;
+			$UserAccountQuery = &quot;Select Description, Name from Win32_UserAccount Where Domain=`'$ComputerName`'&quot;
+			$VideoControllerQuery = 'Select AdapterCompatibility, AdapterRAM, Name from Win32_VideoController'
+			#EndRegion
+			Try {
+				$test = $true
+				if (($ComputerName -ne &quot;&quot;) -or ($ComputerName -ne $null) -or ($ComputerName -ne $env:ComputerName) -or ($ComputerName -ne &quot;.&quot;)){
+					$pingResult = check-ping -ComputerName $ComputerName
+				} else {
+					$pingResult = $true
+				}
+				if ($pingResult){
+					$test = workgetcomputerinfo -computername $ComputerName -wmiQuery $OperatingSystemsQuery -TestWMI
+				} else {
+					$test = $false
+				}
+			}
+			Catch {
+				Write-Warning &quot;WMI failed to connect to $($computername.ToUpper())&quot;
+				$test = $false
+			}
+			if ($test){
+				#Get Computer information
+				$BIOS = workgetcomputerinfo -computername $ComputerName -wmiQuery $BIOSQuery #checked
+				$CDROMDrive  = workgetcomputerinfo -computername $ComputerName -wmiQuery $CDROMDriveQuery #checked
+				$ComputerSystem = workgetcomputerinfo -computername $ComputerName -wmiQuery $ComputerSystemQuery #checked
+				$ComputerSystemProduct = workgetcomputerinfo -computername $ComputerName -wmiQuery $ComputerSystemProductQuery #checked
+				$DiskDrive = workgetcomputerinfo -computername $ComputerName -wmiQuery $DiskDriveQuery #checked
+				$Group = workgetcomputerinfo -computername $ComputerName -wmiQuery $GroupQuery #checked
+				$GroupData = $Group | Select-Object @{Name='Name';Expression={$_.Name}} #checked
+				$GroupUser = Get-LocalGroupMember -ComputerName $ComputerName -Groups $GroupData #checked
+				$IP4RouteTable = workgetcomputerinfo -computername $ComputerName -wmiQuery $IP4RouteTableQuery #checked
+				$NetworkAdapterConfiguration = workgetcomputerinfo -computername $ComputerName -wmiQuery $NetworkAdapterConfigurationQuery #checked
+				$NTEventLogFile = workgetcomputerinfo -computername $ComputerName -wmiQuery $NTEventLogFileQuery #checked
+				$OperatingSystems = workgetcomputerinfo -computername $ComputerName -wmiQuery $OperatingSystemsQuery #checked
+				$PhysicalMemoryinfo = workgetcomputerinfo -computername $ComputerName -wmiQuery $PhysicalMemoryQuery #checked
+				$Printer = workgetcomputerinfo -computername $ComputerName -wmiQuery $PrinterQuery #checked
+				$Process = workgetcomputerinfo -computername $ComputerName -wmiQuery $ProcessQuery
+				$Processor = workgetcomputerinfo -computername $ComputerName -wmiQuery $ProcessorQuery #checked
+				#$Product = workgetcomputerinfo -computername $ComputerName -wmiQuery $ProductQuery
+				$OSType = $ComputerSystem | Select-Object -ExpandProperty SystemType #checked
+				$Product = Get-RemoteProgram -computername $ComputerName -OSType $OSType #checked
+				$Registry = workgetcomputerinfo -computername $ComputerName -wmiQuery $RegistryQuery
+				$Services = workgetcomputerinfo -computername $ComputerName -wmiQuery $ServicesQuery #checked
+				$Share = workgetcomputerinfo -computername $ComputerName -wmiQuery $ShareQuery #checked
+				$SoundDevice = workgetcomputerinfo -computername $ComputerName -wmiQuery $SoundDeviceQuery #checked
+				$StartupCommand = workgetcomputerinfo -computername $ComputerName -wmiQuery $StartupCommandQuery #checked
+				$SystemEnclosure = workgetcomputerinfo -computername $ComputerName -wmiQuery $SystemEnclosureQuery
+				$TapeDrive = workgetcomputerinfo -computername $ComputerName -wmiQuery $TapeDriveQuery
+				$TimeZone = workgetcomputerinfo -computername $ComputerName -wmiQuery $TimeZoneQuery #checked
+				$QuickFixEngineering = workgetcomputerinfo -computername $ComputerName -wmiQuery $QuickFixEngineeringQuery #checked
+				$UserAccount = workgetcomputerinfo -computername $ComputerName -wmiQuery $UserAccountQuery #checked
+				$VideoController = workgetcomputerinfo -computername $ComputerName -wmiQuery $VideoControllerQuery #checked
+				$snmp = Get-SNMPSettings -ComputerName $ComputerName
+				$schtsks = Get-SchTasks -ComputerName $ComputerName
+				$installedComponents = Get-installedComponents -ComputerName $ComputerName -OSType $OSType 
+				$OperatingSystemsData = $OperatingSystems | Select @{Name=&quot;Name&quot;;Expression={$_.CSName}},
+						@{Name=&quot;OS&quot;;Expression={$_.Caption}},
+						@{Name=&quot;ServicePack&quot;;Expression={$_.CSDVersion}},
+						@{Name=&quot;SystemLevel&quot;;Expression={$_.Version}},
+						@{Name=&quot;InstallDate&quot;;Expression={$_.InstallDate}},
+						@{Name=&quot;WindowsDirectory&quot;;Expression={$_.WindowsDirectory}},
+						@{Name=&quot;LastBoot&quot;;Expression={$_.ConvertToDateTime($_.LastBootupTime)}},
+						@{Name=&quot;Uptime&quot;;Expression={(Get-Date) - ($_.ConvertToDateTime($_.LastBootupTime))}}
+				$BIOSData = $BIOS | Select-Object @{Name=&quot;SerialNumber&quot;;Expression={$_.SerialNumber}},@{Name=&quot;SMBIOSBIOSVersion&quot;;Expression={$_.SMBIOSBIOSVersion}},
+						@{Name=&quot;SMBIOSMajorVersion&quot;;Expression={$_.SMBIOSMajorVersion}},
+						@{Name=&quot;SMBIOSMinorVersion&quot;;Expression={$_.SMBIOSMinorVersion}},
+						@{Name=&quot;Version&quot;;Expression={$_.Version}}
+				$ProcessorData = $Processor | Select-Object @{Name=&quot;Name&quot;;Expression={$_.Name}},
+						@{Name=&quot;Description&quot;;Expression={$_.Description}},
+						@{Name=&quot;L2CacheSize&quot;;Expression={$_.L2CacheSize}},
+						@{Name=&quot;MaxClockSpeed&quot;;Expression={$_.MaxClockSpeed}},
+						@{Name=&quot;SocketDesignation&quot;;Expression={$_.SocketDesignation}}
+				$ShareData = $Share | Select-Object @{Name=&quot;Name&quot;;Expression={$_.Name}},
+						@{Name=&quot;Description&quot;;Expression={$_.Description}},
+						@{Name=&quot;Path&quot;;Expression={$_.Path}}
+				$ComputerSystemData= $ComputerSystem | Select-Object @{Name=&quot;Domain&quot;;Expression={$_.Domain}},
+						@{Name=&quot;DomainRole&quot;;Expression={$_.DomainRole}},
+						@{Name=&quot;Manufacturer&quot;;Expression={$_.Manufacturer}},
+						@{Name=&quot;Model&quot;;Expression={$_.Model}},
+						@{Name=&quot;SystemType&quot;;Expression={$_.SystemType}},
+						@{Name=&quot;Name&quot;;Expression={$_.Name}},
+						@{Name=&quot;Status&quot;;Expression={$_.Status}},
+						@{Name=&quot;TotalPhysicalMemory&quot;;Expression={$_.TotalPhysicalMemory}},
+						@{Name=&quot;TotalPhysicalMemoryGB&quot;;Expression={&quot;{0:N0}&quot; -f ($_.TotalPhysicalMemory /1GB)}},
+						@{Name=&quot;NumberofProcessors&quot;;Expression={$_.NumberofProcessors}},
+						@{Name=&quot;NumberofLogicalProcessors&quot;;Expression={$_.NumberofLogicalProcessors}}
+				$CDROMDriveData = $CDROMDrive | Select-Object @{Name=&quot;Drive&quot;;Expression={$_.Drive}},
+						@{Name=&quot;Manufacturer&quot;;Expression={$_.Manufacturer}},
+						@{Name=&quot;Name&quot;;Expression={$_.Name}}
+				$ComputerSystemProductData = $ComputerSystemProduct | Select-Object @{Name=&quot;Manufacturer&quot;;Expression={$_.Vendor}},
+						@{Name=&quot;IdentifyingNumber&quot;;Expression={$_.IdentifyingNumber}},
+						@{Name=&quot;Name&quot;;Expression={$_.Name}}
+				$IP4RouteTable = $IP4RouteTable | Select-Object @{Name=&quot;Destination&quot;;Expression={$_.Destination}},
+						@{Name=&quot;Mask&quot;;Expression={$_.Mask}},
+						@{Name=&quot;NextHop&quot;;Expression={$_.NextHop}}
+				$NetworkAdapterConfigurationData = $NetworkAdapterConfiguration | Select-Object @{Name=&quot;Description&quot;;Expression={$_.Description}},
+						@{Name=&quot;IPAddress&quot;;Expression={$_.IPAddress}},
+						@{Name=&quot;MACAddress&quot;;Expression={$_.MACAddress}},
+						@{Name=&quot;DNSHostName&quot;;Expression={$_.DNSHostName}},
+						@{Name=&quot;DNSDomain&quot;;Expression={$_.DNSDomain}},
+						@{Name=&quot;DNSDomainSuffixSearchOrder&quot;;Expression={$_.DNSDomainSuffixSearchOrder}},
+						@{Name=&quot;WINSPrimaryServer&quot;;Expression={$_.WINSPrimaryServer}},
+						@{Name=&quot;WINSSecondaryServer&quot;;Expression={$_.WINSSecondaryServer}}
+				$NTEventLogFileData = $NTEventLogFile | Select-Object @{Name=&quot;LogFileName&quot;;Expression={$_.LogFileName}},
+						@{Name=&quot;MaxFileSize&quot;;Expression={$_.MaxFileSize}},
+						@{Name=&quot;Name&quot;;Expression={$_.Name}},
+						@{Name=&quot;OverwritePolicy&quot;;Expression={$_.OverwritePolicy}}
+				$PhysicalMemory = $PhysicalMemoryinfo | Select-Object @{Name=&quot;BankLabel&quot;;Expression={$_.BankLabel}},
+						@{Name=&quot;CapacityGB&quot;;Expression={$_.Capacity / 1GB}},
+						@{Name=&quot;FormFactor&quot;;Expression={$_.FormFactor}},
+						@{Name=&quot;MemoryType&quot;;Expression={$_.MemoryType}}
+				$Printer = $Printer	| Select-Object @{Name=&quot;DriverName&quot;;Expression={$_.DriverName}},
+						@{Name=&quot;Name&quot;;Expression={$_.Name}},
+						@{Name=&quot;PortName&quot;;Expression={$_.PortName}}
+				$servicedata = $Services | Select-Object @{Name=&quot;ServiceName&quot;;Expression={$_.Name}},
+						@{Name=&quot;ServiceDisplayName&quot;;Expression={$_.DisplayName}},
+						@{Name=&quot;StartMode&quot;;Expression={$_.StartMode}},
+						@{Name=&quot;Started&quot;;Expression={$_.Started}},
+						@{Name=&quot;StartName&quot;;Expression={$_.StartName}},
+						@{Name=&quot;State&quot;;Expression={$_.State}},
+						@{Name=&quot;PathName&quot;;Expression={$_.PathName}}
+				$Processdata = $Process | Select-Object @{Name=&quot;ProcessName&quot;;Expression={$_.Caption}},
+						@{Name=&quot;ExecutablePath&quot;;Expression={$_.ExecutablePath}}
+				$schtaskdata = $schtsks |Select-Object @{Name=&quot;TaskName&quot;;Expression={$_.TaskName}},
+						@{Name=&quot;Command&quot;;Expression={$_.&quot;TaskToRun&quot;}},
+						@{Name=&quot;RunAs&quot;;Expression={$_.&quot;RunAsUser&quot;}},
+						@{Name=&quot;ScheduleStart&quot;;Expression={((&quot;{0} {1} {2} {3}&quot; -f $_.StartTime,$_.StartDate,$_.Days,$_.Months).Replace(&quot;N/A&quot;,&quot; &quot;))}},
+						@{Name=&quot;Repeat&quot;;Expression={((&quot;{0} {1} {2} {3}&quot; -f $_.RepeatEvery,$_.RepeatUntilTime,$_.RepeatUntilDuration,$_.RepeatStopIfStillRunning).Replace(&quot;N/A&quot;,&quot; &quot;))}},
+						@{Name=&quot;State&quot;;Expression={$_.&quot;ScheduledTaskState&quot;}}
+				$diskData = $DiskDrive | Select DeviceID,@{Name=&quot;SizeGB&quot;;Expression={$_.size/1GB -as [int]}},
+						@{Name=&quot;FreeGB&quot;;Expression={&quot;{0:N2}&quot; -f ($_.Freespace/1GB)}},
+						@{Name=&quot;PercentFree&quot;;Expression={&quot;{0:P2}&quot;  -f ($_.Freespace/$_.Size)}}
+				$startupData = $StartupCommand | Select-Object @{Name=&quot;Name&quot;;Expression={$_.Name}},
+						@{Name=&quot;Command&quot;;Expression={$_.Command}},
+						@{Name=&quot;User&quot;;Expression={$_.User}}
+				$TimeData = $TimeZone | Select-Object @{Name=&quot;Name&quot;;Expression={$_.Description}}
+				$network = $NetworkAdapterConfiguration | Select-Object @{Name=&quot;IPAddress&quot;;Expression={$_.IPAddress}}
+				if ($network.Count -gt 1){
+					$IP = getip($ComputerName)
+					Foreach ($n in $Network){
+						if ($n.IPAddress -eq $IP){$network = $IP}
+					}
+				}
+				$fragments=@()
+				$ReportTitle = $ComputerName
+	#Region HTML Header and style
+	$head = @&quot;
+	&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
+	&lt;style&gt;
+	body {
+		font-family:Arial;
+		font-size:12px;
+		background-color:#005fbf;
+	}
+	header {
+		width:98%;
+		background-color:#6FB3DC;
+		color:white;
+		margin-right:auto;
+		margin-left:auto;
+		padding:2px;
+		overflow:hidden;
+	}
+	h1 {
+		font-size:2em;
+		margin:0;
+		padding:0;
+		padding-top:5px;
+	}
+	h2 {
+		font-size:1.6;
+	}
+	h3 {
+		font-size:1.4;
+	}
+	h4 {
+		font-size:1.1;
+	}
+	hgroup {
+		width:90%;
+		float:left;
+	}
+	hgroup h1 {
+		Padding-top:0;
+		line-height:1em;
+	}
+	hgroup h2 {
+		text-transform:uppercase;
+		font-size:1.2em;
+		line-height:1em;
+	}
+	nav li {
+		margin-right:2px;
+		float: center;
+		display: inline;
+	}
+	nav ul {
+		list-style-type:none;
+		overflow: hidden;
+	}
+	section {
+		width:98%;
+		background-color:White;
+		margin-right:auto;
+		margin-left:auto;
+		padding:5px;
+	}
+	p {
+		margin:6px;
+	}
+	.processordata , .physicalMem , .storage, .cdrom, .ip4routing, .ntevent, .printer, .product, .service,.schtask, .process, .quickfix {
+		margin:0px;padding:0px;
+		width:100%;
+		border:1px solid #000000;
+		-moz-border-radius-bottomleft:5px;
+		-webkit-border-bottom-left-radius:5px;
+		border-bottom-left-radius:5px;
+		-moz-border-radius-bottomright:5px;
+		-webkit-border-bottom-right-radius:5px;
+		border-bottom-right-radius:5px;
+		-moz-border-radius-topright:5px;
+		-webkit-border-top-right-radius:5px;
+		border-top-right-radius:5px;
+		-moz-border-radius-topleft:5px;
+		-webkit-border-top-left-radius:5px;
+		border-top-left-radius:5px;
+	}
+	table {
+		border-collapse: collapse;
+		border-spacing: 0;
+		width:100%;
+		height:100%;
+		margin:0px;padding:0px;
+	}
+	th{
+		background-color:#005fbf;
+		border:0px solid #000000;
+		text-align:center;
+		border-width:0px 0px 1px 1px;
+		font-size:14px;
+		font-family:Arial;
+		font-weight:bold;
+		color:#ffffff;
+	}
+	th:first-child {
+		-moz-border-radius-topleft:5px;
+		-webkit-border-top-left-radius:5px;
+		border-top-left-radius:5px;
+		border-width:0px 0px 1px 0px;
+	}
+	th:last-child {
+		-moz-border-radius-topright:5px;
+		-webkit-border-top-right-radius:5px;
+		border-top-right-radius:5px;
+		border-width:0px 0px 1px 1px;
+	}
+	tr:last-child td:first-child{
+		-moz-border-radius-bottomleft:5px;
+		-webkit-border-bottom-left-radius:5px;
+		border-bottom-left-radius:5px;
+	}
+	tr:last-child td:last-child {
+		-moz-border-radius-bottomright:5px;
+		-webkit-border-bottom-right-radius:5px;
+		border-bottom-right-radius:5px;
+		border-width:0px 0px 0px 0px;
+	}
+	tr:nth-child(odd){
+		background-color:#aad4ff;
+	}
+	tr:nth-child(even){
+		background-color:#ffffff;
+	}
+	td{
+		vertical-align:middle;
+		border:1px solid #000000;
+		border-width:0px 1px 1px 0px;
+		text-align:left;
+		padding:2px;
+		font-size:11px;
+		font-family:Arial;
+		font-weight:normal;
+		color:#000000;
+	}
+	tr:last-child td{
+		border-width:0px 1px 0px 0px;
+	}
+	tr td:last-child{
+		border-width:0px 0px 1px 0px;
+	}
+	footer {
+		width:80%;
+		background-color:black;
+		color:white;
+		margin-right:auto;
+		margin-left:auto;
+		height:50px;
+		padding:10px;
+	}
+
+
+	/* 
+	Max width before this PARTICULAR table gets nasty
+	This query will take effect for any screen smaller than 760px
+	and also iPads specifically.
+	*/
+	@media all and (min-width: 760px){
+	.nontable {
+		-webkit-column-count: 2;
+		-moz-column-count: 2;
+		column-count: 2;
+		-webkit-column-gap: 15px;
+		-moz-column-gap: 15px;
+		column-gap: 40px;
+	}
+	}
+	@media only screen and (max-width: 760px),
+	(min-device-width: 768px) and (max-device-width: 1024px) {
+		/* Force table to not be like tables anymore */
+		.processordata , .physicalMem , .storage, .cdrom, .ip4routing, .ntevent, .printer, .product, .service, .process, .quickfix {
+		border:1px solid #ccc;
+		}
+		table, thead, tbody, th, td, tr { 
+			display: block; 
+		}
+		/* Hide table headers (but not display: none;, for accessibility) */
+		thead tr, th { 
+			position: absolute;
+			top: -9999px;
+			left: -9999px;
+		}
+		tr {
+			border: 1px solid #ccc;
+		}
+		td { 
+			/* Behave  like a &quot;row&quot; */
+			border: none;
+			border-bottom: 1px solid #eee; 
+			position: relative;
+			padding-left: 50%; 
+		}
+		td:before { 
+			/* Now like a table header */
+			position: absolute;
+			/* Top/left values mimic padding */
+			top: 6px;
+			left: 6px;
+			width: 45%; 
+			padding-right: 10px; 
+			white-space: wrap;
+		}
+		/* Label the data */
+		.processordata td:nth-of-type(1):before { content: &quot;Name&quot;; }
+		.processordata td:nth-of-type(2):before { content: &quot;Description&quot;; }
+		.processordata td:nth-of-type(3):before { content: &quot;L2 Cache Size&quot;; }
+		.processordata td:nth-of-type(4):before { content: &quot;Max Clock Speed&quot;; }
+		.processordata td:nth-of-type(5):before { content: &quot;Socket Designation&quot;; }
+		.physicalMem td:nth-of-type(1):before { content: &quot;Bank Lable&quot;; }
+		.physicalMem td:nth-of-type(2):before { content: &quot;Capacity GB&quot;; }
+		.physicalMem td:nth-of-type(3):before { content: &quot;FormFactor&quot;; }
+		.physicalMem td:nth-of-type(4):before { content: &quot;MemoryType&quot;; }
+		.storage td:nth-of-type(1):before { content: &quot;DeviceID&quot;; }
+		.storage td:nth-of-type(2):before { content: &quot;SizeGB&quot;; }
+		.storage td:nth-of-type(3):before { content: &quot;FreeGB&quot;; }
+		.storage td:nth-of-type(4):before { content: &quot;PercentFree&quot;; }
+		.cdrom td:nth-of-type(1):before { content: &quot;Drive&quot;; }
+		.cdrom td:nth-of-type(2):before { content: &quot;Manufacturer&quot;; }
+		.cdrom td:nth-of-type(3):before { content: &quot;Name&quot;; } 
+		.ip4routing td:nth-of-type(1):before { content: &quot;Destination&quot;; }
+		.ip4routing td:nth-of-type(2):before { content: &quot;Mask&quot;; }
+		.ip4routing td:nth-of-type(3):before { content: &quot;NextHop&quot;; }
+		.ntevent td:nth-of-type(1):before { content: &quot;LogFileName&quot;; }
+		.ntevent td:nth-of-type(2):before { content: &quot;MaxFileSize&quot;; }
+		.ntevent td:nth-of-type(3):before { content: &quot;Name&quot;; }
+		.ntevent td:nth-of-type(4):before { content: &quot;Overwrite Policy&quot;; }
+		.printer td:nth-of-type(1):before { content: &quot;Driver Name&quot;; }
+		.printer td:nth-of-type(2):before { content: &quot;Name&quot;; }
+		.printer td:nth-of-type(3):before { content: &quot;Port Name&quot;; }
+		.product td:nth-of-type(1):before { content: &quot;Name&quot;; }
+		.product td:nth-of-type(2):before { content: &quot;Version&quot;; }
+		.product td:nth-of-type(3):before { content: &quot;Install Location&quot;; }
+		.product td:nth-of-type(4):before { content: &quot;Publisher&quot;; }
+		.service td:nth-of-type(1):before { content: &quot;Service Name&quot;; }
+		.service td:nth-of-type(2):before { content: &quot;Start Mode&quot;; }
+		.service td:nth-of-type(3):before { content: &quot;State&quot;; }
+		.service td:nth-of-type(4):before { content: &quot;Start Name&quot;; }
+		.service td:nth-of-type(5):before { content: &quot;Path Name&quot;; }
+		.schtask td:nth-of-type(1):before { content: &quot;Task Name&quot;; }
+		.schtask td:nth-of-type(2):before { content: &quot;Command&quot;; }
+		.schtask td:nth-of-type(3):before { content: &quot;Run As&quot;; }
+		.schtask td:nth-of-type(4):before { content: &quot;Schedule Start&quot;; }
+		.schtask td:nth-of-type(5):before { content: &quot;Repeat&quot;; }
+		.schtask td:nth-of-type(6):before { content: &quot;State&quot;; }
+		.process td:nth-of-type(1):before { content: &quot;Process Name&quot;; }
+		.process td:nth-of-type(2):before { content: &quot;Executable Path&quot;; }
+		.quickfix td:nth-of-type(1):before { content: &quot;Hotfix ID&quot;; }
+		.quickfix td:nth-of-type(2):before { content: &quot;Description&quot;; }
+		.quickfix td:nth-of-type(3):before { content: &quot;Installed On&quot;; }
+	}
+
+	/* Smartphones (portrait and landscape) ----------- */
+	@media only screen
+	and (min-device-width : 320px)
+	and (max-device-width : 480px) {
+		body { 
+			padding: 0; 
+			margin: 0; 
+			width: 320px;
+		}
+	}
+
+	/* iPads (portrait and landscape) ----------- */
+	@media only screen and (min-device-width: 768px) and (max-device-width: 1024px) {
+		body { 
+			width: 495px; 
+		}
+	}
+	&lt;/style&gt;
+	&lt;Title&gt;$ReportTitle&lt;/Title&gt;
+	&quot;@
+	$header = @&quot;
+	&lt;header&gt;
+	  &lt;hgroup&gt;
+		&lt;H1&gt;System Report&lt;/H1&gt;
+		&lt;H4&gt;$(Get-Date -DisplayHint Date | out-string)&lt;/H4&gt;
+		&lt;nav&gt;&lt;ul&gt;
+			&lt;li&gt;&lt;a href=#{0}_Summary&gt;System Summary&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_Storage&gt;Storage&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_Shares&gt;Shares&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_ComputerSystemProductData&gt;Computer System&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_InstalledComponents&gt;Installed Components&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_StartupData&gt;Startup&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_GroupUserData&gt;Local Groups&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_localUserData&gt;Local Users&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_IP4RouteTable&gt;IP4 Route Table&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_NetworkAdapterConfigurationData&gt;Network Adapter&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_NTEventLogFileData&gt;NT Event Log&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_PhysicalMemory&gt;Physical Memory&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_Processor&gt;Processor&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_Printer&gt;Printers&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_Product&gt;Products&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_services&gt;Services&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_schtasks&gt;Scheduled Tasks&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_Processes&gt;Processes&lt;/a&gt;&lt;/li&gt;
+			&lt;li&gt;&lt;a href=#{0}_QuickFix&gt;QuickFix&lt;/a&gt;&lt;/li&gt;
+		&lt;/ul&gt;&lt;/nav&gt;
+		&lt;/hgroup&gt;
+	&lt;/header&gt;
+	&quot;@ -f $Computername.ToUpper()
+	#EndRegion
+				#Region Navigation
+				$nav=&quot;&quot;
+				$nav+=&quot;&lt;nav&gt;&lt;ul&gt;&quot;
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_Summary&gt;System Summary&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_Storage&gt;Storage&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_Shares&gt;Shares&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_ComputerSystemProductData&gt;Computer System&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_InstalledComponents&gt;Installed Components&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_StartupData&gt;Startup&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_GroupUserData&gt;Local Groups&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_localUserData&gt;Local Users&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_IP4RouteTable&gt;IP4 Route Table&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_NetworkAdapterConfigurationData&gt;Network Adapter&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_NTEventLogFileData&gt;NT Event Log&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_PhysicalMemory&gt;Physical Memory&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_Processor&gt;Processor&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_Printer&gt;Printers&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_Product&gt;Products&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_services&gt;Services&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_schtasks&gt;Scheduled Tasks&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_Processes&gt;Processes&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=(&quot;&lt;li&gt;&lt;a href=#{0}_QuickFix&gt;QuickFix&lt;/a&gt;&lt;/li&gt;&quot; -f $computername.ToUpper())
+				$nav+=&quot;&lt;/ul&gt;&lt;/nav&gt;&quot;
+				#EndRegion
+				#Region footer
+				$footer=&quot;Report v{3} run {0} by {1}\{2}&quot; -f (Get-Date),$env:USERDOMAIN,$env:USERNAME,$reportVersion
+				#EndRegion
+				#Region Start HTML
+				$head+=(&quot;&lt;a name='{0}_Summary'&gt;{0}&lt;/a&gt; &quot; -f $computername.ToUpper())
+				$head+=&quot;&lt;br&gt;&lt;hr&gt;&quot;
+				$fragments+=$header
+				#$fragments+=$nav
+				#$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_Summary'&gt;System Summary&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				#EndRegion
+				#Region OS info
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;System Summary&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;nontable`&quot;&gt;&quot;
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Name:&lt;/strong&gt; {0}    &lt;/p&gt;&lt;p&gt;&lt;strong&gt;IP Address:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $OperatingSystemsData.Name,$network.IPAddress
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;OS:&lt;/strong&gt; {0} {1}&lt;/p&gt;&quot; -f $OperatingSystemsData.OS,$OperatingSystemsData.ServicePack
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;SystemLevel:&lt;/strong&gt; {0}&lt;/p&gt;&quot; -f $OperatingSystemsData.SystemLevel
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;WindowsDirectory:&lt;/strong&gt; {0}&lt;/p&gt;&quot; -f $OperatingSystemsData.WindowsDirectory
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;LastBoot:&lt;/strong&gt; {0} &lt;/p&gt;&lt;p&gt;&lt;strong&gt;Uptime:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $OperatingSystemsData.LastBoot,$OperatingSystemsData.Uptime
+				#EndRegion
+				
+				#Region ComputerSystem info
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Domain:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;DomainRole:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $ComputerSystemData.Domain,$ComputerSystemData.DomainRole
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Manufacturer:&lt;/strong&gt; {0} &lt;/p&gt;&lt;p&gt;&lt;strong&gt; Model:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $ComputerSystemData.Manufacturer,$ComputerSystemData.Model
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;SystemType:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;Status:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $ComputerSystemData.SystemType,$ComputerSystemData.Status
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;TimeZone:&lt;/strong&gt; {0}&lt;/p&gt;&quot; -f $TimeData.Name
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;TotalPhysicalMemory:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;TotalPhysicalMemoryGB:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $ComputerSystemData.TotalPhysicalMemory,$ComputerSystemData.TotalPhysicalMemoryGB
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Number of Physical Processors:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;Number of Logical Processors:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $ComputerSystemData.NumberOfProcessors,$ComputerSystemData.NumberOfLogicalProcessors
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region ComputerProduct Data
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_ComputerSystemProductData'&gt;Computer System&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;nontable`&quot;&gt;&quot;
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Name:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;Manufacturer:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $ComputerSystemProductData.Name,$ComputerSystemProductData.Manufacturer
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;IdentifyingNumber:&lt;/strong&gt; {0} &lt;/p&gt;&lt;p&gt;&quot; -f $ComputerSystemProductData.IdentifyingNumber
+				#EndRegion
+				#Region Bios info
+				$fragments+=&quot;&lt;strong&gt;SerialNumber:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;Version:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $BIOSData.SerialNumber,$BIOSData.Version
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;SMBIOSBIOSVersion:&lt;/strong&gt; {0}&lt;/p&gt;&lt;p&gt;&lt;strong&gt;SMBIOSMajorVersion:&lt;/strong&gt; {1}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;SMBIOSMinorVersion:&lt;/strong&gt; {2}&lt;/p&gt;&quot; -f $BIOSData.SMBIOSBIOSVersion,$BIOSData.SMBIOSMajorVersion,$BIOSData.SMBIOSMinorVersion
+				#EndRegion
+				#Region sound device
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;SoundCard Name:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;SoundCard Manufacturer:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $SoundDevice.Name ,$SoundDevice.Manufacturer 
+				#EndRegion
+				#Region video Device
+				Foreach ($VidAdapter in $VideoController){
+				$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Video Controller Name:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;Video Adapter Compatibility:&lt;/strong&gt; {1}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;Video Adapter RAM:&lt;/strong&gt; {2}&lt;/p&gt;&quot; -f $VidAdapter.Name ,$VidAdapter.AdapterCompatibility ,$VidAdapter.RAM 
+				}
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Processor info
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_Processor'&gt;Processor&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;processordata`&quot;&gt;&quot;
+				$fragments+=$ProcessorData | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Physical Memory
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_PhysicalMemory'&gt;Physical Memory&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;physicalMem`&quot;&gt;&quot;
+				$fragments+=$PhysicalMemory | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region local drive
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_Storage'&gt;Storage&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;H4&gt;Local Storage&lt;/H4&gt;&quot;
+				$fragments+=&quot;&lt;div class=`&quot;storage`&quot;&gt;&quot;
+				$fragments+=$diskData | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				#EndRegion
+				#Region CD Drive
+				$fragments+=&quot;&lt;H4&gt;CDROM Drive&lt;/a&gt;&lt;/H4&gt;&quot;
+				$fragments+=&quot;&lt;div class=`&quot;cdrom`&quot;&gt;&quot;
+				$fragments+=$CDROMDriveData | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Network Information
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_NetworkAdapterConfigurationData'&gt;Network Adapters&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;nontable`&quot;&gt;&quot;
+				Foreach ($nic in $NetworkAdapterConfigurationData){
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Description: {0}&lt;/strong&gt;&lt;/p&gt;&quot; -f $nic.Description
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;IPAddress:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;MACAddress:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $nic.IPAddress,$nic.MACAddress
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;DNSHostName:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;DNSDomain:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $nic.DNSHostName,$nic.DNSDomain
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;DNSDomainSuffixSearchOrder:&lt;/strong&gt; {0}&lt;/p&gt;&quot; -f $nic.DNSDomainSuffixSearchOrder
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;WINSServers:&lt;/strong&gt; {0}, {1}&lt;/p&gt;&quot; -f $nic.WINSPrimaryServer,$nic.WINSSecondaryServer
+				}
+				if ($snmp -ne $null){
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;SNMP Communities with permission:&lt;/strong&gt; {0}  &lt;/p&gt;&lt;p&gt;&lt;strong&gt;SNMP Managers:&lt;/strong&gt; {1}&lt;/p&gt;&quot; -f $snmp.CommunityPermission,$snmp.PermittedManagers
+				}
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Routing Tables
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_IP4RouteTable'&gt;IP4 Route Table&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;ip4routing`&quot;&gt;&quot;
+				$fragments+=$IP4RouteTable | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Installed Components
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_InstalledComponents'&gt;Installed Components&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;p&gt;&lt;ul&gt;&quot;
+				Foreach ($item in $installedComponents){
+					$fragments+= &quot;&lt;li&gt;{0}&lt;/li&gt;&quot; -f $item
+				}
+				$fragments+=&quot;&lt;/ul&gt;&lt;/p&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region local Group's and Members
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_GroupUserData'&gt;Local Groups&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				Foreach ($Gp in $GroupUser){
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;{0}&lt;/strong&gt;&lt;br&gt;&quot; -f $Gp.GroupName
+					$fragments+=&quot;&lt;ul&gt;&quot;
+					$fragments+= Foreach ($gmem in $Gp.Members){&quot;&lt;li&gt;{0}&lt;/li&gt;&quot; -f $gmem}
+					$fragments+=&quot;&lt;/ul&gt;&lt;/p&gt;&quot;
+				}
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region local Users
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_localUserData'&gt;Local Users&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;nontable`&quot;&gt;&quot;
+				Foreach ($localUser in $UserAccount){
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Name:&lt;/strong&gt; {0}     &lt;strong&gt;Description:&lt;/strong&gt; {1} &lt;/p&gt;&quot; -f $localUser.Name,$localUser.Description
+				}
+				$fragments+=&quot;&lt;br&gt;&quot;
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region NT Event Log info
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_NTEventLogFileData'&gt;NT Event Log&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;ntevent`&quot;&gt;&quot;
+				$fragments+=$NTEventLogFileData | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Shares
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_Shares'&gt;Shares&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;nontable`&quot;&gt;&quot;
+				Foreach($share in $ShareData){
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;Name:&lt;/strong&gt; {0}  &lt;br&gt;&lt;strong&gt;Description:&lt;/strong&gt; {1}  &lt;br&gt;&lt;strong&gt;Path:&lt;/strong&gt; {2}&lt;/p&gt;&quot; -f $share.Name,$share.Description,$share.Path
+				}
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region printers
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_Printer'&gt;Printers&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;printer`&quot;&gt;&quot;
+				$fragments+=$Printer | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region installed Apps
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_Product'&gt;Products&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;product`&quot;&gt;&quot;
+				$fragments+=$Product |Select-Object Name,Version,InstallLocation,Publisher | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Startup Data
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_StartupData'&gt;Startup&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				Foreach ($Startu in $startupData){
+					$fragments+=&quot;&lt;p&gt;&lt;strong&gt;{0}&lt;/strong&gt;&lt;br&gt;&quot; -f $Startu.Name
+					$fragments+=&quot;&lt;ul&gt;&quot;
+					$fragments+= &quot;&lt;li&gt;{0}&lt;/li&gt;&quot; -f $Startu.User
+					$fragments+= &quot;&lt;li&gt;{0}&lt;/li&gt;&quot; -f $Startu.Command
+					$fragments+=&quot;&lt;/ul&gt;&lt;/p&gt;&quot;
+				}
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Services
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_services'&gt;Services&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;service`&quot;&gt;&quot;
+				$fragments+=$servicedata | Select-Object ServiceName,StartMode,State,StartName,PathName | Sort-Object State,StartMode,ServiceName | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Schtasks
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_schtasks'&gt;Scheduled Tasks&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;schtask`&quot;&gt;&quot;
+				$fragments+=$schtaskdata | Select-Object TaskName,Command,RunAs,ScheduleStart,Repeat,State | Sort-Object State,TaskName | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Process Info
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_Processes'&gt;Processes&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;process`&quot;&gt;&quot;
+				$fragments+=$Processdata | Select-Object ProcessName,ExecutablePath | Sort-Object ExecutablePath | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				#Region Quickfix Info
+				$fragments+=&quot;&lt;section&gt;&quot;
+				$fragments+=(&quot;&lt;H2&gt;&lt;a name='{0}_QuickFix'&gt;QuickFix&lt;/a&gt;&lt;/H2&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;div class=`&quot;quickfix`&quot;&gt;&quot;
+				$fragments+=$QuickFixEngineering | Select-Object HotfixID,Description,InstalledOn | Sort-Object InstalledOn | ConvertTo-Html -Fragment
+				$fragments+=&quot;&lt;/div&gt;&quot;
+				$fragments+=(&quot;&lt;p&gt;&lt;a href=#{0}_Summary&gt;Back to System Summary&lt;/a&gt;&lt;/p&gt;&quot; -f $computername.ToUpper())
+				$fragments+=&quot;&lt;/section&gt;&quot;
+				#EndRegion
+				$compinfo = ConvertTo-Html -Head $head -Title $ReportTitle -PreContent ($fragments | out-String) -PostContent &quot;&lt;br&gt;&lt;I&gt;$footer&lt;/I&gt;&quot; 
+				#Write-Output $compinfo
+				$compinfo | Out-File $outfile
+			}
+		}
+	}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

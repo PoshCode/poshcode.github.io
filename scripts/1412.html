@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Alberto Damiano">
+    <title>Check HBA status - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Check HBA status</h1>
+<h3><a href="//scripts/1412.ps1">download</a> - <a href="//scripts/1411.md">parent</a></h3>
+<p>VMWARE In a Fibre Channel enviroment i generate an HTML report of LUN visibility. FeedBack welcome</p>
+<pre><code class="language-posh">###########################################################################################
+# Title:		Check HBA status 
+# Filename:		Check-HBA.ps1
+# Created by:	Alberto Damiano 			
+# Date:			June 2009				
+# Version:   	1.0			
+###########################################################################################
+
+# Virtual Center Server FQDN
+$VCServerName = &quot;YOUR SERVER&quot;
+
+
+# Some variables
+$CLUSTERS = @()
+$portvc=&quot;443&quot;
+
+
+$VC = Connect-VIServer $VCServerName -ErrorAction Stop -port $portvc
+
+$CLUSTERS = Get-Cluster | Select-Object Name
+
+ForEach ($ClusterName in $CLUSTERS)
+{
+
+	
+	# Generate list of ESX into cluster $ClusterName.Name
+	$VMHosts = Get-VMHost -Location $ClusterName.Name | Sort-Object Name
+
+	Function Generate-Report 
+	{
+		Write-Output &quot;&lt;body&gt;&quot;
+		ForEach ($VMHost in $VMHosts)
+		{
+			$Report = @()
+			$ESX = Get-VMHost $VMHost
+			get-vmhoststorage -RescanAllHba -VMHost $ESX &gt; $null
+			$PROPVMHOST = Get-View $ESX.id
+			$storageSystem = Get-View $PROPVMHOST.ConfigManager.StorageSystem
+			$VMHBAs = $PROPVMHOST.Config.StorageDevice.ScsiTopology.Adapter
+			$lista = $storageSystem.StorageDeviceInfo.MultipathInfo.Lun  
+			# Write hostname ESX
+			Write-Output &quot;&lt;table&gt;&lt;tr class=&quot;&quot;Title&quot;&quot;&gt;&lt;td colspan=&quot;&quot;5&quot;&quot;&gt;$($VMhost.Name)&lt;/td&gt;&lt;/tr&gt;&lt;tr class=&quot;Title&quot;&gt;&lt;td&gt;LunID  &lt;/td&gt;&lt;td&gt;Vmhba  &lt;/td&gt;&lt;td&gt; WWN SAN &lt;/td&gt;&lt;td&gt;SCSI Target  &lt;/td&gt;&lt;td&gt;State  &lt;/td&gt;&lt;/tr&gt;&quot;
+			
+			ForEach ($lun in $lista)
+			{
+				$lun.Path | %{
+					if ($_.Adapter.Contains(&quot;FibreChannelHba&quot;))
+					{
+						$OUT = {} | Select Lunid, Vmhba, wwnt, target, state
+						$temp = $lun.id.Split(&quot;:&quot;)[2]
+						$OUT.Lunid = [Convert]::Todecimal($temp)
+						$OUT.Vmhba = $_.Name.Split(&quot;:&quot;)[0]
+						$elenco = $storageSystem.StorageDeviceInfo.HostBusAdapter | select Device, PortWorldWideName
+						ForEach ($ele in $elenco)
+						{
+							if ($ele.Device -eq $OUT.Vmhba)
+							{
+								break
+							}
+						}
+						$wwnhex = &quot;{0:x}&quot; -f $ele.PortWorldWideName
+						$OUT.Vmhba = $_.Name.Split(&quot;:&quot;)[0] + &quot; &quot; + $wwnhex
+						$OUT.wwnt = &quot;{0:x}&quot; -f $_.Transport.PortWorldWideName
+						$OUT.target = $_.Name.Split(&quot;:&quot;)[1]
+						$OUT.state = $_.PathState
+						$Report += $OUT
+					}
+				}
+			}
+			$Report = $Report | Sort-Object Lunid
+			$old = $Report[1].Lunid
+			$flag = $true
+			$bg=&quot;#C0C0FF&quot;
+			Foreach ($rep in $Report) 
+			{
+			    if ($rep.Lunid -ne $old)
+				{
+					$flag = !($flag)
+					$old = $rep.Lunid
+					if ($flag)
+					{
+						$bg=&quot;#C0C0FF&quot;
+					}
+					else
+					{
+						$bg=&quot;#FFFF66&quot;
+					}
+				}
+				if ($rep.state -like &quot;dead&quot;)
+				{
+					Write-Output &quot;&lt;tr bgcolor=$($bg)&gt;&lt;td&gt;$($rep.Lunid)&lt;/td&gt;&lt;td&gt;$($rep.Vmhba)&lt;/td&gt;&lt;td&gt;$($rep.wwn)&lt;/td&gt;&lt;td&gt;&lt;center&gt;$($rep.target)&lt;/center&gt;&lt;/td&gt;&lt;td class=&quot;Error&quot;&gt;$($rep.state)&lt;/td&gt;&lt;/tr&gt;&quot; 
+				}
+				else
+				{
+					Write-Output &quot;&lt;tr bgcolor=$($bg)&gt;&lt;td&gt;$($rep.Lunid)&lt;/td&gt;&lt;td&gt;$($rep.Vmhba)&lt;/td&gt;&lt;td&gt;$($rep.wwnt)&lt;/td&gt;&lt;td&gt;&lt;center&gt;$($rep.target)&lt;/center&gt;&lt;/td&gt;&lt;td&gt;$($rep.state)&lt;/td&gt;&lt;/tr&gt;&quot; 
+				}
+			}
+			Write-Output &quot;&lt;/table&gt;&quot;
+			Write-Output &quot;&lt;BR&gt;&quot;
+		}
+		Write-Output &quot;&lt;/body&gt;&lt;/html&gt;&quot;
+	}
+	Write-Output &quot;&lt;html&gt;&lt;head&gt;&lt;title&gt;&lt;/title&gt;&lt;style type=&quot;&quot;text/css&quot;&quot;&gt;.Error {color:#FF0000;font-weight: bold;}.Title {background: #0077D4;color: #FFFFFF;text-align:center;font-weight: bold;}.Normal {}&lt;/style&gt;&lt;/head&gt;&quot; &gt; &quot;c:\temp\SAN_Path_$($ClusterName.Name).html&quot;
+
+	#Specify the path where to store the HTML output
+	
+	Generate-Report &gt;&gt; &quot;c:\temp\SAN_Path_$($ClusterName.Name).html&quot;
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

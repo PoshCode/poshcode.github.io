@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="hugopeeters">
+    <title>Get-NICSettings - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-NICSettings</h1>
+<h3><a href="//scripts/545.ps1">download</a></h3>
+<p>Grab remote NIC settings, including Speed and Duplex.
+See: http://www.peetersonline.nl/index.php/powershell/gather-nic-properties-including-speed-and-duplex/#more-51</p>
+<pre><code class="language-posh"># Get-NICSettings by Hugo Peeters of www.peetersonline.nl
+#########################################################
+$serverName = Read-Host &quot;Enter server name&quot;
+$NicConfig = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -ComputerName $serverName
+$myCol = @()
+ForEach ($Nic in $NicConfig)
+{
+If ($Nic.IPAddress -ne $null)
+{
+$myObj = &quot;&quot; | Select-Object Description, DHCPEnabled, IPAddress, IPSubnet, DefaultIPGateway, DNSServers, WINSServers, NICModel, SpeedDuplex
+$myObj.Description = $Nic.Description
+$myObj.DHCPEnabled = $Nic.DHCPEnabled
+$myObj.IPAddress = $Nic.IPAddress
+$myObj.IPSubnet = $Nic.IPSubnet
+$myObj.DefaultIPGateway = $Nic.DefaultIPGateway
+$myObj.DNSServers = $Nic.DNSServerSearchOrder
+$myObj.WINSServers = $Nic.WINSPrimaryServer,$Nic.WINSSecondaryServer
+$registry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $serverName)
+$baseKey = $registry.OpenSubKey(&quot;SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}&quot;)
+$subKeyNames = $baseKey.GetSubKeyNames()
+ForEach ($subKeyName in $subKeyNames)
+{
+$subKey = $baseKey.OpenSubKey(&quot;$subKeyName&quot;)
+$ID = $subKey.GetValue(&quot;NetCfgInstanceId&quot;)
+If ($ID -eq $Nic.SettingId)
+{
+$componentID = $subKey.GetValue(&quot;ComponentID&quot;)
+If ($componentID -match &quot;ven_14e4&quot;)
+{
+$myObj.NICModel = &quot;Broadcom&quot;
+$requestedMediaType = $subKey.GetValue(&quot;RequestedMediaType&quot;)
+$enum = $subKey.OpenSubKey(&quot;Ndi\Params\RequestedMediaType\Enum&quot;)
+$myObj.SpeedDuplex = $enum.GetValue(&quot;$requestedMediaType&quot;)
+}
+ElseIf ($componentID -match &quot;ven_8086&quot;)
+{
+$myObj.NICModel = &quot;Intel&quot;
+$SD = $subKey.GetValue(&quot;SpeedDuplex&quot;)
+$enum = $subKey.OpenSubKey(&quot;Ndi\Params\SpeedDuplex\Enum&quot;)
+$myObj.SpeedDuplex = $enum.GetValue(&quot;$SD&quot;)
+}
+ElseIf ($componentID -match &quot;b06bdrv&quot;)
+{
+$myObj.NICModel = &quot;HP&quot;
+$SD = $subKey.GetValue(&quot;req_medium&quot;)
+$enum = $subKey.OpenSubKey(&quot;Ndi\Params\req_medium\Enum&quot;)
+$myObj.SpeedDuplex = $enum.GetValue(&quot;$SD&quot;)
+}
+Else
+{
+$myObj.NICModel = &quot;unknown&quot;
+$myObj.SpeedDuplex = &quot;unknown&quot;
+}
+}
+}
+$myCol += $myObj
+}
+}
+$myCol
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

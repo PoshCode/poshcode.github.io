@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>Get-Large-Pics.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-Large-Pics.ps1</h1>
+<h3><a href="//scripts/6261.ps1">download</a> - <a href="//scripts/6260.md">parent</a></h3>
+<p>Get-Large-Pics.ps1 - scans a source directory's pictures and stores the largest version of each picture it can find in google image search in the target directory. Usage: get-large-pics.ps1 c:\pictures c:\results.</p>
+<pre><code class="language-posh"># get-large-pics.ps1 - takes two arguments, source directory and target directory.
+# all files in source directory are uploaded to google image search one by one,
+# and in turn it downloads the resulting pictures and saves the largest picture,
+# in the target directory, using the same file name as the source file. Only if the downloaded Picture is larger than the source Picture.
+# so you can just, after verifying the pictures are correct, copy the target directory to the source directory,
+# to have larger versions of all your pictures.
+# If no target directory is specified, it will use &quot;\[source directory]\results&quot;
+
+function global:Get-GoogleImageSearchUrl
+{
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateScript({ Test-Path $_ })]
+        [string] $ImagePath
+    )
+
+    # extract the image file name, without path
+    $imagepath = (get-item -ea 0 $imagepath).fullname
+    $fileName = Split-Path $imagePath -Leaf
+
+    # the request body has some boilerplate before the raw image bytes (part1) and some after (part2)
+    #   note that $filename is included in part1
+    $part1 = @&quot;
+-----------------------------7dd2db3297c2202
+Content-Disposition: form-data; name=&quot;encoded_image&quot;; filename=&quot;$fileName&quot;
+Content-Type: image/jpeg
+
+
+&quot;@
+    $part2 = @&quot;
+-----------------------------7dd2db3297c2202
+Content-Disposition: form-data; name=&quot;image_content&quot;
+
+
+-----------------------------7dd2db3297c2202--
+
+&quot;@
+
+    # grab the raw bytes composing the image file
+    $imageBytes = [Io.File]::ReadAllBytes($imagePath)
+
+    # the request body should sandwich the image bytes between the 2 boilerplate blocks
+    $encoding = New-Object Text.ASCIIEncoding
+    $data = $encoding.GetBytes($part1) + $imageBytes + $encoding.GetBytes($part2)
+
+    # create the HTTP request, populate headers
+    $request = [Net.HttpWebRequest] ([Net.HttpWebRequest]::Create('http://images.google.com/searchbyimage/upload'))
+    $request.Method = &quot;POST&quot;
+    $request.ContentType = 'multipart/form-data; boundary=---------------------------7dd2db3297c2202'  # must match the delimiter in the body, above
+    $request.ContentLength = $data.Length
+
+    # don't automatically redirect to the results page, just take the response which points to it
+    $request.AllowAutoredirect = $false
+
+    # populate the request body
+    $stream = $request.GetRequestStream()
+    $stream.Write($data, 0, $data.Length)
+    $stream.Close()        
+
+    # get response stream, which should contain a 302 redirect to the results page
+    $respStream = $request.GetResponse().GetResponseStream()
+
+    # pluck out the results page link that you would otherwise be redirected to
+    (New-Object Io.StreamReader $respStream).ReadToEnd() -match 'HREF\=&quot;([^&quot;]+)&quot;' | Out-Null
+    $matches[1]
+}
+
+$foundfiles = 0
+if ($args.count -lt 1)
+{
+	$sourceFolder = &quot;c:\users\jrg26\pics&quot;
+}
+else
+{
+	$sourceFolder = $args[0]
+}
+$SearchItem = 'PowerShell'
+if ($args.count -lt 2)
+{
+	$TargetFolder = join-path $sourceFolder &quot;results&quot;
+}
+else
+{
+	$TargetFolder = $args[1]
+}
+$browserAgent = 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36'
+if ( (Test-Path -Path $TargetFolder) -eq $false) { md $TargetFolder }
+
+
+$files = @(dir $sourceFolder|?{$_.psiscontainer -eq $false})
+for ($t=0;$t -lt $files.Count;$t++)
+{
+	&quot;Processing file #$($t) of $($files.Count)&quot;
+	$f = $files[$t]
+	$url = get-GoogleImageSearchUrl $f.fullname
+    
+    $page = Invoke-WebRequest -Uri $url -UserAgent $browserAgent -TimeoutSec 30
+    $link = @($page.Links|?{$_.outertext -eq &quot;Large&quot;})
+    if ($link.Count -eq 0 -or $link.href -notlike &quot;/search*&quot;) 
+    {
+        &quot;No Large pictures found on google for $($F.basename)&quot;
+        continue
+    }
+    $url = &quot;www.google.com&quot;+$link[0].href.tostring().replace(&quot;&amp;amp;&quot;,&quot;&amp;&quot;)
+ 
+$page = Invoke-WebRequest -Uri $url -UserAgent $browserAgent -TimeoutSec 30
+$found = $null
+$page.Links | 
+  Where-Object { $_.href -like '*imgres*' } | 
+  ForEach-Object { ($_.href -split 'imgurl=')[-1].Split('&amp;')[0]} |
+  ForEach-Object {
+    $file = Split-Path -Path $_ -Leaf
+    $path = Join-Path -Path $TargetFolder -ChildPath $file   
+    $path = $path.Replace(&quot;*&quot;,&quot;x&quot;).Replace(&quot;?&quot;,&quot;x&quot;) 
+    do 	
+    {
+	$p1 = join-Path -path $TargetFolder -ChildPath $(get-random(99999)).tostring()
+	if ($path.lastindexof(&quot;.&quot;) -eq -1)
+	{
+		$path = $p1 + $f.extension
+	}
+	else 
+	{
+		$ext = $path.substring($path.lastindexof(&quot;.&quot;))
+		if (($ext.length -gt 4) -and ($ext -ne &quot;.jpeg&quot;))
+		{
+			$ext = $ext.substring(0,4)		
+		}
+		$path = $p1 + $ext
+	}
+    } while ((test-path -ea 0 $path))
+    try 
+    {
+    Invoke-WebRequest -ea 0 -Uri $_ -OutFile $path -UserAgent $browserAgent -TimeoutSec 30
+    }
+    catch { }
+    if (test-path -ea 0 $path)
+    {
+        $f2 = get-item -ea 0 $path
+
+	if ($f2.length -le $f.Length)
+	{
+		del -ea 0 $f2
+	}
+	elseif ($found -eq $null)
+	{
+		$found = $f2
+	}
+	elseif ($found.length -ge $f2.length)
+	{
+		del -ea 0 $f2				
+	}
+	elseif ($found.length -lt $f2.length)
+	{
+		del -ea 0 $found
+		$found = $f2
+	}	
+    }
+  } 
+if ($found -eq $null) {&quot;No bigger files downloaded.&quot;; continue}
+
+    $f3 = $f.basename + $found.extension
+    $f3 = join-path $found.DirectoryName $f3
+
+    del -ea 0 $f3
+    ren $found.fullname $f3
+    &quot;Found $($found.Length) byte file to replace $($f.Length) byte file: $($f.BaseName)$($f.extension)&quot;
+    $foundfiles++
+[gc]::collect()
+}
+
+&quot;$($foundfiles) larger pictures found.&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

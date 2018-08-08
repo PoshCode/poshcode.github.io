@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>UIAutomation 1.9 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>UIAutomation 1.9</h1>
+<h3><a href="//scripts/4099.ps1">download</a> - <a href="//scripts/3931.md">parent</a></h3>
+<p>I really am still working on this replacement for the WASP module ;-)</p>
+<p>This version adds the -PropertyValue parameter to Select-UIElement.  This parameter is super powerful (can do most of the other parameters) and is a temporary shortcut for not having all the other Properties as named parameters.</p>
+<p>NOTE: Requires &quot;Reflection&quot;:http://poshcode.org/3174 (or newer) and &quot;Autoload&quot;:http://poshcode.org/3173 (or newer)</p>
+<pre><code class="language-posh">## UI Automation v 1.10 -- REQUIRES the Reflection module
+## 
+# WASP 2.0 is getting closer, but this is still just a preview:
+# -- a lot of the commands have weird names still because they're being generated ignorantly
+# -- eg: Invoke-Toggle.Toggle and  Invoke-Invoke.Invoke
+
+# v 1.7  - Fixes using multiple checks like: Select-UIElement Red: Edit
+# v 1.8  - Fixes .Net version problems: specifying CSharpVersion3 when in PowerShell 2
+# v 1.9  - Fix bug with Select-UIElement by processName / processId
+# v 1.10 - Add the super-flexible but super-user-only -PropertyValue parameter to Select-UIElement
+
+# IF your PowerShell is running in .Net 4
+if($PSVersionTable.CLRVersion -gt &quot;4.0&quot;) {
+    $Language = &quot;CSharp&quot; # Version 4
+    Add-Type -AssemblyName &quot;UIAutomationClient, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35&quot;
+    Add-Type -AssemblyName &quot;UIAutomationTypes, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35&quot;
+} else {
+    # In PowerShell 2, we need to use the .Net 3 version
+    $Language = &quot;CSharpVersion3&quot; 
+    Add-Type -AssemblyName &quot;UIAutomationClient, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35&quot;
+    Add-Type -AssemblyName &quot;UIAutomationTypes, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35&quot;
+}
+
+
+$SWA = &quot;System.Windows.Automation&quot;
+#  Add-Accelerator InvokePattern      &quot;$SWA.InvokePattern&quot;                -EA SilentlyContinue
+#  Add-Accelerator ExpandPattern      &quot;$SWA.ExpandCollapsePattern&quot;        -EA SilentlyContinue
+#  Add-Accelerator WindowPattern      &quot;$SWA.WindowPattern&quot;                -EA SilentlyContinue
+#  Add-Accelerator TransformPattern   &quot;$SWA.TransformPattern&quot;             -EA SilentlyContinue
+#  Add-Accelerator ValuePattern       &quot;$SWA.ValuePattern&quot;                 -EA SilentlyContinue
+#  Add-Accelerator TextPattern        &quot;$SWA.TextPattern&quot;                  -EA SilentlyContinue
+
+# This is what requires the Reflection module:
+Add-Accelerator Automation         &quot;$SWA.Automation&quot;                   -EA SilentlyContinue
+Add-Accelerator AutomationElement  &quot;$SWA.AutomationElement&quot;            -EA SilentlyContinue
+Add-Accelerator TextRange          &quot;$SWA.Text.TextPatternRange&quot;        -EA SilentlyContinue
+#####  Conditions
+Add-Accelerator Condition          &quot;$SWA.Condition&quot;                    -EA SilentlyContinue
+Add-Accelerator AndCondition       &quot;$SWA.AndCondition&quot;                 -EA SilentlyContinue
+Add-Accelerator OrCondition        &quot;$SWA.OrCondition&quot;                  -EA SilentlyContinue
+Add-Accelerator NotCondition       &quot;$SWA.NotCondition&quot;                 -EA SilentlyContinue
+Add-Accelerator PropertyCondition  &quot;$SWA.PropertyCondition&quot;            -EA SilentlyContinue
+#####  IDentifiers
+Add-Accelerator AutoElementIds     &quot;$SWA.AutomationElementIdentifiers&quot; -EA SilentlyContinue
+Add-Accelerator TransformIds       &quot;$SWA.TransformPatternIdentifiers&quot;  -EA SilentlyContinue
+
+##### Patterns:
+$patterns = Get-Type -Assembly UIAutomationClient -Base System.Windows.Automation.BasePattern 
+            #| Where { $_ -ne [System.Windows.Automation.InvokePattern] }
+
+
+Add-Type -Language $Language -ReferencedAssemblies UIAutomationClient, UIAutomationTypes -TypeDefinition @&quot;
+using System;
+using System.ComponentModel;
+using System.Management.Automation;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Windows.Automation;
+using System.Runtime.InteropServices;
+
+
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+public class StaticFieldAttribute : ArgumentTransformationAttribute {
+   private Type _class;
+
+   public override string ToString() {
+      return string.Format(&quot;[StaticField(OfClass='{0}')]&quot;, OfClass.FullName);
+   }
+
+   public override Object Transform( EngineIntrinsics engineIntrinsics, Object inputData) {
+      if(inputData is string &amp;&amp; !string.IsNullOrEmpty(inputData as string)) {
+         System.Reflection.FieldInfo field = _class.GetField(inputData as string, BindingFlags.Static | BindingFlags.Public);
+         if(field != null) {
+            return field.GetValue(null);
+         }
+      }
+      return inputData;
+   }
+   
+   public StaticFieldAttribute( Type ofClass ) {
+      OfClass = ofClass;
+   }
+
+   public Type OfClass {
+      get { return _class; }
+      set { _class = value; }
+   }   
+}
+
+public static class UIAutomationHelper {
+
+   [DllImport (&quot;user32.dll&quot;, CharSet = CharSet.Auto)]
+   static extern IntPtr FindWindow (string lpClassName, string lpWindowName);
+
+   [DllImport (&quot;user32.dll&quot;, CharSet = CharSet.Auto)]
+   static extern bool AttachThreadInput (int idAttach, int idAttachTo, bool fAttach);
+
+   [DllImport (&quot;user32.dll&quot;, CharSet = CharSet.Auto)]
+   static extern int GetWindowThreadProcessId (IntPtr hWnd, IntPtr lpdwProcessId);
+
+   [DllImport (&quot;user32.dll&quot;, CharSet = CharSet.Auto)]
+   static extern IntPtr SetForegroundWindow (IntPtr hWnd);
+
+   public static AutomationElement RootElement {
+      get { return AutomationElement.RootElement; }
+   }
+
+
+   ///&lt;synopsis&gt;Using Win32 to set foreground window because AutomationElement.SetFocus() is unreliable&lt;/synopsis&gt;
+   public static bool SetForeground(this AutomationElement element)
+   {
+      if(element == null) { 
+         throw new ArgumentNullException(&quot;element&quot;);
+      }
+
+      // Get handle to the element
+      IntPtr other = FindWindow (null, element.Current.Name);
+
+      // // Get the Process ID for the element we are trying to
+      // // set as the foreground element
+      // int other_id = GetWindowThreadProcessId (other, IntPtr.Zero);
+      // 
+      // // Get the Process ID for the current process
+      // int this_id = GetWindowThreadProcessId (Process.GetCurrentProcess().Handle, IntPtr.Zero);
+      // 
+      // // Attach the current process's input to that of the 
+      // // given element. We have to do this otherwise the
+      // // WM_SETFOCUS message will be ignored by the element.
+      // bool success = AttachThreadInput(this_id, other_id, true);
+
+      // Make the Win32 call
+      IntPtr previous = SetForegroundWindow(other);
+
+      return !IntPtr.Zero.Equals(previous);
+   }
+}
+&quot;@
+            
+## TODO: Write Get-SupportedPatterns or rather ... 
+## Get-SupportedFunctions (to return the names of the functions for the supported patterns)
+## TODO: Support all the &quot;Properties&quot; too
+## TODO: Figure out why Notepad doesn't support SetValue
+## TODO: Figure out where the menus support went
+ForEach($pattern in $patterns){
+   $pattern | Add-Accelerator
+   $PatternFullName = $pattern.FullName
+   $PatternName = $Pattern.Name -Replace &quot;Pattern&quot;,&quot;.&quot;
+   $newline = &quot;`n`t`t&quot;
+   
+   New-Item &quot;Function:ConvertTo-$($Pattern.Name)&quot; -Value &quot;
+   param(
+      [Parameter(ValueFromPipeline=`$true)][Alias('Element','AutomationElement')][AutomationElement]`$InputObject
+   )
+   process { 
+      trap { 
+         if(`$_.Exception.Message -like '*Unsupported Pattern.*') {
+            Write-Error `&quot;Cannot get ```&quot;$($Pattern.Name)```&quot; from that AutomationElement, `$(`$_)` You should try one of: `$(`$InputObject.GetSupportedPatterns()|%{```&quot;'```&quot; + (`$_.ProgrammaticName.Replace(```&quot;PatternIdentifiers.Pattern```&quot;,```&quot;```&quot;)) + ```&quot;Pattern'```&quot;})`&quot;; continue;
+         }
+      }
+      Write-Output `$InputObject.GetCurrentPattern([$PatternFullName]::Pattern).Current
+   }&quot;
+   
+   $pattern.GetMethods() | 
+   Where { $_.DeclaringType -eq $_.ReflectedType -and !$_.IsSpecialName } | 
+   ForEach {
+      $FunctionName = &quot;Function:Invoke-$PatternName$($_.Name)&quot;
+      $Position = 1
+      
+      if (test-path $FunctionName) { remove-item $FunctionName }
+      $Parameters = @(&quot;$newline[Parameter(ValueFromPipeline=`$true)]&quot;+
+                      &quot;$newline[Alias('Parent','Element','Root','AutomationElement')]&quot;+
+                      &quot;$newline[AutomationElement]`$InputObject&quot;
+                      ) + 
+                    @(
+                      &quot;[Parameter()]$newline[Switch]`$Passthru&quot;
+                     ) + 
+                    @($_.GetParameters() | % { &quot;[Parameter(Position=$($Position; $Position++))]$newline[$($_.ParameterType.FullName)]`$$($_.Name)&quot; })
+      $Parameters = $Parameters -Join &quot;$newline,$newline&quot;
+      $ParameterValues = '$' + (@($_.GetParameters() | Select-Object -Expand Name ) -Join ', $')
+
+      $definition = @&quot;
+   param(
+      $Parameters
+   )
+   process { 
+      ## trap { Write-Warning &quot;`$(`$_)&quot;; break }
+      `$pattern = `$InputObject.GetCurrentPattern([$PatternFullName]::Pattern)
+      if(`$pattern) {
+         `$Pattern.$($_.Name)($(if($ParameterValues.Length -gt 1){ $ParameterValues }))
+      }
+      if(`$passthru) {
+         `$InputObject
+      }
+   }
+&quot;@
+      
+      trap {
+         Write-Warning $_
+         Write-Host $definition -fore cyan
+      }
+      New-Item $FunctionName -value $definition
+   }
+   
+   $pattern.GetProperties() | 
+   Where { $_.DeclaringType -eq $_.ReflectedType -and $_.Name -notmatch &quot;Cached|Current&quot;} |
+   ForEach {
+      $FunctionName = &quot;Function:Get-$PatternName$($_.Name)&quot;.Trim('.')
+      if (test-path $FunctionName) { remove-item $FunctionName }
+      New-Item $FunctionName -value &quot;
+      param(
+         [Parameter(ValueFromPipeline=`$true)]
+         [AutomationElement]`$AutomationElement
+      )      
+      process { 
+         trap { Write-Warning `&quot;$PatternFullName `$_`&quot;; continue }
+         `$pattern = `$AutomationElement.GetCurrentPattern([$PatternFullName]::Pattern)
+         if(`$pattern) {
+            `$pattern.'$($_.Name)'
+         }
+      }&quot;
+   }
+   ## So far this seems to be restricted to Text (DocumentRange) elements
+   $pattern.GetFields() |
+   Where { $_.FieldType.Name -like &quot;*TextAttribute&quot;} |
+   ForEach {
+      $FunctionName = &quot;Function:Get-Text$($_.Name -replace 'Attribute')&quot;
+      if (test-path $FunctionName) { remove-item $FunctionName }
+      New-Item $FunctionName -value &quot;
+      param(
+         [Parameter(ValueFromPipeline=`$true)]
+         [AutomationElement]`$AutomationElement
+      )
+      process { 
+         trap { Write-Warning `&quot;$PatternFullName `$_`&quot;; continue }
+         `$AutomationElement.GetAttributeValue([$PatternFullName]::$($_.Name))
+      }&quot;
+   }
+   
+   $pattern.GetFields() | Where { $_.FieldType -eq [System.Windows.Automation.AutomationEvent] } |
+   ForEach {
+      $Name = $_.Name -replace 'Event$'
+      $FunctionName = &quot;Function:Register-$($PatternName.Trim('.'))$Name&quot;
+      if (test-path $FunctionName) { remove-item $FunctionName }
+      New-Item $FunctionName -value &quot;
+      param(
+         [Parameter(ValueFromPipeline=`$true)]
+         [AutomationElement]`$AutomationElement
+      ,
+         [System.Windows.Automation.TreeScope]`$TreeScope = 'Element'
+      ,
+         [ScriptBlock]`$EventHandler
+      )
+      process { 
+         trap { Write-Warning `&quot;$PatternFullName `$_`&quot;; continue }
+         [Automation]::AddAutomationEventHandler( [$PatternFullName]::$Name, `$AutomationElement, `$TreeScope, `$EventHandler )
+      }&quot;
+   }
+}
+
+$FalseCondition = [Condition]::FalseCondition
+$TrueCondition  = [Condition]::TrueCondition
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Accelerator SendKeys           System.Windows.Forms.SendKeys       -EA SilentlyContinue
+
+$AutomationProperties = [system.windows.automation.automationelement+automationelementinformation].GetProperties()
+
+Set-Alias Invoke-UIElement Invoke-Invoke.Invoke
+
+function formatter  { END {
+   $input | Format-Table @{l=&quot;Text&quot;;e={$_.Text.SubString(0,25)}}, ClassName, FrameworkId -Auto
+}}
+
+function Get-ClickablePoint {
+[CmdletBinding()]
+param(
+   [Parameter(ValueFromPipeline=$true)]
+   [Alias(&quot;Parent&quot;,&quot;Element&quot;,&quot;Root&quot;)]
+   [AutomationElement]$InputObject
+)
+   process {
+      $InputObject.GetClickablePoint()
+   }
+}
+
+function Show-Window {
+[CmdletBinding()]
+param(
+   [Parameter(ValueFromPipeline=$true)]
+   [Alias(&quot;Parent&quot;,&quot;Element&quot;,&quot;Root&quot;)]
+   [AutomationElement]$InputObject
+,
+   [Parameter()]
+   [Switch]$Passthru   
+)
+   process {
+      Set-UIFocus $InputObject
+      if($passthru) {
+         $InputObject
+      }        
+   }
+}
+
+function Set-UIFocus {
+[CmdletBinding()]
+param(
+   [Parameter(ValueFromPipeline=$true)]
+   [Alias(&quot;Parent&quot;,&quot;Element&quot;,&quot;Root&quot;)]
+   [AutomationElement]$InputObject
+,
+   [Parameter()]
+   [Switch]$Passthru   
+)
+   process {
+      try {
+         [UIAutomationHelper]::SetForeground( $InputObject )
+         $InputObject.SetFocus()
+      } catch {
+         Write-Verbose &quot;SetFocus fail, trying SetForeground&quot;
+      }
+      if($passthru) {
+         $InputObject
+      }        
+   }
+}
+
+function Send-UIKeys {
+[CmdletBinding()]
+param(
+   [Parameter(Position=0)]
+   [string]$Keys
+,
+   [Parameter(ValueFromPipeline=$true)]
+   [Alias(&quot;Parent&quot;,&quot;Element&quot;,&quot;Root&quot;)]
+   [AutomationElement]$InputObject
+,
+   [Parameter()]
+   [Switch]$Passthru
+,
+   [Parameter()]
+   [Switch]$Async
+)
+   process {
+      if(!$InputObject.Current.IsEnabled)
+      {
+         Write-Warning &quot;The Control is not enabled!&quot;
+      }
+      if(!$InputObject.Current.IsKeyboardFocusable)
+      {
+         Write-Warning &quot;The Control is not focusable!&quot;
+      }
+      Set-UIFocus $InputObject
+      
+      if($Async) {
+         [SendKeys]::Send( $Keys )
+      } else {
+         [SendKeys]::SendWait( $Keys )
+      }
+      
+      if($passthru) {
+         $InputObject
+      }      
+   }
+}
+
+function Set-UIText {
+[CmdletBinding()]
+param(
+   [Parameter(Position=0)]
+   [string]$Text
+,
+   [Parameter(ValueFromPipeline=$true)]
+   [Alias(&quot;Parent&quot;,&quot;Element&quot;,&quot;Root&quot;)]
+   [AutomationElement]$InputObject
+,
+   [Parameter()]
+   [Switch]$Passthru   
+)
+   process {
+      if(!$InputObject.Current.IsEnabled)
+      {
+         Write-Warning &quot;The Control is not enabled!&quot;
+      }
+      if(!$InputObject.Current.IsKeyboardFocusable)
+      {
+         Write-Warning &quot;The Control is not focusable!&quot;
+      }
+      
+      $valuePattern = $null
+      if($InputObject.TryGetCurrentPattern([ValuePattern]::Pattern,[ref]$valuePattern)) {
+         Write-Verbose &quot;Set via ValuePattern!&quot;
+         $valuePattern.SetValue( $Text )
+      } 
+      elseif($InputObject.Current.IsKeyboardFocusable) 
+      {
+         Set-UIFocus $InputObject
+         [SendKeys]::SendWait(&quot;^{HOME}&quot;);
+         [SendKeys]::SendWait(&quot;^+{END}&quot;);
+         [SendKeys]::SendWait(&quot;{DEL}&quot;);
+         [SendKeys]::SendWait( $Text )
+      }
+      if($passthru) {
+         $InputObject
+      }      
+   }
+}
+
+function Select-UIElement {
+[CmdletBinding(DefaultParameterSetName=&quot;FromParent&quot;)]
+PARAM (
+   [Parameter(ParameterSetName=&quot;FromWindowHandle&quot;, Position=&quot;0&quot;, Mandatory=$true)] 
+   [Alias(&quot;MainWindowHandle&quot;,&quot;hWnd&quot;,&quot;Handle&quot;,&quot;Wh&quot;)]
+   [IntPtr[]]$WindowHandle=[IntPtr]::Zero
+,
+   [Parameter(ParameterSetName=&quot;FromPoint&quot;, Position=&quot;0&quot;, Mandatory=$true)]
+   [System.Windows.Point[]]$Point
+,
+   [Parameter(ParameterSetName=&quot;FromParent&quot;, ValueFromPipeline=$true, Position=100)]
+   [System.Windows.Automation.AutomationElement]$Parent = [UIAutomationHelper]::RootElement
+,
+   [Parameter(ParameterSetName=&quot;FromParent&quot;, Position=&quot;0&quot;)]
+   [Alias(&quot;WindowName&quot;)]
+   [String[]]$Name
+,
+   [Parameter(ParameterSetName=&quot;FromParent&quot;, Position=&quot;1&quot;)]
+   [Alias(&quot;Type&quot;,&quot;Ct&quot;)]
+   [System.Windows.Automation.ControlType]
+   [StaticField(([System.Windows.Automation.ControlType]))]$ControlType
+,
+   [Parameter(ParameterSetName=&quot;FromParent&quot;)]
+   [Alias(&quot;UId&quot;)]
+   [String[]]$AutomationId
+,
+   ## Removed &quot;Id&quot; alias to allow get-process | Select-Window pipeline to find just MainWindowHandle
+   [Parameter(ParameterSetName=&quot;FromParent&quot;, ValueFromPipelineByPropertyName=$true )]
+   [Alias(&quot;Id&quot;)]
+   [Int[]]$PID
+,
+   [Parameter(ParameterSetName=&quot;FromParent&quot;)]
+   [Alias(&quot;Pn&quot;)]
+   [String[]]$ProcessName
+,
+   [Parameter(ParameterSetName=&quot;FromParent&quot;)]
+   [Alias(&quot;Cn&quot;)]
+   [String[]]$ClassName
+,
+   [switch]$Recurse
+,
+   [switch]$Bare,
+
+   [Parameter(ParameterSetName=&quot;FromParent&quot;)]
+   [Alias(&quot;Pv&quot;)]
+   [Hashtable]$PropertyValue
+
+)
+process {
+
+   Write-Debug &quot;Parameters Found&quot;
+   Write-Debug ($PSBoundParameters | Format-Table | Out-String)
+
+   $search = &quot;Children&quot;
+   if($Recurse) { $search = &quot;Descendants&quot; }
+   
+   $condition = [System.Windows.Automation.Condition]::TrueCondition
+   
+   Write-Verbose $PSCmdlet.ParameterSetName
+   switch -regex ($PSCmdlet.ParameterSetName) {
+      &quot;FromWindowHandle&quot; {
+         Write-Verbose &quot;Finding from Window Handle $HWnd&quot;
+         $Element = $(
+            foreach($hWnd in $WindowHandle) {
+               [System.Windows.Automation.AutomationElement]::FromHandle( $hWnd )
+            }
+         )
+         continue
+      }
+      &quot;FromPoint&quot; {
+         Write-Verbose &quot;Finding from Point $Point&quot;
+         $Element = $(
+            foreach($pt in $Point) {
+               [System.Windows.Automation.AutomationElement]::FromPoint( $pt )
+            }
+         )
+         continue
+      }
+      &quot;FromParent&quot; {
+         Write-Verbose &quot;Finding from Parent!&quot;
+         ## [System.Windows.Automation.Condition[]]$conditions = [System.Windows.Automation.Condition]::TrueCondition
+         [ScriptBlock[]]$filters = @()
+         if($AutomationId) {
+            [System.Windows.Automation.Condition[]]$current = $(
+               foreach($aid in $AutomationId) {
+                  new-object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::AutomationIdProperty), $aid
+               }
+            )
+            if($current.Length -gt 1) {
+               [System.Windows.Automation.Condition[]]$conditions += New-Object System.Windows.Automation.OrCondition $current
+            } elseif($current.Length -eq 1) {
+               [System.Windows.Automation.Condition[]]$conditions += $current[0]
+            }  
+         }
+         if($PID) {
+            [System.Windows.Automation.Condition[]]$current = $(
+               foreach($p in $PID) {
+                  new-object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ProcessIdProperty), $p
+               }
+            )
+            if($current.Length -gt 1) {
+               [System.Windows.Automation.Condition[]]$conditions += New-Object System.Windows.Automation.OrCondition $current
+            } elseif($current.Length -eq 1) {
+               [System.Windows.Automation.Condition[]]$conditions += $current[0]
+            }         
+         }
+         if($ProcessName) {
+            if($ProcessName -match &quot;\?|\*|\[&quot;) {
+               [ScriptBlock[]]$filters += { $(foreach($p in $ProcessName){ (Get-Process -id $_.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::ProcessIdProperty)).ProcessName -like $p }) -contains $true } 
+            } else {
+               [System.Windows.Automation.Condition[]]$current = $(
+                  foreach($p in Get-Process -Name $ProcessName) {
+                     new-object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ProcessIdProperty), $p.id
+                  }
+               )
+               if($current.Length -gt 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += New-Object System.Windows.Automation.OrCondition $current
+               } elseif($current.Length -eq 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += $current[0]
+               }               
+            }
+         }
+         if($Name) {
+            Write-Verbose &quot;Name: $Name&quot;
+            if($Name -match &quot;\?|\*|\[&quot;) {
+               [ScriptBlock[]]$filters += { $(foreach($n in $Name){ $_.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NameProperty) -like $n }) -contains $true } 
+            } else {
+               [System.Windows.Automation.Condition[]]$current = $(
+                  foreach($n in $Name){
+                     new-object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::NameProperty), $n, &quot;IgnoreCase&quot;
+                  }
+               )
+               if($current.Length -gt 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += New-Object System.Windows.Automation.OrCondition $current
+               } elseif($current.Length -eq 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += $current[0]
+               }   
+            }
+         }
+         if($ClassName) {
+            if($ClassName -match &quot;\?|\*|\[&quot;) {
+               [ScriptBlock[]]$filters += { $(foreach($c in $ClassName){ $_.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::ClassNameProperty) -like $c }) -contains $true } 
+            } else {
+               [System.Windows.Automation.Condition[]]$current = $(
+                  foreach($c in $ClassName){
+                     new-object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ClassNameProperty), $c, &quot;IgnoreCase&quot;
+                  }
+               )
+               if($current.Length -gt 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += New-Object System.Windows.Automation.OrCondition $current
+               } elseif($current.Length -eq 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += $current[0]
+               }                  
+            }
+         }
+         if($ControlType) {
+            if($ControlType -match &quot;\?|\*|\[&quot;) {
+               [ScriptBlock[]]$filters += { $(foreach($c in $ControlType){ $_.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::ControlTypeProperty) -like $c }) -contains $true } 
+            } else {
+               [System.Windows.Automation.Condition[]]$current = $(
+                  foreach($c in $ControlType){
+                     new-object System.Windows.Automation.PropertyCondition ([System.Windows.Automation.AutomationElement]::ControlTypeProperty), $c
+                  }
+               )
+               if($current.Length -gt 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += New-Object System.Windows.Automation.OrCondition $current
+               } elseif($current.Length -eq 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += $current[0]
+               }                  
+            }
+         }
+         if($PropertyValue) {
+            $Property = $PropertyValue.Keys[0]
+            $Value = $PropertyValue.Values[0]
+            if($Value -match &quot;\?|\*|\[&quot;) {
+               [ScriptBlock[]]$filters += { $(foreach($c in $PropertyValue.GetEnumerator()){
+                  $_.GetCurrentPropertyValue(  
+                     [System.Windows.Automation.AutomationElement].GetField(
+                        $c.Key).GetValue(([system.windows.automation.automationelement]))
+                  ) -like $c.Value }) -contains $true } 
+            } else {
+               [System.Windows.Automation.Condition[]]$current = $(
+                  foreach($c in $PropertyValue.GetEnumerator()){
+                     new-object System.Windows.Automation.PropertyCondition (
+                        [System.Windows.Automation.AutomationElement].GetField(
+                        $c.Key).GetValue(([system.windows.automation.automationelement]))), $c.Value
+                  }
+               )
+               if($current.Length -gt 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += New-Object System.Windows.Automation.OrCondition $current
+               } elseif($current.Length -eq 1) {
+                  [System.Windows.Automation.Condition[]]$conditions += $current[0]
+               }                  
+            }
+         }         
+         
+         if($conditions.Length -gt 1) {
+            [System.Windows.Automation.Condition]$condition = New-Object System.Windows.Automation.AndCondition $conditions
+         } elseif($conditions) {
+            [System.Windows.Automation.Condition]$condition = $conditions[0]
+         } else {
+            [System.Windows.Automation.Condition]$condition = [System.Windows.Automation.Condition]::TrueCondition
+         }
+         
+         If($VerbosePreference -gt &quot;SilentlyContinue&quot;) {
+         
+            function Write-Condition {
+               param([Parameter(ValueFromPipeline=$true)]$condition, $indent = 0)
+               process {
+                  Write-Debug ($Condition | fl *  | Out-String)               
+                  if($condition -is [System.Windows.Automation.AndCondition] -or $condition -is [System.Windows.Automation.OrCondition]) {
+                     Write-Verbose ((&quot; &quot;*$indent) + $Condition.GetType().Name )
+                     $condition.GetConditions().GetEnumerator() | Write-Condition -Indent ($Indent+4)
+                  } elseif($condition -is [System.Windows.Automation.PropertyCondition]) {
+                     Write-Verbose ((&quot; &quot;*$indent) + $Condition.Property.ProgrammaticName + &quot; = '&quot; + $Condition.Value + &quot;' (&quot; + $Condition.Flags + &quot;)&quot;)
+                  } else {
+                     Write-Verbose ((&quot; &quot;*$indent) + $Condition.GetType().Name + &quot; where '&quot; + $Condition.Value + &quot;' (&quot; + $Condition.Flags + &quot;)&quot;)
+                  }
+               }
+            }
+         
+            Write-Verbose &quot;CONDITIONS =============&quot;
+            $global:LastCondition = $condition
+            foreach($c in $condition) {            
+               Write-Condition $c
+            }
+            Write-Verbose &quot;============= CONDITIONS&quot;
+         }
+         
+         if($filters.Count -gt 0) {
+            $Element = $Parent.FindAll( $search, $condition ) | Where-Object { $item = $_;  foreach($f in $filters) { $item = $item | Where $f }; $item }
+         } else {
+            $Element = $Parent.FindAll( $search, $condition )
+         }
+      }  
+   }
+   
+   Write-Verbose &quot;Element Count: $(@($Element).Count)&quot;
+   if($Element) {
+      foreach($el in $Element) {
+         if($Bare) {
+            Write-Output $el
+         } else {
+            $e = New-Object PSObject $el
+            foreach($prop in $e.GetSupportedProperties() | Sort ProgrammaticName)
+            {
+               ## TODO: make sure all these show up: [System.Windows.Automation.AutomationElement] | gm -sta -type Property
+               $propName = [System.Windows.Automation.Automation]::PropertyName($prop)
+               Add-Member -InputObject $e -Type ScriptProperty -Name $propName -Value ([ScriptBlock]::Create( &quot;`$this.GetCurrentPropertyValue( [System.Windows.Automation.AutomationProperty]::LookupById( $($prop.Id) ))&quot; )) -EA 0
+            }
+            foreach($patt in $e.GetSupportedPatterns()| Sort ProgrammaticName)
+            {
+               Add-Member -InputObject $e -Type ScriptProperty -Name ($patt.ProgrammaticName.Replace(&quot;PatternIdentifiers.Pattern&quot;,&quot;&quot;) + &quot;Pattern&quot;) -Value ([ScriptBlock]::Create( &quot;`$this.GetCurrentPattern( [System.Windows.Automation.AutomationPattern]::LookupById( '$($patt.Id)' ) )&quot; )) -EA 0
+            }
+            Write-Output $e
+         }
+      }
+   }
+}
+
+}
+
+Export-ModuleMember -cmdlet * -Function * -Alias *
+
+#   [Cmdlet(VerbsCommon.Add, &quot;UIAHandler&quot;)]
+#   public class AddUIAHandlerCommand : PSCmdlet
+#   {
+#      private AutomationElement _parent = AutomationElement.RootElement;
+#      private AutomationEvent _event = WindowPattern.WindowOpenedEvent;
+#      private TreeScope _scope = TreeScope.Children;
+#
+#      [Parameter(ValueFromPipeline = true)]
+#      [Alias(&quot;Parent&quot;, &quot;Element&quot;, &quot;Root&quot;)]
+#      public AutomationElement InputObject { set { _parent = value; } get { return _parent; } }
+#
+#      [Parameter()]
+#      public AutomationEvent Event { set { _event = value; } get { return _event; } }
+#
+#      [Parameter()]
+#      public AutomationEventHandler ScriptBlock { set; get; }
+#
+#      [Parameter()]
+#      public SwitchParameter Passthru { set; get; }
+#
+#      [Parameter()]
+#      public TreeScope Scope { set { _scope = value; } get { return _scope; } }
+#
+#      protected override void ProcessRecord()
+#      {
+#         Automation.AddAutomationEventHandler(Event, InputObject, Scope, ScriptBlock);
+#
+#         if (Passthru.ToBool())
+#         {
+#            WriteObject(InputObject);
+#         }
+#
+#         base.ProcessRecord();
+#      }
+#   }
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

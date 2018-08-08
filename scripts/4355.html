@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Zachary Loeber">
+    <title>Get-AssetInfo - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-AssetInfo</h1>
+<h3><a href="//scripts/4355.ps1">download</a></h3>
+<p>A multi-threaded, windows asset gathering function.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+   Get inventory data for specified computer system.
+.DESCRIPTION
+   Get inventory data for provided host using wmi.
+   Data proccessing use multithreading and support using timeouts in case of wmi problems.
+   Target computer system must be reacheble using ICMP Echo.
+   Provide ComputerName specified by user and HostName used by OS. Also provide OS version, CPU and memory info.
+.PARAMETER ComputerName
+   Specifies the target computer for data query.
+.PARAMETER ThrottleLimit
+   Specifies the maximum number of systems to inventory simultaneously 
+.PARAMETER Timeout
+   Specifies the maximum time in second command can run in background before terminating this thread.
+.PARAMETER ShowProgress
+   Show progress bar information
+.EXAMPLE
+   PS &gt; Get-AssetInfo -ComputerName test1
+ 
+   ComputerName : hp-test1
+   OSCaption    : Microsoft Windows 8 Enterprise
+   Memory       : 5,93 GB
+   Cores        : 2
+   Sockets      : 1
+ 
+   Description
+   -----------
+   Query information ablout computer test1
+.EXAMPLE
+   PS &gt; Get-AssetInfo -ComputerName test1 -Credential (get-credential) | fromat-list * -force
+ 
+   ComputerName   : hp-test1
+   OSCaption      : Microsoft Windows 8 Enterprise
+   OSVersion      : 6.2.9200
+   Cores          : 2
+   OSServicePack  : 0
+   Memory         : 5,93 GB
+   Sockets        : 1
+   PSComputerName : test1
+   Description
+   -----------
+   Query information ablout computer test1 using alternate credentials
+.EXAMPLE
+   PS &gt; get-content C:\complist.txt | Get-AssetInfo -ThrottleLimit 100 -Timeout 60 -ShowProgress
+ 
+   Description
+   -----------
+   Query information about computers in file C:\complist.txt using 100 thread at time with 60 sec timeout and showing progressbar
+.EXAMPLE
+   PS &gt; $a = Get-AssetInfo
+   PS &gt; $a | Select Memory,Chassis
+   
+   Description
+   -----------
+   Query information about the  local computer, store in $a and then show output for the Memory and Chassis property groups
+
+.NOTES
+   Originally posted at: http://learn-powershell.net/2013/05/08/scripting-games-2013-event-2-favorite-and-not-so-favorite/
+   Extended and further hacked by: Zachary Loeber
+   Site: http://www.the-little-things.net/
+   Requires: Powershell 2.0
+   Info: WMI prefered over CIM as there no speed advantage using cimsessions in multitheating against old systems.
+   The following are the default property groups you can send to output:
+    - Default
+    - System
+    - OS
+    - Processor
+    - Chassis
+    - Memory
+    - MemoryArray
+    - Network
+#&gt;
+function Get-AssetInfo
+{
+    [CmdletBinding()]
+    Param
+    (
+        [Parameter(ValueFromPipeline=$true,
+                   ValueFromPipelineByPropertyName=$true,
+                   Position=0)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('DNSHostName','PSComputerName')]
+        [string[]]
+        $ComputerName=$env:computername,
+ 
+        [Parameter(Position=1)]
+        [ValidateRange(1,65535)]
+        [int32]
+        $ThrottleLimit = 32,
+ 
+        [Parameter(Position=2)]
+        [ValidateRange(1,65535)]
+        [int32]
+        $Timeout = 120,
+ 
+        [Parameter(Position=3)]
+        [switch]
+        $ShowProgress,
+ 
+        [Parameter(Position=4)]
+        [System.Management.Automation.Credential()]
+        $Credential = [System.Management.Automation.PSCredential]::Empty
+    )
+
+    Begin
+    {
+        Write-Verbose -Message 'Creating local hostname list'
+        $IPAddresses = [net.dns]::GetHostAddresses($env:COMPUTERNAME) | Select-Object -ExpandProperty IpAddressToString
+        $HostNames = $IPAddresses | ForEach-Object {
+            try {
+                [net.dns]::GetHostByAddress($_)
+            } catch {
+                # We do not care about errors here...
+            }
+        } | Select-Object -ExpandProperty HostName -Unique
+        $LocalHost = @('', '.', 'localhost', $env:COMPUTERNAME, '::1', '127.0.0.1') + $IPAddresses + $HostNames
+ 
+        Write-Verbose -Message 'Creating initial variables'
+        $runspacetimers       = [HashTable]::Synchronized(@{})
+        $runspaces            = New-Object -TypeName System.Collections.ArrayList
+        $bgRunspaceCounter    = 0
+        
+        Write-Verbose -Message 'Creating Initial Session State'
+        $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+        foreach ($ExternalVariable in ('runspacetimers', 'Credential', 'LocalHost'))
+        {
+            Write-Verbose -Message &quot;Adding variable $ExternalVariable to initial session state&quot;
+            $iss.Variables.Add((New-Object -TypeName System.Management.Automation.Runspaces.SessionStateVariableEntry -ArgumentList $ExternalVariable, (Get-Variable -Name $ExternalVariable -ValueOnly), ''))
+        }
+ 
+        Write-Verbose -Message 'Creating runspace pool'
+        $rp = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $ThrottleLimit, $iss, $Host)
+        $rp.Open()
+ 
+        Write-Verbose -Message 'Defining background runspaces scriptblock'
+        $ScriptBlock = {
+            [CmdletBinding()]
+            Param
+            (
+                [Parameter(Position=0)]
+                [string]
+                $ComputerName,
+ 
+                [Parameter(Position=1)]
+                [int]
+                $bgRunspaceID
+            )
+            $runspacetimers.$bgRunspaceID = Get-Date
+            
+            # Use this little embedded function later to join a bunch of wmi result properies to our final result object
+            function Join-Object ($inputobj, $objtoadd, $prefix) {
+                $result = $inputobj
+                foreach($prop in $objtoadd | get-member -type Properties | select -expand Name) {
+                    Add-Member -in $result -type NoteProperty -name &quot;$($prefix)$($prop)&quot; -value $objtoadd.($prop)
+                }
+                $result
+            }
+
+            function Prefix-StringArray ($array, $prefix) {
+                $result = [String[]]@()
+                foreach($item in $array) {
+                    $result = $result + &quot;$($prefix)$($item)&quot;
+                }
+                $result
+            }
+            
+            if (Test-Connection -ComputerName $ComputerName -Quiet -Count 1 -ErrorAction SilentlyContinue)
+            {
+                try
+                {
+                    Write-Verbose -Message &quot;WMI Query: $ComputerName&quot;
+                    $WMIHast = @{
+                        ComputerName = $ComputerName
+                        ErrorAction = 'Stop'
+                    }
+                    if ($LocalHost -notcontains $ComputerName)
+                    {
+                        $WMIHast.Credential = $Credential
+                    }
+                    $WMI_OSProps          = @('BuildNumber','Version','SerialNumber','ServicePackMajorVersion','CSDVersion','SystemDrive',`
+                                              'SystemDirectory','WindowsDirectory','Caption','TotalVisibleMemorySize','FreePhysicalMemory',`
+                                              'TotalVirtualMemorySize','FreeVirtualMemory','OSArchitecture','Organization','LocalDateTime',`
+                                              'RegisteredUser','OperatingSystemSKU','OSType','LastBootUpTime','InstallDate')
+                    $prefix_OSProps       = 'OS_'
+                    $WMI_ProcProps        = @('Name','Description','MaxClockSpeed','CurrentClockSpeed','AddressWidth','NumberOfCores','NumberOfLogicalProcessors')
+                    $prefix_ProcProps     = 'CPU_'
+                    $WMI_CompProps        = @('DNSHostName','Domain','Manufacturer','Model','NumberOfLogicalProcessors','NumberOfProcessors','PrimaryOwnerContact', `
+                                              'PrimaryOwnerName','SystemType','TotalPhysicalMemory')
+                    $prefix_CompProps     = 'System_'
+                    $WMI_ChassisProps     = @('ChassisTypes','Manufacturer','SerialNumber','Tag','SKU')
+                    $prefix_ChassisProps  =   'Chassis_'
+                    $WMI_MemProps         = @('BankLabel','DeviceLocator','Capacity','PartNumber','Speed','Tag')
+                    $prefix_MemProps      = 'Memory_'
+                    $WMI_MemArrayProps    = @('Tag','MemoryDevices','MaxCapacity')
+                    $prefix_MemArrayProps = 'MemoryArray_'
+                    $WMI_NetProps         = @('Description', 'DHCPServer','IpAddress','IpSubnet','DefaultIPGateway','DNSServerSearchOrder','WinsPrimaryServer', `
+                                              'WinsSecondaryServer')
+                    $prefix_NetProps      = 'Net_'
+                    # Modify this variable to change your default set of display properties
+                    $defaultProperties    = @('ComputerName','OSCaption','OSServicePack','OSVersion','OSSKU','Architecture', `
+                                              'PhysicalMemoryTotal','PhysicalMemoryFree','VirtualMemoryTotal','VirtualMemoryFree', `
+                                              'CPUCores','CPUSockets','MemorySlotsTotal','MemorySlotsUsed','SystemTime', `
+                                              'LastBootTime','InstallDate','Uptime')
+                    $SKUs                 = @(&quot;Undefined&quot;,&quot;Ultimate Edition&quot;,&quot;Home Basic Edition&quot;,&quot;Home Basic Premium Edition&quot;,&quot;Enterprise Edition&quot;,`
+                                              &quot;Home Basic N Edition&quot;,&quot;Business Edition&quot;,&quot;Standard Server Edition&quot;,&quot;DatacenterServer Edition&quot;,&quot;Small Business Server Edition&quot;,`
+                                              &quot;Enterprise Server Edition&quot;,&quot;Starter Edition&quot;,&quot;Datacenter Server Core Edition&quot;,&quot;Standard Server Core Edition&quot;,`
+                                              &quot;Enterprise ServerCoreEdition&quot;,&quot;Enterprise Server Edition for Itanium-Based Systems&quot;,&quot;Business N Edition&quot;,&quot;Web Server Edition&quot;,`
+                                              &quot;Cluster Server Edition&quot;,&quot;Home Server Edition&quot;,&quot;Storage Express Server Edition&quot;,&quot;Storage Standard Server Edition&quot;,`
+                                              &quot;Storage Workgroup Server Edition&quot;,&quot;Storage Enterprise Server Edition&quot;,&quot;Server For Small Business Edition&quot;,&quot;Small Business Server Premium Edition&quot;)
+                    $ChassisModels        = @(&quot;PlaceHolder&quot;,&quot;Maybe Virtual Machine&quot;,&quot;Unknown&quot;,&quot;Desktop&quot;,&quot;Thin Desktop&quot;,&quot;Pizza Box&quot;,&quot;Mini Tower&quot;,&quot;Full Tower&quot;,&quot;Portable&quot;,`
+                                              &quot;Laptop&quot;,&quot;Notebook&quot;,&quot;Hand Held&quot;,&quot;Docking Station&quot;,&quot;All in One&quot;,&quot;Sub Notebook&quot;,&quot;Space-Saving&quot;,&quot;Lunch Box&quot;,&quot;Main System Chassis&quot;,`
+                                              &quot;Lunch Box&quot;,&quot;SubChassis&quot;,&quot;Bus Expansion Chassis&quot;,&quot;Peripheral Chassis&quot;,&quot;Storage Chassis&quot; ,&quot;Rack Mount Unit&quot;,&quot;Sealed-Case PC&quot;)
+                    
+                    # Collect all of our wmi data
+                    $wmi_compsystem = Get-WmiObject @WMIHast -Class Win32_ComputerSystem | select $WMI_CompProps
+                    $wmi_os = Get-WmiObject @WMIHast -Class Win32_OperatingSystem | select $WMI_OSProps
+                    $wmi_proc = Get-WmiObject @WMIHast -Class Win32_Processor | select $WMI_ProcProps
+                    $wmi_chassis = Get-WmiObject @WMIHast -Class Win32_SystemEnclosure | select $WMI_ChassisProps
+                    $wmi_memory = Get-WmiObject @WMIHast -Class Win32_PhysicalMemory | select $WMI_MemProps
+                    $wmi_memoryarray = Get-WmiObject @WMIHast -Class Win32_PhysicalMemoryArray | select $WMI_MemArrayProps
+                    $wmi_net = Get-WmiObject @WMIHast -Class Win32_NetworkAdapterConfiguration | select $WMI_NetProps
+                    
+                    ## Calculated properties
+                    # CPU count
+                    if (@($wmi_proc)[0].NumberOfCores) #Modern OS
+                    {
+                        $Sockets = @($wmi_proc).Count
+                        $Cores = ($wmi_proc | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+                    }
+                    else #Legacy OS
+                    {
+                        $Sockets = @($wmi_proc | Select-Object -Property SocketDesignation -Unique).Count
+                        $Cores = @($wmi_proc).Count
+                    }
+                    
+                    # OperatingSystemSKU is not availble in 2003 and XP
+                    if ($wmi_os.OperatingSystemSKU -ne $null)
+                    {
+                        $OS_SKU = $SKUs[$wmi_os.OperatingSystemSKU]
+                    }
+                    else
+                    {
+                        $OS_SKU = 'Not Available'
+                    }
+                    $System_Time = ([wmi]'').ConvertToDateTime($wmi_os.LocalDateTime).tostring(&quot;MM/dd/yyyy HH:mm:ss&quot;)
+                    $OS_LastBoot = ([wmi]'').ConvertToDateTime($wmi_os.LastBootUptime).tostring(&quot;MM/dd/yyyy HH:mm:ss&quot;)
+                    $OS_InstallDate = ([wmi]'').ConvertToDateTime($wmi_os.InstallDate).tostring(&quot;MM/dd/yyyy HH:mm:ss&quot;)
+                    $Uptime = New-TimeSpan -Start $OS_LastBoot -End $System_Time                    
+                    $Memory_Slotstotal = 0
+                    $Memory_SlotsUsed = (@($wmi_memory)).Count                
+                    @($wmi_memoryarray) | % {$Memory_Slotstotal = $Memory_Slotstotal + $_.MemoryDevices}
+                    
+                    #region Create custom output object
+                    #Due to some bug setting scriptblock directly as value can cause 'NullReferenceException' in v3 host
+                    $ReadableOutput = @{
+                        Name = 'ToString'
+                        MemberType = 'ScriptMethod'
+                        PassThru = $true
+                        Force = $true
+                        Value = [ScriptBlock]::Create(@&quot;
+                            &quot;{0:N1} {1}&quot; -f @(
+                                switch -Regex ([math]::Log(`$this,1024)) {
+                                    ^0 {
+                                        (`$this / 1), ' B'
+                                    }
+                                    ^1 {
+                                        (`$this / 1KB), 'KB'
+                                    }
+                                    ^2 {
+                                        (`$this / 1MB), 'MB'
+                                    }
+                                    ^3 {
+                                        (`$this / 1GB), 'GB'
+                                    }
+                                    ^4 {
+                                        (`$this / 1TB), 'TB'
+                                    }
+                                    default {
+                                        (`$this / 1PB), 'PB'
+                                    }
+                                }
+                            )
+&quot;@
+                        )
+                    }
+
+                    $myObject = New-Object -TypeName PSObject -Property @{
+                        ### Defaults
+                        'PSComputerName' = $ComputerName
+                        'ComputerName' = $wmi_compsystem.DNSHostName                        
+                        'OSCaption' = $wmi_os.Caption
+                        'OSServicePack' = $wmi_os.ServicePackMajorVersion
+                        'OSVersion' = $wmi_os.Version
+                        'OSSKU' = $OS_SKU
+                        'Architecture' = $wmi_os.OSArchitecture
+                        'PhysicalMemoryTotal' = $wmi_os.TotalVisibleMemorySize | Add-Member @ReadableOutput
+                        'PhysicalMemoryFree' = $wmi_os.FreePhysicalMemory | Add-Member @ReadableOutput
+                        'VirtualMemoryTotal' = $wmi_os.TotalVirtualMemorySize | Add-Member @ReadableOutput
+                        'VirtualMemoryFree' = $wmi_os.FreeVirtualMemory | Add-Member @ReadableOutput
+                        'CPUCores' = $Cores
+                        'CPUSockets' = $Sockets
+                        'MemorySlotsTotal' = $Memory_Slotstotal
+                        'MemorySlotsUsed' = $Memory_SlotsUsed
+                        'SystemTime' = $System_Time
+                        'LastBootTime' = $OS_LastBoot
+                        'InstallDate' = $OS_InstallDate
+                        'Uptime' = &quot;$($Uptime.days) days $($Uptime.hours) hours $($Uptime.minutes) minutes&quot;
+                    }
+
+                    # Add in all the other wmi properties we gathered just in case anyone wants 'em
+                    $myObject = Join-Object $myObject $wmi_compsystem $prefix_CompProps
+                    $myObject = Join-Object $myObject $wmi_os $prefix_OSProps
+                    $myObject = Join-Object $myObject $wmi_proc $prefix_ProcProps
+                    $myObject = Join-Object $myObject $wmi_chassis $prefix_ChassisProps
+                    $myObject = Join-Object $myObject $wmi_memory $prefix_MemProps
+                    $myObject = Join-Object $myObject $wmi_memoryarray $prefix_MemArrayProps
+                    $myObject = Join-Object $myObject $wmi_net $prefix_NetProps
+
+                    # Setup the default properties for output
+                    $myObject.PSObject.TypeNames.Insert(0,'My.Asset.Info')
+                    $defaultDisplayPropertySet = New-Object System.Management.Automation.PSPropertySet(‘DefaultDisplayPropertySet’,[string[]]$defaultProperties)
+                    $PSStandardMembers = [System.Management.Automation.PSMemberInfo[]]@($defaultDisplayPropertySet)
+                    $myObject | Add-Member MemberSet PSStandardMembers $PSStandardMembers
+                    #endregion
+                    
+                    # Add property sets for your convenience
+                    $myObject | Add-Member PropertySet &quot;Default&quot; ([string[]]@($defaultProperties))
+                    $myObject | Add-Member PropertySet &quot;OS&quot; ([string[]]@(Prefix-StringArray $WMI_OSProps $prefix_OSProps))
+                    $myObject | Add-Member PropertySet &quot;System&quot; ([string[]]@(Prefix-StringArray $WMI_CompProps $prefix_CompProps))
+                    $myObject | Add-Member PropertySet &quot;Processor&quot; ([string[]]@(Prefix-StringArray $WMI_ProcProps $prefix_ProcProps))
+                    $myObject | Add-Member PropertySet &quot;Chassis&quot; ([string[]]@(Prefix-StringArray $WMI_ChassisProps $prefix_ChassisProps))
+                    $myObject | Add-Member PropertySet &quot;Memory&quot; ([string[]]@(Prefix-StringArray $WMI_MemProps $prefix_MemProps))
+                    $myObject | Add-Member PropertySet &quot;MemoryArray&quot; ([string[]]@(Prefix-StringArray $WMI_MemArrayProps $prefix_MemArrayProps))
+                    $myObject | Add-Member PropertySet &quot;Network&quot; ([string[]]@(Prefix-StringArray $WMI_NetProps $prefix_NetProps))
+
+                    Write-Output -InputObject $myObject
+                }
+                catch
+                {
+                    Write-Warning -Message ('{0}: {1}' -f $ComputerName, $_.Exception.Message)
+                }
+            }
+            else
+            {
+                Write-Warning -Message (&quot;{0}: Unavailable&quot; -f $ComputerName)
+            }
+        }
+ 
+        function Get-Result
+        {
+            [CmdletBinding()]
+            Param 
+            (
+                [switch]$Wait
+            )
+            do
+            {
+                $More = $false
+                foreach ($runspace in $runspaces)
+                {
+                    $StartTime = $runspacetimers.($runspace.ID)
+                    if ($runspace.Handle.isCompleted)
+                    {
+                        Write-Verbose -Message ('Thread done for {0}' -f $runspace.IObject)
+                        $runspace.PowerShell.EndInvoke($runspace.Handle)
+                        $runspace.PowerShell.Dispose()
+                        $runspace.PowerShell = $null
+                        $runspace.Handle = $null
+                    }
+                    elseif ($runspace.Handle -ne $null)
+                    {
+                        $More = $true
+                    }
+                    if ($Timeout -and $StartTime)
+                    {
+                        if ((New-TimeSpan -Start $StartTime).TotalSeconds -ge $Timeout -and $runspace.PowerShell)
+                        {
+                            Write-Warning -Message ('Timeout {0}' -f $runspace.IObject)
+                            $runspace.PowerShell.Dispose()
+                            $runspace.PowerShell = $null
+                            $runspace.Handle = $null
+                        }
+                    }
+                }
+                if ($More -and $PSBoundParameters['Wait'])
+                {
+                    Start-Sleep -Milliseconds 100
+                }
+                foreach ($threat in $runspaces.Clone())
+                {
+                    if ( -not $threat.handle)
+                    {
+                        Write-Verbose -Message ('Removing {0} from runspaces' -f $threat.IObject)
+                        $runspaces.Remove($threat)
+                    }
+                }
+                if ($ShowProgress)
+                {
+                    $ProgressSplatting = @{
+                        Activity = 'Getting asset info'
+                        Status = '{0} of {1} total threads done' -f ($bgRunspaceCounter - $runspaces.Count), $bgRunspaceCounter
+                        PercentComplete = ($bgRunspaceCounter - $runspaces.Count) / $bgRunspaceCounter * 100
+                    }
+                    Write-Progress @ProgressSplatting
+                }
+            }
+            while ($More -and $PSBoundParameters['Wait'])
+        }
+    }
+    Process
+    {
+        foreach ($Computer in $ComputerName)
+        {
+            $bgRunspaceCounter++
+            $psCMD = [System.Management.Automation.PowerShell]::Create().AddScript($ScriptBlock).AddParameter('bgRunspaceID',$bgRunspaceCounter).AddParameter('ComputerName',$Computer)
+            $psCMD.RunspacePool = $rp
+ 
+            Write-Verbose -Message ('Starting {0}' -f $Computer)
+            [void]$runspaces.Add(@{
+                Handle = $psCMD.BeginInvoke()
+                PowerShell = $psCMD
+                IObject = $Computer
+                ID = $bgRunspaceCounter
+           })
+           Get-Result
+        }
+    }
+ 
+    End
+    {
+        Get-Result -Wait
+        if ($ShowProgress)
+        {
+            Write-Progress -Activity 'Getting asset info' -Status 'Done' -Completed
+        }
+        Write-Verbose -Message &quot;Closing runspace pool&quot;
+        $rp.Close()
+        $rp.Dispose()
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

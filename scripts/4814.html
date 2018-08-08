@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>desktops (demo) - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>desktops (demo)</h1>
+<h3><a href="//scripts/4814.ps1">download</a></h3>
+<pre><code class="language-posh">$code =  @'
+using System;
+using System.Threading;
+using System.Reflection;
+using System.Runtime.InteropServices;
+
+[assembly: AssemblyVersion(&quot;2.0.0.0&quot;)]
+[assembly: CLSCompliant(true)]
+[assembly: ComVisible(false)]
+
+namespace Desktops {
+  internal static class NativeMethods {
+    internal enum ACCESS_MASK : uint { //UInt32
+      DESKTOP_NONE            = 0,
+      DESKTOP_READOBJECTS     = 0x0001,
+      DESKTOP_CREATEWINDOW    = 0x0002,
+      DESKTOP_CREATEMENU      = 0x0004,
+      DESKTOP_HOOKCONTROL     = 0x0008,
+      DESKTOP_JOURNALRECORD   = 0x0010,
+      DESKTOP_JOURNALPLAYBACK = 0x0020,
+      DESKTOP_ENUMERATE       = 0x0040,
+      DESKTOP_WRITEOBJECTS    = 0x0080,
+      DESKTOP_SWITCHDESKTOP   = 0x0100,
+      
+      GENERIC_ALL = (DESKTOP_CREATEMENU | DESKTOP_CREATEWINDOW | DESKTOP_ENUMERATE |
+             DESKTOP_HOOKCONTROL | DESKTOP_JOURNALPLAYBACK | DESKTOP_JOURNALRECORD |
+                DESKTOP_READOBJECTS | DESKTOP_SWITCHDESKTOP | DESKTOP_WRITEOBJECTS )
+    }
+    
+    [DllImport(&quot;kernel32.dll&quot;)]
+    internal static extern UInt32 GetCurrentThreadId();
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean CloseDesktop(IntPtr hDesktop);
+    
+    [DllImport(&quot;user32.dll&quot;, CharSet = CharSet.Unicode)]
+    internal static extern IntPtr CreateDesktop(
+      String lpszDesktop, String lpszDevice, String pDevmode,
+      Int32 dwFlags, ACCESS_MASK dwDesiredAccess, IntPtr lpsa
+    );
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    internal static extern IntPtr GetThreadDesktop(UInt32 dwThreadId);
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean SetThreadDesktop(IntPtr hDesktop);
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean SwitchDesktop(IntPtr hDesktop);
+  }
+  
+  public sealed class VirtualDesktop {
+    private VirtualDesktop() {}
+    
+    public static void CreateDemoDesktop(String deskName) {
+      //current desktop pointer
+      IntPtr oldDesk = NativeMethods.GetThreadDesktop(NativeMethods.GetCurrentThreadId());
+      //new desktop
+      IntPtr newDesk = NativeMethods.CreateDesktop(deskName, null, null, 0,
+                       NativeMethods.ACCESS_MASK.GENERIC_ALL, IntPtr.Zero);
+      NativeMethods.SetThreadDesktop(newDesk);
+      NativeMethods.SwitchDesktop(newDesk);
+      //timeout
+      Thread.Sleep(10000);
+      //delete desktop
+      NativeMethods.SwitchDesktop(oldDesk);
+      NativeMethods.CloseDesktop(newDesk);
+    }
+  }
+}
+'@
+
+function frmMain_Show {
+  Add-Type -Assembly System.Windows.Forms
+  Add-Type $code
+  [Windows.Forms.Application]::EnableVisualStyles()
+
+  $dsk = 0
+  $ico = [Drawing.Icon]::ExtractAssociatedIcon(($PSHome + '\powershell.exe'))
+  $scr = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+  $btn = New-Object &quot;Windows.Forms.Button[,]&quot; 2, 2
+  $pnt = New-Object Drawing.Point(($scr.Width - 395), ($scr.Height - 245))
+  
+  $frmMain = New-Object Windows.Forms.Form
+  $mnuIcon = New-Object Windows.Forms.ContextMenuStrip
+  $mnuExit = New-Object Windows.Forms.ToolStripMenuItem
+  $niPopup = New-Object Windows.Forms.NotifyIcon
+  #
+  #common
+  #
+  $mnuIcon.Items.AddRange(@($mnuExit))
+  #
+  #mnuExit
+  #
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click({
+    $niPopup.Visible = $false
+    $frmMain.Close()
+  })
+  #
+  #niPopup
+  #
+  $niPopup.ContextMenuStrip = $mnuIcon
+  $niPopup.Icon = $ico
+  $niPopup.Text = &quot;Desktops&quot;
+  $niPopup.Visible = $true
+  $niPopup.Add_Click({$frmMain.Location = $pnt})
+  #
+  #frmMain
+  #
+  $frmMain.ClientSize = New-Object Drawing.Size(390, 240)
+  $frmMain.FormBorderStyle = [Windows.Forms.FormBorderStyle]::None
+  $frmMain.Icon = $ico
+  $frmMain.Location = $pnt
+  $frmMain.ShowInTaskbar = $false
+  $frmMain.StartPosition = [Windows.Forms.FormStartPosition]::Manual
+  $frmMain.Text = &quot;Desktops&quot;
+  $frmMain.TopMost = $true
+  $frmMain.Add_Load({
+    for ($i = 0; $i -lt 2; $i++) {
+      for ($j = 0; $j -lt 2; $j++) {
+        $btn[$i, $j] = New-Object Windows.Forms.Button
+        $btn[$i, $j].Parent = $this
+        $btn[$i, $j].Left = 6 + $j * 190
+        $btn[$i, $j].Top = 10 + $i * 110
+        $btn[$i, $j].Size = New-Object Drawing.Size(190, 110)
+        $btn[$i, $j].Tag = $dsk++
+        $btn[$i, $j].Text = $(
+          if ($dsk -ne 1) {
+            'Press to create Desktop' + $dsk
+          }
+          else {
+            get $btn[$i, $j]
+          }
+        )
+        #add desktop
+        $btn[$i, $j].Add_Click({
+          #hide form (do not use Hide() method because it close form)
+          $frmMain.Location = New-Object Drawing.Point($scr.Width, $scr.Height)
+          #remove label and create desktop
+          if (![String]::IsNullOrEmpty($this.Text)) {
+            [Desktops.VirtualDesktop]::CreateDemoDesktop($this.Tag.ToString())
+          }
+        }) #btnX_Click
+      } #for
+    } #for
+  })
+  
+  #take piece of screen
+  function get([Windows.Forms.Button]$ins) {
+    $pic = New-Object Drawing.Bitmap(190, 110)
+    $gfx = [Drawing.Graphics]::FromImage($pic)
+    $gfx.CopyFromScreen([Drawing.Point]::Empty, [Drawing.Point]::Empty, $pic.Size)
+    $gfx.Dispose()
+    
+    $bytes = (New-Object Drawing.ImageConverter).ConvertTo($pic, [Byte[]])
+    $ins.Image = [Drawing.Image]::FromStream(
+      (New-Object IO.MemoryStream($bytes, 0, $bytes.Length))
+    )
+  }
+  
+  [void]$frmMain.ShowDialog()
+}
+
+frmMain_Show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

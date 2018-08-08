@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Get-RemoteRegistry - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-RemoteRegistry</h1>
+<h3><a href="//scripts/614.ps1">download</a> - <a href="//scripts/181.md">parent</a></h3>
+<p>A script to do a query on a remote registry key or value ...
+Because the Registry provider inexplicably doesn't support it ;)</p>
+<pre><code class="language-posh">## Get-RemoteRegistry
+########################################################################################
+## Version: 2.0
+##  + I added the &quot;Properties&quot; parameter so you can select specific registry values
+## NOTE: you have to have access, and the remote registry service has to be running
+########################################################################################
+## USAGE:
+##   Get-RemoteRegistry $RemotePC &quot;HKLM\SOFTWARE\Microsoft\NET Framework Setup\NDP&quot;
+##     * Returns a list of subkeys (because this key has no properties)
+##   Get-RemoteRegistry $RemotePC &quot;HKLM\SOFTWARE\Microsoft\NET Framework Setup\NDP\v2.0.50727&quot;
+##     * Returns a list of subkeys and all the other &quot;properties&quot; of the key
+##   Get-RemoteRegistry $RemotePC &quot;HKLM\SOFTWARE\Microsoft\NET Framework Setup\NDP\v2.0.50727\Version&quot;
+##     * Returns JUST the full version of the .Net SP2 as a STRING (to preserve prior behavior)
+##   Get-RemoteRegistry $RemotePC &quot;HKLM\SOFTWARE\Microsoft\NET Framework Setup\NDP\v2.0.50727&quot; Version
+##     * Returns a custom object with the property &quot;Version&quot; = &quot;2.0.50727.3053&quot; (your version)
+##   Get-RemoteRegistry $RemotePC &quot;HKLM\SOFTWARE\Microsoft\NET Framework Setup\NDP\v2.0.50727&quot; Version,SP
+##     * Returns a custom object with &quot;Version&quot; and &quot;SP&quot; (Service Pack) properties
+##
+##  For fun, get all versions (2.0 and greater) and return version + service pack:
+##    Get-RemoteRegistry $RemotePC &quot;HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP&quot; | 
+##    Select -Expand Subkeys | 
+##    ForEach-Object { Get-RemoteRegistry Duo &quot;HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP\$_&quot; Version,SP }
+##
+########################################################################################
+# Function Get-RemoteRegistry {
+param(
+    [string]$computer = $(Read-Host &quot;Remote Computer Name&quot;)
+   ,[string]$Path     = $(Read-Host &quot;Remote Registry Path (must start with HKLM,HKCU,etc)&quot;)
+   ,[string[]]$Properties
+   ,[switch]$Verbose
+)
+if ($Verbose) { $VerbosePreference = 2 } # Only affects this script.
+
+   $root, $last = $Path.Split(&quot;\&quot;)
+   $last = $last[-1]
+   $Path = $Path.Substring($root.Length + 1,$Path.Length - ( $last.Length + $root.Length + 2))
+
+   #split the path to get a list of subkeys that we will need to access
+   # ClassesRoot, CurrentUser, LocalMachine, Users, PerformanceData, CurrentConfig, DynData
+   switch($root) {
+      &quot;HKCR&quot;  { $root = &quot;ClassesRoot&quot;}
+      &quot;HKCU&quot;  { $root = &quot;CurrentUser&quot; }
+      &quot;HKLM&quot;  { $root = &quot;LocalMachine&quot; }
+      &quot;HKU&quot;   { $root = &quot;Users&quot; }
+      &quot;HKPD&quot;  { $root = &quot;PerformanceData&quot;}
+      &quot;HKCC&quot;  { $root = &quot;CurrentConfig&quot;}
+      &quot;HKDD&quot;  { $root = &quot;DynData&quot;}
+      default { return &quot;Path argument is not valid&quot; }
+   }
+
+
+   #Access Remote Registry Key using the static OpenRemoteBaseKey method.
+   Write-Verbose &quot;Accessing $root from $computer&quot;
+   $rootkey = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey($root,$computer)
+   if(-not $rootkey) { Write-Error &quot;Can't open the remote $root registry hive&quot; }
+
+   Write-Verbose &quot;Opening $Path&quot;
+   $key = $rootkey.OpenSubKey( $Path )
+   if(-not $key) { Write-Error &quot;Can't open $($root + '\' + $Path) on $computer&quot; }
+
+   $subkey = $key.OpenSubKey( $last )
+   
+   $output = new-object object
+
+   if($subkey -and $Properties -and $Properties.Count) {
+      foreach($property in $Properties) {
+         Add-Member -InputObject $output -Type NoteProperty -Name $property -Value $subkey.GetValue($property)
+      }
+      Write-Output $output
+   } elseif($subkey) {
+      Add-Member -InputObject $output -Type NoteProperty -Name &quot;Subkeys&quot; -Value @($subkey.GetSubKeyNames())
+      foreach($property in $subkey.GetValueNames()) {
+         Add-Member -InputObject $output -Type NoteProperty -Name $property -Value $subkey.GetValue($property)
+      }
+      Write-Output $output
+   }
+   else
+   {
+      $key.GetValue($last)
+   }
+# }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Josh Feierman">
+    <title>Compare-SQLResultSet - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Compare-SQLResultSet</h1>
+<h3><a href="//scripts/3709.ps1">download</a></h3>
+<p>A function to compare result sets from SQL Server queries. I wrote it to help with ensuring that original and modified code returned the same results. Currently only works with similarly shaped results sets (i.e. those with the same number of columns).</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+  Compares two result sets from SQL queries for differences.
+.DESCRIPTION
+  Compares the result sets from two SQL queries and outputs the
+  differences.
+  
+  Currently the function only handles similarly shaped result sets. That is,
+  result sets with the same number and names of columns. Functionality will be
+  added in the future to allow for comparison and differencing of disparate result
+  sets.
+.PARAMETER ServerName1
+  The name of the server on which the first query should be executed.
+.PARAMETER DatabaseName1
+  The name of the database on which the first query should be executed.
+.PARAMETER Query1
+  The first SQL query to be executed.
+.PARAMETER ServerName2
+  The name of the server on which the second query should be executed.
+.PARAMETER DatabaseName2
+  The name of the database on which the second query should be executed.
+.PARAMETER Query2
+  The second SQL query to be executed.
+.EXAMPLE
+  Compare-SQLResultSet -ServerName1 myServer1 -DatabaseName1 myDatabase -Query1 &quot;exec dbo.myproc&quot; -ServerName2 myServer2 -DatabaseName2 myDatabase -Query2 &quot;exec dbo.myproc_changed&quot;
+
+  Could be used to compare two result sets from the same server and database, but two different
+  procedures. Useful for comparing old and new code.
+.NOTES
+  Author: Josh Feierman
+  Version: 1
+
+#&gt;
+function Compare-SQLResultSet
+{
+  [Cmdletbinding()]
+  param
+  (
+      [parameter(mandatory=$true)]
+      [String]$ServerName1,
+      [parameter(mandatory=$true)]
+      [String]$DatabaseName1,
+      [parameter(mandatory=$true)]
+      [String]$Query1,
+      [parameter(mandatory=$true)]
+      [String]$ServerName2,
+      [parameter(mandatory=$true)]
+      [String]$DatabaseName2,
+      [parameter(mandatory=$true)]
+      [String]$Query2
+  )
+  try
+  {
+      if (-not (Get-Module -Name SQLPS -ListAvailable))
+      {
+          Write-Warning &quot;The SQLPS module is not installed, please obtain and install it.&quot;
+          return
+      }
+      Import-Module SQLPS
+  
+      #Get the two result sets
+      $resultSet1 = Invoke-Sqlcmd -ServerInstance $ServerName1 -Database $DatabaseName1 -Query $Query1
+      $resultSet2 = Invoke-Sqlcmd -ServerInstance $ServerName2 -Database $DatabaseName2 -Query $Query2
+  
+      #Get a count of records in both sets, so we can iterate over the correct number
+      $firstCount = $resultSet1.Count
+      $secondCount = $resultSet2.Count
+  
+      if ($firstCount -gt $secondCount) {$totalCount = $firstCount}
+      elseif ($secondCount -gt $firstCount) {$totalCount = $secondCount}
+      else {$totalCount = $firstCount}
+  
+      #Begin iteration
+      for ($counter = 0; $counter -lt $totalCount; $counter ++)
+      {
+          #Get the row from the first result set
+          if ($counter -lt $firstCount)
+          {
+              $firstRow = $resultSet1[$counter]
+          }
+          else
+          {
+              $firstRow = $null
+          }
+          if ($counter -lt $secondCount)
+          {
+              $secondRow = $resultSet2[$counter]
+          }
+          else
+          {
+              $secondRow = $null
+          }
+  
+          #Create custom output object for comparison
+          $compareObject = New-Object PSObject -Property @{
+              RowNumber = $counter + 1
+              ColumnName = $null
+              FirstValue = $null
+              SecondValue = $null
+          }
+  
+          #Get a list of columns
+          $properties = Get-Member -inputObject $firstRow -MemberType Properties
+  
+          foreach ($property in $properties)
+          {
+              $firstValue = $firstRow.Item($property.Name)
+              $secondValue = $secondRow.Item($property.Name)
+  
+              if ($firstValue -ne $secondValue)
+              {
+                  $compareObject.ColumnName = $property.Name
+                  $compareObject.FirstValue = $firstValue
+                  $compareObject.SecondValue = $secondValue
+  
+                  Write-Output $compareObject
+              }
+          }
+      }
+  }
+  catch
+  {
+      Write-Warning $_.Exception.Message
+  }
+
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

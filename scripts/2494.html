@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Steven Murawski">
+    <title>Set-AppCompatFlag - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-AppCompatFlag</h1>
+<h3><a href="//scripts/2494.ps1">download</a></h3>
+<p>Sets Application Compatibility flags for an application.  (Same as on the Compatibility tab of the properties.)</p>
+<pre><code class="language-posh">&lt;# 
+       .SYNOPSIS 
+        Sets the Compatibility flags for an application. 
+       
+       .EXAMPLE 
+        Set-AppCompatFlag.ps1 -Path 'c:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe'
+        This sets the RUNASADMIN flag for the ISE
+        
+       .EXAMPLE 
+        Set-AppCompatFlag.ps1 -Path 'c:\windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe' -ComputerName RemoteServer01 
+        This sets the RUNASADMIN flag for the ISE on RemoteServer01.
+        
+       .PARAMETER  Path
+        The full path to the executable to flag for compatibility.
+       
+       .PARAMETER  ComputerName
+        Computer to run the command against.  If this is a remote computer, the Remote Registry service needs to be running.  This defaults to the local machine.
+       
+       .PARAMETER  Scope
+        The scope to set the compatibility flag at.  This can be the CurrentUser or the LocalMachine level.  The default is CurrentUser.
+       
+       .PARAMETER  Flag
+        The compatibility flag to set.  Currently supports:
+            &quot;RUNASADMIN&quot;, 
+            &quot;WINSRV03SP1&quot;, 
+            &quot;WINSRV08SP1&quot;,
+            &quot;WINXPSP2&quot;, 
+            &quot;WINXPSP3&quot;, 
+            &quot;DISABLETHEMES&quot;, 
+            &quot;640X480&quot;, 
+            &quot;HIGHDPIAWARE&quot;, 
+            &quot;256COLOR&quot;,
+            &quot;DISABLEDWM&quot;.  
+        The default is RUNASADMIN.
+
+       .NOTES 
+        NAME: Set-AppCompatFlag
+        AUTHOR: Steven Murawski 
+        LASTEDIT: February 07, 2011 5:27:44 PM
+        KEYWORDS: 
+         
+        #Requires -Version 2.0 
+#&gt; 
+    param(
+        [Parameter(
+            Mandatory=$true,
+            ValueFromPipeline=$true,
+            ValueFromPipelineByPropertyName=$true,
+            Position=0)] 
+        [alias('FullName','FullPath')]
+        [string] 
+        $Path,
+        [Parameter(
+            ValueFromPipeline=$true,
+            ValueFromPipelineByPropertyName=$true,
+            Position=1)] 
+        [string[]] 
+        $ComputerName,
+        [Parameter(Position=2)]
+        [string]
+        [ValidateSet(&quot;CurrentUser&quot;, &quot;LocalMachine&quot;)] 
+        $Scope = &quot;CurrentUser&quot;,
+        [Parameter(Position=3)]
+        [string]
+        [ValidateSet(&quot;RUNASADMIN&quot;, 
+            &quot;WINSRV03SP1&quot;, 
+            &quot;WINSRV08SP1&quot;,
+            &quot;WINXPSP2&quot;, 
+            &quot;WINXPSP3&quot;, 
+            &quot;DISABLETHEMES&quot;, 
+            &quot;640X480&quot;, 
+            &quot;HIGHDPIAWARE&quot;, 
+            &quot;256COLOR&quot;,
+            &quot;DISABLEDWM&quot;)] 
+        $Flag = &quot;RUNASADMIN&quot;
+    )
+    
+    process
+    {
+        if (($ComputerName -eq $null) -or ($ComputerName.count -lt 1))
+        {
+            $ComputerName = @($env:COMPUTERNAME)
+        }
+        
+        foreach ($Computer in $ComputerName)
+        {
+            try
+            {
+                Write-Debug &quot;Opening Remote Registry&quot;
+                $reg = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey($Scope, $Computer)   
+                                   
+                Write-Debug 'Reading SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers'   
+                $keys = $reg.OpenSubKey('SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers', $true)
+                
+                
+                Write-Debug &quot;Checking to see if $Path already has AppCompatFlags&quot;
+                
+                $NotFlagged = $true
+                $NotSet = $true
+                
+                if ($keys.GetValueNames() -contains $Path)
+                {
+                    Write-Debug &quot;Checking to see if $Path already has $Flag set&quot;
+                    if ($keys.GetValue($Path) -like &quot;*$Flag*&quot;)
+                    {
+                        $NotFlagged = $false
+                        Write-Debug &quot;Found Application and it was already flagged - $Flag&quot;
+                    }
+                    else
+                    {
+                        $CurrentValue = $keys.GetValue($Path)
+                        Write-Debug &quot;Adding $Flag for $path  to $Current on $Computer&quot;
+                        $NewFlag = &quot;$CurrentValue $Flag&quot;
+                        
+                        Write-Debug &quot;Setting $Flag for $path on $Computer&quot;
+                        $Keys.SetValue($path, $NewFlag)
+                        Write-Verbose &quot;Set $NewFlag for $path on $Computer&quot;
+                        $NotSet = $false
+                    }
+                }
+                
+                if ($NotFlagged -and $NotSet)
+                {
+                    Write-Debug &quot;Setting $Flag for $path on $Computer&quot;
+                    $keys.SetValue(&quot;$path&quot;,&quot;$flag&quot;)
+                    
+                    Write-Verbose &quot;Set $Flag for $path on $Computer&quot;
+                }
+                else
+                {
+                    Write-Debug &quot;Did not set $Flag for $Path on $Computer.  Flag already existed.&quot;
+                    Write-Verbose &quot;Did not set $Flag for $Path on $Computer.  Flag already existed.&quot;
+                }
+            }
+            catch [Exception]
+            {
+                Write-Debug &quot;Failed to connect to the remote registery or error reading the remote key.&quot;
+                Write-Error $_.Exception
+            }
+        }
+    }
+    
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

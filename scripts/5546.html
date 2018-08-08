@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Ping-WSMan - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Ping-WSMan</h1>
+<h3><a href="//scripts/5546.ps1">download</a></h3>
+<p>It's like Test-WSMan but you can set the flags, so you can turn off CACheck and CNCheck (and I do, by default)</p>
+<p>And it might even work ;-)</p>
+<p>Note: this version doesn't support certificates yet</p>
+<pre><code class="language-posh">Import-Module Microsoft.WSMan.Management
+Add-Type @&quot;
+  [System.Flags]
+  public enum WSManSessionFlags {
+    None = 0, UseUtf8 = 1, SkipCACheck = 8192, SkipCNCheck = 16384, UseSsl = 134217728,
+    UseNoAuthentication = 32768, 
+    Negotiate = 131072, Kerberos = 524288, ClientCertificate = 2097152, 
+    Digest = 65536, Basic = 262144, CredSsp = 16777216, CredUserNamePassword = 4096, 
+    
+    NoEncryption = 1048576,  EnableSpnServerPort = 4194304, UseUtf16 = 8388608, 
+    SkipRevocationCheck = 33554432, AllowNegotiateImplicitCredentials = 67108864
+  }
+
+  [System.Flags]
+  public enum WSManSessionOptions {
+    None = 0, UseUtf8 = 1, UseUtf16 = 8388608, 
+    SkipCACheck = 8192, SkipCNCheck = 16384, UseSsl = 134217728,
+    NoEncryption = 1048576,  EnableSpnServerPort = 4194304, 
+    SkipRevocationCheck = 33554432, AllowNegotiateImplicitCredentials = 67108864    
+  }
+
+  [System.Flags]
+  public enum WSManAuthentication {
+    None = 32768, Basic = 266240, Negotiate = 131072, Kerberos = 524288, 
+    ClientCertificate = 2097152, Digest = 69632, CredSsp = 16781312
+  }
+&quot;@
+
+function Ping-WsMan {
+    #.Synopsis
+    # It's like Test-WSMan, but with SessionOptions
+    #.Description
+    # This just calls Identify, and it relies on Microsoft.WSMan.Management classes
+    # but it lets you specify some SessionOptions that aren't available on Test-WSMan
+    [CmdletBinding()]
+    param(
+        [Parameter(ParameterSetName=&quot;ComputerName&quot;)]
+        [Alias(&quot;CN&quot;)]
+        $ComputerName = 'localhost',
+
+        [Parameter(ParameterSetName=&quot;ComputerName&quot;)]
+        [int]$Port = 5985,
+
+        [Parameter(ParameterSetName=&quot;ComputerName&quot;)]
+        [string]$ApplicationName,
+        
+        [Parameter(ParameterSetName=&quot;Url&quot;)]
+        [string]$Uri = &quot;${ComputerName}:${Port}&quot; + $( if($ApplicationName){ &quot;/$ApplicationName&quot; } ),
+
+        [Switch]$UseSsl,
+
+        [WSManSessionOptions]$SessionOptions = (&quot;SkipCACheck&quot;,&quot;SkipCNCheck&quot;),
+
+        [WSManAuthentication]$Authentication = &quot;None&quot;,
+
+        [System.Management.Automation.Credential()]
+        [pscredential]$Credential
+    )
+
+    if($UseSsl) {
+        if(!$Port){ $Port = 5986 }
+        $SessionOptions += &quot;UseSsl&quot;
+        $Uri = &quot;${ComputerName}:${Port}&quot; + $( if($ApplicationName){ &quot;/$ApplicationName&quot; } )
+    }
+
+    [WSManSessionFlags]$SessionFlags = $SessionOptions -bor $Authentication
+    $wsman = New-Object Microsoft.WSMan.Management.WSManClass
+    
+    if($Credential) {
+        if($Authentication -eq &quot;None&quot;) {
+            $SessionFlags -= &quot;UseNoAuthentication&quot;
+            $SessionFlags += &quot;CredUserNamePassword&quot;
+        }
+        $options = [System.__ComObject].InvokeMember('CreateConnectionOptions', 'InvokeMethod', $null, $wsman, $null)
+        $options.UserName = $Credential.UserName
+        $options.Password = $Credential.GetNetworkCredential().Password
+        $Parameters = $Uri, $SessionFlags, $options
+    } else {
+        $Parameters = $Uri, $SessionFlags
+    }
+
+    Write-Verbose $SessionFlags
+
+    $session = [System.__ComObject].InvokeMember('CreateSession', 'InvokeMethod', $null, $wsman, $Parameters)
+     
+    $([Xml]$session.Identify(0)).DocumentElement
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

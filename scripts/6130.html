@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="govnyakha">
+    <title>doxc2txt wi&#39;out MSOffice - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>doxc2txt wi'out MSOffice</h1>
+<h3><a href="//scripts/6130.ps1">download</a></h3>
+<p>Original post found at http://www.cyberforum.ru/post8436749.html</p>
+<pre><code class="language-posh">#requires -version 2
+function Convert-Docx2Text {
+  &lt;#
+    .SYNOPSIS
+        Converts DOCX to TXT file without MS Office.
+    .DESCRIPTION
+        Creates text file in the same directory where original document
+        is placed. This demo function does not use third party tools or
+        libraries.
+    .EXAMPLE
+        PS C:\Users\Admin\Documents&gt; Convert-Docx2Text pecoff_v83.docx
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true)]
+    [ValidateScript({Test-Path $_})]
+    [String]$FileName
+  )
+  
+  begin {
+    # MIME of DOCX is application/x-zip-compressed
+    $FindMimeFromData = {
+      [OutputType([String])]
+      param(
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [String]$FileName
+      )
+      
+      Add-Type -AssemblyName ($$ = 'PresentationCore')
+      try {
+        $fs = [IO.File]::OpenRead($FileName)
+        if (($len = $fs.Length) -gt 4096) { $len = 4096 }
+        $buf = New-Object &quot;Byte[]&quot; $len
+        [void]$fs.Read($buf, 0, $buf.Length)
+        
+        $gch = [Runtime.InteropServices.GCHandle]::Alloc($buf, 'Pinned')
+        $ptr = $gch.AddrOfPinnedObject()
+        
+        if (([AppDomain]::CurrentDomain.GetAssemblies() | ? {
+          $_.ManifestModule.ScopeName.Equals(&quot;$$.dll&quot;)
+        }).GetType(
+          'MS.Win32.Compile.UnsafeNativeMethods'
+        ).GetMethod(
+          'FindMimeFromData', [Reflection.BindingFlags]40
+        ).Invoke($null, (
+          $$ = [Object[]]($null, $FileName, $ptr, [Int32]$len, $null, 0, $mime, 0)
+        )) -ne 0) {
+          throw New-Object Exception('Could not get MIME type.')
+        }
+      }
+      catch { $_.Exception }
+      finally {
+        if ($gch -ne $null) { $gch.Free() }
+        if ($fs -ne $null) { $fs.Close() }
+      }
+      $$[6] # MIME
+    }
+    
+    $FileName = Convert-Path $FileName
+  }
+  process {
+    # check MIME and extension of input file
+    if (($ext = (Get-Item $FileName).Extension) -ne '.docx'-and
+        $FindMimeFromData.Invoke($FileName) -ne 'application/x-zip-compressed'
+    ) {
+      Write-Warning 'unsupported file format.'
+    }
+    # locate word/document.xml deflated data
+    try {
+      $fs = [IO.File]::OpenRead($FileName)
+      $br = New-Object IO.BinaryReader($fs)
+      
+      while ($true) {
+        if ($br.ReadUInt32() -ne 67324752) {break} # no more local headers
+        $fs.Position += 14
+        $csz = $br.ReadUInt32() # compressed size of data (can be skipped?)
+        $fs.Position += 4
+        $fnl = $br.ReadUInt16() # file name length
+        $efl = $br.ReadUInt16() # extra field length
+        if ((-join $br.ReadChars($fnl)) -eq 'word/document.xml') {
+          $fs.Position += $efl # skip extra field data
+          try { # extract compressed data (xml)
+            $ds = New-Object IO.Compression.DeflateStream($fs, 'Decompress')
+            $of = [IO.File]::Create(($$ = $FileName -replace $ext, '.txt'))
+            
+            while ($true) {
+              $buf = New-Object &quot;Byte[]&quot; 100
+              $get = $ds.Read($buf, 0, $buf.Length)
+              $of.Write($buf, 0, $get)
+              
+              if ($get -ne $buf.Length) {break}
+            }
+          }
+          catch { $_.Exception }
+          finally {
+            if ($of -ne $null) { $of.Close() }
+            if ($ds -ne $null) { $ds.Close() }
+          }
+          break
+        }
+        $fs.Position += $efl + $csz
+      }
+    }
+    catch { $_.Exception }
+    finally {
+      if ($br -ne $null) { $br.Close() }
+      if ($fs -ne $null) { $fs.Close() }
+    }
+  }
+  end {
+    if (Test-Path $$) { # convert xml to text
+      $xml = [xml](Get-Content $$)
+      Out-File $$ -InputObject $xml.document.InnerText -Encoding Default
+    }
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

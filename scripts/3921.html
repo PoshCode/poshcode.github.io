@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Matt Graeber">
+    <title>ConvertFrom-SDDL - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ConvertFrom-SDDL</h1>
+<h3><a href="//scripts/3921.ps1">download</a> - <a href="//scripts/3919.md">parent</a></h3>
+<p>Convert a raw security descriptor from SDDL form to a parsed security descriptor.</p>
+<pre><code class="language-posh">filter ConvertFrom-SDDL
+{
+&lt;#
+.SYNOPSIS
+
+    Convert a raw security descriptor from SDDL form to a parsed security descriptor.
+
+    Author: Matthew Graeber (@mattifestation)
+
+.DESCRIPTION
+
+    ConvertFrom-SDDL generates a parsed security descriptor based upon any string in raw security descriptor definition language (SDDL) form. ConvertFrom-SDDL will parse the SDDL regardless of the type of object the security descriptor represents.
+
+.PARAMETER RawSDDL
+
+    Specifies the security descriptor in raw SDDL form.
+
+.EXAMPLE
+
+    ConvertFrom-SDDL -RawSDDL 'D:PAI(A;;0xd01f01ff;;;SY)(A;;0xd01f01ff;;;BA)(A;;0x80120089;;;NS)'
+
+.EXAMPLE
+
+    'O:BAG:SYD:(D;;0xf0007;;;AN)(D;;0xf0007;;;BG)(A;;0xf0005;;;SY)(A;;0x5;;;BA)', 'O:BAG:SYD:PAI(D;OICI;FA;;;BG)(A;OICI;FA;;;BA)(A;OICIIO;FA;;;CO)(A;OICI;FA;;;SY)' | ConvertFrom-SDDL
+
+.INPUTS
+
+    System.String
+
+    ConvertFrom-SDDL accepts SDDL strings from the pipeline
+
+.OUTPUTS
+
+    System.Management.Automation.PSObject
+
+.LINK
+
+    http://www.exploit-monday.com
+#&gt;
+
+    Param (
+        [Parameter( Position = 0, Mandatory = $True, ValueFromPipeline = $True )]
+        [ValidateNotNullOrEmpty()]
+        [String[]]
+        $RawSDDL
+    )
+
+    Set-StrictMode -Version 2
+
+    # Get reference to sealed RawSecurityDescriptor class
+    $RawSecurityDescriptor = [Int].Assembly.GetTypes() | ? { $_.FullName -eq 'System.Security.AccessControl.RawSecurityDescriptor' }
+
+    # Create an instance of the RawSecurityDescriptor class based upon the provided raw SDDL
+    try
+    {
+        $Sddl = [Activator]::CreateInstance($RawSecurityDescriptor, [Object[]] @($RawSDDL))
+    }
+    catch [Management.Automation.MethodInvocationException]
+    {
+        throw $Error[0]
+    }
+
+    if ($Sddl.Group -eq $null)
+    {
+        $Group = $null
+    }
+    else
+    {
+        $SID = $Sddl.Group
+        $Group = $SID.Translate([Security.Principal.NTAccount]).Value
+    }
+    
+    if ($Sddl.Owner -eq $null)
+    {
+        $Owner = $null
+    }
+    else
+    {
+        $SID = $Sddl.Owner
+        $Owner = $SID.Translate([Security.Principal.NTAccount]).Value
+    }
+
+    $ObjectProperties = @{
+        Group = $Group
+        Owner = $Owner
+    }
+
+    if ($Sddl.DiscretionaryAcl -eq $null)
+    {
+        $Dacl = $null
+    }
+    else
+    {
+        $DaclArray = New-Object PSObject[](0)
+
+        $ValueTable = @{}
+
+        $EnumValueStrings = [Enum]::GetNames([System.Security.AccessControl.CryptoKeyRights])
+        $CryptoEnumValues = $EnumValueStrings | % {
+                $EnumValue = [Security.AccessControl.CryptoKeyRights] $_
+                if (-not $ValueTable.ContainsKey($EnumValue.value__))
+                {
+                    $EnumValue
+                }
+        
+                $ValueTable[$EnumValue.value__] = 1
+            }
+
+        $EnumValueStrings = [Enum]::GetNames([System.Security.AccessControl.FileSystemRights])
+        $FileEnumValues = $EnumValueStrings | % {
+                $EnumValue = [Security.AccessControl.FileSystemRights] $_
+                if (-not $ValueTable.ContainsKey($EnumValue.value__))
+                {
+                    $EnumValue
+                }
+        
+                $ValueTable[$EnumValue.value__] = 1
+            }
+
+        $EnumValues = $CryptoEnumValues + $FileEnumValues
+
+        foreach ($DaclEntry in $Sddl.DiscretionaryAcl)
+        {
+            $SID = $DaclEntry.SecurityIdentifier
+            $Account = $SID.Translate([Security.Principal.NTAccount]).Value
+
+            $Values = New-Object String[](0)
+
+            # Resolve access mask
+            foreach ($Value in $EnumValues)
+            {
+                if (($DaclEntry.Accessmask -band $Value) -eq $Value)
+                {
+                    $Values += $Value.ToString()
+                }
+            }
+
+            $Access = &quot;$($Values -join ',')&quot;
+
+            $DaclTable = @{
+                Rights = $Access
+                IdentityReference = $Account
+                IsInherited = $DaclEntry.IsInherited
+                InheritanceFlags = $DaclEntry.InheritanceFlags
+                PropagationFlags = $DaclEntry.PropagationFlags
+            }
+
+            if ($DaclEntry.AceType.ToString().Contains('Allowed'))
+            {
+                $DaclTable['AccessControlType'] = [Security.AccessControl.AccessControlType]::Allow
+            }
+            else
+            {
+                $DaclTable['AccessControlType'] = [Security.AccessControl.AccessControlType]::Deny
+            }
+
+            $DaclArray += New-Object PSObject -Property $DaclTable
+        }
+
+        $Dacl = $DaclArray
+    }
+
+    $ObjectProperties['Access'] = $Dacl
+
+    $SecurityDescriptor = New-Object PSObject -Property $ObjectProperties
+
+    Write-Output $SecurityDescriptor
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>ImaginaryFriendFeed - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ImaginaryFriendFeed</h1>
+<h3><a href="//scripts/1110.ps1">download</a> - <a href="//scripts/1109.md">parent</a></h3>
+<p>For FriendFeed users: get any twitter friends who aren't on FriendFeed, and make imaginary versions of them, complete with avatars.</p>
+<p><em>PLEASE NOTICE THIS HAS A LOT OF DEPENDENCIES.</em></p>
+<p>ImaginaryFriends aren't available (yet?) in the FriendFeed API, so we have to automate them using WatiN, so you'll need the &quot;WatiN script module&quot;:/1108 from PoshCode, plus the actual Watin 2 binaries.</p>
+<p>To fully automate it, you'll also need the &quot;HttpRest script module&quot;:/1107 and the MindTouch Dream dll's that go with that.</p>
+<p>Once you have all that, make sure you change the nickname...</p>
+<pre><code class="language-posh">#.SYNOPSIS
+#  A few functions for working with FriendFeed and Twitter
+#.DESCRIPTION
+#  Allows you to copy your users from Twitter to imaginary FriendFeed users...
+#.EXAMPLE
+# ## Get any twitter friends who aren't on friendfeed
+# ## Make sure you use FriendFeed's built in &quot;add all your twitter friends&quot; first
+# $twits = Get-TwitterFriends `
+#         -Nickname jaykul
+#         -Exclude $(Get-FriendFeedFriends jaykul | select -expand twitter)
+#
+# ## YOU MIGHT want to remove people who aren't updating, while you're messing around ...
+# $threshold = (Get-Date).AddDays(-14)
+# $twits = $twits | Where { $_.protected -or ([DateTime]::ParseExact($_.status.created_at, &quot;ddd MMM dd HH:mm:ss +0000 yyyy&quot;, $Null) -gt $threshold) }
+#
+# ## Add them to friend feed
+# foreach($twit in $twits) {
+#    New-ImaginaryFriend $twit.name @{twitter=$twit.screen_name} $twit.profile_image_url
+# }
+
+function New-ImaginaryFriend {
+##.Note
+##    DEPENDS on the WatiN module in http://poshcode.org/1108
+##.Synopsis
+##    Creates a new &quot;Imaginary Friend&quot; on friendfeed by automating your browser
+##.Example
+##    New-ImaginaryFriend PoshCode @{Twitter=&quot;PoshCode&quot;} http://poshcode.org/PoshCode.png
+##
+[CmdletBinding()]
+PARAM($name,[hashtable]$services,$avatar)
+## BEGIN ...
+   if($global:ie -is [WatiN.Core.IE]) { 
+      New-Watin &quot;http`://friendfeed.com/settings/imaginary&quot;
+      while( $ie.Url -ne &quot;http`://friendfeed.com/settings/imaginary&quot; ) {
+         Set-WatinUrl &quot;http`://friendfeed.com/settings/imaginary&quot;
+         Read-Host &quot;Press Enter after you have logged into FriendFeed&quot;
+      }
+   }
+## TEST/Validate
+   Set-WatinUrl http`://friendfeed.com/settings/imaginary
+   if($ie.Url -ne &quot;http`://friendfeed.com/settings/imaginary&quot; ) {
+      throw &quot;You are not authenticated to FriendFeed. Please log in and try again&quot;
+   }
+
+## PROCESS
+   Find-Button value &quot;Create imaginary friend&quot; | % { $_.Click() }
+   Find-TextField name name | % { $_.TypeText( $name ) }
+   (Find-Form action &quot;/a/createimaginary&quot;).Buttons | % { $_.click() }
+   
+   $null = $ie.url -match &quot;http`://friendfeed.com/([^/]*)/services&quot;;
+   $ffid = $matches[1]
+   # Write-Output $ffid
+   
+   foreach($service in $services.GetEnumerator()) {
+      Write-Verbose &quot;$($service.Key): $($service.Value)&quot;
+      Find-Link service $service.Key | % { $_.Click() }
+      $form = Find-Form action &quot;/a/configureservice&quot;
+      @($form.TextFields)[0].TypeText( $service.Value )
+      @($form.Buttons)[0].click();
+   }
+   
+   if($avatar) {
+      Set-WatinUrl &quot;http`://friendfeed.com/$ffid&quot;
+      $avatarFile = Get-WebFile $avatar ([uri]$avatar).segments[-1]
+      Write-Verbose &quot;Downloaded? $($avatarFile.FullName)&quot;
+      Start-Sleep -milli 500
+      Find-Link innertext &quot;Change picture&quot; | %{ $_.Click() }
+      Find-FileUpload id pictureupload | % { $_.Set( $avatarFile.FullName ) }
+      (Find-Form action &quot;/a/changepicture&quot;).Buttons | % { $_.click() }
+      Start-Sleep -milli 500
+      Remove-Item $avatarFile
+   }
+}
+
+
+## DEPENDS on the HttpRest module in http://poshcode.org/1107
+Function Get-FriendFeedFriends {
+Param([string]$UserName,[string[]]$Exclude)
+   $friendNames = Get-WebPageText &quot;http`://friendfeed.com/api/user/$username/profile&quot; //user/subscription/nickname @{format=&quot;xml&quot;;include=&quot;subscriptions&quot;} | 
+                  Where {$Exclude -notcontains $_ }
+
+   ForEach($incoming in (Get-WebPageContent &quot;http`://friendfeed.com/api/profiles&quot; //profiles/profile @{ format=&quot;xml&quot;; nickname=$($friendNames -join &quot;,&quot;) })) {
+      $output = Select -Input $incoming Name, NickName | 
+      Add-Member noteproperty Lists @($incoming.SelectNodes(&quot;//list/nickname&quot;).InnerText) -Passthru |
+      Add-Member noteproperty Rooms @($incoming.SelectNodes(&quot;//room/nickname&quot;).InnerText) -Passthru
+      ForEach($service in $incoming.service) {
+         if(!$output.&quot;$($service.id)&quot;) {
+            if($service.username) {
+               Add-Member -input $output noteproperty $service.id $service.username
+            } else {
+               Add-Member -input $output noteproperty $service.id $service.profileUrl
+            }
+         } else {
+            if($service.username) {
+               $output.&quot;$($service.id)&quot; = @($output.&quot;$($service.id)&quot;) + $service.username
+            } else {
+               $output.&quot;$($service.id)&quot; = @($output.&quot;$($service.id)&quot;) + $service.profileUrl
+            }
+         }
+      }
+      $output
+   }
+}
+
+## DEPENDS on the HttpRest module in http://poshcode.org/1107
+function Get-TwitterFriends {
+Param($UserName, [string[]]$Exclude)
+   $page = 0; $tweeters = @()
+   do { 
+      $tweeters = Get-WebPageContent &quot;http`://twitter.com/statuses/friends.xml&quot; //users/user @{page=(++$page); screen_name=$UserName} | 
+                  Where {$Exclude -notcontains $_.screen_name }
+      Write-Output $tweeters
+   } while($tweeters)
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

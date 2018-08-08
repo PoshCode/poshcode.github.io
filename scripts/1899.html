@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Carter Shanklin">
+    <title>Add-Slide - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Add-Slide</h1>
+<h3><a href="//scripts/1899.ps1">download</a></h3>
+<p>Snipped of my powerpoint movie creator. This is not general purpose code only a sample for entertainment. Scrubbed to take out some meaningful strings, I'll try to post something better another time.</p>
+<pre><code class="language-posh">function Add-Slide($pres, $maxShared, $vmUsages, $vmShared, $maxVM, $vmLoad) {
+	$slide = $pres.slides.range(1).duplicate()
+	#$totalSlides = ($pres.slides | Measure-Object).Count
+	#$pres.slides.range(2).moveto($totalSlides)
+
+	#region 1
+	# Add all the boxes. Skip the first position.
+	$i = 1
+	foreach ($position in $xOffsets[1..5]) {
+		$shape = $slide.shapes.addShape(5, $position*72, $vmBoxYOffset*72, $vmBoxSize[0]*72, $vmBoxSize[1]*72)
+
+		# Label the name.
+		$shape.textframe2.textrange.text = &quot;XXX&quot;
+		$shape.textframe2.textrange.font.size = 24
+		$shape.line.visible = 0
+
+		# Color the VMs based on their load. We do this by selecting some
+		# fixed HSL endpoints to represent red and green. Luckily yellow is
+		# in the middle of these in HSL space. Load is between 0 and 100 so
+		# 0 load gives you a green box, 50 a yellow box, 100 a red box.
+		$load = $vmLoad[$i-1]
+		$H = 81 - (81 * $load / 100)
+		$S = 63 + (46 * $load / 100)
+		$shape.fill.forecolor.rgb = From-Hsl $H $S 138
+
+		# Switch to gradient fill.
+		$shape.fill.OneColorGradient(1, 2, 0.6)
+		$i++
+	}
+	#endregion
+
+	#region 2
+	# Add the memory profile. First a shared pool box.
+	$shared = ($vmShared | measure-object -sum).Sum
+	$perSize = $shared / $maxShared
+	$maxHeight = ($memBoxYBottom - $memBoxYTop)
+	$height = $maxHeight * $perSize
+	$yOffset = $memBoxYTop + ($maxHeight * (1 - $perSize))
+	$shape = $slide.shapes.addShape(1, $xOffsets[0]*72, $yOffset*72, $vmBoxSize[0]*72, $height*72)
+	$shape.line.visible = 0
+
+	# Only display the text if there is room.
+	if ($perSize -gt 0.25) {
+		$shape.textframe2.textrange.text = &quot;Xyzzy&quot;
+		$shape.textframe2.textrange.font.size = 24
+	}
+
+	# This one is always green.
+	$shape.fill.forecolor.rgb = 5880731
+
+	# Gradient fill.
+	$shape.fill.OneColorGradient(1, 2, 0.6)
+	#endregion
+
+	#region 3
+	# Obscure memory stuff..
+	foreach ($i in 0..4) {
+		# Total memory for this VM.
+		$profile = @($vmShared[$i], $vmUsages[$i])
+		$vmTotal = $profile[0] + $profile[1]
+		$vmPercent = $vmTotal / $maxVM
+
+		# Calculate the heights.
+		$maxHeight = ($memBoxYBottom - $memBoxYTop)
+		$height = $maxHeight * $vmPercent
+		$height1 = $height * ($profile[0] / $vmTotal)
+		$height2 = $height * ($profile[1] / $vmTotal)
+		$yOffset1 = $memBoxYTop + ($maxHeight * (1 - $vmPercent))
+		$yOffset2 = $yOffset1 + $height1
+
+		# Make the boxes.
+		$shape = $slide.shapes.addShape(1, $xOffsets[$i+1]*72, $yOffset1*72, $vmBoxSize[0]*72, $height1*72)
+		$shape.line.visible = 0
+		if ($height1 -gt 0.4) {
+			$shape.textframe2.textrange.text = &quot;Something&quot;
+			$shape.textframe2.textrange.font.size = 24
+		}
+		# Another green.
+		$shape.fill.forecolor.rgb = 5880731
+		$shape.fill.OneColorGradient(1, 2, 0.6)
+
+		$shape = $slide.shapes.addShape(1, $xOffsets[$i+1]*72, $yOffset2*72, $vmBoxSize[0]*72, $height2*72)
+		$shape.line.visible = 0
+		if ($height2 -gt 0.4) {
+			$shape.textframe2.textrange.text = &quot;Something Else&quot;
+			$shape.textframe2.textrange.font.size = 24
+		}
+		$shape.fill.forecolor.rgb = 4626167
+		$shape.fill.OneColorGradient(1, 2, 0.6)
+	}
+	#endregion
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

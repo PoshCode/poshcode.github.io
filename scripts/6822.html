@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jeremiah">
+    <title>Fetch IMDB info - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Fetch IMDB info</h1>
+<h3><a href="//scripts/6822.ps1">download</a> - <a href="//scripts/5640.md">parent</a></h3>
+<p>I'm not sure if IMDB updated their site or what, but much of the HTML code referenced in the script either no longer exists on the sites or doesn't seem to grab the correct information.</p>
+<p>I went ahead and updated those pieces to get the right info. Here's a couple more things I changed:</p>
+<ul>
+<li>$Released is now a DateTime value.</li>
+<li>$RuntimeMinutes is now a TimeSpan value.</li>
+<li>I added genres and the MPAA rating (R, PG-13, etc.)</li>
+</ul>
+<p>I'm really glad you posted this because it seems to be the only IMDB-related script out there and I've been looking for this exact thing! Also, I've never messed with HTML before so that was a learning experience.</p>
+<pre><code class="language-posh">function Get-IMDBMatch
+{
+    &lt;#
+    .Synopsis
+       Retrieves search results from IMDB
+    .DESCRIPTION
+       This cmdlet posts a search to IMDB and returns the results.
+    .EXAMPLE
+       Get-IMDBMatch -Title 'American Dad!'
+    .EXAMPLE
+       Get-IMDBMatch -Title 'American Dad!' | Where-Object { $_.Type -eq 'TV Series' }
+    .PARAMETER Title
+       Specify the name of the tv show/movie you want to search for.
+
+    #&gt;
+
+    [cmdletbinding()]
+    param([Parameter(Mandatory=$True, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+          [string[]] $Title)
+
+    BEGIN { }
+
+    PROCESS {
+        foreach ($MediaTitle in $Title) {
+            $IMDBSearch = Invoke-WebRequest -Uri &quot;http://www.imdb.com/find?q=$($MediaTitle -replace &quot; &quot;,&quot;+&quot;)&amp;s=all&quot; -UseBasicParsing
+
+            $FoundMatches = $IMDBSearch.Content -split &quot;&lt;tr class=`&quot;findresult &quot; | select -Skip 1 | % { (($_ -split &quot;&lt;TD class=`&quot;result_text`&quot;&gt;&quot;)[1] -split &quot;&lt;/TD&gt;&quot;)[0] } | Select-String -Pattern &quot;fn_al_tt_&quot;
+
+            foreach ($Match in $FoundMatches) {
+
+                $ID = (($Match -split &quot;/title/&quot;)[1] -split &quot;/&quot;)[0]
+                $MatchTitle = (($Match -split &quot;&gt;&quot;)[1] -split &quot;&lt;/a&quot;)[0]
+                $Released = (($Match -split &quot;&lt;/a&gt; \(&quot;)[1] -split &quot;\)&quot;)[0]
+                $Type = (($Match -split &quot;\) \(&quot;)[1] -split &quot;\) &quot;)[0]
+
+                if ($Type -eq &quot;&quot;) {
+                    $Type = &quot;Movie&quot;
+                }
+
+                if ($ID -eq &quot;&quot;) {
+                    Continue
+                }
+
+                $returnObject = New-Object System.Object
+                $returnObject | Add-Member -Type NoteProperty -Name ID -Value $ID
+                $returnObject | Add-Member -Type NoteProperty -Name Title -Value $MatchTitle
+                $returnObject | Add-Member -Type NoteProperty -Name Released -Value $Released
+                $returnObject | Add-Member -Type NoteProperty -Name Type -Value $Type
+
+                Write-Output $returnObject
+
+                Remove-Variable ID, MatchTitle, Released, Type
+    
+            }
+
+            Remove-Variable FoundMatches, IMDBSearch
+        }
+    }
+
+    END { }
+}
+
+
+function Get-IMDBItem
+{
+    &lt;#
+    .Synopsis
+       Retrieves information about a movie/tv show etc. from IMDB.
+    .DESCRIPTION
+       This cmdlet fetches information about the movie/tv show matching the specified ID from IMDB.
+       The ID is often seen at the end of the URL at IMDB.
+    .EXAMPLE
+        Get-IMDBItem -ID tt0848228
+    .EXAMPLE
+       Get-IMDBMatch -Title 'American Dad!' | Get-IMDBItem
+ 
+       This will fetch information about the item(s) piped from the Get-IMDBMatch cmdlet.
+    .PARAMETER ID
+       Specify the ID of the tv show/movie you want get. The ID has the format of tt0123456
+    #&gt;
+ 
+    [cmdletbinding()]
+    param([Parameter(Mandatory=$True, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+          [string[]] $ID)
+ 
+    BEGIN { }
+ 
+    PROCESS {
+        foreach ($ImdbID in $ID) {
+ 
+            $IMDBItem = Invoke-WebRequest -Uri &quot;http://www.imdb.com/title/$ImdbID&quot; -UseBasicParsing
+ 
+@@            $ItemInfo = (($IMDBItem.Content -split &quot;&lt;div id=`&quot;title-overview-widget`&quot; class=`&quot;heroic-overview`&quot;&gt;&quot;)[1] -split &quot;&lt;div id=`&quot;sidebar`&quot;&gt;&quot;)[0]
+ 
+@@            $ItemTitle = (($ItemInfo -split &quot;&lt;h1 itemprop=`&quot;name`&quot; class=`&quot;`&quot;&gt;&quot;)[1] -split &quot;&amp;nbsp;&quot;)[0]
+            
+@@            If (($ItemInfo -split &quot;itemprop=`&quot;datePublished`&quot; content=`&quot;&quot;).Length -gt 1) {
+@@                $Type = &quot;Movie&quot;
+@@                [DateTime]$Released = (($ItemInfo -split &quot;&lt;meta itemprop=`&quot;datePublished`&quot; content=`&quot;&quot;)[1] -split &quot;`&quot; /&gt;&quot;)[0]
+@@            } Else {
+@@                $Type = &quot;TV Series&quot;
+@@                $Released = $null
+@@            }
+ 
+@@            $Description = ((($ItemInfo -split &quot;&lt;div class=`&quot;summary_text`&quot; itemprop=`&quot;description`&quot;&gt;&quot;)[1] -split &quot;&lt;/div&gt;&quot;)[0]).Trim()
+            
+@@            $Rating = (($ItemInfo -split &quot;&lt;span itemprop=`&quot;ratingValue`&quot;&gt;&quot;)[1] -split &quot;&lt;/span&gt;&quot;)[0]
+            
+@@            $GenreSplit = $ItemInfo -split &quot;itemprop=`&quot;genre`&quot;&gt;&quot;
+@@            $NumGenres = ($GenreSplit.Length)-1
+@@            $Genres = foreach ($Genre in $GenreSplit[1..$NumGenres]) {
+@@                ($Genre -split &quot;&lt;/span&gt;&quot;)[0]
+@@            }
+
+@@            $MPAARating = (($ItemInfo -split &quot;&lt;meta itemprop=`&quot;contentRating`&quot; content=`&quot;&quot;)[1] -split &quot;`&quot;&gt;&quot;)[0]
+
+            try {
+@@                $RuntimeMinutes = New-TimeSpan -Minutes (($ItemInfo -split &quot;&lt;time itemprop=`&quot;duration`&quot; datetime=`&quot;PT&quot;)[1] -split &quot;M`&quot;&gt;&quot;)[0]
+            }
+            catch {
+                $RuntimeMinutes = $null
+            }
+  
+            if ($Description -like '*Add a plot*') {
+                $Description = $null
+            }
+ 
+            $returnObject = New-Object System.Object
+            $returnObject | Add-Member -Type NoteProperty -Name ID -Value $ImdbID
+            $returnObject | Add-Member -Type NoteProperty -Name Type -Value $Type
+            $returnObject | Add-Member -Type NoteProperty -Name Title -Value $ItemTitle
+@@            $returnObject | Add-Member -Type NoteProperty -Name Genre -Value $Genres
+            $returnObject | Add-Member -Type NoteProperty -Name Description -Value $Description
+            $returnObject | Add-Member -Type NoteProperty -Name Released -Value $Released
+            $returnObject | Add-Member -Type NoteProperty -Name RuntimeMinutes -Value $RuntimeMinutes
+            $returnObject | Add-Member -Type NoteProperty -Name Rating -Value $Rating
+@@            $returnObject | Add-Member -Type NoteProperty -Name MPAARating -Value $MPAARating
+ 
+            Write-Output $returnObject
+ 
+@@            Remove-Variable IMDBItem, ItemInfo, ItemTitle, Genres, Description, Released, Type, Rating, RuntimeMinutes, MPAARating -ErrorAction SilentlyContinue
+        }
+    }
+ 
+    END { }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

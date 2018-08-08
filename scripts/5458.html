@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DollarUnderscore">
+    <title>Get-ADTokenSize - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-ADTokenSize</h1>
+<h3><a href="//scripts/5458.ps1">download</a></h3>
+<p>This advanced function will return information about the estimated token size and group memberships of the specified user.</p>
+<p>It requires the Active Directory module to run.</p>
+<p>For more information and details regarding this function and token size problems, see this blogpost:
+http://dollarunderscore.azurewebsites.net/?p=3451</p>
+<p>I hope someone might find this useful!</p>
+<pre><code class="language-posh">#========================================================================
+# Created By: Anders Wahlqvist
+# Website: DollarUnderscore (http://dollarunderscore.azurewebsites.net)
+#========================================================================
+
+function Get-ADTokenSize
+{
+
+    &lt;#
+    .SYNOPSIS
+    This cmdlets estimates the tokensize of a given user based on Active Directory group memberships.
+
+    .DESCRIPTION
+    This cmdlets estimates the tokensize of a given user based on Active Directory group memberships.
+
+    It requires the Active Directory module to run.
+
+    The returned token size value is only an estimation!
+
+    .EXAMPLE
+    Get-ADTokenSize -Identity JohnDoe
+
+    Get the estimated token size of user JohnDoe
+    .EXAMPLE
+    Get-ADUser -Filter { GivenName -eq &quot;John&quot; } | Get-ADTokenSize
+
+    Get the tokensize of all users named John.
+
+    .PARAMETER Identity
+    Specify the SamAccountName, DistinguishedName, objectGUID or SID of the user. Supports pipeline input.
+
+    .PARAMETER Server
+    Specifies the Active Directory Domain Services instance to connect to.
+
+    #&gt;
+
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$True, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+          [Alias('SamAccountName','DistinguishedName','ObjectGUID','SID')]
+          [string] $Identity,
+          [string] $Server = $env:USERDNSDOMAIN)
+
+    BEGIN { }
+
+    PROCESS {
+
+        # Make sure the user exists and that we have the distinguished name of it.
+        try {
+            $UserDN = Get-ADUser -Identity $Identity -Server $Server -ErrorAction Stop | select -ExpandProperty DistinguishedName -ErrorAction Stop
+        }
+        catch {
+            Write-Error &quot;Failed to locate the user in Active Directory. The error was: $($Error[0])&quot;
+            return
+        }
+
+        # Get the group memberships using LDAP_MATCHING_RULE_IN_CHAIN
+        try {
+            $Groups = Get-ADGroup -LDAPFilter &quot;(member:1.2.840.113556.1.4.1941:=$UserDN)&quot; -Properties sIDHistory -Server $Server -ErrorAction Stop
+        }
+        catch {
+            Write-Error &quot;Failed to lookup group memberships. The error was: $($Error[0])&quot;
+            return
+        }
+
+        # Initialize the variables and set token size to 1200 (ticket penalty)
+        [int] $UserTokenSize = 1200
+        [int] $GlobalGroups = 0
+        [int] $UniversalGroups = 0
+        [int] $DomainLocalGroups = 0
+        [int] $GroupsWithSidHistory = 0
+
+        # loop through them and check the type and token size of them
+        foreach ($Group in $Groups) {
+    
+            Remove-Variable GroupTokenSize -ErrorAction SilentlyContinue
+
+            # If they have a sidhistory the size is always 40
+            if ($Group.SIDHistory.Count -ge 1) {
+                [int] $GroupTokenSize = 40
+                $GroupsWithSidHistory++
+            }
+            else {
+                # otherwise set it according to the group scope
+                [int] $GroupTokenSize = switch ($Group.GroupScope)
+                                        {
+                                        'Global'       {  8 ; $GlobalGroups++ }
+                                        'Universal'    {  8 ; $UniversalGroups++ }
+                                        'DomainLocal'  { 40 ; $DomainLocalGroups++ }
+                                        }
+            }
+
+            # add it to the total size
+            $UserTokenSize += $GroupTokenSize
+
+        }
+
+        # count all the groups
+        [int] $AllGroups = $GlobalGroups + $UniversalGroups + $DomainLocalGroups
+
+        # create the object
+        $returnObject = New-Object System.Object
+        $returnObject | Add-Member -Type NoteProperty -Name DistinguishedName -Value $UserDN
+        $returnObject | Add-Member -Type NoteProperty -Name EstimatedTokenSize -Value $UserTokenSize
+        $returnObject | Add-Member -Type NoteProperty -Name GlobalGroups -Value $GlobalGroups
+        $returnObject | Add-Member -Type NoteProperty -Name UniversalGroups -Value $UniversalGroups
+        $returnObject | Add-Member -Type NoteProperty -Name DomainLocalGroups -Value $DomainLocalGroups
+        $returnObject | Add-Member -Type NoteProperty -Name GroupsWithSidHistory -Value $GroupsWithSidHistory
+        $returnObject | Add-Member -Type NoteProperty -Name AllGroups -Value $AllGroups
+
+        # send it to the pipeline
+        Write-Output $returnObject
+    }
+
+    END { }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

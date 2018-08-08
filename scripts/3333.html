@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>Findup - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Findup</h1>
+<h3><a href="//scripts/3333.cs">download</a> - <a href="//scripts/3332.md">parent</a></h3>
+<p>Findup - Find duplicates C# version. Compares files sizes and SHA512 hashes to identify duplicates. New regex Include/Exclude feature. Should be compiled with Visual Studio 11 (beta as of now), as older Visual Studio C# compilers seem to have a bug that causes crashes on long file names.</p>
+<pre><code class="language-csharp">using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+using System.Security.Cryptography;
+using System.Runtime.InteropServices;
+using Microsoft.Win32;
+using System.IO;
+using System.Text.RegularExpressions;
+
+
+
+namespace Findup
+{
+    public class FileLengthComparer : IComparer&lt;FileInfo&gt;
+    {
+        public int Compare(FileInfo x, FileInfo y)
+        {
+            return (x.Length.CompareTo(y.Length));
+        }
+    }
+    
+    class Findup
+    {
+        public static System.String[] paths = new string[0];
+        public static System.String[] excpaths = new string[0];
+        public static System.String[] incpaths = new string[0];
+            
+        public static System.Boolean noerr = false;
+        public static System.Boolean useregex = false;
+        public static System.Boolean includeflag = false;
+
+        public static void Main(string[] args)
+        {            
+            Console.WriteLine(&quot;Findup.exe v2.0 - By James Gentile - JamesRaymondGentile@gmail.com - 2012.&quot;);
+            Console.WriteLine(&quot; &quot;);            
+            System.Boolean recurse = false;
+            System.Boolean exc = false;
+            System.Boolean inc = false;
+            List&lt;FileInfo&gt; files = new List&lt;FileInfo&gt;();            
+            long numOfDupes = 0;                                 // number of duplicate files found.
+            long dupeBytes = 0;                                  // number of bytes in duplicates.
+            int i = 0;            
+
+            for (i = 0; i &lt; args.Length; i++)
+            {
+                if ((System.String.Compare(args[i], &quot;-help&quot;, true) == 0) || (System.String.Compare(args[i], &quot;-h&quot;, true) == 0))
+                {
+                    Console.WriteLine(&quot;Usage:    findup.exe &lt;file/directory #1&gt; &lt;file/directory #2&gt; ... &lt;file/directory #N&gt; [-recurse] [-noerr] [-x] &lt;files/directories/regx&gt; [-regex]&quot;);
+                    Console.WriteLine(&quot; &quot;);
+                    Console.WriteLine(&quot;Options:  -help     - displays this help message.&quot;);
+                    Console.WriteLine(&quot;          -recurse  - recurses through subdirectories when directories or file specifications (e.g. *.txt) are specified.&quot;);                    
+                    Console.WriteLine(&quot;          -noerr    - discards error messages.&quot;);
+                    Console.WriteLine(&quot;          -x        - eXcludes all directories\\files (or RegEx if -regex used) including subdirs following this switch until another switch is used.&quot;);
+                    Console.WriteLine(&quot;          -i        - Include only directories\\files (or RegEx if -regex used) including subdirs following this switch until another switch is used.&quot;);
+                    Console.WriteLine(&quot;          -regex    - Use Regex notation for exclude (-x) and include (-i) option.&quot;);
+                    Console.WriteLine(&quot; &quot;);
+                    Console.WriteLine(&quot;Examples: findup.exe c:\\finances -recurse -noerr&quot;);
+                    Console.WriteLine(&quot;                     - Find dupes in c:\\finance.&quot;);
+                    Console.WriteLine(&quot;                     - recurse all subdirs of c:\\finance.&quot;);
+                    Console.WriteLine(&quot;                     - suppress error messages.&quot;);
+                    Console.WriteLine(&quot;          findup.exe c:\\users\\alice\\plan.txt d:\\data -recurse -x d:\\data\\webpics&quot;);
+                    Console.WriteLine(&quot;                     - Find dupes in c:\\users\\alice\\plan.txt, d:\\data&quot;);
+                    Console.WriteLine(&quot;                     - recurse subdirs in d:\\data.&quot;);
+                    Console.WriteLine(&quot;                     - exclude any files in d:\\data\\webpics and subdirs.&quot;);
+                    Console.WriteLine(&quot;          findup.exe c:\\data *.txt c:\\reports\\quarter.doc -x \&quot;(?:jim)\&quot; -regex&quot;);
+                    Console.WriteLine(&quot;                     - Find dupes in c:\\data, *.txt in current directory and c:\\reports\\quarter.doc&quot;);
+                    Console.WriteLine(&quot;                     - exclude any file with 'jim' in it as specified by the Regex item \&quot;(?:jim)\&quot;&quot;);
+                    Console.WriteLine(&quot;          findup.exe c:\\data *.txt c:\\reports\\quarter.doc -x \&quot;(?:jim)\&quot; -i \&quot;(?:smith)\&quot; -regex&quot;);
+                    Console.WriteLine(&quot;                     - Find dupes in c:\\data, *.txt in current directory and c:\\reports\\bobsmithquarter.doc&quot;);
+                    Console.WriteLine(&quot;                     - Include only files with 'smith' and exclude any file with 'jim' in it as specified by the Regex items \&quot;(?:jim)\&quot;,\&quot;(?:smith)\&quot;&quot;);
+                    Console.WriteLine(&quot;Note:     Exclude takes precedence over Include.&quot;);
+                    return;
+                }
+                if (System.String.Compare(args[i], &quot;-recurse&quot;, true) == 0)
+                {
+                    recurse = true;
+                    inc = false;
+                    exc = false;
+                    continue;
+                }
+                if (System.String.Compare(args[i], &quot;-regex&quot;, true) == 0)
+                {
+                    useregex = true;
+                    inc = false;
+                    exc = false;
+                    continue;
+                }                               
+                if (System.String.Compare(args[i], &quot;-noerr&quot;, true) == 0)
+                {
+                    noerr = true;
+                    inc = false;
+                    exc = false;
+                    continue;
+                }
+                if (System.String.Compare(args[i], &quot;-i&quot;, true) == 0)
+                {
+                    inc = true;
+                    exc = false;                    
+                    continue;
+                }
+                if (System.String.Compare(args[i], &quot;-x&quot;, true) == 0)
+                {
+                    exc = true;
+                    inc = false;
+                    continue;
+                }
+                if (exc == true)
+                {
+                    Array.Resize(ref excpaths, excpaths.Length + 1);
+                    excpaths[excpaths.Length - 1] = args[i];
+                    continue;
+                }
+                if (inc == true)
+                {
+                    Array.Resize(ref incpaths, incpaths.Length + 1);
+                    incpaths[incpaths.Length - 1] = args[i];
+                    includeflag = true;
+                    continue;
+                }
+                else
+                {
+                    Array.Resize(ref paths, paths.Length + 1);
+                    paths[paths.Length - 1] = args[i];
+                }
+            }
+            if (paths.Length == 0)
+            {
+                WriteErr(&quot;No files, file specifications, or directories specified. Try findup.exe -help&quot;);
+                return;
+            }
+            Console.Write(&quot;Getting file info...&quot;);
+            getFiles(paths, &quot;*.*&quot;, recurse, files);
+            Console.WriteLine(&quot;Completed!&quot;);               
+            if (files.Count &lt; 2)
+            {
+                WriteErr(&quot;Findup.exe needs at least 2 files to compare. Try findup.exe -help&quot;);
+                return;
+            }
+
+            Console.Write(&quot;Sorting file list...&quot;);
+            files.Sort(new FileLengthComparer());
+            Console.WriteLine(&quot;Completed!&quot;);
+
+            Console.Write(&quot;Computing SHA512 &amp; Size matches...&quot;);
+
+            var SizeHashName = new Dictionary&lt;long, Dictionary&lt;string,List&lt;string&gt;&gt;&gt;();            
+
+            for (i = 0; i &lt; (files.Count - 1); i++)
+            {
+                if (files[i].Length != files[i + 1].Length) { continue; }
+                var breakout = false;
+                while (true)
+                {
+                    var _SHA512 = SHA512.Create();
+                    try
+                    {                       
+                        using (var fstream = File.OpenRead(files[i].FullName))
+                        {                    
+                            _SHA512.ComputeHash(fstream);
+                        }
+                        System.Text.Encoding enc = System.Text.Encoding.ASCII;
+                        string SHA512string = enc.GetString(_SHA512.Hash);
+
+                        if (SizeHashName.ContainsKey(files[i].Length))
+                        {
+                            if (!SizeHashName[files[i].Length].ContainsKey(SHA512string))
+                            {                                
+                                SizeHashName[files[i].Length][SHA512string] = new List&lt;string&gt;() {};
+                            }
+                        }
+                        else
+                        {
+                            SizeHashName.Add(files[i].Length, new Dictionary&lt;string,List&lt;string&gt;&gt;());
+                            SizeHashName[files[i].Length][SHA512string] = new List&lt;string&gt;() {};
+                        }
+                        SizeHashName[files[i].Length][SHA512string].Add(files[i].FullName);
+                    }
+                    catch (Exception e)
+                    {
+                        WriteErr(&quot;Hash error: &quot; + e.Message);                     
+                    }
+
+                    if (breakout == true) {break;}
+                    i++;
+                    if (i == (files.Count - 1)) { breakout = true; continue; }
+                    if (files[i].Length != files[i + 1].Length) { breakout = true; }
+                }
+            }
+
+            Console.WriteLine(&quot;Completed!&quot;);
+
+            foreach (var SizeGroup in SizeHashName)
+            {
+                foreach (var HashGroup in SizeGroup.Value)
+                {
+                    if (HashGroup.Value.Count &gt; 1)
+                    {                        
+                        Console.WriteLine(&quot;Duplicates (size: {0:N0} Bytes) - &quot;, (long)SizeGroup.Key);                        
+                        foreach (var FileName in HashGroup.Value)
+                        {
+                            Console.WriteLine(FileName);
+                            numOfDupes++;
+                            dupeBytes += (long)SizeGroup.Key;
+                        }
+                    }
+                }                
+            }
+
+            Console.WriteLine(&quot;\n &quot;);
+            Console.WriteLine(&quot;Files checked      : {0:N0}&quot;, files.Count);
+            Console.WriteLine(&quot;Duplicate files    : {0:N0}&quot;, numOfDupes);
+            Console.WriteLine(&quot;Duplicate bytes    : {0:N0}&quot;, dupeBytes);
+            return;                                                                             // Exit after displaying statistics.
+        }               
+
+        private static void WriteErr(string Str)
+        {
+            if (noerr == false)
+                Console.WriteLine(Str);
+        }
+
+        private static Boolean CheckExcludes(string Path)
+        {
+            foreach (var x in excpaths)
+            {
+                if (useregex == true)
+                {
+                    try
+                    {
+                        Regex rgx = new Regex(x);
+                        if (rgx.IsMatch(Path))
+                            return false;
+                    }
+                    catch (Exception e)
+                    {
+                        WriteErr(&quot;Invalid regex used: &quot; + x + &quot; exception: &quot; + e);
+                    }
+                }
+                else { if (Path.ToLower().StartsWith(x.ToLower())) { return false; } }
+            }
+            return true;
+        }
+        private static Boolean CheckIncludes(string Path)
+        {
+            if (!includeflag) { return true; }
+            foreach (var i in incpaths)
+            {
+                if (useregex == true)
+                {
+                    try
+                    {
+                        Regex rgx = new Regex(i);
+                        if (rgx.IsMatch(Path))
+                            return true;
+                    }
+                    catch (Exception e)
+                    {
+                        WriteErr(&quot;Invalid regex used: &quot; + i + &quot; exception: &quot; + e);
+                    }
+                }
+                else {if (Path.ToLower().StartsWith(i.ToLower())) { return true; }}
+            }
+            return false;
+        }
+
+        private static void getFiles(string[] pathRec, string searchPattern, Boolean recursiveFlag, List&lt;FileInfo&gt; returnList)
+        {
+
+            foreach (string d in pathRec)
+            {
+                getFiles(d, searchPattern, recursiveFlag, returnList);
+            }
+            return;
+        }
+
+        private static void getFiles(string pathRec, string searchPattern, Boolean recursiveFlag, List&lt;FileInfo&gt; returnList)
+        {
+
+            string dirPart;
+            string filePart;
+
+            if (File.Exists(pathRec))
+            {
+                try
+                {
+                    FileInfo addf = (new FileInfo(pathRec));
+                    if (((addf.Attributes &amp; FileAttributes.ReparsePoint) == 0) &amp;&amp; CheckExcludes(addf.FullName) &amp;&amp; CheckIncludes(addf.FullName))
+                        returnList.Add(addf);
+                }
+                catch (Exception e)
+                {
+                    WriteErr(&quot;Add file error: &quot; + e.Message);
+                }                
+            }
+            else if (Directory.Exists(pathRec))
+            {
+                try
+                {
+                    DirectoryInfo Dir = new DirectoryInfo(pathRec);
+                    foreach (FileInfo addf in (Dir.GetFiles(searchPattern)))
+                    {
+                        if (((addf.Attributes &amp; FileAttributes.ReparsePoint) == 0) &amp;&amp; CheckExcludes(addf.FullName) &amp;&amp; CheckIncludes(addf.FullName))
+                            returnList.Add(addf);
+                    }
+                }
+                catch (Exception e)
+                {
+                    WriteErr(&quot;Add files from Directory error: &quot; + e.Message);
+                }
+
+                if (recursiveFlag == true)
+                {
+                    try
+                    {
+                            getFiles((Directory.GetDirectories(pathRec)), searchPattern, recursiveFlag, returnList);
+                    }
+                    catch (Exception e)
+                    {
+                        WriteErr(&quot;Add Directory error: &quot; + e.Message);
+                    }
+                }                
+            }
+            else
+            {
+                try
+                {
+                    filePart = Path.GetFileName(pathRec);
+                    dirPart = Path.GetDirectoryName(pathRec);
+                }
+                catch (Exception e)
+                {
+                    WriteErr(&quot;Parse error on: &quot; + pathRec);
+                    WriteErr(@&quot;Make sure you don't end a directory with a \ when using quotes. The console arg parser doesn't accept that.&quot;);
+                    WriteErr(&quot;Exception: &quot; + e.Message);
+                    return;
+                }
+
+                if (filePart.IndexOfAny(new char[] {'?','*'}) &gt;= 0)
+                {
+                    if ((dirPart == null) || (dirPart == &quot;&quot;))
+                        dirPart = Directory.GetCurrentDirectory();
+                    if (Directory.Exists(dirPart) &amp;&amp; CheckExcludes(dirPart) &amp;&amp; CheckIncludes(dirPart))
+                    {
+                        getFiles(dirPart, filePart, recursiveFlag, returnList);
+                        return;
+                    }
+                }
+                WriteErr(&quot;Invalid file path, directory path, file specification, or program option specified: &quot; + pathRec);                                                        
+            }            
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

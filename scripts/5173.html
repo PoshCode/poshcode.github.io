@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DexterPOSH">
+    <title>Get-SCCMUserComputer - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-SCCMUserComputer</h1>
+<h3><a href="//scripts/5173.ps1">download</a> - <a href="//scripts/5172.md">parent</a></h3>
+<p>In the ConfigMgr environment while performing Application Deployments. Sometimes Users don't mention their machine names.
+This Function takes either SAMACCOUNTNAME or a Name (uses ADSI to prompt for the matched users) and then retrieves the NetbiosName stored in the instance of the SMS_R_System Class.</p>
+<pre><code class="language-posh">function Get-SCCMUserComputer
+{
+    [CmdletBinding(DefaultParameterSetName=&quot;Identity&quot;)]
+    [OutputType([PSObject])]
+    Param
+    (
+        # Specify the SamAccountName for the User
+        [Parameter(Mandatory=$true,
+                   ValueFromPipelineByPropertyName=$true,
+                   ParameterSetName=&quot;Identity&quot;)]
+        [string[]]$identity,
+
+        # Specify the Name ...ADSI will be used to find the Users matching the criteria
+       [Parameter(Mandatory=$true,
+                   ValueFromPipelineByPropertyName=$true,
+                   ParameterSetName=&quot;Name&quot;)]
+        [string]$Name,
+
+        #specify the SCCMServer having SMS Namespace provider installed for the site. Default is the local machine.
+        [Parameter(Mandatory=$false)]
+        [Alias(&quot;SMSProvider&quot;)]
+        [String]$SCCMServer=$env:COMPUTERNAME
+
+    )
+
+    Begin
+    {
+        #region open a CIM session
+        $CIMSessionParams = @{
+                    ComputerName = $SCCMServer
+                    ErrorAction = 'Stop'
+                    
+                }
+        try
+        {
+            If ((Test-WSMan -ComputerName $SCCMServer -ErrorAction SilentlyContinue).ProductVersion -match 'Stack: 3.0')
+            {
+                Write-Verbose -Message &quot;[BEGIN] WSMAN is responsive&quot;
+                $CimSession = New-CimSession @CIMSessionParams
+                $CimProtocol = $CimSession.protocol
+                Write-Verbose -Message &quot;[BEGIN] [$CimProtocol] CIM SESSION - Opened&quot;
+            } 
+
+            else 
+            {
+                Write-Verbose -Message &quot;[PROCESS] Attempting to connect with protocol: DCOM&quot;
+                $CIMSessionParams.SessionOption = New-CimSessionOption -Protocol Dcom
+                $CimSession = New-CimSession @CIMSessionParams
+                $CimProtocol = $CimSession.protocol
+
+                Write-Verbose -Message &quot;[BEGIN] [$CimProtocol] CIM SESSION - Opened&quot;
+            }
+       
+
+        #endregion open a CIM session
+
+           
+            $sccmProvider = Get-CimInstance -query &quot;select * from SMS_ProviderLocation where ProviderForLocalSite = true&quot; -Namespace &quot;root\sms&quot; -CimSession $CimSession -ErrorAction Stop
+            # Split up the namespace path
+            $Splits = $sccmProvider.NamespacePath -split &quot;\\&quot;, 4
+            Write-Verbose &quot;[BEGIN] Provider is located on $($sccmProvider.Machine) in namespace $($splits[3])&quot;
+ 
+            # Create a new hash to be passed on later
+            $hash= @{&quot;CimSession&quot;=$CimSession;&quot;NameSpace&quot;=$Splits[3];&quot;ErrorAction&quot;=&quot;Stop&quot;}
+                                  
+            
+        }
+        catch
+        {
+            Write-Warning &quot;[BEGIN] $SCCMServer needs to have SMS Namespace Installed&quot;
+            throw $Error[0].Exception
+        }
+    }
+    Process
+    {
+        Switch -exact ($PSCmdlet.ParameterSetName)
+        {
+            &quot;Identity&quot;
+            {
+                foreach ($id in $identity)
+                {
+                    $query = &quot;Select NetbiosName from {0} where LastlogonUserName='{1}'&quot; -f &quot;SMS_R_System&quot;,$id
+                    Get-CimInstance -Query $query @hash -PipelineVariable UserComputer | 
+                        foreach -Process {
+                                            [pscustomobject]@{
+                                                                                                                            
+                                                                SamAccountName = $id
+                                                                ComputerName = $userComputer.netbiosname
+                                                                }}
+                                            
+                }
+            }
+            
+            &quot;Name&quot;
+            {
+                $adsisearcher = New-Object -TypeName System.DirectoryServices.DirectorySearcher
+                if ($Name -notmatch '\s+')
+                {
+                    $Name = &quot;*$Name*&quot; #Add wildcard * (asterix) if a single name is specified..will be a bit slow after this (ADSI search)
+                }
+                $adsisearcher.Filter ='(&amp;(objectCategory=person)(objectClass=user)(name={0}))' -f $($($name -replace '\s+',' ')  -replace ' ','*')
+
+                $users = $adsisearcher.FindAll() 
+                if ($users.count -ne 0)
+                {
+                    if ($users.Count -ne 1)
+                    {
+                     $users = $users | select -ExpandProperty properties | 
+                                foreach { [pscustomobject]@{Name=$_.name;SamAccountName=$_.samaccountname;Email=$_.mail;Title=$_.title;Location=$_.l} } |
+                                    Out-GridView -OutputMode Single -Title &quot;Select the User&quot;
+                    }
+                    
+                
+                $query = &quot;Select NetbiosName from {0} where LastlogonUserName='{1}'&quot; -f &quot;SMS_R_System&quot;,$($users.samaccountname)
+                Get-CimInstance -Query $query @hash -PipelineVariable UserComputer | 
+                    foreach -Process {
+                                        [pscustomobject]@{
+                                                            Name=$users.name
+                                                            SamAccountName = $users.samaccountname
+                                                            ComputerName = $userComputer.netbiosname
+                                                            }}
+                                    
+                }
+                else
+                {
+                    Write-Warning -Message &quot;No Users could be found&quot;
+                }
+            }
+        }
+    }
+    End
+    {
+        Write-Verbose -Message &quot;[END] Ending the Function&quot;
+    }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="vCosonok">
+    <title>Set-DfsnForDR - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-DfsnForDR</h1>
+<h3><a href="//scripts/5495.ps1">download</a></h3>
+<p>See www.cosonok.com and Set-DfsnForDR.ps1.</p>
+<pre><code class="language-posh">#########################################################
+## Set-DfsnForDR - v5.1 (September 2014)               ##
+## =================================================== ##
+## CAVEAT UTILITOR!                                    ##
+## This program comes with no warranty and no support! ##
+#########################################################
+
+$title             = &quot;Set-DfsnForDR - v5.1 (September 2014)&quot; # TITLE
+$workingPath       = $env:USERPROFILE                        # The users profile (where we expect the optional Set-DfsnForDR.ini to be)
+$domainServersFile = $workingPath + &quot;\Set-DfsnForDR.ini&quot;     # This is the default file name and location for the DomainServersFile
+$backupPath        = $workingPath + &quot;\DFSN_BACKUP&quot;           # The default backup folder (where namespace backups go)
+
+#############################
+# Generic Display Functions #
+#############################
+
+Function Pad-R{                                  # Function Pad-R
+	Param([string]$string,[int]$int)             # Takes in a -string $string, and -int $int
+	$string.PadRight($int,&quot; &quot;).SubString(0,$int) # Pads it right to $padR with &quot; &quot; and cuts it down to size if it was too big to start with	
+}                                                # END of function Pad-R
+
+Function Columnize{                                                                # Function Columnize
+	$i = 0                                                                         # Initialize counter $i = 0
+	while($i -lt $args.count){                                                     # While $i is less than the count of arguments
+        Write-Host ((Pad-R $args[$i] $args[$i+1]) + &quot; &quot;) -F $args[$i+2] -NoNewline # Write to screen $args[i] adjusted to size $args[i], &quot; &quot;, and in color $args[$i+2], with no new line after
+        $i += 3                                                                    # Accumulate count by 3 (since have sets of three arguments)
+    }                                                                              # END of while $i &lt; count of arguments
+	Write-Host                                                                     # Starts a new line for the next row
+}                                                                                  # END of Columnize
+
+Function Wr-E{Write-Host}                                 # Writes a Carriage Return (Enter)
+Function Wr-C{Write-Host ($args[0]) -F Cyan}              # Writes supplied argument text in Cyan
+Function Wr-G{Write-Host ($args[0]) -F Green}             # Writes supplied argument text in Green
+Function Wr-R{Write-Host ($args[0]) -F Red}               # Writes supplied argument text in Red
+Function Wr-W{Write-Host ($args[0]) -F White}             # Writes supplied argument text in White
+Function Wr-Y{Write-Host ($args[0]) -F Yellow}            # Writes supplied argument text in Yellow
+Function Wn-C{Write-Host ($args[0]) -F Cyan -NoNewline}   # Writes supplied argument text in Cyan (no new line after)
+Function Wn-G{Write-Host ($args[0]) -F Green -NoNewline}  # Writes supplied argument text in Green (no new line after)
+Function Wn-R{Write-Host ($args[0]) -F Red -NoNewline}    # Writes supplied argument text in Red (no new line after)
+Function Wn-W{Write-Host ($args[0]) -F White -NoNewline}  # Writes supplied argument text in White (no new line after)
+Function Wn-Y{Write-Host ($args[0]) -F Yellow -NoNewline} # Writes supplied argument text in Yellow (no new line after)
+Function Rd-W{                                            # Read from host in White (because default isn't)
+    If($args){Write-Host ($args[0]) -F White -NoNewline}  # If supplied $args then write to the screen $args[0] first with NoNewLine
+    return (Read-Host &quot;?&quot;)}                               # Then prompt!
+
+Function Prompt-Keys{ # ------------------------------------------------------- # This expects key presses so the args should all be only one character long!
+	Param([switch]$anykey,[switch]$echo)                                        # Allows any key to be pressed / Allows the key to be echoed to screen
+	If(!$anykey -and !$args[0]){return $false}                                  # No args when not using the -anykey is not a valid option
+	If($args[0]){                                                               # Might have no $args[0] if using the -anykey option
+		If($args[0].count -ne 1){$answers = $args[0]}                           # If the 1st argument - $args[0] - is an array, use this for the list of possible answers
+		else{$answers  = $args[0..(($args.count)-1)]}                           # Otherwise, take all the other arguments for the list of possible answers
+	}                                                                           # END of If ($args[0]
+	while($true){                                                               # Infinite loop! Escape via valid keypress or anykey if -anykey set!
+		If ($echo){$keyPress = $host.UI.RawUI.ReadKey(&quot;IncludeKeyDown&quot;)}        # The Key Press (ECHO allowed)
+		else      {$keyPress = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)} # The Key Press (no ECHO)
+		If($anyKey -and !$args[0]){return $true}                                # If $anyKey and no $args[0] we an return now
+		$keyPress = $keyPress.character.ToString().ToUpper()                    # Compare in upper case (and return in upper case)
+		foreach($answer in $answers){                                           # Loop through the answers
+			if($keyPress -eq $answer.ToUpper()){return $keyPress}               # Check if the answer to the prompt equals a valid answer, and if so then return
+		}                                                                       # END of foreach $answers
+		If($anyKey){return $true}                                               # If -anykey don't loop
+	}                                                                           # END of while $true
+} # --------------------------------------------------------------------------- # END of Prompt-Keys
+	
+Function Set-Window{ # ---------------------------------------------------------- # Set-Window
+	Param([string]$textcolor,[string]$background,[string]$title,[int]$percentMax) # -textcolor COLOR -background COLOR -title TITLE -percentMax %MAX_of_SCREEN_SIZE
+	$window = (get-host).UI.RawUI                                                 # Gets the current Window properties
+	If($textcolor)      {$window.ForegroundColor = $textcolor}                    # If $textcolor parameter, sets the textcolor
+	If($background -and ($window.BackgroundColor -ne $background)){               # If $background parameters and it's not equal to what it is set to already
+        $window.BackgroundColor = $background;cls}                                # ... set the background and do a CLS
+	If($title)          {$window.WindowTitle = $title}                            # Set's the Window Title!
+	$buffer            = $window.BufferSize                                       # Gets buffersize
+	$buffer.Height     = 9999                                                     # ... set maximum buffer hit
+	$window.BufferSize = $buffer                                                  # ... apply
+	If($perCentMax){                                                              # If $perCentMax parameter
+		$maxX = [int](($window.MaxPhysicalWindowSize.Width)*$percentMax/100)      # ... find our new X size
+		$maxY = [int](($window.MaxPhysicalWindowSize.Height)*$percentMax/100)     # ... find our new Y size
+		$buffer.Width = $maxX                                                     # ... buffer = maxX
+		$window.BufferSize = $buffer                                              # ... apply
+		$size = $window.WindowSize                                                # ... get WindowSize
+		$size.Width = $maxX                                                       # ... set maxX
+		$size.Height = $maxY                                                      # ... set maxY
+		$window.WindowSize = $size                                                # ... apply
+	}                                                                             # END of $perCentMax
+} # ----------------------------------------------------------------------------- # END of Set-Window
+
+##################
+# CORE FUNCTIONS #
+##################
+
+Function Check-OSVersion{ # ----------------------------- # Checks the OS Version of the machine the script is running on
+	Param([int]$major,[int]$minor)                        # INPUT = -major MAJORVERSION -minor MINORVERSION (e.g 2008R2 is 6 1)
+	$currentOS = [System.Environment]::OSVersion.Version  # Get the current OSVersion
+	if     ($currentOS.major -lt $major){return $null}    # Current major version less than required major version    - return FALSE
+	elseif ($currentOS.major -gt $major){return $true}    # Current major version greater than required major version - return TRUE
+	elseif ($currentOS.minor -lt $minor){return $null}    # Current minor version less than required minor version    - return FALSE
+	else                                {return $true}}   # Current minor version greater than or equal to the minor  - return TRUE
+
+Function Got-DFSUtil{ # ------------ # Tests if have access to DFSUtil
+	Wr-E; $testDfsUtil = dfsutil.exe # This will output a big red error to screen if it fails and leave $testDfsUtil as $null
+	return $testDfsUtil}             # Return $testDfsUtil (either it's $null or has something in)
+	
+Function Create-Folder { # ------------------------------------------------------- # INPUT = The folder or path to a folder for a new folder
+	If(!$args[0]){ return $null }                                                  # If no/null argument supplied, return NULL
+	If(Test-Path $args[0] -ErrorAction SilentlyContinue){ return ($args[0]) }      # If it already exists, it returns back the name of the folder
+	Else {[Void](New-item $args[0] -type directory -ErrorAction SilentlyContinue)} # Otherwise try and create it
+	If(Test-Path $args[0] -ErrorAction SilentlyContinue){ return ($args[0]) }      # If folder now exists, return back the name of the folder
+	Else { return $null }                                                          # Otherwise return NULL
+} # ------------------------------------------------------------------------------ # END Create-Folder
+
+Function Prompt-ForDomainServersFile{                                           # Takes no input
+    Wr-W &quot;This program allows loading of a file with:&quot;                          # Display to screen
+    Wr-W &quot;Line 1 = A domain name for Domain-based Namespaces&quot;                   # Display to screen
+    Wr-W &quot;Line 2 = A comma separated list of servers for Standalone Namespaces&quot; # Display to screen
+    Wr-W &quot;The file contents are not checked for validity.&quot;;Wr-E                 # Display to screen
+    $readIn = Rd-W &quot;Enter filepath&quot;;Wr-E                                        # Read input
+    return $readIn                                                              # Return what was read
+}                                                                               # END of Prompt-ForDomainServersFile
+
+Function Prompt-ForDomain{                                               # Function takes no input
+    $readIn = Rd-W &quot;Enter domain name&quot;;Wr-E                              # Read in the domain name
+    $getDFSUtil = Get-DFSUtil -Domain $readIn                            # Run Get-DFSUtil -Domain on the domain
+    If(!$getDFSUtil){                                                    # If was unsuccessful
+        Wr-R &quot;Unsuccessful querying domain $readIn for namespaces.&quot;;Wr-E # ... says it was unsuccessful
+        return $false                                                    # return FALSE
+    }                                                                    #
+    Wr-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; List of Namespaces in $readIn&quot;;Wr-E                    # Display the list of Namespaces
+    $getDFSUtil | foreach {Wr-W $_};Wr-E                                 # Cycles through the Get-DFSUtil output
+    return $readIn                                                       # return the domain name given in the prompt
+}                                                                        # END of Prompt-ForDomain
+
+Function Prompt-ForServer{                                                   # Function takes no input
+    $readIn = Rd-W &quot;Enter server name (or servers separated by commas)&quot;;Wr-E # Read in the server name(s)
+    $split = $readIn.Split(&quot;,&quot;)                                              # We allow comma separated servers, so split by this
+    foreach ($server in $split) {                                            # Cycle through the comma seperated list (or just a list of one)
+        $getDFSUtil = Get-DFSUtil -Server $server                            # Run Get-DFSUtil -Server on the server
+        If(!$getDFSUtil){                                                    # If was unsuccessful
+            Wr-R &quot;Unsuccessful querying server $server for namespaces.&quot;;Wr-E # ... say it was unsuccessful
+            return $false                                                    # return FALSE
+        }                                                                    #
+        Wr-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; List of Namespaces on $server&quot;;Wr-E                    # Display the list of Namespaces
+        $getDFSUtil | foreach {Wr-W $_};Wr-E                                 # Cycles through the Get-DFSUtil output
+    }                                                                        # END of cycling through servers
+    return $readIn                                                           # return the server name(s) given in the prompt
+}                                                                            # END of Prompt-ForServer
+
+Function Display-Namespaces{ # -------------------------- # Takes domain and/or server(s) as input
+    Param($domain,$server)                                # Define the parameters
+    $listNamespaces = @()                                 # Define an array for the list of namespaces
+    If($domain){                                          # If supplied a domain name
+        Wr-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; List of Namespaces in $domain&quot;;Wr-E # A heading
+        $list = Get-DFSUtil -Domain $domain               # Get the list of name spaces in the domain
+        foreach($item in $list){                          # FOR $list
+            $namespace = &quot;\\&quot; + $domain + &quot;\&quot; + $item     # Format Namespaces for domain
+            $listNamespaces += $namespace                 # Add to $listNamespaces
+            Wr-W $namespace                               # Display the namespaces
+        }                                                 # END $list
+        Wr-E                                              # 
+    }                                                     # END of if $domain
+    If($server){                                          # If supplied server(s)
+        $split = $server.Split(&quot;,&quot;)                       # We allow comma separated servers, so split by this
+        $split | foreach {                                # For each item (or just one)
+            Wr-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; List of Namespaces on $_&quot;;Wr-E  # A heading
+            $list = Get-DFSUtil -Server $_                # Get the list of name spaces in the standalone namespace
+            foreach($item in $list){                      # FOR $list
+                $namespace = &quot;\&quot; + $item                  # Standalone namespaces just need a &quot;\&quot; on the front of &quot;\COMPUTER&quot;
+                $listNamespaces += $namespace             # Add to $listNamespaces
+                Wr-W $namespace                           # Display the namespaces
+            }                                             # END $list
+            Wr-E                                          #
+        }                                                 # END of $split for loop
+    }                                                     # END of if $server
+    , $listNamespaces                                     # Return the list of Namespaces
+} # ----------------------------------------------------- # END of Display-Namespaces
+
+Function Get-DFSUtil {                                             # Expected parameters: -Domain OR -Server
+	Param([string]$Domain,[string]$Server)                         # Define parameters -Domain and -Server
+	If($Domain){$dfsutilOut = dfsutil domain $Domain}              # Run&gt; dfsutil domain DOMAINNAME
+	If($Server){$dfsutilOut = dfsutil server $Server}              # Run&gt; dfsutil server SERVERNAME
+    If(!$dfsutilOut){return $false}                                # If no results, return FALSE
+    If($dfsutilOut[0].contains(&quot;Could not complete the command&quot;)){ # dfsutil failed
+        return $false                                              # return FALSE
+    }                                                              # END of if &quot;Could not complete&quot;
+	$dfsNameSpaces = @()                                           # Initialize the array $dfsNameSpaces
+	Foreach ($line in $dfsutilOut) {                               # Cycle through the lines in the supplied (as 1st argument) array
+		$line = $line.Trim()                                       # Trim spaces from ends of line!
+		$tmp  = $line.ToLower()                                    # $tmp (TeMPorary) is $line in lowercase (makes matching easier)
+		If(($tmp -eq &quot;&quot;) -or                                       # not interested in blank lines
+		   ($tmp.StartsWith(&quot;roots on&quot;)) -or                       # not interested in this line
+		   ($tmp.StartsWith(&quot;done with&quot;)) -or                      # not interested in this line
+		   ($tmp.StartsWith(&quot;done processing&quot;))){}                 # not interested in this line {do nothing...}
+		else {$dfsNameSpaces += $line}                             # Construct $dfsNameSpaces
+	}                                                              # END of Foreach in $args[0]
+	, $dfsNameSpaces                                               # Return $dfsNameSpaces
+}                                                                  # END of Function Get-DFSUtil
+
+Function Prompt-ForNamespace { # ----------------------------------------- # Input is the list of namespaces from MAIN ($gotNameSpaces)
+    Param($namespaces)                                                     # Define parameter $namespaces
+    Wr-W &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt; List of Namespaces&quot;;Wr-E                                 # A heading
+    $namespaces | foreach {Wr-W $_};Wr-E                                   # Write to screen all the namespaces
+    $choice = Rd-W &quot;Enter namespace&quot;;Wr-E                                  # Prompt for the namespace
+    If(!$choice){return &quot;ALL&quot;}                                             # If user presses enter, return ALL
+    ## Note: We cannot use -match for the matching because regex is confused by \ ##
+    foreach ($namespace in $namespaces) {                                  # START: Cycle through $namespaces
+        If ( $namespace.ToUpper() -eq $choice.ToUpper() ) {return $choice} # If a match of the $choice in the $namespaces, return $choice ...
+    }                                                                      # END  : Cycle through $namespaces
+    Wr-R &quot;Unable to match $choice from the list of namespaces!&quot;            # ... no match and say so
+    Wr-E; return &quot;ALL&quot;                                                     # ... and return &quot;ALL&quot;
+} # ---------------------------------------------------------------------- # END Prompt-ForNamespace
+
+Function Backup-Namespaces { # --------------------------- # Backs up namespaces and returns an array with the filename(s) in
+    Param($domain,$server,$namespace,$path)                # Parameters -domain and/or -server, with -path
+    Wn-W &quot;Namespaces being backed up to &quot;; Wr-C $path;Wr-E # Display
+    $filenames = @()                                       # Initialize $filenames array
+    $date = Get-Date -uformat &quot;%Y%m%d%H%M&quot;                 # Get the date
+    If($namespace -ne &quot;ALL&quot;){ # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # If have the $namespace parameter (but not for ALL)
+        $split = $namespace.Split(&quot;\&quot;)                                                      # We have \\SERVER or DOMAIN\NAMESPACE - [0] \ [1] \ [2] \ [3]
+        $filename = $path + &quot;\&quot; + $split[2] + &quot;.&quot; + $split[3] + &quot;.&quot; + $date + &quot;.dfsnbackup&quot; # Create filename
+        [Void](Get-DFSUtilRootExport $namespace $filename)                                  # Run Get-DFSUtilRootExport
+        Wn-G &quot;$namespace&quot;; Wn-W &quot; backed up to &quot;; Wr-C &quot;$filename&quot;; Wr-E                    # write to screen
+        return $filename                                                                    # Return just one filename (since chosen to do 1 specific namespace)
+    } # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # END of $namespace (NOTE: $namespace is overwritten later in this FN)
+    If($domain){ # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # If DOMAIN
+        $list = Get-DFSUtil -Domain $domain                                               # Get the list of namespaces
+        foreach($item in $list){                                                          # cycle the list
+            $filename = $path + &quot;\&quot; + $domain + &quot;.&quot; + $item + &quot;.&quot; + $date + &quot;.dfsnbackup&quot; # create filename
+            $namespace = &quot;\\&quot; + $domain + &quot;\&quot; + $item                                     # format namespace for dfsutil
+            [Void](Get-DFSUtilRootExport $namespace $filename)                            # Run Get-DFSUtilRootExport
+            $filenames += $filename                                                       # accumulate filenames
+            Wn-G &quot;$namespace&quot;; Wn-W &quot; backed up to &quot;; Wr-C &quot;$filename&quot;                    # write to screen
+        }                                                                                 # END of $list
+    } # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # END of if DOMAIN
+    If($server){ # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # If SERVER(s)
+        $elements = $server.Split(&quot;,&quot;)                                                             # We allow comma separated servers, so split by this
+        foreach($element in $elements){                                                            # For each item (or just one)
+            $list = Get-DFSUtil -Server $element                                                   # Get the list of namespaces
+            foreach($item in $list){                                                               # cycle the list
+                $split = $item.Split(&quot;\&quot;)                                                          # Server items are \SERVER\NAMESPACE so we split them ([0] \ [1] SERVER \ [2] NAMESPACE)
+                $filename = $path + &quot;\&quot; + $element + &quot;.&quot; + $split[2] + &quot;.&quot; + $date + &quot;.dfsnbackup&quot; # create filename
+                $item = &quot;\&quot; + $item                                                                # format namespace for dfsutil
+                [Void](Get-DFSUtilRootExport $item $filename)                                      # Run Get-DFSUtilRootExport
+                $filenames += $filename                                                            # accumulate filenames
+                Wn-G &quot;$item&quot;; Wn-W &quot; backed up to &quot;; Wr-C &quot;$filename&quot;                              # write to screen
+            }                                                                                      # END of $list
+        }                                                                                          # END of $split for loop
+    };Wr-E # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ # END of SERVER
+	, $filenames # Return $filenames
+} # ------------ # END of Backup-Namespaces
+
+Function Get-DFSUtilRootExport {                            # Expected parameters: -Namespace AND -Backup
+    Param([string]$Namespace,[string]$Backup)               # Define parameters -Namespace and -Backup
+    $dfsutilout = dfsutil root export $Namespace $Backup    # Get the DFS Namespace information and write to $Backup
+    $tmp = $dfsutilout[1].ToString().ToLower()              # $tmp (TeMPorary) is $dfsutilout in lowercase (makes matching easier)
+    If($tmp.Contains(&quot;done processing this&quot;)){return $true} # Means successfully done a dfsutil root export
+    $false                                                  # ... otherwise it failed!
+}                                                           # END of Function Get0DFSUtilRootExport
+
+Function Display-TableOfLinks{ # ---------------------------------------------------------------------- # START of Display-TableOfLinks
+    Param($backupFiles)                                                                                 # Define param -backupfiles
+	If(!$global:tableOfLinks){                                                                          # (v5.1) If $global:tableOfLinks is NULL
+		[Void](Build-ArrayOfLinks $backupFiles)                                                         # ... build array of links
+		$global:ToLcount = $global:tableOfLinks.count}                                                  # ... and count rows in the array (global)
+    $r = 0;$x1 = 45;$x2 = 45;$x3 = 9;$x4 = 15                                                           # Initialize row accumulator r=0 and column widths for the table
+   	Columnize &quot;Namespace Link&quot; $x1 White &quot;Target&quot; $x2 White &quot;State&quot; $x3 White &quot;PriorityClass&quot; $x4 White # Column Headings
+	Columnize &quot;--------------&quot; $x1 White &quot;------&quot; $x2 White &quot;-----&quot; $x3 White &quot;-------------&quot; $x4 White # ... underlined
+    while ($r -lt $global:ToLcount){                                                                    # While the row count is less than the number of rows (of 4) we have in the array
+        Columnize ($global:tableOfLinks[$r]) $x1 White ($global:tableOfLinks[$r+1]) $x2 White ($global:tableOfLinks[$r+2]) $x3 White ($global:tableOfLinks[$r+3]) $x4 White
+        $r += 4                                                                                         # Accumulate the array by 4 for the next row
+    }                                                                                                   # END of while $r -lt $rows
+    Wr-E                                                                                                # Write to screen a carriage return
+} # --------------------------------------------------------------------------------------------------- # END of FN (AKA - Display-DFSUtilRootExportTable modified)
+
+Function Build-ArrayOfLinks{ # --------------------------------------------------------- # Cycles through all the backup files building the array of links
+    Param($backupFiles)                                                                  # Define param -backupfiles
+	$fileCount = $backupFiles.Count                                                      # A count of backup files
+	$onFileNum = 1                                                                       # Initialize &quot;On File Number&quot; = 0 
+    foreach ($file in $backupFiles){                                                     # Cycle through backup files
+		Wn-W (&quot;Reading backup file &quot; + $onFileNum + &quot;/&quot; + $fileCount + &quot; - &quot;);Wn-C $file # (v5.1) Display progress	
+		[Void](Get-DFSUtilRootExportTable $file)                                         # (v5.1) Get-DFSUtilRootExportTable updates $global:tableOfLinks!
+		$onFileNum ++                                                                    # Accumulate number of file we're on (progress display)
+    }                                                                                    # END of $backupFiles
+	Wr-E                                                                                 # 
+} # ------------------------------------------------------------------------------------ # END of Build-ArrayOfLinks
+
+Function Get-DFSUtilRootExportTable { # ---------------------------------- # Expected parameter: -Filename
+	# INPUT = $Filename of a DFSUTIL ROOT EXPORT file!                     #
+	# OUTPUT = NONE! (Updates $global:tableOfLinks)                        #
+	# USED BY = Function Build-ArrayOfLinks                                #
+    Param([string]$Filename)                                               # Define parameter -Filename
+    $tmp = Test-Path $Filename                                             # Test for $filename
+    If(!$tmp){Wr-R &quot;Filename $Filename not found!&quot;;return $null}           # Return NULL and display a warning if $filename not found
+    $contents = Get-Content -Path $Filename                                # Get the contents of $Filename
+    If(!$contents){Wr-R &quot;Filename $Filename has no content!&quot;;return $null} # Return NULL and display a warning if no content
+    $recording = $false                                                    # Variable turns on/off recording from the file
+	If (!$global:tableOfLinks){$global:tableOfLinks = @()}                 # (v5.1) A check that $global:tableOfLinks is not null, and if it is, to initialize as an array
+	$split = $Filename.split(&quot;\&quot;)                                          # (v5.1) We record full back to backup file and 
+    $split = $split[($split.count)-1]                                      # (v5.1) ... just want the end bit (the file name)
+    $split = $split.Split(&quot;.&quot;)                                             # (v5.1) Split backup file name on &quot;.&quot;
+    $namespacePrefix = &quot;\\&quot; + $split[0] + &quot;\&quot; + $split[1] +&quot;\&quot;             # (v5.1) The (DEFAULT) filename is DOMAIN/COMPUTER[0].NAMESPACE[1]
+    Foreach ($line in $contents){                                          # Go through all the lines in $contents
+		Wn-C &quot;.&quot;                                                           # (v5.1) Display progress 
+        $tmp = $line.ToLower()                                             # $tmp (TeMPorary) is $line in lowercase (makes matching easier)  
+        If($tmp.Contains(&quot;&lt;/link&gt;&quot;)){$recording = $false}                  # STOP recording contents of the file with &quot;&lt;/link&gt;&quot;
+        If($recording){                                                    # This bit only activates if $recording for servernames
+            $split = $line.Split([char]34)                                 # Split $line on Quotations
+            $state = $split[1]                                             # State is [0] &quot; [1] STATE
+            $priorityClass = $split[3]                                     # Priority Class is [0] &quot; [1] STATE &quot; [2] &quot; [3] PriorityClass
+            $split = $line.Split(&quot;&gt;&quot;)                                      # Split $line on &gt;
+            $split = $split[1]                                             # Take [1] ( [0] &gt; [1] )
+            $split = $split.Split(&quot;&lt;&quot;)                                     # Split the above on &lt;
+            $target = $split[0]                                            # Target is [0] Target &lt; [1]
+			$global:tableOfLinks += $link                                  # (v5.1) Contruct array: link         
+			$global:tableOfLinks += $target                                # (v5.1) Contruct array: target       
+			$global:tableOfLinks += $state                                 # (v5.1) Contruct array: state        
+			$global:tableOfLinks += $priorityClass                         # (v5.1) Contruct array: priorityClass
+        }                                                                  # END of $recording 
+        If($tmp.Contains(&quot;&lt;link name=&quot;)){                                  # If the line contains &quot;&lt;link name=&quot;
+            $recording = $true                                             # ... start recording from the next line
+            $link = $line.Split([char]34)                                  # Split the line on &quot;
+            $link = $link[1]                                               # The link is [0] &quot; [1] LINK &quot;
+			$link = $namespacePrefix + $link                               # (v5.1) Formats the link as a full path
+			If($link.contains(&quot;.DFSFolderLink&quot;)){$recording = $false}      # FIX for condition where a DFS link has no targets and temporary link name=&quot;&lt;LINK&gt;\.DFSFolderLink&quot;
+        }                                                                  # END of $tmp contains &quot;&lt;link name =&quot;            
+    }                                                                      # END of foreach $line n $contents
+	Wr-E                                                                   # (v5.1) Display progress - carriage return after the progress dots ...
+} # ---------------------------------------------------------------------- # END of function Get-DFSUtilRootTable
+
+Function Display-TargetServers{ # ---------------------- # START: Display-TargetServers
+	# INPUT = NONE but uses $global:tableOfLinks
+	# OUTPUT = NONE but constructs and/or displays $global:targets (hashtable with all targets in alphabetical order and how many times they've occurred!)
+	If(!$global:targets){                                # If we don't already have the $global:targets hash table
+		$global:targets = @{}                            # Initializes $global:targets as a hash table
+		$i = 0                                           # Initialize $i = 0 (location in the table of links)
+		while ($i -lt $global:ToLcount){                 # Goes through all the entries in the Table of Links
+			$target = $global:tableOfLinks[$i+1]         # Because $table has 4 entries per row [0] Namespace Link [1] Target ...
+			$server = $target.Split(&quot;\&quot;)[2]              # The server is ... [0] \ [1] \ [2] SERVERNAME \ [3] ...
+			$count = $global:targets.Get_Item($server)   # Get count of number of links with this server (note: we don't check capitalization of server name)
+			If(!$count){                                 # If no count ...
+				$global:targets.Set_Item($server,1)      # ... start with a count of 1
+			} else {                                     # otherwise
+				$count++                                 # accumulate the counter
+				$global:targets.Set_Item($server,$count) # and set the hashtable for $server with value $count
+			}                                            # END of If !$count else $count
+			$i += 4                                      # Accumulate $i by 4 (represents 4 entries per row in the table)
+		}                                                # END of while Less Than $sizeOfLinksTable
+	}                                                    # END of If !$global:targets
+	$str = $global:targets.GetEnumerator() | Sort-Object -Property Name | Format-Table -Autosize | Out-String
+	$str = $str.Trim()                                   # Trim carriage returns from front and end!
+	Wr-W $str; Wr-E                                      # Write table to screen
+} # ---------------------------------------------------- # END: Display-TargetServers
+
+Function Prompt-ForTarget{ # -------------------------------------------------------------------------- # FN: Prompt-ForTarget
+	$answer = Rd-W &quot;Enter target FQDN/NETBIOS&quot;;Wr-E                                                     # The prompt
+	If(!$answer){return $null}                                                                          # If no answer return NULL
+	If(!$global:targets.get_item($answer)){                                                             # If no match
+		Wr-R &quot;$answer is not a valid target from the List of 'Servers with Targets in the Namespaces'!&quot; # ... say no match
+		Wr-E; return $null}                                                                             # And return NULL
+	return $answer} # --------------------------------------------------------------------------------- # Else return $answer
+
+########################
+# Update DFS Functions #
+########################
+
+Function Update-DFSUtil{ # ------------------- # Function Update-DFSUtil
+	# INPUT: $global variables:tableOfLinks,TolCount,first,last,enabled,disabled
+    Param([switch]$ShowCommands,[switch]$Safe) # Define switches
+   	If(!$ShowCommands){                        # Not showing table headers or any headers if -ShowCommands!
+        $x1 = 45;$x2 = 45;$x3 = 9;$x4 = 15     # Column widths for tables (row output done in Update-DFSUtilProperty)
+        Columnize &quot;Namespace Link&quot; $x1 White &quot;Target&quot; $x2 White &quot;State&quot; $x3 White &quot;PriorityClass&quot; $x4 White
+	    Columnize &quot;--------------&quot; $x1 White &quot;------&quot; $x2 White &quot;-----&quot; $x3 White &quot;-------------&quot; $x4 White} # END !$showCommands
+    # \/ This next 4 lines use Update-DFSUtilProperty to do DFSUTIL property updates for different properties \/ #
+    If($global:first)   {[Void](Update-DFSUtilProperty -Match ($global:first)    -P1 &quot;priorityclass&quot; -P2 &quot;set&quot; -S1 &quot;GlobalHigh&quot; -Column &quot;PriorityClass&quot; -Display &quot;GlobalHigh&quot;)}
+    If($global:last)    {[Void](Update-DFSUtilProperty -Match ($global:last)     -P1 &quot;priorityclass&quot; -P2 &quot;set&quot; -S1 &quot;GlobalLow&quot;  -Column &quot;PriorityClass&quot; -Display &quot;GlobalLow&quot;)}
+    If($global:enabled) {[Void](Update-DFSUtilProperty -Match ($global:enabled)  -P1 &quot;state&quot;         -P2 &quot;online&quot;               -Column &quot;State&quot;         -Display &quot;ONLINE&quot;)}
+    If($global:disabled){[Void](Update-DFSUtilProperty -Match ($global:disabled) -P1 &quot;state&quot;         -P2 &quot;offline&quot;              -Column &quot;State&quot;         -Display &quot;OFFLINE&quot;)}
+	Wr-E                                       # ... blank line before the menu title
+} # ------------------------------------------ # Note: (v5.1) Removed $m since we now check the target is valid on input!
+
+Function Update-DFSUtilProperty { # ---------- # This Function is used inside Update-DFSUtil ONLY
+    Param($Match,$P1,$P2,$S1,$Column,$Display) # Define parameters -Match -P1 -P2 -S1 -Column -Display
+    $i = 0                                     # Initialize i as 0 (counts where we are in $arrayOfLinks FROM Update-DFSUtil)
+    If ($safe -and !$ShowCommands)     {Wr-E; Wr-G &quot;Running in safe mode, no updates will be actioned!&quot;;Wr-E}
+    elseif (!$safe -and !$ShowCommands){Wr-E; Wr-C &quot;DFSUtil property Updates being actioned!&quot;;Wr-E}
+    while ($i -lt $global:ToLcount){                        # WHILE &lt; count of $global:TableOfLinks
+        $target       = $global:tableOfLinks[$i+1]          # Target is taken from $arrayOfLinks
+        $targetServer = ($target.split(&quot;\&quot;))[2]             # Because we have \\SERVER\ or [0]\[1]\[2]SERVER\
+        If( $targetServer.ToLower() -eq $Match.ToLower() ){ # If we have a match (has to be a PERFECT MATCH, letter for letter, but not case sensitive)
+            $namespaceLink = $global:tableOfLinks[$i]       # Get the namespace link from $arrayOfLinks
+            $state         = $global:tableOfLinks[$i+2]     # Get original state from $arrayOfLinks
+            $priorityClass = $global:tableOfLinks[$i+3]     # Get original priority class from $arrayOfLinks
+            If($ShowCommands){                                             # IF we're just showing the commands ($showCommands from the parent function)
+                Wr-C &quot;dfsutil property $P1 $P2 $namespaceLink $target $S1&quot; # Display the command that would get run
+            } else {                                                       # ELSE (!$ShowCommands)
+                If(!$safe){ # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ # @@ ATTENTION - THE DFS UPDATE BIT @@
+                    $commandOut = dfsutil property $P1 $P2 $namespaceLink $target $S1 # THIS BIT ONLY RUNS IF SAFE MODE IS NOT ENABLED!
+                } # @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ # @@ END OF DFS UPDATE BIT          @@
+                If($Column -eq &quot;PriorityClass&quot;){Columnize $namespaceLink $x1 White $target $x2 White $state $x3 White $Display $x4 Cyan}
+                If($Column -eq &quot;State&quot;){Columnize $namespaceLink $x1 White $target $x2 White $Display $x3 Cyan $priorityClass $x4 White}
+            }                # END of not showing commands
+        }                    # END of if $Match
+	    $i += 4              # Accumulate $i by 4 ($array of links is a 1xY array - Y is in multiples of 4)
+    }                        # END of while &lt; $count
+} # ------------------------ # Note: (v5.1) Removed $recordMatches since we now checks the target is valid on input!
+
+##################
+## MAIN PROGRAM ##
+##################
+
+# Basic Checks.
+If($PSIse)                {Wr-E;Wr-R &quot;This program cannot run in PowerShell ISE. ISE does not support ReadKey!&quot;;Wr-E;EXIT}
+If(!(Check-OSVersion 6 0)){Wr-E;Wr-R &quot;This program requires Windows Version 6.0 (Windows 2008) or better!&quot;;Wr-E;Prompt-Keys -AnyKey;EXIT}
+If(!(Got-DFSUtil))        {Wr-E;Wr-R &quot;This program requires access to DFSUTIL.EXE!&quot;;Wr-E;Prompt-Keys -AnyKey;EXIT}
+# Note: We do not check AD rights permissions to DFS, but if the account doesn't have enough permission data gathering will fail!
+
+Set-Window White Black $title 80            # Set White text, Black background, Window Title, @ 80% max window size
+Wr-E;Wr-W &quot;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt; $title &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&quot;;Wr-E # Display TITLE
+
+$modes = &quot;Set Referral Priority Class (For Clustered ONTAP)&quot;,&quot;Set State Online/Offline (For Data ONTAP 7-Mode)&quot; # Initialize available modes
+$safeModes = &quot;Safe Mode ENABLED (Updates NOT possible)!&quot;,&quot;Safe Mode DISABLED (UPDATES will be ACTIONED)!&quot;       # Initialize description for safe modes
+$mode  = 0;$safeMode = $true                                                                                    # Initialize mode for CDOT and safe mode TRUE
+
+$nsChoice = &quot;ALL&quot;; $loadFile = $true # Initialize selection of ALL namespaces; enable loading the Domain Servers File on first run
+$global:tableOfLinks = $global:ToLcount = $global:targets = $null                                                   # Global variables we set to NULL
+$global:first = $global:last = $global:enabled = $global:disabled = $null                                           # Global variables we set to NULL
+$reset1 = $reset2 = $reset4 = $reset4 = $domainName = $servers = $gotNameSpaces = $domainOrServer = $backup = $null # Non-global ones we set to NULL
+
+$backupPath = Create-Folder $backupPath # This returns back the default $backupPath if it was created or already exists
+Wn-W &quot;Checking for the default Domain and Servers file at &quot;; Wr-C $domainServersFile; Wr-E # Display on first running the script
+
+while($true){ # START of 'MAIN MENU SYSTEM' ... a perpetual loop
+
+    If($loadFile){                                     # If $loadFile then load the domainServersFile
+        If(Test-Path $domainServersFile){              # Check if a $domainServersFile exists
+            $content = Get-Content $domainServersFile  # Get the file contents
+            If($content[0]){$domainName = $content[0]} # Domain is on the first line (or blank)
+            If($content[1]){$servers = $content[1]}    # Servers (separated by commas) are on the second line (or blank)
+        } else {                                       # Otherwise, no file                                                   
+            $domainServersFile = $null                 # Set the string $domainServersFile to NULL
+        }                                              # NOTE: There is (currently) no error checking in here for the validity of the file contents
+        $loadFile = $null                              # Will not reload the file on subsequent starts of the main menu (unless a new file is selected for loading)
+    }                                                  # END: If $loadFile
+
+    If ($reset1){$reset1 = $gotNameSpaces = $null; $nsChoice = &quot;ALL&quot;; $reset2 = $true}
+    If ($reset2){$reset2 = $backup = $null; $reset3 = $true}
+	If ($reset3){$reset3 = $global:tableOfLinks = $global:targets = $null; $reset4 = $true}
+	If ($reset4){$reset4 = $global:first = $global:last = $global:enabled = $global:disabled = $null; $safeMode = $true}
+
+    ## MAIN MENU ##
+    
+    Wr-W &quot;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt; MAIN MENU &gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&gt;&quot;;Wr-E             # MAIN MENU
+    $PROMPTKEYS = &quot;X&quot;,&quot;Q&quot;,&quot;B&quot;,&quot;1&quot;,&quot;2&quot;,&quot;3&quot;                 # Initialize the key selections array with always available options
+    If($domainName -or $servers){$domainOrServer = $true  # Set the $domainOrServer flag to TRUE if we have any
+    } else {                     $domainOrServer = $null} # ... otherwise set it to NULL
+
+    # ~~~~~ DISPLAY: Options B,1 - 3 ~~~~~ #
+	If($backupPath) {            Wn-W &quot;    &lt;B&gt;   Change backup folder. Current = &quot;;Wr-C $backupPath}
+	else {                       Wr-R &quot;    &lt;B&gt;   Select a backup folder!&quot;}    
+    If($domainServersFile){      Wn-W &quot;    &lt;1&gt;   Reload Domain and Server(s) from file. Last loaded = &quot;;Wr-C $domainServersFile}
+    else{                        Wr-W &quot;    &lt;1&gt;   Load Domain and Server(s) from file&quot;}
+    If($domainName){             Wn-W &quot;    &lt;2&gt;   Change Domain. Currently selected = &quot;;Wr-G $domainName}
+    else{                        Wr-W &quot;    &lt;2&gt;   Enter Domain Name (for Domain-based namespaces)&quot;}
+    If($servers){                Wn-W &quot;    &lt;3&gt;   Change Server(s). Currently selected = &quot;;Wr-G $servers}
+    else{                        Wr-W &quot;    &lt;3&gt;   Enter Server Name(s) (for Standalone namespaces)&quot;}
+    # ~~~~~ DISPLAY: Options 4 - 8 ~~~~~ #
+    If($domainOrServer){    Wr-E;Wr-W &quot;    &lt;4&gt;   Display Namespaces&quot;;$PROMPTKEYS += &quot;4&quot;}
+    If($gotNameSpaces){          Wn-W &quot;    &lt;5&gt;   Select an individual namespace/select ALL. Currently selected = &quot;;Wr-C $nsChoice;$PROMPTKEYS += &quot;5&quot;}
+    If($gotNameSpaces -and $backupPath){
+								 Wr-W &quot;    &lt;6&gt;   Backup Namespaces&quot;;$PROMPTKEYS += &quot;6&quot;}
+    If($backup){                 Wr-W &quot;    &lt;7&gt;   Display Table of Links, Target, State and PriorityClass&quot;;$PROMPTKEYS += &quot;7&quot;}
+    If($global:tableOfLinks){    Wr-W &quot;    &lt;8&gt;   Display List of Servers with Targets in the Namespaces&quot;;$PROMPTKEYS += &quot;8&quot;}
+    # ~~~~~ DISPLAY: Options T,F,L,E,D ~~~~~ #
+    $common = &quot;Set Server whose Targets are to be set as&quot;                        
+    If($global:targets){    Wr-E;Wn-W &quot;    &lt;T&gt;   (T)oggle Mode of Operation. Current = &quot;;Wr-C $modes[$mode];$PROMPTKEYS += &quot;T&quot;
+        If($mode -eq 0){ $PROMPTKEYS += &quot;F&quot;,&quot;L&quot;
+            If($global:first){   Wn-W &quot;    &lt;F&gt;   $common Priority (F)irst. &quot;; Wr-G (&quot;Selected = &quot; + $global:first)}
+            else{                Wr-W &quot;    &lt;F&gt;   $common Priority (F)irst.&quot;}
+            If($global:last){    Wn-W &quot;    &lt;L&gt;   $common Priority (L)ast . &quot;; Wr-G (&quot;Selected = &quot; + $global:last)}
+            else{                Wr-W &quot;    &lt;L&gt;   $common Priority (L)ast .&quot;}
+        } else { $PROMPTKEYS += &quot;E&quot;,&quot;D&quot;
+            If($global:enabled){ Wn-W &quot;    &lt;E&gt;   $common (E)nabled . &quot;; Wr-C (&quot;Selected = &quot; + $global:enabled)}
+            else{                Wr-W &quot;    &lt;E&gt;   $common (E)nabled .&quot;}
+            If($global:disabled){Wn-W &quot;    &lt;D&gt;   $common (D)isabled. &quot;; Wr-C (&quot;Selected = &quot; + $global:disabled)}
+            else{                Wr-W &quot;    &lt;D&gt;   $common (D)isabled.&quot;}}} 
+    # ~~~~~ DISPLAY: Options C,S,U ~~~~~ #
+    If($global:last -or $global:first -or $global:enabled -or $global:disabled){
+        $PROMPTKEYS += &quot;S&quot;,&quot;C&quot;,&quot;U&quot;
+                            Wr-E;Wr-C &quot;    &lt;C&gt;   Display DFSUTIL (C)ommands that will be run.&quot;
+        If($safeMode){           Wn-G &quot;    &lt;S&gt;   Toggle (S)afe Mode On/Off. Current = &quot;; Wr-G $safeModes[0]
+                                 Wr-G &quot;    &lt;U&gt;   (U)PDATE DFS!&quot;
+        } else {                 Wn-Y &quot;    &lt;S&gt;   Toggle (S)afe Mode On/Off. Current = &quot;; Wr-Y $safeModes[1]
+                                 Wr-Y &quot;    &lt;U&gt;   (U)PDATE DFS!&quot;}}
+    # ~~~~~ DISPLAY: Exit and Press a Key ~~~~~ #
+                            Wr-E;Wr-W &quot;    &lt;X/Q&gt; E(X)it/(Q)uit!&quot;
+                            Wr-E;Wn-G &quot;    &lt;&lt;&lt;&lt;&lt; Press a Key: &quot;
+
+    ## Handle the Keys ##
+    
+    $key = Prompt-Keys $PROMPTKEYS;Wr-Y $key; Wr-E
+    
+    # &lt;&lt;&lt;&lt;&lt;&lt;&lt; HANDLE: X,B,1,2,3 &gt;&gt;&gt;&gt;&gt;&gt;&gt; #
+    If(($key -eq &quot;X&quot;) -or ($key -eq &quot;Q&quot;)){EXIT}
+	If($key -eq &quot;B&quot;){$backupPath = Rd-W &quot;Enter backup folder path&quot;; $backupPath = Create-Folder $backupPath; Wr-E; $reset2 = $true}
+    If($key -eq &quot;1&quot;){$domainServersFile = Prompt-ForDomainServersFile; $loadFile = $true; $reset1 = $true}
+    If($key -eq &quot;2&quot;){$domainName = Prompt-ForDomain; $reset1 = $true}
+    If($key -eq &quot;3&quot;){$servers = Prompt-ForServer; $reset1 = $true}
+    # &lt;&lt;&lt;&lt;&lt;&lt;&lt; HANDLE: 4 - 8 &gt;&gt;&gt;&gt;&gt;&gt;&gt; #
+    If($key -eq &quot;4&quot;){$gotNameSpaces = Display-Namespaces $domainName $servers} # KEY: &quot;4&quot; get's a properly formatted table of Namespaces
+    If($key -eq &quot;5&quot;){                                                          # KEY: &quot;5&quot; selection
+        $newChoice = Prompt-ForNamespace $gotNameSpaces                        # Prompt for new choice if NameSpace
+        If($newChoice -ne $nsChoice){$reset2 = $true}                          # If $newChoice is different to the old, we need to reset $reset2 set of variables
+        $nsChoice = $newChoice                                                 # Always set $nsChoice to $newChoice
+    }                                                                          # END: &quot;5&quot; selection
+    If($key -eq &quot;6&quot;){                                                          # KEY: &quot;6&quot; for backup!
+		$backup = Backup-Namespaces -Domain $domainName -Server $servers -Namespace $nsChoice -Path $backupPath
+		$reset3 = $true}                                                       # Running a backup always re-initializes the $global:tableOfLinks to a NULL array
+	If($key -eq &quot;7&quot;){[Void](Display-TableOfLinks $backup)}                     # KEY: &quot;7&quot; generates and/or displays $global:tableOfLinks
+	If($key -eq &quot;8&quot;){[Void](Display-TargetServers)}                            # KEY: &quot;8&quot; generates and/or displays $global:targets (hashtable of target servers &amp; occurrences) 
+    # &lt;&lt;&lt;&lt;&lt;&lt;&lt; HANDLE: T,F,L,E,D &gt;&gt;&gt;&gt;&gt;&gt;&gt; #
+    If($key -eq &quot;T&quot;){                                     # KEY: &quot;T&quot; (T)oggle
+        If($mode -eq 0){$mode = 1}                        # Mode now &quot;Set State&quot;
+        else           {$mode = 0}                        # Mode now &quot;Set PriorityClass&quot;
+        $reset4}                                          # Toggling mode resets these variables
+    If($key -eq &quot;F&quot;){$global:first    = Prompt-ForTarget} # KEY: &quot;F&quot;
+	If($key -eq &quot;L&quot;){$global:last     = Prompt-ForTarget} # KEY: &quot;L&quot;
+	If($key -eq &quot;E&quot;){$global:enabled  = Prompt-ForTarget} # KEY: &quot;E&quot;
+	If($key -eq &quot;D&quot;){$global:disabled = Prompt-ForTarget} # KEY: &quot;D&quot;
+    # &lt;&lt;&lt;&lt;&lt;&lt;&lt; HANDLE: S,C,U &gt;&gt;&gt;&gt;&gt;&gt;&gt; #
+    If($key -eq &quot;S&quot;){                         # START: S selection for (S)afe
+        If($safeMode){$safeMode = $null}      # ... not SAFE mode
+        else         {$safeMode = $true}}     # ... now SAFE mode
+    If($key -eq &quot;C&quot;){ # --------------------- # START: C selection for (C)ommands
+        [Void](Update-DFSUtil -ShowCommands)} # ... RUN but just show commands
+    If($key -eq &quot;U&quot;){ # --------------------- # START: U selection for (U)pdate
+        If($safeMode){                        # ... If safe mode
+            [Void](Update-DFSUtil -Safe)      # RUN Update-DFSUtil in safe mode
+        } else {                              # ... else ...
+            [Void](Update-DFSUtil)            # RUN Update-DFSUtil
+            $reset2 = $true                   # ... after FULL run, run  $reset2 (will need to backup before more changes!)
+        }                                     # END: NOT $safeMode
+    } # ------------------------------------- # END:   R selection
+
+} # END of 'MAIN MENU SYSTEM' ... loop back to start
+
+#########################
+## END of MAIN PROGRAM ##
+#########################
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

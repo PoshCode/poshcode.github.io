@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="vpodans">
+    <title>New-CodeSigningCertifica - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-CodeSigningCertifica</h1>
+<h3><a href="//scripts/2700.ps1">download</a></h3>
+<p>Creates new self-signed code signing certificate and installs it to current user's personal store. Supports Windows XP and higher.</p>
+<p>Initially script was developed for Quest PowerGUI ScriptEditor add-on.</p>
+<pre><code class="language-posh">#####################################################################
+# New-CodeSigningCertificate.ps1
+# Version 1.0
+#
+# Creates new self-signed code signing certificate and installs it to
+# current user's personal store. Supports Windows XP and higher.
+#
+# Initially script was developed for Quest PowerGUI ScriptEditor add-on.
+#
+# Vadims Podans (c) 2011
+# http://en-us.sysadmins.lv/
+#####################################################################
+#requires -Version 2.0
+
+function New-CodeSigningCertificate {
+[CmdletBinding()]
+	param(
+		[Security.Cryptography.X509Certificates.X500DistinguishedName]$Subject = &quot;CN=PowerGUI User&quot;,
+		[ValidateSet(1024,2048)]
+		[int]$KeyLength = 2048,
+		[DateTime]$ValidFrom = [datetime]::Now,
+		[DateTime]$ValidTo = [datetime]::Now.AddYears(1)
+	)
+$signature = @&quot;
+[DllImport(&quot;advapi32.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+public static extern bool CryptAcquireContext(
+   ref IntPtr phProv,
+   string pszContainer,
+   string pszProvider,
+   uint dwProvType,
+   Int64 dwFlags
+);
+[DllImport(&quot;advapi32.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+public static extern bool CryptReleaseContext(
+	IntPtr phProv,
+	int flags
+);
+[DllImport(&quot;advapi32.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+public static extern bool CryptGenKey(
+	IntPtr phProv,
+	int Algid,
+	int dwFlags,
+	ref IntPtr phKey
+);
+[DllImport(&quot;Crypt32.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+public static extern bool CryptExportPublicKeyInfo(
+	IntPtr phProv,
+	int dwKeySpec,
+	int dwCertEncodingType,
+	IntPtr pbInfo,
+	ref int pcbInfo
+);
+[DllImport(&quot;Crypt32.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+public static extern bool CryptHashPublicKeyInfo(
+	IntPtr phProv,
+	int Algid,
+	int dwFlags,
+	int dwCertEncodingType,
+	IntPtr pInfo,
+	IntPtr pbComputedHash,
+	ref int pcbComputedHash
+);
+[DllImport(&quot;Crypt32.dll&quot;, SetLastError=true)]
+public static extern bool CryptEncodeObject(
+	int dwCertEncodingType,
+	[MarshalAs(UnmanagedType.LPStr)]string lpszStructType,
+	ref CRYPTOAPI_BLOB pvStructInfo,
+	byte[] pbEncoded,
+	ref int pcbEncoded
+);
+
+[DllImport(&quot;Crypt32.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+public static extern IntPtr CertCreateSelfSignCertificate(
+	IntPtr phProv,
+	CRYPTOAPI_BLOB pSubjectIssuerBlob,
+	int flags,
+	CRYPT_KEY_PROV_INFO pKeyProvInfo,
+	IntPtr pSignatureAlgorithm,
+	SystemTime pStartTime,
+	SystemTime pEndTime,
+	CERT_EXTENSIONS pExtensions
+);
+[DllImport(&quot;advapi32.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+public static extern bool CryptDestroyKey(
+	IntPtr cryptKeyHandle
+);
+[DllImport(&quot;kernel32.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+public static extern bool FileTimeToSystemTime(
+	[In] ref long fileTime,
+	out SystemTime SystemTime
+);
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct CRYPT_KEY_PROV_INFO {
+	public string pwszContainerName;
+	public string pwszProvName;
+	public int dwProvType;
+	public int dwFlags;
+	public int cProvParam;
+	public IntPtr rgProvParam;
+	public int dwKeySpec;
+}
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct CERT_EXTENSIONS {
+	public int cExtension;
+	public IntPtr rgExtension;
+}
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct CERT_EXTENSION {
+	[MarshalAs(UnmanagedType.LPStr)]public String pszObjId;
+	public Boolean fCritical;
+	public CRYPTOAPI_BLOB Value;
+}
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct CERT_BASIC_CONSTRAINTS2_INFO {
+	public Boolean fCA;
+	public Boolean fPathLenConstraint;
+	public int dwPathLenConstraint;
+}
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct CRYPTOAPI_BLOB {
+	public int cbData;
+	public IntPtr pbData;
+}
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct CRYPT_BIT_BLOB {
+	public uint cbData;
+	public IntPtr pbData;
+	public uint cUnusedBits;
+}
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct CERT_PUBLIC_KEY_INFO {
+	public CRYPT_ALGORITHM_IDENTIFIER Algorithm;
+	public CRYPT_BIT_BLOB PublicKey;
+}
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct CRYPT_ALGORITHM_IDENTIFIER {
+	[MarshalAs(UnmanagedType.LPStr)]public String pszObjId;
+	public CRYPTOAPI_BLOB Parameters;
+}
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+public struct SystemTime {
+	public short Year;
+	public short Month;
+	public short DayOfWeek;
+	public short Day;
+	public short Hour;
+	public short Minute;
+	public short Second;
+	public short Milliseconds;
+}
+&quot;@
+	Add-Type -MemberDefinition $signature -Namespace Quest -Name PowerGUI
+	$pszContainer = [Guid]::NewGuid().ToString()
+	[IntPtr]$phProv = [IntPtr]::Zero
+	$Provider = &quot;Microsoft Base Cryptographic Provider v1.0&quot;
+	$Result = [Quest.PowerGUI]::CryptAcquireContext([ref]$phProv,$pszContainer,$Provider,0x1,0x8)
+	if (!$Result) {Write-Warning &quot;Unable to create provider context!&quot;; return}
+	[IntPtr]$phKey = [IntPtr]::Zero
+	if ($KeyLength -eq 2048) {
+		$Result = [Quest.PowerGUI]::CryptGenKey($phProv,2,0x08000001,[ref]$phKey)
+	} else {
+		$Result = [Quest.PowerGUI]::CryptGenKey($phProv,2,0x04000001,[ref]$phKey)
+	}
+	if (!$Result) {Write-Warning &quot;Unable to create key context!&quot;; return}
+	$dataHandle = [Runtime.InteropServices.GCHandle]::Alloc($Subject.RawData,&quot;pinned&quot;)
+	$ptrName = New-Object Quest.PowerGUI+CRYPTOAPI_BLOB -Property @{
+		cbData = $Subject.RawData.Count;
+		pbData = $dataHandle.AddrOfPinnedObject()
+	}
+	$PrivateKey = New-Object Quest.PowerGUI+CRYPT_KEY_PROV_INFO -Property @{
+		pwszContainerName = $pszContainer;
+		pwszProvName = $Provider;
+		dwProvType = 1;
+		dwKeySpec = 2
+	}
+	$Extensions = New-Object Security.Cryptography.X509Certificates.X509ExtensionCollection
+	# add Basic Constraints extension
+	[void]$Extensions.Add((New-Object Security.Cryptography.X509Certificates.X509BasicConstraintsExtension $false,$false,0,$false))
+	# add Code Signing EKU
+	$OIDs = New-Object Security.Cryptography.OidCollection
+	[void]$OIDs.Add(&quot;code signing&quot;)
+	[void]$Extensions.Add((New-Object Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension -ArgumentList $OIDs, $false))
+	# add SKI extension
+	$pcbInfo = 0
+	if (([Quest.PowerGUI]::CryptExportPublicKeyInfo($phProv,2,1,[IntPtr]::Zero,[ref]$pcbInfo))) {
+		$pbInfo = [Runtime.InteropServices.Marshal]::AllocHGlobal($pcbInfo)
+		$Return = [Quest.PowerGUI]::CryptExportPublicKeyInfo($phProv,2,1,$pbInfo,[ref]$pcbInfo)
+		$pcbComputedHash = 0
+		if (([Quest.PowerGUI]::CryptHashPublicKeyInfo([IntPtr]::Zero,0x00008004,0,1,$pbInfo,[IntPtr]::Zero,[ref]$pcbComputedHash))) {
+			$pbComputedHash = [Runtime.InteropServices.Marshal]::AllocHGlobal($pcbComputedHash)
+			[void][Quest.PowerGUI]::CryptHashPublicKeyInfo([IntPtr]::Zero,0x00008004,0,1,$pbInfo,$pbComputedHash,[ref]$pcbComputedHash)
+			$pcbEncoded = 0
+			$uSKI = New-Object Quest.PowerGUI+CRYPTOAPI_BLOB -Property @{
+				cbData = $pcbComputedHash;
+				pbData = $pbComputedHash
+			}
+			$pcbEncoded = 0
+			if (([Quest.PowerGUI]::CryptEncodeObject(1,&quot;2.5.29.14&quot;,[ref]$uSKI,$null,[ref]$pcbEncoded))) {
+				$pbEncoded = New-Object byte[] -ArgumentList $pcbEncoded
+				$Return = [Quest.PowerGUI]::CryptEncodeObject(1,&quot;2.5.29.14&quot;,[ref]$uSKI,$pbEncoded,[ref]$pcbEncoded)
+				$AsnEncodedData = New-Object Security.Cryptography.AsnEncodedData -ArgumentList &quot;2.5.29.14&quot;, $pbEncoded
+				[void]$Extensions.Add((New-Object Security.Cryptography.X509Certificates.X509SubjectKeyIdentifierExtension -ArgumentList $AsnEncodedData, $false))
+			}
+		}
+	}
+	# add KeyUsages extension
+	[void]$Extensions.Add((New-Object Security.Cryptography.X509Certificates.X509KeyUsageExtension -ArgumentList &quot;DigitalSignature&quot;, $true))
+	# transform managed extensions to unmanaged structures
+	$uExtensionCollection = @()
+	foreach ($mExt in $Extensions) {
+		$uExtension = New-Object Quest.PowerGUI+CERT_EXTENSION
+		$uExtension.pszObjId = $mExt.Oid.Value
+		$uExtension.fCritical = $mExt.Critical
+		$value = New-Object Quest.PowerGUI+CRYPTOAPI_BLOB
+		$value.cbData = $mExt.RawData.Length
+		$value.pbData = [Runtime.InteropServices.Marshal]::AllocHGlobal($value.cbData)
+		[Runtime.InteropServices.Marshal]::Copy($mExt.RawData,0,$Value.pbData,$Value.cbData)
+		$uExtension.Value = $value
+		$uExtensionCollection += $uExtension
+	}
+	$uExtensions = New-Object Quest.PowerGUI+CERT_EXTENSIONS
+	$ExtensionSize = [Runtime.InteropServices.Marshal]::SizeOf([Quest.PowerGUI+CERT_EXTENSION]) * $Extensions.Count
+	$uExtensions.cExtension = $Extensions.Count
+	$uExtensions.rgExtension = [Runtime.InteropServices.Marshal]::AllocHGlobal($ExtensionSize)
+	for ($n = 0; $n -lt $Extensions.Count; ++$n) {
+		$offset = $n * [Runtime.InteropServices.Marshal]::SizeOf([Quest.PowerGUI+CERT_EXTENSION])
+		$next = $offset + $uExtensions.rgExtension.ToInt64()
+		[IntPtr]$NextAddress = New-Object IntPtr $next
+		[Runtime.InteropServices.Marshal]::StructureToPtr($uExtensionCollection[$n],$NextAddress,$false)
+	}
+	$pStartTime = New-Object Quest.PowerGUI+SystemTime
+	[void][Quest.PowerGUI]::FileTimeToSystemTime([ref]$ValidFrom.ToFileTime(),[ref]$pStartTime)
+	$pEndTime = New-Object Quest.PowerGUI+SystemTime
+	[void][Quest.PowerGUI]::FileTimeToSystemTime([ref]$ValidTo.ToFileTime(),[ref]$pEndTime)
+	$pvContext = [Quest.PowerGUI]::CertCreateSelfSignCertificate($phProv,$ptrName,0,$PrivateKey,[IntPtr]::Zero,$pStartTime,$pEndTime,$uExtensions)
+	if (!$pvContext.Equals([IntPtr]::Zero)) {
+		New-Object Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList $pvContext
+	}
+	# release memory
+	foreach ($uExt in $uExtensionCollection) {
+		[void][Runtime.InteropServices.Marshal]::FreeHGlobal($uExt.Value.pbData)
+	}
+	[void][Runtime.InteropServices.Marshal]::FreeHGlobal($uExtensions.rgExtension)
+	[void][Runtime.InteropServices.Marshal]::FreeHGlobal($pbInfo)
+	[void][Runtime.InteropServices.Marshal]::FreeHGlobal($pbComputedHash)
+	[void]$dataHandle.Free()
+	[void][Quest.PowerGUI]::CryptDestroyKey($phKey)
+	[void][Quest.PowerGUI]::CryptReleaseContext($phProv,0)
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

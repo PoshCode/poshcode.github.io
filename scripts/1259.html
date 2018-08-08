@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Peter">
+    <title>Get-CrawlHealth (MOSS) - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-CrawlHealth (MOSS)</h1>
+<h3><a href="//scripts/1259.ps1">download</a> - <a href="//scripts/1258.md">parent</a></h3>
+<p>This extends the functionality of the SharePoint Search Administration page, producing dashboard-like analysis of your farm's search crawls. I do not intend to use this script in production, but instead will use it as a starting point to help me build out search crawl health monitoring functionality.</p>
+<p>Added mid-expression newlines for readability. EDIT: now no longer formats the result as a list--you may now choose to format the results yourself (or not)</p>
+<pre><code class="language-posh">[reflection.assembly]::LoadWithPartialName(&quot;Microsoft.SharePoint&quot;) | out-null
+[reflection.assembly]::LoadWithPartialName(&quot;Microsoft.Office.Server&quot;) | out-null
+[reflection.assembly]::LoadWithPartialName(&quot;Microsoft.Office.Server.Search&quot;) | out-null
+
+@@#NOTE: I've set strict crawl freshness/crawl duration/success ratio threshholds. Reset as desired
+@@#      to something that more suits your reality.
+$crawlFreshnessDayThreshhold = 2
+$crawlDurationHourThreshhold = 4
+$successRatioThreshhold = 0.9
+
+
+function Calculate-CrawlDuration(
+	[Microsoft.Office.Server.Search.Administration.SharePointContentSource]$contentSource)
+{
+	if ($contentSource.CrawlStatus -eq [Microsoft.Office.Server.Search.Administration.CrawlStatus]::Idle) {
+		return &quot;Green - no current crawl&quot;
+	}
+	
+	$timespan = [datetime]::Now - $contentSource.CrawlStarted
+	$timespanFormatted = &quot;Running for $($timespan.TotalDays.ToString('0.00')) Days&quot; + 
+		&quot;($($timespan.TotalHours.ToString('0.0')) hours)&quot;
+	
+	if ($timespan.TotalHours -le ($crawlDurationHourThreshhold / 2)) {
+		return &quot;Green - $timespanFormatted&quot;
+	} elseif ($timespan.TotalHours -le ($crawlDurationHourThreshhold)) {
+		return &quot;Yellow - $timespanFormatted&quot;
+	} else {
+		return &quot;Red - $timespanFormatted&quot;
+	}
+}
+
+
+function Calculate-CrawlFreshness(
+	[Microsoft.Office.Server.Search.Administration.SharePointContentSource]$contentSource)
+{
+	$timespan = [datetime]::Now - $contentSource.CrawlCompleted
+	$timespanFormatted = &quot;$($timespan.TotalDays.ToString('0.00')) days ago&quot;
+	if ($timespan.Days -le 0) {
+		return &quot;Green - $timespanFormatted&quot;
+	} elseif ($timespan.Days -lt $crawlFreshnessDayThreshhold) {
+		return &quot;Yellow - $timespanFormatted&quot;
+	} else {
+		return &quot;Red - $timespanFormatted&quot;
+	}
+}
+
+
+function Calculate-IndexHealth(
+	[Microsoft.Office.Server.Search.Administration.SharePointContentSource]$contentSource, 
+	$successCount, $warningCount, $errorCount)
+{
+	$formatted = &quot;($($successCount)/$($warningCount)/$($errorCount))&quot;
+	if ($errorCount -eq 1) {
+		return &quot;Red - exactly 1 error, usually indicates permissions/config error - $formatted&quot;
+	}
+	
+	$successRatio = ([double]$successCount)/([double]($warningCount + $errorCount))
+	$successRatioMidpointToPerfection = (1.0 - ((1.0 - $successRatioThreshhold)/2.0))
+	if ($successRatio -ge $successRatioMidpointToPerfection) {
+		return &quot;Green - $formatted&quot;
+	} elseif ($successRatio -ge $successRatioThreshhold) {
+		return &quot;Yellow - $formatted&quot;
+	} else {
+		return &quot;Red - $formatted&quot;
+	}
+}
+
+function Get-CrawlHealth
+{
+	$serverContext = [Microsoft.Office.Server.ServerContext]::Default
+	$searchContext = [Microsoft.Office.Server.Search.Administration.SearchContext]::GetContext($serverContext)
+
+	$content = [Microsoft.Office.Server.Search.Administration.Content]$searchContext
+	$history = [Microsoft.Office.Server.Search.Administration.CrawlHistory]$searchContext
+	
+	$contentSources = $content.ContentSources | foreach { $_ }
+	
+	$contentSources | foreach { 
+		#unroll DataTable object into more useful DataRow object
+		$crawlHistory = $history.GetLastCompletedCrawlHistory($_.Id) | % { $_ }
+		add-member -inputobject $_ -membertype NoteProperty -name &quot;CurrentCrawlDuration&quot; -value (
+			Calculate-CrawlDuration $_)
+		add-member -inputobject $_ -membertype NoteProperty -name &quot;CompletedCrawlFreshness&quot; -value (
+			Calculate-CrawlFreshness $_)
+		add-member -inputobject $_ -membertype NoteProperty -name &quot;IndexHealth&quot; -value (
+			Calculate-IndexHealth -contentSource $_ -successCount $crawlHistory.SuccessCount -warningCount (
+				$crawlHistory.WarningCount) -errorCount $crawlHistory.ErrorCount)
+	}
+	
+	$contentSources | select Name, CurrentCrawlDuration, CompletedCrawlFreshness, IndexHealth
+}
+
+
+
+@@#USAGE: -Open a PowerShell session on the SharePoint server with elevated credentials 
+@@#       (specifically, with access to the SSP - usually the SharePoint farm account)
+@@#       -Tweak the threshholds (they may be too ambitious for your environment)
+@@#        -Paste this text into an open PowerShell window and type (without the # mark)
+@@#        Get-CrawlHealth | Format-List
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

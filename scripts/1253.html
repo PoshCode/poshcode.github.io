@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Carter Shanklin">
+    <title>Excel Auto-frontend - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Excel Auto-frontend</h1>
+<h3><a href="//scripts/1253.ps1">download</a></h3>
+<p>Automatically create an Excel frontend to a cmdlet or advanced function. Not really general purpose yet. There are a couple of examples within the script.</p>
+<pre><code class="language-posh">Function New-DummyVM {
+	param(
+	[Parameter(Mandatory=$true,HelpMessage=&quot;Target Host&quot;)]
+	[VMware.VimAutomation.Types.VMHost]
+	$TargetHost,
+
+	[Parameter(Mandatory=$true,HelpMessage=&quot;Target Host&quot;)]
+	[VMware.VimAutomation.Types.ResourcePool]
+	$ResourcePool,
+
+	[Parameter(Mandatory=$true,HelpMessage=&quot;New VM Name&quot;)]
+	[String]
+	$NewName
+	)
+	
+	Get-VMHost $TargetHost | New-VM -ResourcePool $ResourcePool -Name $NewName -DiskMB 1
+}
+
+Function Add-BulkHosts {
+	param(
+	[Parameter(Mandatory=$true,HelpMessage=&quot;Host name or IP address&quot;)]
+	[String]
+	$HostName,
+
+	[Parameter(HelpMessage=&quot;Target Datacenter&quot;)]
+	[VMware.VimAutomation.Types.Datacenter]
+	$Datacenter,
+
+	[Parameter(HelpMessage=&quot;Target Folder&quot;)]
+	[VMware.VimAutomation.Types.Folder]
+	$Folder,
+
+	[Parameter(HelpMessage=&quot;Target Cluster&quot;)]
+	[VMware.VimAutomation.Types.Cluster]
+	$Cluster,
+
+	[Parameter(HelpMessage=&quot;Target Resource Pool&quot;)]
+	[VMware.VimAutomation.Types.ResourcePool]
+	$ResourcePool,
+
+	[Parameter(HelpMessage=&quot;Target Port&quot;)]
+	[Int32]
+	$Port=443,
+
+	[Parameter(HelpMessage=&quot;User&quot;)]
+	[String]
+	$User = &quot;&quot;,
+
+	[Parameter(HelpMessage=&quot;Password&quot;)]
+	[String]
+	$Password
+	)
+
+	Process {
+		if ($Datacenter) {
+			$location = $Datacenter
+		} elseif ($Folder) {
+			$location = $Folder
+		} elseif ($Cluster) {
+			$location = $Cluster
+		} elseif ($ResourcePool) {
+			$location = $ResourcePool
+		}
+		if (!$location) {
+			Write-Warning &quot;One of Datacenter, Folder, Cluster or ResourcePool must be specified.&quot;
+			return
+		}
+
+		if ($User -ne &quot;&quot;) {
+			Add-VMHost -Name $HostName -Location $location -Port $Port -User $User -Password $Password -Force
+		} else {
+			Add-VMHost -Name $HostName -Location $location -Port $Port -Force
+		}
+	}
+}
+
+Function Get-ExcelFrontEnd {
+	param($cmdlet)
+
+	# Load in some Excel interop stuff.
+	[reflection.assembly]::loadwithpartialname(&quot;microsoft.office.interop.excel&quot;) | Out-Null
+	$xlDvType                  = &quot;Microsoft.Office.Interop.Excel.XlDVType&quot; -as [type]
+	$xlDvAlertStyle            = &quot;Microsoft.Office.Interop.Excel.XlDvAlertStyle&quot; -as [type]
+	$xlFormatConditionOperator = &quot;Microsoft.Office.Interop.Excel.XlFormatConditionOperator&quot; -as [type]
+	$myDocuments = (Get-Itemproperty &quot;hkcu:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders&quot;).Personal
+	$csvFile = $myDocuments + &quot;\parameters.csv&quot;
+
+	# We watch this file for writes.
+	$startWriteTime = (Get-ChildItem $csvFile -ea SilentlyContinue).LastWriteTime
+
+	# Define what commands will get us various types of data.
+	$findObjects = @{
+		[VMware.VimAutomation.Types.Cluster]             = { Get-Cluster }             ;
+		[VMware.VimAutomation.Types.Datacenter]          = { Get-Datacenter }          ;
+		[Datastore]                                      = { Get-Datastore }           ;
+		[VMware.VimAutomation.Types.Folder]              = { Get-Folder }              ;
+		[VMware.VimAutomation.Types.OSCustomizationSpec] = { Get-OSCustomizationSpec } ;
+		[VMware.VimAutomation.Types.ResourcePool]        = { Get-ResourcePool }        ;
+		[VMware.VimAutomation.Types.Template]            = { Get-Template }            ;
+		[VMware.VimAutomation.Types.VirtualMachine]      = { Get-VM }                  ;
+		[VMware.VimAutomation.Types.VMHost]              = { Get-VMHost }
+	}
+	
+	# Parameters to ignore.
+	$ignore = @(&quot;Verbose&quot;, &quot;Debug&quot;, &quot;ErrorAction&quot;, &quot;WarningAction&quot;, &quot;ErrorVariable&quot;,
+	    &quot;WarningVariable&quot;, &quot;OutVariable&quot;, &quot;OutBuffer&quot;)
+
+	# Determine the names and types of all parameters in the first signature.
+	$parameters = (Get-Command $cmdlet).Parameters
+
+	# Locate the cmdlet template.
+	$cmdletTemplate = $myDocuments + &quot;\CmdletFrontend.xlsm&quot;
+	$ifOffset = 11
+
+	# Launch Excel and initialize things.
+	$xl = New-Object -ComObject Excel.Application
+	$wb = $xl.Workbooks.Open($cmdletTemplate)
+	#$wb = $xl.Workbooks.Add()
+	$ifSheet = $wb.worksheets.item(1)
+	#$ifSheet.Name = &quot;Interface&quot;
+	$ifSheet.StandardWidth = 20
+	$dataSheet = $wb.worksheets.item(2)
+	#$dataSheet.Name = &quot;Data&quot;
+	#$wb.worksheets.item(3).Delete()
+
+	# Populate the easy stuff.
+	$ifSheet.Cells.Item(4, 1) = $cmdlet
+	#$ifSheet.Cells.Item(7, 5) = $defaultVIServer.Name
+	#$ifSheet.Cells.Item(8, 5) = $defaultVIServer.SessionId
+
+	$xl.visible = $true
+
+	# Based on the types, start populating stuff under the Data sheet.
+	$i = 0
+	foreach ($key in $parameters.keys) {
+		if ($ignore -contains $key) {
+			continue
+		}
+		$i++
+
+		$parameter = $parameters[$key]
+		$type = $parameter.ParameterType
+
+		# If the type is an array, figure out the real type.
+		# XXX
+
+		# Create the column in the Interface sheet.
+		$ifSheet.Cells.Item($ifOffset, $i) = $key
+
+		# If we know how to load instances of this type, load the data in now.
+		if ($findObjects[$type]) {
+			$values = . $findObjects[$type]
+
+			# Put this data in the Data sheet.
+			$j = 1
+			foreach ($value in $values) {
+				$dataSheet.Cells.Item($j++, $i) = $value.Name
+			}
+
+			# Turn this into a named data range.
+			$rangeName = $key
+			Write-Debug $rangeName
+
+			# Convert the range to R1C1 notation.
+			$dataRange = &quot;=Data!R1C{0}:R{1}C{2}&quot; -f $i, ($j-1), $i
+			Write-Debug $dataRange
+			$name = $wb.names.add($rangename, $null, $true, $null, $null, $null, $null, $null, $null, $dataRange, $null)
+
+			$column = [char]([byte][char]&quot;A&quot; + $i - 1)
+			$ifRange = &quot;{0}{1}:{2}{3}&quot; -f $column, $ifOffset, $column, 250
+			Write-Debug $ifRange
+			# Constrain input in the interface sheet based on this data.
+			$range = $ifSheet.Range($ifRange).Select()
+			$validation = $xl.Selection.Validation.Add($xlDvType::xlValidateList, $xlDvAlertStyle::xlValidAlertStop,
+				$xlFormatConditionOperator::xlBetween, &quot;=$rangename&quot;, $null)
+		}
+	}
+	
+	$range = $ifSheet.Range(&quot;A1&quot;).Select()
+
+	# Wait for the file to get updated.
+	do {
+		Write-Debug &quot;Waiting&quot;
+		Start-Sleep 1
+		$thisWriteTime = (Get-ChildItem $csvFile -ea silentlycontinue).LastWriteTime
+	} while ($thisWriteTime -le $startWriteTime)
+
+	# Run the cmdlet with the data specified.
+	$xl.Visible = $false
+	$wb.Close($false)
+	$xl.Quit()
+	foreach ($f in (import-csv $csvFile)) {
+		$properties = $f | Get-Member -type NoteProperty
+ 		$argString = &quot;&quot;
+		$objects = @()
+		$i = 0
+		foreach ($property in $properties) {
+			$pName = $property.Name
+			#Write-Host (&quot;Property name is &quot; + $pName)
+			if ($f.$pName -ne &quot;&quot;) {
+				#Write-Host (&quot;Property value is &quot; + $f.$pName)
+
+				# Resolve the object.
+				$parameter = $parameters[$pName]
+				$type = $parameter.ParameterType
+				$getter = $findObjects[$type]
+				$object = $null
+				if ($getter) {
+					$lookupExpression = ($getter.ToString() + &quot; -name '&quot; + $f.$pName + &quot;' | Select -first 1&quot;)
+					#Write-Host (&quot;Looking up using &quot; + $lookupExpression)
+					$object = Invoke-Expression $lookupExpression
+				} else {
+					$object = $f.$pName
+				}
+				$objects += $object
+				#Write-Host $objects
+				$argString += (&quot; -&quot; + $pName + &quot; `$objects[$i]&quot;)
+				#Write-Host (&quot;Set &quot; + $pName + &quot; to &quot; + $objects[$i])
+				$i++
+			}
+		}
+		$command = $cmdlet + $argString
+		#Write-Host $command
+		Invoke-Expression $command
+	}
+}
+
+#Get-ExcelFrontEnd Add-BulkHosts
+#Get-ExcelFrontEnd New-DummyVM
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jon Webster">
+    <title>Select-CSVString - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Select-CSVString</h1>
+<h3><a href="//scripts/1607.ps1">download</a></h3>
+<p>Search through CSV files using a regular expression and import just the lines you're looking for as named properties.</p>
+<pre><code class="language-posh"># NAME
+#   Select-CSVString
+#
+# SYNOPSIS
+#   Convert CSV files to custom objects with properties
+#
+# SYNTAX
+#   Select-CSVString -pattern &lt;string[]&gt; -files (ls *) [-StartDate &lt;DateTime&gt;] [-EndDate &lt;DateTime&gt;]
+
+param ([regex]$pattern,$files=(&quot;$($exinstall)TransportRoles\Logs\AgentLog&quot;,&quot;$($exinstall.substring(0,1)):\Program Files (x86)\Microsoft Forefront Protection for Exchange Server\Data\FSEAgentLog&quot;|%{ls $_}|Sort-Object LastWriteTime), [string]$StartDate, [string]$EndDate)
+
+# Check start and end dates
+$local:erroractionpreference = &quot;Stop&quot;
+If(!$StartDate -and !$EndDate) { [string]$datetime = &quot;None&quot; }
+ElseIf ($StartDate -and $EndDate)
+{
+	[DateTime]$StartDate = $StartDate
+	[DateTime]$EndDate = $EndDate
+	[string]$datetime = &quot;Both&quot;
+	$files = $files|Where-Object {($_.CreationTime -ge $StartDate -or $_.LastWriteTime -ge $StartDate) -and $_.CreationTime -le $EndDate}
+}
+ElseIf ($StartDate -and !$EndDate)
+{
+	[DateTime]$StartDate = $StartDate
+	[string]$datetime = &quot;StartDate&quot;
+	$files = $files|Where-Object {$_.CreationTime -ge $StartDate -or $_.LastWriteTime -ge $StartDate}
+}
+ElseIf (!$StartDate -and $EndDate)
+{
+	[DateTime]$EndDate = $EndDate
+	[string]$datetime = &quot;EndDate&quot;
+	$files = $files|Where-Object {$_.CreationTime -le $EndDate -or $_.LastWriteTime -le $EndDate}
+}
+$local:erroractionpreference = &quot;Continue&quot;
+
+# Get columns
+$columns = @($files)[0]|Get-Content -TotalCount 5
+
+foreach($col in $columns)
+{
+	$col = $col -Replace &quot;^#Fields: &quot;,&quot;&quot;
+	If ($col -notmatch &quot;^#&quot;)
+	{
+		$columns = $col.Split(',')
+		break
+	}
+}
+
+# Get Results
+foreach($file in $files)
+{
+	Write-Debug &quot;File: $($file.FullName)&quot;
+	trap
+	{
+		Write-Debug &quot;File Locked&quot;
+		$script:lines = $file|Get-Content|Select-String $pattern
+		continue
+	}
+	$lines = $file|Select-String $pattern -ErrorAction Stop
+
+
+	foreach($l in $lines) {
+		Write-Debug &quot;Line: $($l.Line)&quot;
+		if ($l -eq $null) { break }
+		$line = New-Object object
+		$line|Add-Member -memberType NoteProperty -name &quot;Path&quot; -value $l.Path
+
+		# ---------- Delimiter magic inside ----------
+		# It has been asked, why not dump select-string to a 
+		# file and import-csv the whole thing? To get realtime
+		# results and avoid temporary files, thats why.
+
+		$z = [char](222)
+		$from = &quot;,&quot;
+
+		$tmp = $l.Line -replace &quot;(?:`&quot;((?:(?:[^`&quot;]|`&quot;`&quot;))+)(?:`&quot;$from|`&quot;`$))|(?:$from)|(?:((?:.(?!$from))*.)(?:$from|`$))&quot;,&quot;$z`$1`$2$z&quot;
+		# Replace &quot;&quot; with &quot; to be like all the other CSV parsers
+		$tmp = $tmp -replace '&quot;&quot;','&quot;'
+		$tmp = [regex]::Matches($tmp,&quot;[$z](.*?)[$z]&quot;)
+		$row = @()
+		$tmp | foreach { $row += $_.Groups[1].Value }
+		# ---------- Delimiter magic inside ----------
+
+		0..($columns.Count-1)|Foreach-Object {
+			# Convert timestamps to datetime objects
+			If($columns[$_] -match &quot;(timestamp|date-time)&quot;) {$row[$_] = [DateTime]$row[$_]}
+			$line|Add-Member -memberType NoteProperty -name $columns[$_] -Value $row[$_]
+		}
+
+		# Determine if the line meets datetime requirements
+		If($datetime -eq &quot;None&quot;) {Write-Output $line}
+		ElseIf($datetime -eq &quot;EndDate&quot; -and $EndDate -ge $line.timestamp) {Write-Output $line}
+		ElseIf($datetime -eq &quot;StartDate&quot; -and $StartDate -le $line.timestamp) {Write-Output $line}
+		ElseIf($datetime -eq &quot;Both&quot; -and $StartDate -le $line.timestamp -and $EndDate -ge $line.timestamp) {Write-Output $line}
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

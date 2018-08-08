@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-Module</h1>
+<h3><a href="//scripts/4379.ps1">download</a> - <a href="//scripts/4378.md">parent</a></h3>
+<p>Generate a new PowerShell module from a few scripts.</p>
+<pre><code class="language-posh">function New-Module {
+   #.Synopsis
+   #  Generate a new module from some script files
+   #.Description
+   #  New-Module serves two ways of creating modules, but in either case, it can generate the psd1 and psm1 necessary for a module based on script files.
+   #
+   #  In one use case, it's just a simplified wrapper for New-ModuleManifest which answers some of the parameters based on the files already in the module folder.
+   #
+   #  In the second use case, it allows you to collect one or more scripts and put them into a new module folder.
+   #.Example
+   #  New-Module FileUtilities *.ps1 -Author &quot;Joel Bennett&quot; -Description &quot;My collection of file utility functions&quot;
+   #
+   #  This example shows the recommended way to run the New-Module cmdlet, providing a full Author name, and a real description. It collecta all the script files in the present working directory and generates a new module &quot;MyUtility&quot; ...
+   #.Example
+   #  New-Module MyUtility *.ps1 -recurse 
+   #
+   #  This example shows how to collect all the script files in the folder and it's subfolders to recursively generate a new module &quot;MyUtility&quot; with the default values for everything else.
+   #.Example
+   #  New-Module ~\Documents\WindowsPowerShell\Modules\MyUtility -Upgrade
+   #
+   #  This example shows how to (re)generate the MyUtility module from all the files that have already been moved to that folder. 
+   #  If you use the first example to generate a module, and then you add some files to it, this is the simplest way to update it after adding new script files.  However, you can also create the module and move files there by hand, and then call this command-line to generate the psd1 and psm1 files...
+   #
+   #  Note: the Upgrade parameter keeps the module GUID, increments the ModuleVersion, updates the FileList, TypesToProcess, FormatsToProcess, and NestedModules from the files in the directory, and overwrites the convention-based values: RootModule, FunctionsToExport, AliasesToExport, VariablesToExport, and CmdletsToExport.  You may provide additional parameters (like AuthorName) and overwrite those as well.
+   #.Example
+   #  Get-ChildItem *.ps1,*.psd1 -Recurse | New-Module MyUtility
+   #
+   #  This example shows how to pipe the files into the New-Module, and yet another approach to collecting the files needed.
+   [CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact=&quot;Medium&quot;, DefaultParameterSetName=&quot;NewModuleManifest&quot;)]
+   param(
+      # If set, overwrites existing modules without prompting
+      [Switch]$Force,
+
+      # If set, appends to (increments) existing modules without prompting.
+      # THe Updgrade switch will leave any customizations to your module in place:
+      # * It doesn't alter the psm1 (but will create one if it's missing)
+      # * It only changes the manifest module version, and any explicitly set parameters
+      [Switch]$Upgrade,
+
+      # The name of the module to create
+      [Parameter(Position=0, Mandatory=$true)]
+      [ValidateScript({if($_ -match &quot;[$([regex]::Escape(([io.path]::GetInvalidFileNameChars() -join '')))]&quot;) { throw &quot;The ModuleName must be a valid folder name. The character '$($matches[0])' is not valid in a Module name.&quot;} else { $true } })]
+      $ModuleName,
+
+      # The script files to put in the module. Should be .ps1 files (but could be .psm1 too)
+      [Parameter(Position=1, Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true, ParameterSetName=&quot;OverwriteModule&quot;)]
+      [Alias(&quot;PSPath&quot;)]
+      $Path,
+
+      # Supports recursively searching for File
+      [Switch]$Recurse,
+
+      # If set, enforces the allowed verb names on function exports
+      [Switch]$StrictVerbs,
+
+      # The name of the author to use for the psd1 and copyright statement
+      [PSDefaultValue(Help = {&quot;Env:UserName: (${Env:UserName})&quot;})]
+      [String]$Author = $Env:UserName,
+
+      # A short description of the contents of the module.
+      [Parameter(Position=1)]
+      [PSDefaultValue(Help = {&quot;'A collection of script files by ${Env:UserName}' (uses the value from the Author parmeter)&quot;})]
+      [string]${Description} = &quot;A collection of script files by $Author&quot;,
+
+      # The vresion of the module 
+      # (This is a passthru for New-ModuleManifest)
+      [Parameter()]
+      [PSDefaultValue(Help = &quot;1.0 (when -Upgrade is set, increments the existing value to the nearest major version number)&quot;)]
+      [Alias(&quot;Version&quot;,&quot;MV&quot;)]
+      [Version]${ModuleVersion} = &quot;1.0&quot;,
+
+      # (This is a passthru for New-ModuleManifest)
+      [AllowEmptyString()]
+      [String]$CompanyName = &quot;None (Personal Module)&quot;,
+
+      # Specifies the minimum version of the Common Language Runtime (CLR) of the Microsoft .NET Framework that the module requires (Should be 2.0 or 4.0). Defaults to the (rounded) currently available ClrVersion.
+      # (This is a passthru for New-ModuleManifest)
+      [version]
+      [PSDefaultValue(Help = {&quot;Your current CLRVersion number (rounded): ($($PSVersionTable.CLRVersion.ToString(2)))&quot;})]
+      ${ClrVersion} = $($PSVersionTable.CLRVersion.ToString(2)),
+
+      # Specifies the minimum version of Windows PowerShell that will work with this module. Defaults to 1 less than your current version.
+      # (This is a passthru for New-ModuleManifest)
+      [version]
+      [PSDefaultValue(Help = {&quot;Your current PSVersion number (rounded): ($($PSVersionTable.PSVersion.ToString(2))&quot;})]
+      [Alias(&quot;PSV&quot;)]
+      ${PowerShellVersion} = $(&quot;{0:F1}&quot; -f (([Double]$PSVersionTable.PSVersion.ToString(2)) - 1.0)),
+      
+      # Specifies modules that this module requires. (This is a passthru for New-ModuleManifest)
+      [System.Object[]]
+      [Alias(&quot;Modules&quot;,&quot;RM&quot;)]
+      ${RequiredModules} = $null,
+      
+      # Specifies the assembly (.dll) files that the module requires. (This is a passthru for New-ModuleManifest)
+      [AllowEmptyCollection()]
+      [string[]]
+      [Alias(&quot;Assemblies&quot;,&quot;RA&quot;)]
+      ${RequiredAssemblies} = $null
+   )
+
+   begin {
+      # Make sure ModuleName isn't really a path ;)
+      if(Test-Path $ModuleName -Type Container) {
+         [String]$ModulePath = Resolve-Path $ModuleName
+      } else {
+         if(!$ModuleName.Contains([io.path]::DirectorySeparatorChar) -and !$ModuleName.Contains([io.path]::AltDirectorySeparatorChar)) {
+            [String]$ModulePath = Join-Path ([Environment]::GetFolderPath(&quot;MyDocuments&quot;)) &quot;WindowsPowerShell\Modules\$ModuleName&quot;
+         } else {
+            [String]$ModulePath = $ModuleName
+         }
+      }
+      [String]$ModuleName = Split-Path $ModuleName -Leaf
+
+      # If they passed in the File(s) as a parameter
+      if($Path) {
+         $Path = switch($Path) {
+            {$_ -is [String]} { 
+               if(Test-Path $_) {
+                  Get-ChildItem $_ -Recurse:$Recurse | % { $_.FullName }
+               } else { throw &quot;Can't find the file '$_' doesn't exist.&quot; }
+            }
+            {$_ -is [IO.FileSystemInfo]} { $_.FullName }
+            default { Write-Warning $_.GetType().FullName + &quot; type not supported for `$Path&quot; }
+         }
+      }
+
+      $ScriptFiles = @()
+   }
+
+   process {
+      $ScriptFiles += switch($Path){
+         {$_ -is [String]} { 
+            if(Test-Path $_) {
+               Resolve-Path $_ | % { $_.ProviderPath }
+            } else { throw &quot;Can't find the file '$_' doesn't exist.&quot; }
+         }
+         {$_ -is [IO.FileSystemInfo]} { $_.FullName }
+         {$_ -eq $null}{ } # Older PowerShell version had issues with empty paths
+         default { Write-Warning $_.GetType().FullName + &quot; type not supported for `$Path&quot; }
+      }
+   }
+
+   end {
+      # If there are errors in here, we need to stop before we really mess something up.
+      $ErrorActionPreference = &quot;Stop&quot;
+
+      # We support either generating a module from an existing module folder, 
+      # or generating a module from loose files (but not both)
+      if($ScriptFiles) {
+         # We have script files, so let's make sure the folder is empty and then put our files in it
+         if(!$Upgrade -and (Test-Path $ModulePath)) {
+            if($Force -Or $PSCmdlet.ShouldContinue(&quot;The specified Module already exists: '$ModulePath'. Do you want to delete it and start over?&quot;, &quot;Deleting '$ModulePath'&quot;)) {
+               Remove-Item $ModulePath -recurse
+            } else {
+               throw &quot;The specified ModuleName '$ModuleName' already exists in '$ModulePath'. Please choose a new name, or specify -Force to overwrite that folder.&quot;
+            }
+         }
+
+         if(!$Upgrade -or !(Test-Path $ModulePath)) {
+            try {
+               $null = New-Item -Type Directory $ModulePath
+            } catch [Exception]{
+               Write-Error &quot;Cannot create Module Directory: '$ModulePath' $_&quot;
+            }
+         }
+
+         # Copy the files into the ModulePath, recreate directory paths where necessary
+         foreach($file in Get-Item $ScriptFiles | Where { !$_.PSIsContainer }) {
+            $Destination = Join-Path $ModulePath (Resolve-Path $file -Relative )
+            if(!(Test-Path (Split-Path $Destination))) {
+               $null = New-Item -Type Directory (Split-Path $Destination)
+            }
+            Copy-Item $file $Destination
+         }
+      }
+
+      # We need to run the rest of this (especially the New-ModuleManifest stuff) from the ModulePath
+      Push-Location $ModulePath
+
+      try {
+         # Create the RootModule if it doesn't exist yet
+         if(!$Upgrade -Or !(Test-Path &quot;${ModuleName}.psm1&quot;)) {
+            if($Force -Or !(Test-Path &quot;${ModuleName}.psm1&quot;) -or $PSCmdlet.ShouldContinue(&quot;The specified '${ModuleName}.psm1' already exists in '$ModulePath'. Do you want to overwrite it?&quot;, &quot;Creating new '${ModuleName}.psm1'&quot;)) {
+               Set-Content &quot;${ModuleName}.psm1&quot; @'
+Push-Location $PSScriptRoot
+Import-LocalizedData -BindingVariable ModuleManifest
+$ModuleManifest.FileList -like &quot;*.ps1&quot; | % {
+    $Script = Resolve-Path $_ -Relative
+    Write-Verbose &quot;Loading $Script&quot;
+    . $Script
+}
+Pop-Location
+'@
+            } else {
+               throw &quot;The specified Module '${ModuleName}.psm1' already exists in '$ModulePath'. Please create a new Module, or specify -Force to overwrite the existing one.&quot;
+            }
+         }
+
+
+         if($Force -Or $Upgrade -or !(Test-Path &quot;${ModuleName}.psd1&quot;) -or $PSCmdlet.ShouldContinue(&quot;The specified '${ModuleName}.psd1' already exists in '$ModulePath'. Do you want to update it?&quot;, &quot;Creating new '${ModuleName}.psd1'&quot;)) {
+            if($Upgrade -and (Test-Path &quot;${ModuleName}.psd1&quot;)) {
+               Import-LocalizedData -BindingVariable ModuleInfo -File &quot;${ModuleName}.psd1&quot; -BaseDirectory $ModulePath
+            } else {
+               # If there's no upgrade, then we want to use all the parameter (default) values, not just the PSBoundParameters:
+               $ModuleInfo = @{
+                  # ModuleVersion is special, because it will get incremented
+                  ModuleVersion = 0.0
+                  Author = $Author
+                  Description = $Description
+                  CompanyName = $CompanyName
+                  ClrVersion = $ClrVersion
+                  PowerShellVersion = $PowerShellVersion
+                  RequiredModules = $RequiredModules
+                  RequiredAssemblies = $RequiredAssemblies
+               }
+            }
+
+            # We'll list all the files in the module
+            $FileList = Get-ChildItem -Recurse | Where { !$_.PSIsContainer } | Resolve-Path -Relative
+
+            $verbs = if($Strict){ Get-Verb | % { $_.Verb +&quot;-*&quot; } } else { &quot;*-*&quot; }
+
+            # Overwrite existing values with the new truth ;)
+            $ModuleInfo.Path = Resolve-Path &quot;${ModuleName}.psd1&quot;
+            $ModuleInfo.RootModule = &quot;${ModuleName}.psm1&quot;
+            $ModuleInfo.ModuleVersion = [Math]::Floor(1.0 + $ModuleInfo.ModuleVersion).ToString(&quot;F1&quot;)
+            $ModuleInfo.FileList = $FileList
+            $ModuleInfo.TypesToProcess = $FileList -match &quot;.*Types?\.ps1xml&quot;
+            $ModuleInfo.FormatsToProcess = $FileList -match &quot;.*Formats?\.ps1xml&quot;
+            $ModuleInfo.NestedModules = $FileList -like &quot;*.psm1&quot; -notlike &quot;*${ModuleName}.psm1&quot;
+            $ModuleInfo.FunctionsToExport = $Verbs
+            $ModuleInfo.AliasesToExport = &quot;*&quot;
+            $ModuleInfo.VariablesToExport = &quot;${ModuleName}*&quot;
+            $ModuleInfo.CmdletsToExport = $Null
+
+            # Overwrite defaults and upgrade values with specified values (if any)
+            $null = $PSBoundParameters.Remove(&quot;Path&quot;)
+            $null = $PSBoundParameters.Remove(&quot;Force&quot;)
+            $null = $PSBoundParameters.Remove(&quot;Upgrade&quot;)
+            $null = $PSBoundParameters.Remove(&quot;Recurse&quot;)
+            $null = $PSBoundParameters.Remove(&quot;ModuleName&quot;)
+            foreach($key in $PSBoundParameters.Keys) {
+               $ModuleInfo.$key = $PSBoundParameters.$key
+            }
+
+            New-ModuleManifest @ModuleInfo
+            Get-Item $ModulePath
+         }  else {
+            throw &quot;The specified Module Manifest '${ModuleName}.psd1' already exists in '$ModulePath'. Please create a new Module, or specify -Force to overwrite the existing one.&quot;
+         }
+      } catch {
+         throw
+      } finally {
+         Pop-Location
+      }
+   }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

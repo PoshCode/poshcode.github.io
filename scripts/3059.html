@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-Event - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-Event</h1>
+<h3><a href="//scripts/3059.ps1">download</a> - <a href="//scripts/1597.md">parent</a></h3>
+<p>A PowerShell client for NaturalInputs.com to parse natural language dates into (optionally recurring) calendar event objects.</p>
+<pre><code class="language-posh">function New-Event {
+&lt;#
+.Synopsis
+   Generates a new event from a plain English string
+.Description
+   Takes a plain English date-time string like &quot;Scrum every day at 9am&quot; or &quot;Lunch every other Tuesday at noon&quot; and turns it into an event object (see notes).
+.Example
+   New-Event Lunch every other Friday at 11:45
+.Example
+   New-Event Lunch at noon on Christmas
+.Notes
+   v 1.2 Supports resolving common calendar holidays
+         But NaturalInputs' API still can't do relative dates, so:
+         You can now schedule &quot;Lunch at noon on Easter&quot; but not &quot;Lunch at noon the Sunday before Memorial Day&quot; or &quot;Dinner at 6 PM the day after Christmas&quot;
+#&gt;
+   param( 
+      [Parameter(ValueFromRemainingArguments=$true, ValueFromPipeline=$true, Position=0)]
+      [string]$query
+   ,
+      [DateTime]$currentTime = $([DateTime]::Now)
+   ,
+      [ValidateSet(&quot;Canada&quot;, &quot;GreatBritain&quot;, &quot;IrelandNorthern&quot;, &quot;IrelandRepublicOf&quot;, &quot;Scotland&quot;, &quot;UnitedStates&quot;)]
+      [String]$Country = &quot;UnitedStates&quot;
+   )
+   begin {
+      $wc = New-Object System.Net.WebClient
+      $time = $currentTime.ToString(&quot;yyyyMMddThhmmss&quot;)
+      
+      if(!$global:Holidays) {
+         $service = New-WebServiceProxy http://www.holidaywebservice.com/HolidayService_v2/HolidayService2.asmx
+         
+         $global:Holidays  = $service.GetHolidaysForYear( $Country, $currentTime.Year )
+         $global:Holidays += $service.GetHolidaysForYear( $Country, $currentTime.Year + 1 )
+      }
+      $HolidayKeys = @{}
+      foreach($holiday in $global:Holidays) {
+         $key = $holiday.Descriptor -replace &quot; Day&quot; -replace &quot;'s&quot; -replace &quot; Birthday&quot;
+         $key = $key.Trim()
+         $HolidayKeys[$key] += @($holiday)
+      }
+   }
+   process {
+      
+      foreach($key in $HolidayKeys.Keys) {
+         $keyPattern = [System.Text.RegularExpressions.Regex]::Escape($key)
+         if($query -match $keyPattern ) {
+            Write-Verbose $keyPattern
+            if($query -match &quot;next\s+$keyPattern&quot;) {
+               $currentTime = $currentTime.AddYears(1)
+            }
+            if($query -match &quot;$keyPattern.*observed&quot;) {
+               $holiday = $HolidayKeys[$key] | Where-Object { $_.DateType -match &quot;observed&quot; -and ($_.Date.Year -eq $currentTime.Year) } | Select -First 1
+            } else {
+               $holiday = $HolidayKeys[$key] | Where-Object { $_.DateType -match &quot;actual&quot; -and ($_.Date.Year -eq $currentTime.Year) } | Select -First 1
+            }
+            $query = $query -replace &quot;(next\s+)?$keyPattern(.*observed)?&quot;, $Holiday.Date.ToString(&quot;d&quot;,$Culture)
+            break
+         }
+      }
+
+      Write-Verbose &quot;Query: $query&quot;
+      $query = [System.Web.HttpUtility]::UrlEncode( $query )
+      [xml]$event = $wc.DownloadString( &quot;http://naturalinputs.com/query?t=$time&amp;q=$query&quot; )
+      Write-Verbose &quot;Response: $($event.OuterXml)&quot;
+      
+      foreach($r in $event.naturalinputsresponse) {
+         foreach($o in $r.occurrence) {
+            if($o.start_date) {
+               if($o.start_time) {
+                  $startdate = Get-Date ([DateTime]::ParseExact( (&quot;{0}T{1}&quot; -f $o.start_date, $o.start_time), &quot;yyyyMMddTHH:mm:ss&quot;, $null)) -DisplayHint &quot;Date&quot;
+                  $starttime = Get-Date ([DateTime]::ParseExact( (&quot;{0}T{1}&quot; -f $o.start_date, $o.start_time), &quot;yyyyMMddTHH:mm:ss&quot;, $null)) -DisplayHint &quot;Time&quot;
+               } else {
+                  $startdate = Get-Date ([DateTime]::ParseExact( $o.start_date, &quot;yyyyMMdd&quot;, $null)) -DisplayHint &quot;Date&quot;
+                  $starttime = $null
+               }
+            } elseif ($o.start_time) {
+               $startdate = $null
+               $starttime = Get-Date $o.start_time -DisplayHint &quot;Time&quot;
+            }
+            
+            if($o.end_date) {
+               if($o.end_time) {
+                  $enddate = Get-Date ([DateTime]::ParseExact( (&quot;{0}T{1}&quot; -f $o.end_date, $o.end_time), &quot;yyyyMMddTHH:mm:ss&quot;, $null)) -DisplayHint &quot;Date&quot;
+                  $endtime = Get-Date ([DateTime]::ParseExact( (&quot;{0}T{1}&quot; -f $o.end_date, $o.end_time), &quot;yyyyMMddTHH:mm:ss&quot;, $null)) -DisplayHint &quot;Time&quot;
+               } else {
+                  $enddate = Get-Date ([DateTime]::ParseExact( $o.end_date, &quot;yyyyMMdd&quot;, $null)) -DisplayHint &quot;Date&quot;
+                  $endtime = $null
+               }
+            } elseif ($o.end_time) {
+               if($o.start_date) {
+                  $enddate = $null
+                  $endtime = Get-Date ([DateTime]::ParseExact( (&quot;{0}T{1}&quot; -f $o.start_date, $o.end_time), &quot;yyyyMMddTHH:mm:ss&quot;, $null)) -DisplayHint &quot;Time&quot;
+               } else {
+                  $enddate = $null
+                  $endtime = Get-Date $o.end_time -DisplayHint &quot;Time&quot;
+               }
+            }
+
+            New-Object PSObject -Property @{
+               Name=$r.message
+               Type=$o.type
+               DayOfWeek=$o.day_of_week
+               WeekOfMonth=$o.week_of_month
+               DateOfMonth=$o.date_of_month
+               Interval=$o.interval
+               StartDate=$startdate
+               StartTime=$starttime
+               EndDate=$enddate
+               EndTime=$endtime
+               # Xml=$event
+            } | Add-Member ScriptProperty TimeUntil { $this.StartDate - (Get-Date) } -Passthru
+         }
+      }
+
+   }
+}
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

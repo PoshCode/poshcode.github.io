@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Lee Holmes">
+    <title>Invoke-SqlCommand.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-SqlCommand.ps1</h1>
+<h3><a href="//scripts/2188.ps1">download</a></h3>
+<p>From Windows PowerShell Cookbook (O'Reilly) by Lee Holmes</p>
+<pre><code class="language-posh">##############################################################################
+##
+## Invoke-SqlCommand
+##
+## From Windows PowerShell Cookbook (O'Reilly)
+## by Lee Holmes (http://www.leeholmes.com/guide)
+##
+##
+##############################################################################
+
+&lt;#
+
+.SYNOPSIS
+
+Return the results of a SQL query or operation
+
+.EXAMPLE
+
+Invoke-SqlCommand.ps1 -Sql &quot;SELECT TOP 10 * FROM Orders&quot;
+Invokes a command using Windows authentication
+
+.EXAMPLE
+
+PS &gt;$cred = Get-Credential
+PS &gt;Invoke-SqlCommand.ps1 -Sql &quot;SELECT TOP 10 * FROM Orders&quot; -Cred $cred
+Invokes a command using SQL Authentication
+
+.EXAMPLE
+
+PS &gt;$server = &quot;MYSERVER&quot;
+PS &gt;$database = &quot;Master&quot;
+PS &gt;$sql = &quot;UPDATE Orders SET EmployeeID = 6 WHERE OrderID = 10248&quot;
+PS &gt;Invoke-SqlCommand $server $database $sql
+Invokes a command that performs an update
+
+.EXAMPLE
+
+PS &gt;$sql = &quot;EXEC SalesByCategory 'Beverages'&quot;
+PS &gt;Invoke-SqlCommand -Sql $sql
+Invokes a stored procedure
+
+.EXAMPLE
+
+Invoke-SqlCommand (Resolve-Path access_test.mdb) -Sql &quot;SELECT * FROM Users&quot;
+Access an Access database
+
+.EXAMPLE
+
+Invoke-SqlCommand (Resolve-Path xls_test.xls) -Sql 'SELECT * FROM [Sheet1$]'
+Access an Excel file
+
+#&gt;
+
+param(
+    ## The data source to use in the connection
+    [string] $DataSource = &quot;.\SQLEXPRESS&quot;,
+
+    ## The database within the data source
+    [string] $Database = &quot;Northwind&quot;,
+
+    ## The SQL statement(s) to invoke against the database
+    [Parameter(Mandatory = $true)]
+    [string[]] $SqlCommand,
+
+    ## The timeout, in seconds, to wait for the query to complete
+    [int] $Timeout = 60,
+
+    ## The credential to use in the connection, if any.
+    $Credential
+)
+
+
+Set-StrictMode -Version Latest
+
+## Prepare the authentication information. By default, we pick
+## Windows authentication
+$authentication = &quot;Integrated Security=SSPI;&quot;
+
+## If the user supplies a credential, then they want SQL
+## authentication
+if($credential)
+{
+    $credential = Get-Credential $credential
+    $plainCred = $credential.GetNetworkCredential()
+    $authentication =
+        (&quot;uid={0};pwd={1};&quot; -f $plainCred.Username,$plainCred.Password)
+}
+
+## Prepare the connection string out of the information they
+## provide
+$connectionString = &quot;Provider=sqloledb; &quot; +
+                    &quot;Data Source=$dataSource; &quot; +
+                    &quot;Initial Catalog=$database; &quot; +
+                    &quot;$authentication; &quot;
+
+## If they specify an Access database or Excel file as the connection
+## source, modify the connection string to connect to that data source
+if($dataSource -match '\.xls$|\.mdb$')
+{
+    $connectionString = &quot;Provider=Microsoft.Jet.OLEDB.4.0; &quot; +
+        &quot;Data Source=$dataSource; &quot;
+
+    if($dataSource -match '\.xls$')
+    {
+        $connectionString += 'Extended Properties=&quot;Excel 8.0;&quot;; '
+
+        ## Generate an error if they didn't specify the sheet name properly
+        if($sqlCommand -notmatch '\[.+\$\]')
+        {
+            $error = 'Sheet names should be surrounded by square brackets, ' +
+                'and have a dollar sign at the end: [Sheet1$]'
+            Write-Error $error
+            return
+        }
+    }
+}
+
+## Connect to the data source and open it
+$connection = New-Object System.Data.OleDb.OleDbConnection $connectionString
+$connection.Open()
+
+foreach($commandString in $sqlCommand)
+{
+    $command = New-Object Data.OleDb.OleDbCommand $commandString,$connection
+    $command.CommandTimeout = $timeout
+
+    ## Fetch the results, and close the connection
+    $adapter = New-Object System.Data.OleDb.OleDbDataAdapter $command
+    $dataset = New-Object System.Data.DataSet
+    [void] $adapter.Fill($dataSet)
+
+    ## Return all of the rows from their query
+    $dataSet.Tables | Select-Object -Expand Rows
+}
+
+$connection.Close()
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

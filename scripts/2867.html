@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jeff Patton">
+    <title>Update-AdminPassword - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Update-AdminPassword</h1>
+<h3><a href="//scripts/2867.ps1">download</a></h3>
+<p>This script changes the local administrator password.</p>
+<pre><code class="language-posh">&lt;#
+    .SYNOPSIS
+        Local administrator password update
+    .DESCRIPTION
+        This script changes the local administrator password.
+    .PARAMETER ADSPath
+        The ActiveDirectory namespace to search for computers
+    .PARAMETER AdminAccount
+        The username of the administrator account
+    .PARAMETER NewPassword
+        The new password
+    .EXAMPLE
+        .\Update-AdminPassword.ps1 -ADSPath &quot;LDAP://DC=company,DC=com&quot; -AdminAccount &quot;administrator&quot; `
+        -NewPassword &quot;N3wp@ssw0rd&quot; |Export-Csv .\sample.csv -NoTypeInformation
+        
+        Description
+        -----------
+        This example shows all parameters being used with the output being piped to a spreadsheet.
+    .EXAMPLE
+        .\Update-AdminPassword.ps1 -ADSPath &quot;LDAP://OU=TestOU,DC=company,Dc=com&quot; -AdminAccount Administrator `
+        -NewPassword Pass12345
+        
+        ComputerName    UserName        Status
+        ------------    --------        ------
+        L1132C-VM01     Administrator   The network path was not found.
+        l1132c-pc17     Administrator   The user name could not be found.
+        l1132c-pc05     Administrator   Access is denied.
+        L1132C-PC01     Administrator   Password updated
+
+        Description
+        -----------
+        This shows an example of the output
+    .NOTES
+        ScriptName is used to register events for this script
+        LogName is used to determine which classic log to write to
+        This script assumes that the includes folder contains the libraries needed for this script to work.
+        I've not added credentials for this, so it will need to be run from an account that has the ability to 
+        change passwords on your computers.
+    .LINK
+        http://scripts.patton-tech.com/wiki/PowerShell/Production/UpdateAdminPassword
+    .LINK
+        http://scripts.patton-tech.com/wiki/PowerShell/ComputerManagemenet
+    .LINK
+        http://scripts.patton-tech.com/wiki/PowerShell/ActiveDirectoryManagement
+#&gt;
+Param
+    (
+        [Parameter(Mandatory=$true)]
+        [string]$ADSPath,
+        [Parameter(Mandatory=$true)]
+        [string]$AdminAccount,
+        [Parameter(Mandatory=$true)]
+        [string]$NewPassword            
+    )
+Begin
+    {
+        $ScriptName = $MyInvocation.MyCommand.ToString()
+        $LogName = &quot;Application&quot;
+        $ScriptPath = $MyInvocation.MyCommand.Path
+        $Username = $env:USERDOMAIN + &quot;\&quot; + $env:USERNAME
+
+    	New-EventLog -Source $ScriptName -LogName $LogName -ErrorAction SilentlyContinue
+    	
+    	$Message = &quot;Script: &quot; + $ScriptPath + &quot;`nScript User: &quot; + $Username + &quot;`nStarted: &quot; + (Get-Date).toString()
+    	Write-EventLog -LogName $LogName -Source $ScriptName -EventID &quot;100&quot; -EntryType &quot;Information&quot; -Message $Message 
+    	
+    	. .\includes\ActiveDirectoryManagement.ps1
+        . .\includes\ComputerManagement.ps1
+    }
+Process
+    {    
+        $Workstations = Get-ADObjects -ADSPath $ADSPath
+        $Jobs = @()
+    	foreach ($Workstation in $Workstations)
+            {
+                [string]$ThisWorkstation = $Workstation.Properties.name
+                $ThisJob = New-Object PSobject
+
+                [string]$Retval = Set-Pass -ComputerName $ThisWorkstation -UserName $AdminAccount -Password $NewPassword
+
+                Add-Member -InputObject $ThisJob -MemberType NoteProperty -Name &quot;ComputerName&quot; -Value $ThisWorkstation
+                Add-Member -InputObject $ThisJob -MemberType NoteProperty -Name &quot;UserName&quot; -Value $AdminAccount
+                Add-Member -InputObject $ThisJob -MemberType NoteProperty -Name &quot;Status&quot; -Value $RetVal.Trim()
+                $Jobs += $ThisJob
+                $ThisJob
+                }
+
+        $Message = [system.string]::Join(&quot;`n&quot;,($Jobs))
+        Write-EventLog -LogName $LogName -Source $ScriptName -EventId &quot;101&quot; -EntryType &quot;Information&quot; -Message $Message
+    }
+End
+    {        
+    	$Message = &quot;Script: &quot; + $ScriptPath + &quot;`nScript User: &quot; + $Username + &quot;`nFinished: &quot; + (Get-Date).toString()
+    	Write-EventLog -LogName $LogName -Source $ScriptName -EventID &quot;100&quot; -EntryType &quot;Information&quot; -Message $Message	
+    }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

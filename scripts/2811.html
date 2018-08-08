@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Alex Ocampo">
+    <title>Get-LogicalDiskInfo - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-LogicalDiskInfo</h1>
+<h3><a href="//scripts/2811.ps1">download</a> - <a href="//scripts/2810.md">parent</a></h3>
+<p>Hard disk drives have dramatically increased capacity over the years, yet there is always a time when they fill up and critical applications stop working.</p>
+<p>Even if its possible to check each server's free disk space, it's time consuming and best accomplished by an automated task. Change variables value before running...</p>
+<p>Get-LogicalDiskInfo.ps1 makes systems administrator's life a little easier.</p>
+<p>WARNING: You are responsible to review and test this script before running on production environment.</p>
+<p>Daptiv - The leader in on-demand project portfolio management software.</p>
+<p>For more information and a free demo, please visit us at http://www.daptiv.com</p>
+<pre><code class="language-posh"># ========================================================================
+# 
+# NAME: Get-LogicalDiskInfo.ps1
+# 
+# AUTHOR: Alex Ocampo , Daptiv Solutions LLC
+# DATE  : 7/19/2011
+# 
+# COMMENT: Using WMI, script check logical disk information of a single
+# server or a group of servers. Script send email notification if any
+# logical disk free space falls below minimum free disk space
+# ($minFreeSpace).
+#          
+#
+# Syntax:
+#
+# Check logicalDisks info on a single host in this case &quot;server1&quot;
+# PS C:\Scripts&gt; .\Get-LogicalDiskInfo.ps1 -computerNames &quot;server1&quot;
+#
+# Running script without passing a parameter checks logicalDisks of all
+# computers or servers listed on C:\Scripts\Computers.txt. Script stop
+# execution if no parameter is passed and Computers.txt is not present.
+#
+# Sample (Computers.txt), add computers/servers to check as needed...
+# SERVER1
+# SERVER2
+# SERVER3
+# 
+# ========================================================================
+
+param (
+	[string[]] $computerNames
+)
+
+Set-Location -Path ([System.Environment]::GetEnvironmentVariable(&quot;SystemDrive&quot;) + &quot;\Scripts&quot;)
+
+# Test that parameters exists
+if ($computerNames -eq $null) {
+	if (Test-Path -LiteralPath &quot;.\Computers.txt&quot; -PathType &quot;leaf&quot;) {
+		$computerNames = Get-Content -Path	&quot;.\Computers.txt&quot;
+	}
+	
+	else {
+		Write-Host &quot;missing parameters...&quot;
+		exit
+	}
+}
+
+# $minFreeSpace = $_.freespace/$_.size
+# higher value translate to lower maximum disk space used and reports
+# more drives meeting criteria.
+
+[double] $minFreeSpace=.25
+
+function notify {
+	param (
+		[string] $subject,
+		[string] $message,
+		[string] $to=&quot;DL Team IT &lt;distributionGroup@mydomain.com&gt;&quot;,
+		[string] $from=&quot;IT Notification &lt;itNotification@mydomain.com&gt;&quot;,		
+		[string] $smtpserver=&quot;mailServer.mydomain.com&quot;
+	)
+	
+	Send-MailMessage -From $from -To $to -Subject $subject -Body $message -SmtpServer $smtpserver
+}
+ 
+function existTest {
+	param ([string] $node2Chk)
+	$pathStr=&quot;\\$node2Chk\ADMIN$&quot;
+	return Test-Path -LiteralPath $pathStr
+}
+
+function chkDisk {
+	param (
+		[string] $node
+	)
+		# $messageBody string = &quot;WARNING: Drive C: is 85% full...&quot;
+		[string] $messageBody=&quot;WARNING: Immediate action required...`r`n`r`n&quot;
+				
+		Get-WmiObject Win32_LogicalDisk -ComputerName $node | `
+			Where-Object {$_.DriveType -eq 3} | `
+			ForEach-Object { If (($_.FreeSpace/$_.Size) -le $minFreeSpace) { `
+				$result=&quot;Drive &quot; + $_.DeviceID + &quot; is &quot; + (100 - [math]::Round(($_.FreeSpace/$_.Size)*100, 2)) + &quot;% full...&quot;
+				# $result=$node + &quot;: &quot; + $_.DeviceID + &quot; - Free disk space: &quot; + [math]::Round($_.FreeSpace/1GB, 2) + &quot;GB&quot;
+				$messageBody=&quot;$messageBody&quot; + &quot;`t$result`r`n&quot;
+			}
+		}
+		
+		# do not call function if variable is equals to initial value
+		if ($messageBody -ne &quot;WARNING: Immediate action required...`n`n&quot;) {				
+			notify -subject &quot;RE: \\$node&quot; -message &quot;$messageBody&quot;
+		}
+}
+
+function main {
+	param (
+		[bool] $validNode
+	)
+		
+	foreach ($computer in $computerNames) {
+		# Test if computer exists
+		$validNode = existTest $computer
+		
+		if ($validNode) {
+			chkDisk $computer
+		}		
+	}
+} 
+
+# call main function
+main
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

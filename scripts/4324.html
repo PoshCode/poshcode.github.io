@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Boe Prox">
+    <title>New-SymLink - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-SymLink</h1>
+<h3><a href="//scripts/4324.ps1">download</a></h3>
+<p>Creates a symbolic link just like mklink.exe but doesn't rely on having to call it like 'cmd.exe /c mklink.exe'.</p>
+<pre><code class="language-posh">Function New-SymLink {
+    &lt;#
+        .SYNOPSIS
+            Creates a Symbolic link to a file or directory
+
+        .DESCRIPTION
+            Creates a Symbolic link to a file or directory as an alternative to mklink.exe
+
+        .PARAMETER Path
+            Name of the path that you will reference with a symbolic link.
+
+        .PARAMETER SymName
+            Name of the symbolic link to create. Can be a full path/unc or just the name.
+            If only a name is given, the symbolic link will be created on the current directory that the
+            function is being run on.
+
+        .PARAMETER File
+            Create a file symbolic link
+
+        .PARAMETER Directory
+            Create a directory symbolic link
+
+        .NOTES
+            Name: New-SymLink
+            Author: Boe Prox
+            Created: 15 Jul 2013
+
+
+        .EXAMPLE
+            New-SymLink -Path &quot;C:\users\admin\downloads&quot; -SymName &quot;C:\users\admin\desktop\downloads&quot; -Directory
+
+            SymLink                          Target                   Type
+            -------                          ------                   ----
+            C:\Users\admin\Desktop\Downloads C:\Users\admin\Downloads Directory
+
+            Description
+            -----------
+            Creates a symbolic link to downloads folder that resides on C:\users\admin\desktop.
+
+        .EXAMPLE
+            New-SymLink -Path &quot;C:\users\admin\downloads\document.txt&quot; -SymName &quot;SomeDocument&quot; -File
+
+            SymLink                             Target                                Type
+            -------                             ------                                ----
+            C:\users\admin\desktop\SomeDocument C:\users\admin\downloads\document.txt File
+
+            Description
+            -----------
+            Creates a symbolic link to document.txt file under the current directory called SomeDocument.
+    #&gt;
+    [cmdletbinding(
+        DefaultParameterSetName = 'Directory',
+        SupportsShouldProcess=$True
+    )]
+    Param (
+        [parameter(Position=0,ParameterSetName='Directory',ValueFromPipeline=$True,
+            ValueFromPipelineByPropertyName=$True,Mandatory=$True)]
+        [parameter(Position=0,ParameterSetName='File',ValueFromPipeline=$True,
+            ValueFromPipelineByPropertyName=$True,Mandatory=$True)]
+        [ValidateScript({
+            If (Test-Path $_) {$True} Else {
+                Throw &quot;`'$_`' doesn't exist!&quot;
+            }
+        })]
+        [string]$Path,
+        [parameter(Position=1,ParameterSetName='Directory')]
+        [parameter(Position=1,ParameterSetName='File')]
+        [string]$SymName,
+        [parameter(Position=2,ParameterSetName='File')]
+        [switch]$File,
+        [parameter(Position=2,ParameterSetName='Directory')]
+        [switch]$Directory
+    )
+    Begin {
+        #Verify user is administrator
+        If (-Not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] &quot;Administrator&quot;)) {
+            Write-Warning &quot;You must be an Administrator running this under UAC to run this function!&quot;
+            Break
+        }
+        Try {
+            $null = [mklink.symlink]
+        } Catch {
+            Add-Type @&quot;
+            using System;
+            using System.Runtime.InteropServices;
+ 
+            namespace mklink
+            {
+                public class symlink
+                {
+                    [DllImport(&quot;kernel32.dll&quot;)]
+                    public static extern bool CreateSymbolicLink(string lpSymlinkFileName, string lpTargetFileName, int dwFlags);
+                }
+            }
+&quot;@
+        }
+    }
+    Process {
+        #Assume target Symlink is on current directory if not giving full path or UNC
+        If ($SymName -notmatch &quot;^(?:[a-z]:\\)|(?:\\\\\w+\\[a-z]\$)&quot;) {
+            $SymName = &quot;{0}\{1}&quot; -f $pwd,$SymName
+        }
+        $Flag = @{
+            File = 0
+            Directory = 1
+        }
+        If ($PScmdlet.ShouldProcess($Path,'Create Symbolic Link')) {
+            Try {
+                $return = [mklink.symlink]::CreateSymbolicLink($SymName,$Path,$Flag[$PScmdlet.ParameterSetName])
+                If ($return) {
+                    $object = New-Object PSObject -Property @{
+                        SymLink = $SymName
+                        Target = $Path
+                        Type = $PScmdlet.ParameterSetName
+                    }
+                    $object.pstypenames.insert(0,'System.File.SymbolicLink')
+                    $object
+                } Else {
+                    Throw &quot;Unable to create symbolic link!&quot;
+                }
+            } Catch {
+                Write-warning (&quot;{0}: {1}&quot; -f $path,$_.Exception.Message)
+            }
+        }
+    }
+ }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

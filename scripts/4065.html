@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="R Derickson">
+    <title>DHCP Backup - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>DHCP Backup</h1>
+<h3><a href="//scripts/4065.ps1">download</a> - <a href="//scripts/4017.md">parent</a></h3>
+<p>Discovers DHCP online servers and if %SystemRoot%\Windows\System32\DHCP\Backup exists, copies the folder on each server to a network share (\network\share\hostname).</p>
+<p>Accepts two parameters:
+SearchBase - Location of domain's configuration container.
+BackupDestRoot - Base folder where a folder for each host will be created to contain the copied DHCP database backups</p>
+<p>Usage:
+.\Backup-DhcpServers.ps1 -SearchBase &quot;cn=configuration,dc=domain,dc=com&quot; -BackupDestRoot &quot;\network\share&quot;</p>
+<p>Two functions:
+Get-OnlineDhcpServers
+Backup-DhcpServers</p>
+<p>No comment-based help.
+No logging.
+No error handling.</p>
+<p>Known Issues:
+BackupDestRoot parameter MUST end with a backslash (). The script will eventually add a DHCP server's hostname to this path to create that server's backup destination.</p>
+<pre><code class="language-posh">param (
+    [Parameter(Position=1)]
+    $searchBase = &quot;cn=configuration,dc=domain,dc=com&quot;,
+    [Parameter(Position=2)]
+    $backupDestRoot = &quot;\\network\share\&quot;
+)
+
+Import-Module ActiveDirectory
+
+function Get-OnlineDhcpServers {
+    param (
+        [Parameter(Mandatory=$true,Position=1)]
+        $dhcpSearchBase
+        )
+    $arrDhcpServers = Get-ADObject -SearchBase $dhcpSearchBase -Filter &quot;objectclass -eq 'dhcpclass' -AND name -ne 'dhcproot'&quot;
+    ForEach ($dhcpServer in $arrDhcpServers) {
+        if (!(Test-Connection -ComputerName $dhcpServer.name -Count 2 -Quiet -ErrorAction SilentlyContinue)) {
+            $arrDhcpServers = @($arrDhcpServers | Where-Object {$_.name -ne $dhcpServer.name})
+        }
+    }
+    return $arrDhcpServers
+}
+
+function Backup-DhcpServers {
+    param (
+        [Parameter(Mandatory=$true,Position=1)]
+        $arrDhcpBackupSrcNames,
+        [Parameter(Mandatory=$true,Position=2)]
+        $dhcpBackupDestRoot
+    )
+    ForEach ($dhcpBackupSrcName in $arrDhcpBackupSrcNames) {
+        $dhcpBackupSrc = &quot;\\&quot; + $dhcpBackupSrcName + &quot;\c$\Windows\System32\Dhcp\Backup&quot;
+        $dhcpBackupDest = $dhcpBackupDestRoot + $dhcpBackupSrcName
+        if (Test-Path -Path $dhcpBackupSrc) {
+            Remove-Item -Path $dhcpBackupDest -Recurse -Force -Verbose
+            New-Item -Path $dhcpBackupDest -ItemType Directory
+            Copy-Item -Path $dhcpBackupSrc -Destination $dhcpBackupDest -Recurse -Verbose
+        }
+    }
+}
+
+$onlineDhcpServers = Get-OnlineDhcpServers -dhcpSearchBase $searchBase
+$onlineDhcpServerNames = $onlineDhcpServers | ForEach-Object {$_.name.Split(&quot;.&quot;)[0]}
+Backup-DhcpServers -arrDhcpBackupSrcNames $onlineDhcpServerNames -dhcpBackupDestRoot $backupDestRoot
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

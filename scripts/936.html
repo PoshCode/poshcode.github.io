@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Patrick">
+    <title>Sendmail for PoSh V1.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Sendmail for PoSh V1.0</h1>
+<h3><a href="//scripts/936.ps1">download</a></h3>
+<p>Sending Mails via Powershell with Text Edit, Signature Support and Encryption.
+Send via Outlook or SMTP (Outlook needs extra plugin -&gt; outlook redemption (google it))
+Save as ps1 and call the file. After that simply use sendmail and enter the options</p>
+<pre><code class="language-posh">#region vars
+$global:maileditor = &quot;C:\Programme\vim\vim72\vim.exe&quot;
+$global:encryption = &quot;C:\Programme\GNU\GnuPG\gpg.exe&quot;
+$global:enckey = &quot;s.patrick1982@gmail.com&quot;
+$global:tempmail = &quot;C:\temp\psmail.txt&quot;
+$global:sigmail = &quot;C:\temp\halten\sig.txt&quot;
+$global:mailbody = &quot;&quot;
+#endregion vars
+
+#region initMail
+function global:initHeader {
+	$global:mailTo = ($global:mailTo).Split(',') | % { $_.Trim() }
+
+	if (Test-Path $global:sigmail) {
+		(Get-Content $global:sigmail | Out-String) | Out-File $global:tempmail
+	}
+
+	&amp; $global:maileditor $global:tempmail
+
+}
+
+function global:initMail {
+	$smtpserver = &quot;yoursmtpserver&quot;
+	$myuser = &quot;user&quot;
+	$mypass = &quot;pass&quot;
+	$myAddress = &quot;Patrick&lt;s.patrick1982@gmail.com&gt;&quot;
+	
+	$global:mail = New-Object System.Net.Mail.MailMessage
+	$global:srv = New-Object System.Net.Mail.SmtpClient
+	$global:srv.Host = $smtpserver
+	$global:srv.Credentials = New-Object System.Net.NetworkCredential($myuser, $mypass)
+	
+	$global:mail.from = $myAddress
+	foreach ($rcpt in $global:mailTo) {
+		if ($rcpt -ne &quot;&quot;) {
+			$global:mail.To.Add($rcpt)
+		}
+	}
+	$global:mail.subject = $global:subject
+}
+
+function global:initMailol {
+	$global:outlook = New-Object -ComObject Outlook.Application
+	$global:srv = New-Object -ComObject Redemption.SafeMailItem
+	$global:omail = $outlook.CreateItem(&quot;olMailItem&quot;)
+	$global:srv.Item = $global:omail
+
+	#region check
+	#User Input
+	foreach ($rcpt in $global:mailTo) {
+		$global:srv.Recipients.Add($rcpt) | Out-Null
+	}
+
+	#check recipients
+	$check = $global:srv.Recipients.ResolveAll()
+	
+	if ($check -eq $False) {
+		for ($i=0; $i -gt $global:sitem.Recipients.Count;$i++) {
+			$global:srv.Recipients.Remove($i)
+			exit(-1)
+		}
+	}
+	#endregion
+
+	$global:srv.item.Subject = $global:subject
+
+	if ($global:debug -eq $true) {
+		Write-Host &quot;Mail an - &quot; $global:sitem.Recipients
+		Write-Host &quot;Betreff - &quot; $global:subject
+	}
+}
+#endregion initMail
+
+#region sendmail
+function global:sendmail {
+	Param (
+		[string]$global:client,
+		[string]$global:mailTo,
+		[string]$global:subject,
+		[string]$global:mtype
+	)
+
+	#Parameter Check
+	if (!$global:client) { 
+		$global:client = Read-Host -Prompt &quot;Which Client (srv,ol): &quot;
+	}
+	
+	if (!$global:mailto) {
+		$global:mailTo = Read-Host -Prompt &quot;E-Mail To: &quot;
+	}
+	
+	if (!$global:subject) {
+		$global:subject = Read-Host -Prompt &quot;Subject: &quot;
+	}
+	
+	initheader($global:mailTo, $global:subject)
+	
+#region encrypt
+	switch ($global:mtype) {
+		s {
+			&amp; $global:encryption -a -r $global:enckey --clearsign $global:tempmail
+			break;
+		}
+		
+		e {
+			&amp; $global:encryption -a -r $global:enckey --encrypt $global:tempmail 
+			break;
+		}
+	}
+#endregion encrypt
+
+#body
+	if ($global:mtype -ne &quot;&quot;) {
+		$global:mailbody = (Get-Content $global:tempmail&quot;.asc&quot; | Out-String)
+	} else {
+		$global:mailbody = (Get-Content $global:tempmail | Out-String)
+	}		
+	
+#cleaning
+	if (test-path $global:tempmail) { Remove-Item $global:tempmail -Confirm:$false }
+	if (test-path $global:tempmail&quot;.asc&quot; ) { Remove-Item $global:tempmail&quot;.asc&quot; -Confirm:$false }
+	
+	switch ($global:client) {
+		srv {
+			initMail
+			$global:mail.Body = $global:mailbody
+ 			$global:srv.Send($global:mail)
+			break;
+		}
+		
+		ol {
+			initMailol
+			$global:srv.Body = $global:mailbody
+			$global:srv.Send()
+			break;
+		}
+	}
+
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

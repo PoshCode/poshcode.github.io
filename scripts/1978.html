@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Boe P">
+    <title>Performance Monitoring - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Performance Monitoring</h1>
+<h3><a href="//scripts/1978.ps1">download</a></h3>
+<p>This is a script that should be dot sourced to use each function. You can choose to build a configuration file that the Get-PerfCounter will use to decide what type of counters to look for. Use Build-PerfConfig with the -assist switch to launch a command line helper to choose the type of counter. A GUI selection using windows forms is currently being built.</p>
+<p>I have included the function for building the SQL table, but it is not yet active.  You should use the TSQL statement to build the table on the PerfMon database as those columns are required for the script. I am working to finish the build of the Build-SQLTable function so it is active and available to use.</p>
+<p>This also only can be run on Windows Vista and above OS's.  Due to what appears to be a bug in the Start-Job cmdlet, the SQL connection hangs on opening on Win XP and Win2K3 servers. This script, however, can be run against those OS's along with Win2K servers.</p>
+<pre><code class="language-posh">&lt;#  
+.SYNOPSIS  
+    Multiple functions to build a config file and to use file to launch PerfMon background jobs.
+.DESCRIPTION
+    Multiple functions to build a config file and to use file to launch PerfMon background jobs.
+.NOTES  
+    Name: WinPerfv2.PS1
+    Author: Boe Prox
+    DateCreated: 28June2010 
+    
+    To-Do:
+        1. Add a function for building the table where data will be stored at
+        2. Build a GUI for the XML Config file build
+.LINK  
+    http://www.powershell.com
+      
+#&gt; 
+
+Function Build-SQLTable {
+&lt;#  
+.SYNOPSIS  
+    Builds a SQL Table named Counters on a SQL server database.
+.DESCRIPTION
+    Builds a SQL Table named Counters on a SQL server database.
+.PARAMETER computer
+    Name of the server that hosts the database
+.PARAMETER database
+    Name of the database that the table will be created on
+.NOTES  
+    Name: Build-SQLTable
+    Author: Boe Prox
+    DateCreated: 29June2010 
+.LINK  
+    http://www.powershell.com
+.EXAMPLE  
+    Build-SQLTable -computer 'Server' -database 'database'
+          
+#&gt; 
+[cmdletbinding(
+	SupportsShouldProcess = $True,
+	DefaultParameterSetName = 'perf',
+	ConfirmImpact = 'low'
+)]
+param(
+    [Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'sql',
+        ValueFromPipeline = $True)]
+        [string]$computer,
+    [Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'sql',
+        ValueFromPipeline = $True)]
+        [string]$database     
+        ) 
+Write-Host -foregroundcolor Green &quot;Building a SQL table: 'Counters' on Database: `'$($database)`' residing on Server: `'$($Computer)`'.&quot;        
+#TSQL Statement to create table required for script
+$tsql = CREATE TABLE Counters (ServerName varchar(20),&quot;Date&quot; varchar (50),CounterName varchar (25),CounterType varchar (25),InstanceName varchar (25),Data float (20))                
+}
+
+Function Get-UserChoice
+    {
+&lt;#    
+  .SYNOPSIS   
+    Prompts user for choice.
+  .DESCRIPTION   
+    Prompts user for choice.
+       
+#&gt;    
+#Determine Values for Choice
+$choice = [System.Management.Automation.Host.ChoiceDescription[]] @(&quot;&amp;Continue&quot;,&quot;&amp;Quit&quot;)
+
+#Determine Default Selection
+[int]$default = 0
+
+#Present choice option to user
+$userchoice = $host.ui.PromptforChoice(&quot; &quot;,&quot;Do you want to continue performance counters to the config file?&quot;,$choice,$default)
+
+Return $userchoice
+    }
+
+Function Build-PerfConfig {
+
+&lt;#  
+.SYNOPSIS  
+    Builds an xml config file to be used with WinPerf.ps1 script
+.DESCRIPTION
+    Builds an xml config file to be used with WinPerf.ps1 script
+.PARAMETER file
+    Name of the file that will be saved
+.PARAMETER flag
+.PARAMETER assist    
+.NOTES  
+    Name: Build-PerfConfig.ps1
+    Author: Boe Prox
+    DateCreated: 28June2010 
+.LINK  
+    http://www.powershell.com
+.EXAMPLE  
+    Build-PerfConfig -file &quot;exchange.xml&quot;
+          
+#&gt; 
+[cmdletbinding(
+	SupportsShouldProcess = $True,
+	DefaultParameterSetName = 'perf',
+	ConfirmImpact = 'low'
+)]
+param(
+    [Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf',
+        ValueFromPipeline = $True)]
+        [string]$file = 'config.xml',
+    [Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf',
+        ValueFromPipeline = $True)]
+        [string]$flag = $True,    
+    [Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf',
+        ValueFromPipeline = $True)]
+        [switch]$assist            
+)
+#Clear screen
+Clear
+
+#Display welcome message
+Write-Host -ForegroundColor Green -Backgroundcolor Black &quot;Use this tool to build a config file for the WinPerf.ps1 perfmon script.&quot;
+Write-Host -ForegroundColor Green -Backgroundcolor Black &quot;You must know what performance counters you need before running this tool!&quot;
+Write-Host -ForegroundColor Green -Backgroundcolor Black &quot;If you do not know, then it is advised to look up the counters before proceeding.&quot;
+Write-Host -ForegroundColor Green -Backgroundcolor Black &quot;`t`t`t`t`t`t`t`t`t`t&quot;
+Write-Host -ForegroundColor Green -Backgroundcolor Black &quot;You can quit and save at anytime by typing 'q' and then pressing 'Enter' `n&quot;
+
+If ($assist) {
+    Write-Host -ForegroundColor Cyan -Backgroundcolor Black &quot;You will be assisted with determining what Categories, Counters and Instances to type. `n&quot;
+    }
+    
+#Prepare the array
+$arr = @()
+
+#Loop until user decides to quit and save xml file
+While ($flag -eq $True) {
+    #Create temporary array
+    $t_array = &quot;&quot; | Select CategoryName, CounterName, InstanceName, CounterType, CounterHelp
+    
+    #Begin gathering information
+    #Help user if requested from Assist switch
+    If ($assist) {
+        $flag2 = $False
+        While ($flag2 -eq $False) {
+            #Clear any errors
+            $Error.Clear()
+            Write-Host -ForegroundColor Green &quot;Please enter a type of counter you are looking for.&quot;
+            $d_counter = Read-Host &quot;Category&quot;
+			Write-Host &quot;Counter: $d_counter&quot;
+            Write-Host -ForegroundColor Green &quot;Listing Categories based on your query. `n&quot;
+            #Configure error handling
+            Write-Verbose &quot;Configuring error preference&quot;
+            $ErrorActionPreference = 'stop'
+            Try {
+                Get-Counter -ListSet &quot;*$d_counter*&quot; | FT @{Name=&quot;Available Categories&quot;;Expression = &quot;CounterSetName&quot;}
+                }
+            Catch {
+                Write-Warning &quot;$_&quot;
+                }  
+             #Only continue script if no errors occurred, otherwise try again     
+             If (!($error)) {
+                #Set flag so script can continue
+                $flag2 = $True
+                }   
+            }  
+        #Change preference back to continue                  
+        $ErrorActionPreference = 'continue'
+        }
+    If ($flag -eq $True) {
+        #Prompt for Category Name
+        Write-Host -ForegroundColor Green &quot;Enter the Category&quot;
+        $t_array.CategoryName = Read-Host &quot;Category&quot;
+        
+        #Change flag state if 'q' is typed
+        If ($($t_array.CategoryName) -eq &quot;q&quot;) {
+            Write-Verbose &quot;User typed 'q', quitting loop&quot;
+            $flag = $False
+            }
+        }
+    #Help user if requested from Assist switch
+    If ($assist) {
+        Write-Host -ForegroundColor Green &quot;Listing Counters based on your Category selection. `n&quot;
+        (Get-Counter -ListSet &quot;$($t_array.CategoryName)&quot;).counter | % {$_.split(&quot;\&quot;)[2]}
+        }
+                
+    If ($flag -eq $True) {
+        #Prompt for Counter Name
+        Write-Host -ForegroundColor Green &quot;`nEnter the Counter Name&quot;
+        $t_array.CounterName = Read-Host &quot;Counter&quot;
+        
+        #Change flag state if 'q' is typed
+        If ($($t_array.CounterName) -eq &quot;q&quot;) {
+            Write-Verbose &quot;User typed 'q', quitting loop&quot;
+            $flag = $False
+            }        
+        }
+    
+    #Help user if requested from Assist switch
+    If ($assist) {
+        Write-Host -ForegroundColor Green &quot;Listing Instance Names based on your Category selection. `n&quot;
+        $counter = $t_array.CounterName
+		(get-counter -list &quot;$($t_array.CategoryName)&quot;).pathswithinstances | % {
+			$compare = ($_.split(&quot;(&quot;)[1]).split(&quot;)&quot;)[1]
+			Try {
+					If (&quot;$counter&quot; -match $compare) {
+						($_.split(&quot;(&quot;)[1]).split(&quot;)&quot;)[0]
+						}
+					}
+			Catch {
+					Write-Verbose &quot;$_&quot;
+					}
+			}
+        }        
+    If ($flag -eq $True) {
+        #Prompt for Instance Name
+        Write-Host -ForegroundColor Green &quot;`nEnter the Instance Name (can be blank if not needed)&quot;
+        $t_array.InstanceName = Read-Host &quot;Instance Name&quot;
+        
+        #Change flag state if 'q' is typed
+        If ($($t_array.CategoryName) -eq &quot;q&quot;) {
+            Write-Verbose &quot;User typed 'q', quitting loop&quot;
+            $flag = $False
+            }        
+        }
+    
+    #Process the temporay array with the main array
+    If ($flag -eq $True) {
+        Write-Verbose &quot;Adding temp array to main array&quot;
+        $arr += $t_array
+        }
+        
+    #Build the help comment and retrieve the Type of counter
+    If ($flag -eq $True) {
+        #We need to partially build this counter to retrieve the help comments
+        $counter = New-Object System.Diagnostics.PerformanceCounter
+        $counter.CategoryName = $($t_array.CategoryName)
+        $counter.CounterName = $($t_array.CounterName)
+        
+        #Retrieve the help comments
+        $t_array.CounterHelp = $counter.CounterHelp
+        
+        #Retrieve the Counter Type
+        $t_array.CounterType = $counter.CounterType
+        
+        #Remove the $counter object
+        $counter = $Null
+        }
+           
+    #Ask user if they want to continue adding to the config file
+    If ($flag -eq $True) {
+            $answer = Get-UserChoice
+            If ($answer -eq 1) {
+                Write-Verbose &quot;User typed 'q', quitting loop&quot;
+                $flag = $False
+                }
+        }
+
+    } #End While Loop
+    
+    #Begin compiling xml file
+    Write-Verbose &quot;Building XML file: $file&quot;
+    $arr | Export-Clixml $file
+    
+    Write-Host -ForegroundColor Green &quot;`n$file saved to $pwd&quot;
+    Write-Host -ForegroundColor Green &quot;Opening $file to verify contents. If anything is missing, you will need to rebuild.&quot;
+    Import-Clixml $file
+    Return $file
+} #End Build-PerfConfig Function
+
+Function Get-PerfCounter {
+&lt;#  
+.SYNOPSIS  
+    Runs a pre-defined perfmon counter against a selected server or servers.
+.DESCRIPTION
+     Runs a pre-defined perfmon counter against a selected server or servers.
+.PARAMETER interval
+    Interval for performance counters. Default Value is 10 seconds.
+.PARAMETER computers
+    List or name of a computer to run against. Default Value is the local machine.
+.PARAMETER endat
+    When to end the perfmon counter. Default Value is 10 minutes.
+.NOTES  
+    Name: WinPerf.ps1
+    Author: Boe Prox
+    DateCreated: 28June2010 
+         
+.LINK  
+    http://www.powershell.com
+.EXAMPLE  
+    Get-PerfCounter -configfile &quot;OS_Baseline.xml&quot; -computers Server -endat &quot;06/20/2010 04:00 PM&quot; -interval 60
+    
+    Uses the counters listed in the OS_Baseline.xml file on server 'Server' which will collect data at 60 second 
+    intervals and will end on 06/20/2010 at 04:00PM.
+          
+#&gt; 
+[cmdletbinding(
+	SupportsShouldProcess = $True,
+	DefaultParameterSetName = 'perf',
+	ConfirmImpact = 'low'
+)]
+param(
+    [Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf',
+        ValueFromPipeline = $True)]
+        [array]$computers = $env:Computername, #Computer or computers to run perfmon against
+	[Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf')]
+        [string]$configfile, #Configuration file that lists what perfmon counters to check          
+	[Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf')]
+        [int]$interval = 10, #Time in seconds to wait before beginning next set of counters
+	[Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf')]
+        [datetime]$endat = (Get-Date).AddMinutes(10), #When to end the perf counter
+	[Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf')]
+        [string]$sqlsvr = &quot;R49&quot;, #Name of the SQL server that hosts the perf counter database
+	[Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf')]
+        [string]$database = &quot;PerfMon&quot;, #Name of the database storing the perf counters
+	[Parameter(
+        Mandatory = $False,
+        ParameterSetName = 'perf')]
+        [string]$file #List of host names to run perfmon against      
+)
+If ($computers -eq $Null -OR $computers -eq &quot;&quot;) {
+    $computers = $env:Computername
+    }
+If ($File) {
+    $computers = Get-Content $file
+    }    
+$path = $pwd	
+#Check to see if a config file was used, if not begin building the file.    
+If ($configfile -eq $Null -OR $configfile -eq &quot;&quot;) {
+        Write-Warning &quot;No config file given! `nLaunching file builder...&quot;
+        Start-Sleep -s 2
+        Build-PerfConfig -assist
+		$configfile = 'config.xml'
+        }
+ForEach ($computer in $computers) {
+
+        #Initialize Background Job
+        Start-Job -Name $computer -ArgumentList $computer, $configfile, $interval, $endat,$conn,$sqlsvr,$database,$path -ScriptBlock {
+        param ($computer, $configfile, $interval, $endat,$conn,$sqlsvr,$database,$path)
+        
+        #Register SQL assemblies
+        Write-Verbose &quot;Loading SQL Assemblies&quot;
+        [void][System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.ConnectionInfo.DLL&quot;) 
+        [void][System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.SMO.DLL&quot;) 
+        [void][System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.SMOEnum.DLL&quot;) 
+                
+        #Create SQL Connection
+        Write-Verbose &quot;Creating SQL Connection&quot;
+        $conn = New-Object System.Data.SqlClient.SqlConnection(&quot;Data Source=$sqlsvr;
+        Initial Catalog=$database; Integrated Security=SSPI&quot;)
+        $conn.Open()
+        $cmd = $conn.CreateCommand()
+        
+        #Define location of XML file
+        Set-Location $path
+        
+        #Import the XML file
+        Write-Verbose &quot;Importing XML file $($configfile)&quot;
+        $counters = Import-Clixml $configfile
+        
+        #Set an increment
+        Write-Verbose &quot;Setting increment to 0&quot;
+        $inc = 0
+        
+        #Build Array for counters
+        $total = $counters.Count
+	    $perfcounter = New-Object 'object[]' $total        
+        
+        #Iterate through counters
+        ForEach ($counter in $counters) {
+        
+            Write-Verbose &quot;Looking at $($counter.CategoryName)&quot;
+            #Initialize the Performance Counters for the machine
+            $perfcounter[$inc] = New-Object System.Diagnostics.PerformanceCounter
+            $perfcounter[$inc].MachineName = $computer
+            $perfcounter[$inc].CategoryName = $counter.CategoryName
+            $perfcounter[$inc].CounterName = $counter.CounterName
+            $perfcounter[$inc].InstanceName = $counter.InstanceName
+            
+            #Initial counter increment so the first value will not be 0
+            $nothing = $perfcounter[$inc].NextValue()
+            
+            #Increment counter
+            $inc++
+            }
+        $inc--    
+        Write-Host -ForegroundColor Green $inc
+                    		
+        While ($endat -gt (get-date)) {
+            
+            #Iterate through perfcounters
+            0..$inc | % {
+                #Make variables for SQL command easier to read
+                $CouName = $perfcounter[$_].CounterName
+                $CatName = $perfcounter[$_].CategoryName
+                $InsName = $perfcounter[$_].InstanceName
+                $value = $perfcounter[$_].NextValue()
+                
+                #Create Date String
+                $dt = (get-date) -f &quot;&quot;
+                
+                #Create query string
+                #Must matching the table layout (Server, Date, CounterName, CounterType, InstanceName, Value)
+                Write-Verbose &quot;Sending PerfMon data for $catname \ $couname to SQL database&quot;
+                $cmd.CommandText = &quot;INSERT INTO Counters (ServerName, Date, CounterName, CounterType, InstanceName, Data) VALUES ('$computer','$dt','$CouName','$CatName','$InsName','$Value')&quot;  
+
+                #Execute Query
+                $cmd.ExecuteNonQuery() | Out-Null               
+                }
+            Start-Sleep -s $interval                
+        	}                
+        }
+    }
+}    
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

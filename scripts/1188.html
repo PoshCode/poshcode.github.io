@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>LibrarySqlBackup - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>LibrarySqlBackup</h1>
+<h3><a href="//scripts/1188.ps1">download</a></h3>
+<p>Standalone script adapted from SQL Server Powershell Extensions (sqlpsx) http://sqlpsx.codeplex.com. Defines SQL Server backup and restore functions.</p>
+<pre><code class="language-posh"># ---------------------------------------------------------------------------
+### &lt;Script&gt;
+### &lt;Author&gt;
+### Chad Miller 
+### &lt;/Author&gt;
+### &lt;Description&gt;
+### Excerpt from SQL Server Powershell Extensions (sqlpsx)
+### http://sqlpsx.codeplex.com
+### Defines backup and restore functions
+### &lt;/Description&gt;
+### &lt;Usage&gt;
+### . ./LibrarySqlBackup.ps1
+### $server = new-object (&quot;Microsoft.SqlServer.Management.Smo.Server&quot;) 'Z002\SQL2K8'
+### invoke-sqlbackup 'Z002\SqlExpress' 'pubs' $($server.BackupDirectory + &quot;\pubs.bak&quot;)
+### invoke-sqlrestore 'Z002\SqlExpress' 'pubs' $($server.BackupDirectory + &quot;\pubs.bak&quot;) -force 
+### &lt;/Usage&gt;
+### &lt;/Script&gt;
+# ---------------------------------------------------------------------------
+$smoAssembly = [reflection.assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.Smo&quot;)
+if (!($smoVersion))
+{ Set-Variable -name SmoVersion  -value $smoAssembly.GetName().Version.Major -Scope Global -Option Constant -Description &quot;SQLPSX variable&quot; }
+[void][reflection.assembly]::LoadWithPartialName('Microsoft.SqlServer.SMOExtended')
+
+#######################
+function Invoke-SqlBackup
+{
+    param($sqlserver=$(throw 'sqlserver required.'),$dbname=$(throw 'dbname required.'),$filepath=$(throw 'filepath required.')
+          ,$action='Database', $description='',$name='',[switch]$force,[switch]$incremental,[switch]$copyOnly)
+    
+    #action can be Database or Log
+
+    $server = new-object (&quot;Microsoft.SqlServer.Management.Smo.Server&quot;) $sqlserver
+
+    Write-Verbose &quot;Invoke-SqlBackup $($server.Name) $dbname&quot;
+
+    $backup = new-object (&quot;Microsoft.SqlServer.Management.Smo.Backup&quot;)
+    $backupDevice = new-object (&quot;Microsoft.SqlServer.Management.Smo.BackupDeviceItem&quot;) $filepath, 'File'
+
+    $backup.Action = $action
+    $backup.BackupSetDescription = $description
+    $backup.BackupSetName = $name
+    if (!$server.Databases.Contains(&quot;$dbname&quot;)) {throw 'Database $dbname does not exist on $($server.Name).'}
+    $backup.Database = $dbname
+    $backup.Devices.Add($backupDevice) 
+    $backup.Initialize = $($force.IsPresent)
+    $backup.Incremental = $($incremental.IsPresent)
+    if ($copyOnly)
+    { if ($server.Information.Version.Major -ge 9 -and $smoVersion -ge 10) 
+      { $backup.CopyOnly = $true }
+      else
+      { throw 'CopyOnly is supported in SQL Server 2005(9.0) or higher with SMO version 10.0 or higher.' }
+    }
+    
+    trap {
+        $ex = $_.Exception
+        Write-Output $ex.message
+        $ex = $ex.InnerException
+        while ($ex.InnerException)
+        {
+            Write-Output $ex.InnerException.message
+            $ex = $ex.InnerException
+        };
+        continue
+    }
+    $backup.SqlBackup($server) 
+    
+    if ($?)
+    { Write-Host &quot;$action backup of $dbname to $filepath complete.&quot; }
+    else
+    { Write-Host &quot;$action backup of $dbname to $filepath failed.&quot; }
+
+} #Invoke-SqlBackup
+
+#######################
+function Invoke-SqlRestore
+{
+    param($sqlserver=$(throw 'sqlserver required.'),$dbname=$(throw 'dbname required.'),$filepath=$(throw 'filepath required.'),
+          $action='Database',$stopat,$relocatefiles,[switch]$force,[switch]$norecovery,[switch]$keepreplication)
+
+    #action can be Database or Log
+
+    $server = new-object (&quot;Microsoft.SqlServer.Management.Smo.Server&quot;) $sqlserver
+ 
+    Write-Verbose &quot;Invoke-SqlRestore $($server.Name) $dbname&quot;
+
+    $restore = new-object (&quot;Microsoft.SqlServer.Management.Smo.Restore&quot;)
+    $restoreDevice = new-object (&quot;Microsoft.SqlServer.Management.Smo.BackupDeviceItem&quot;) $filepath, 'File'
+
+    $restore.Action = $action
+    $restore.Database = $dbname
+    $restore.Devices.Add($restoreDevice) 
+    $restore.ReplaceDatabase = $($force.IsPresent)
+    $restore.NoRecovery = $($norecovery.IsPresent)
+    $restore.KeepReplication = $($keepreplication.IsPresent)
+   
+    if ($stopat)
+    { $restore.ToPointInTime = $stopAt }
+
+    if ($relocatefiles)
+    {
+       if ($relocateFiles.GetType().Name -ne 'Hashtable')
+       { throw 'Invoke-SqlRestore:Param relocateFile must be a hashtable' }
+
+       $relocateFileAR = New-Object Collections.ArrayList
+        
+       foreach ($i in $relocatefiles.GetEnumerator())
+        {
+            $logicalName = $($i.Key); $physicalName = $($i.Value);
+            $relocateFile = new-object (&quot;Microsoft.SqlServer.Management.Smo.RelocateFile&quot;) $logicalName, $physicalName
+            [void]$relocateFileAR.Add($relocateFile)
+        }
+
+        $restore.RelocateFiles = $relocateFileAR
+     
+    }
+
+    trap {
+        $ex = $_.Exception
+        Write-Output $ex.message
+        $ex = $ex.InnerException
+        while ($ex.InnerException)
+        {
+            Write-Output $ex.InnerException.message
+            $ex = $ex.InnerException
+        };
+        continue
+    }
+    $restore.SqlRestore($server) 
+    
+    if ($?)
+    { Write-Host &quot;$action restore of $dbname from $filepath complete.&quot; }
+    else
+    { Write-Host &quot;$action restore of $dbname from $filepath failed.&quot; }
+
+} #Invoke-SqlRestore
+
+#######################
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

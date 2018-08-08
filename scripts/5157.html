@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Daniel Cheng">
+    <title>SoapAction Wsdl - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SoapAction Wsdl</h1>
+<h3><a href="//scripts/5157.ps1">download</a> - <a href="//scripts/5156.md">parent</a></h3>
+<p>Obtain the correct SoapAction string when a webservice method is passed (read from a Soap request).</p>
+<p>e.g. Find-SoapAction -method GetUserProfile -wsdl http://server/AuthenticationService.svc?wsdl</p>
+<pre><code class="language-posh">function Find-SoapAction
+{
+    [CmdletBinding(PositionalBinding=$false)]
+    param(
+        [string]$method,
+        [uri]$wsdl # supports files
+    )
+    
+ 
+    Add-Type -AssemblyName &quot;System.Web.Services&quot;
+    $webClient = New-Object -TypeName System.Net.WebClient
+    $serviceDescriptionCollection = New-Object -TypeName System.Web.Services.Description.serviceDescriptionCollection
+
+    function private:Get-ServiceDescription([uri]$WsdlLocation)
+    {
+        $error.Clear()
+        Write-Verbose &quot;Trying $($WsdlLocation)..&quot;
+        # accept all certs in retrieving Wsdl if https is used
+        if ($WsdlLocation.Scheme -eq &quot;https&quot;){[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}}
+        try {
+            $wsdlStream = $WebClient.OpenRead($WsdlLocation)
+            $serviceDescription = [Web.Services.Description.ServiceDescription]::Read($wsdlStream)
+            $wsdlStream.Close()
+        } catch {
+            Write-Verbose &quot;$($WsdlLocation) retrieval failed!&quot;
+            return $false
+        }
+        Write-Verbose &quot;$($WsdlLocation) retrieval success!&quot;
+        return $serviceDescription
+    }
+
+    function private:Get-BindingOperation
+    {
+        param($serviceDescription)
+        foreach ($message in $serviceDescription.Messages)
+        {
+            Write-Verbose &quot;comparing $($message.parts.element.name) with $($method)&quot;
+             # http://msdn.microsoft.com/en-us/library/system.xml.xmlqualifiedname_properties(v=vs.110).aspx
+            if ($message.parts.element.name -eq $method)
+            {
+                foreach ($PortTypeOperation in $serviceDescription.PortTypes.Operations.Messages) {
+                    Write-Verbose &quot;comparing $($PortTypeOperation.Message.Name) with $($message.name)&quot;
+                    if ($PortTypeOperation.Message.Name -eq $message.Name)
+                    {
+                        Write-Verbose $PortTypeOperation.operation.name
+                        return $PortTypeOperation.operation.name
+                    }
+                }
+            }
+        }
+    }
+
+    function private:Find-BindingOperationMapping
+    {
+        param($bindingOperation, $serviceDescription)
+        foreach ($servicePortBinding in $serviceDescription.services.ports.Binding)
+        {
+            foreach ($Binding in $serviceDescription.Bindings)
+            {
+                #quick hack to get rid of soap12 services
+                Write-Verbose &quot;comparing $($servicePortBinding.Name) with $($Binding.Name)&quot;
+                if (($servicePortBinding.Name -eq $Binding.Name) -and ($servicePortBinding.name -notlike &quot;*soap12*&quot;))
+                {
+                    foreach ($Operation in $Binding.Operations)
+                    {
+                        if ($Operation.Name -eq $bindingOperation)
+                        {
+                            return ([uri]$Operation.Extensions.soapAction).AbsoluteUri
+                        }
+                    }
+                }
+    
+            }
+        }
+    }
+
+    if ($wsdl.IsFile)
+    {
+        $location = Get-ServiceDescription -WsdlLocation $wsdl
+    } else {
+        try {
+            $location = Get-ServiceDescription -WsdlLocation ($wsdl.AbsoluteUri -replace &quot;\?wsdl&quot;, &quot;?singleWsdl&quot;)
+            if (![bool]$location) {throw &quot;error&quot;}
+        } catch {
+            $location = Get-ServiceDescription -WsdlLocation $wsdl
+        }
+    }    
+    
+    # build serviceDescriptionCollection object (from all imported Wsdls if applicable)
+    if ($location.GetType().BaseType -eq [System.Web.Services.Description.NamedItem])
+    {
+        try {
+            [void]$serviceDescriptionCollection.add($location)
+        } catch {
+            Write-Verbose &quot;[serviceDescriptionCollection] $($error)&quot;
+        } finally {
+            if ([bool]$location.imports.count)
+            {
+                foreach ($importLocation in $location.Imports.location)
+                {
+                    Write-Verbose &quot;Importing from $($importLocation)..&quot;
+                    try {
+                        [void]$serviceDescriptionCollection.add((Get-ServiceDescription $importLocation))
+                    } catch {
+                        Write-Verbose &quot;[importLocation] $($error)&quot;
+                    }
+                }
+            }
+        }
+    }
+
+    # finally find the action
+    foreach ($serviceDescription in $serviceDescriptionCollection)
+    {
+        $bindingOperation = Get-BindingOperation -serviceDescription $serviceDescription
+        if ($bindingOperation)
+        {
+            foreach ($serviceDescription in $serviceDescriptionCollection)
+            {
+                Find-BindingOperationMapping -bindingOperation $bindingOperation -serviceDescription $serviceDescription
+            }
+            
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

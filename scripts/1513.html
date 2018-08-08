@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>JSON - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>JSON</h1>
+<h3><a href="//scripts/1513.ps1">download</a></h3>
+<p>Json.psm1 is a first draft of a JSON module. I has a full set of tools for exporting, importing, and converting Json objects. For instance, this actually works (it round trips a bunch of FileInfo objects through JSON, XML, JSON, and back to objects).</p>
+<p>@ ls | Where { !$_.PSIsContainer } | ConvertTo-Json | Convert-JsonToXml | Convert-XmlToJson | ConvertFrom-Json IO.FileInfo[] @</p>
+<p>However, this module is &quot;still very incomplete&quot;:http://huddledmasses.org/json-from-powershell-but-why</p>
+<pre><code class="language-posh">#requires -version 2.0
+# No help (yet) because I'm still changing and renaming everything every time I mess with this code
+Add-Type -Assembly System.ServiceModel.Web, System.Runtime.Serialization
+$utf8 = [System.Text.Encoding]::UTF8
+
+
+function Convert-JsonToXml
+{
+PARAM([Parameter(ValueFromPipeline=$true)][string[]]$json)
+BEGIN { $mStream = new-object System.IO.MemoryStream }
+PROCESS {
+   $json | Write-String -Stream $mStream
+}
+END {
+   $mStream.Position = 0
+   $jsonReader = [System.Runtime.Serialization.Json.JsonReaderWriterFactory]::CreateJsonReader($mStream,[System.Xml.XmlDictionaryReaderQuotas]::Max)
+   try
+   {
+      $xml = new-object Xml.XmlDocument
+      $xml.Load($jsonReader)
+      $xml
+   }
+   finally
+   {
+      $jsonReader.Close()
+      $mStream.Dispose()
+   }
+}
+}
+ 
+function Convert-XmlToJson
+{
+PARAM([Parameter(ValueFromPipeline=$true)][xml]$xml)
+Process{
+   $mStream = new-object System.IO.MemoryStream
+   $jsonWriter = [System.Runtime.Serialization.Json.JsonReaderWriterFactory]::CreateJsonWriter($mStream)
+   try
+   {
+     $xml.Save($jsonWriter)
+     $bytes = $mStream.ToArray()
+     [System.Text.Encoding]::UTF8.GetString($bytes,0,$bytes.Length)
+   }
+   finally
+   {
+     $jsonWriter.Close()
+     $mStream.Dispose()
+   }
+}
+}
+
+
+
+function ConvertFrom-Json {
+PARAM( [Parameter(Mandatory=$true)][Type[]]$type, [Parameter(ValueFromPipeline=$true,Mandatory=$true)][String]$json )
+PROCESS{ 
+   $ms = New-object IO.MemoryStream (,$utf8.GetBytes($json))
+   Import-Json $type $ms 
+   $ms.dispose()
+}
+}
+
+function Import-Json {
+[CmdletBinding(DefaultParameterSetName=&quot;File&quot;)]
+PARAM( 
+[Parameter(Mandatory=$true,Position=1)][Type[]]$type
+, 
+[Parameter(Mandatory=$true,Position=2,ParameterSetName=&quot;Stream&quot;)][IO.Stream]$Stream 
+, 
+[Parameter(Mandatory=$true,Position=2,ParameterSetName=&quot;File&quot;)][String]$Path
+)
+BEGIN {
+   if($PSCmdlet.ParameterSetName -eq &quot;File&quot;) {
+      $Stream = [IO.File]::Open($Path, &quot;Read&quot;)
+   }
+}
+PROCESS{
+   if($type.Count -gt 1) {
+      $t,$types = @($type)
+      $js = New-Object System.Runtime.Serialization.Json.DataContractJsonSerializer $t, (,@($types))
+   } else {
+      $js = New-Object System.Runtime.Serialization.Json.DataContractJsonSerializer @($type)[0] 
+   }
+   Write-Output $js.ReadObject($Stream)
+}
+END {
+   if($PSCmdlet.ParameterSetName -eq &quot;File&quot;) {
+      $Stream.Dispose()
+   }
+}
+}
+
+function Export-Json {
+[CmdletBinding(DefaultParameterSetName=&quot;File&quot;)]
+PARAM( 
+[Parameter(Mandatory=$true,Position=1)][Array]$InputObject
+, 
+[Parameter(Mandatory=$true,Position=2,ParameterSetName=&quot;Stream&quot;)][IO.Stream]$Stream 
+, 
+[Parameter(Mandatory=$true,Position=2,ParameterSetName=&quot;File&quot;)][String]$Path
+)
+BEGIN {
+   if($PSCmdlet.ParameterSetName -eq &quot;File&quot;) {
+      $Stream = [IO.File]::Open($Path, &quot;Write&quot;)
+   }
+}
+PROCESS {
+   [type]$Type = @($InputObject)[0].GetType()
+
+   if($Type -isnot [Array]) { #$InputObject.Count -gt 1 -and 
+      [type]$Type = &quot;$($Type)[]&quot;
+   }
+   
+   [Type[]]$types = ($InputObject | select -expand PsTypeNames) | % { $_ -split &quot;`n&quot; -replace &quot;^Selected\.&quot; } | Select -unique
+   
+   #Write-Verbose $($Types | select -expand FullName | out-string)
+   #Write-Verbose &quot;Stream: $($Stream.GetType())&quot;
+   Write-Verbose &quot;Output: $Type&quot;
+   Write-Verbose &quot;Input: $($InputObject.GetType())&quot;
+   
+   $js = New-Object System.Runtime.Serialization.Json.DataContractJsonSerializer $Type #, $Types #, ([int]::MaxValue), $false, $null, $false
+   $js.WriteObject( $stream, $InputObject )
+}
+END {
+   if($PSCmdlet.ParameterSetName -eq &quot;File&quot;) {
+      $Stream.Dispose()
+   }
+}
+}
+
+
+function ConvertTo-Json {
+PARAM( [Parameter(ValueFromPipeline=$true,Mandatory=$true)]$object )
+BEGIN {    
+   [type]$lastType = $null
+   function Out-JsonString {
+      Param($items)
+      $ms = New-Object IO.MemoryStream
+      Export-Json $items.ToArray() $ms
+      $utf8.GetString( $ms.ToArray(), 0, $ms.Length )
+      $ms.Dispose()
+   }
+}
+PROCESS {
+   $thisType = $object.GetType()
+   if(!$lastType -or $lastType -ne $thisType) { 
+      if($lastType) { Out-JsonString $items }
+      # make a new collection
+      $items = new-object &quot;System.Collections.Generic.List[$thisType]&quot;
+   }
+   $items.Add($object)
+   $lastType = $thisType
+}
+END {
+   Out-JsonString $items
+}
+}
+
+function Write-String {
+param([Parameter()]$stream,[Parameter(ValueFromPipeline=$true)]$string)
+process {
+  $bytes = $utf8.GetBytes($string)
+  $stream.Write( $bytes, 0, $bytes.Length )
+}  
+}
+New-Alias fromjson ConvertFrom-Json
+New-Alias tojson ConvertTo-Json
+
+New-Alias cvfjs ConvertFrom-Json
+New-Alias cvtjs ConvertTo-Json
+New-Alias ipjs Import-Json
+New-Alias epjs Export-Json
+
+
+Export-ModuleMember -Function ConvertFrom-Json, Import-Json, Export-Json, ConvertTo-Json, Convert-JsonToXml, Convert-XmlToJson -Alias *
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Karl Mitschke">
+    <title>ASPX Mailbox  (4 of 6) - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ASPX Mailbox  (4 of 6)</h1>
+<h3><a href="//scripts/508.cs">download</a></h3>
+<p>This is part 4 of a 6 part mailbox creation web site.
+This site allows local administrators to create and delete mailboxes, and change email addresses.  Save this as MailboxConfirm.aspx.cs</p>
+<pre><code class="language-csharp">using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Management.Automation;
+using System.Management.Automation.Runspaces;
+using System.Net.Mail;
+using System.Text.RegularExpressions;
+using System.Web.UI;
+using System.Web.UI.WebControls;
+
+public partial class MailboxConfirm : System.Web.UI.Page
+{
+    protected void Page_Load(object sender, EventArgs e)
+    {
+        if (IsPostBack)
+        {
+            if (Session[&quot;AdminUser&quot;].ToString() == &quot;&quot;)
+            {
+                Server.Transfer(&quot;MailboxTasks.aspx&quot;,false);
+            }
+            else
+            {
+                Session[&quot;blKeepAddress&quot;] = chkKeepAddress.Checked;
+                Session[&quot;NewAddress&quot;] = newAddress.Text;
+                Server.Transfer(&quot;MailboxTaskResults.aspx&quot;, true);
+            }
+        }
+//Variable Definition
+        Collection&lt;PSObject&gt; Results;
+        string strNTUser = Request.ServerVariables[&quot;LOGON_USER&quot;];
+        string strUCNTUser = strNTUser.ToUpper();
+        string strUserToCheck = strUCNTUser;
+        string strUserName = &quot;&quot;;
+        string strTargName = &quot;&quot;;
+        string strTargPath = &quot;&quot;;
+        string strTask = &quot;&quot;;
+        Session[&quot;AdminID&quot;] = &quot;&quot;;
+        Session[&quot;DirPath&quot;] = &quot;&quot;;
+        Session[&quot;OldAddress&quot;] = &quot;&quot;;
+        Session[&quot;NewAddress&quot;] = &quot;&quot;;
+        Session[&quot;AdminUser&quot;] = &quot;&quot;;
+        Session[&quot;LastName&quot;] = &quot;&quot;;
+        Session[&quot;Agency&quot;] = &quot;&quot;;
+        Session[&quot;DivisionOU&quot;] = &quot;&quot;;
+        Session[&quot;blKeepAddress&quot;] = false;
+        newAddress.Visible = false;
+        chkKeepAddress.Visible = false;
+        chkKeepAddress.Text = &quot;Keep old email addresses&quot;;
+        strTargName = &quot;'&quot; + Request.Form[3] + &quot;'&quot;;
+        strTask = Request.Form[4];
+        Session[&quot;Action&quot;] = strTask;
+        if (strUCNTUser.IndexOf(&quot;\\&quot;, 0) &gt; 0)
+        {
+            strUserToCheck = strUCNTUser.Substring(strUCNTUser.IndexOf(&quot;\\&quot;,0)+1);
+        }
+        strNTUser = strUserToCheck.ToLower();
+
+        Results = runposh(&quot;dsquery user -samid &quot; + strNTUser);
+        if (Results != null)
+        {
+            strUserName = Results[0].ToString();
+        }
+        Results = runposh(&quot;dsquery user -samid &quot; + strTargName);
+        if (Results != null)
+        {
+            if (Results.Count != 0)
+            {
+                Response.Write(&quot;Your logon ID and password are correct&lt;br /&gt;&lt;br /&gt;&quot;);
+                strTargPath = Results[0].ToString();
+                fnGetData(strTargPath, strUserName, strUserToCheck, strNTUser, strTask, strTargName);
+            }
+            else
+            {
+                Response.Write(&quot;We were unable to locate the object you specified (&quot; + strTargName + &quot;). Please check the name and try again&lt;br /&gt;&lt;br /&gt;&quot;);
+                fnAddBackButton();
+            }
+        }
+    }
+    void fnGetData(string strTargPath, string strUserName, string strUserToCheck, string strNTUser, string strTask, string strTargName)
+    {
+        string strPoshCommand = &quot;&quot;;
+        string strAgencyOU = &quot;&quot;;
+        string strDivOU = &quot;&quot;;
+        string strMBXGroup = &quot;&quot;;
+        string strUPN = &quot;&quot;;
+        int intAttaySize = 0;
+
+        Boolean boolIsMemberOfAdminGroup = false;
+        Boolean boolIsValidCompany = false;
+
+        Collection&lt;PSObject&gt; Results;
+
+        #region Find Admin Group
+        strPoshCommand = strTargPath + &quot;.split(',').length&quot;;
+        Results = runposh(strPoshCommand);
+        intAttaySize = int.Parse(Results[0].ToString());
+        strPoshCommand = &quot;&quot;;
+        for (int i = intAttaySize; i &gt; 0; i--)
+        {
+            strPoshCommand = strPoshCommand + &quot;$part&quot; + i + &quot;,&quot;;
+        }
+        strPoshCommand = strPoshCommand.Substring(0, strPoshCommand.Length - 1) + &quot; = &quot; + strTargPath + &quot;.split(',')&quot;;
+        Results = runposh(strPoshCommand);
+        strPoshCommand = &quot;dsget user &quot; + strTargPath + &quot; -company&quot;; //This is the agency
+        Results = runposh(strPoshCommand);
+        if (Results[1].ToString().Trim().Length &gt;= 3)
+        {
+            boolIsValidCompany = true;
+            strAgencyOU = Results[1].ToString().Trim().Substring(0, 3).ToUpper();
+            strMBXGroup = strAgencyOU + &quot;MailboxAdmins&quot;;
+        }
+        else
+        {
+        	Response.Write(&quot;User &quot; + strTargName + &quot;'s Active Directory account does not seem to have an agency name in the Company field.&lt;br&gt;We will not be able to create a mailbox until this is corrected.&lt;br&gt;&quot;);
+            boolIsValidCompany = false;
+        	strAgencyOU = &quot;&quot;;
+        }
+        #endregion
+        #region Validate Admin Group
+        if (boolIsValidCompany == true)
+        {
+            //Check to see if user is in the admin group
+            strPoshCommand = &quot;dsget user &quot; + strUserName + &quot; -memberof -expand&quot;;
+            Results = runposh(strPoshCommand);
+            for (int i = 0; i &lt; Results.Count - 1; i++)
+            {
+                Array groupcheck = Results[i].ToString().Split(',');
+                string strgroupstring = groupcheck.GetValue(0).ToString();
+                strgroupstring = strgroupstring.Substring(4);
+
+                if (strgroupstring.ToUpper() == strMBXGroup.ToUpper())
+                {
+                    boolIsMemberOfAdminGroup = true;
+                    break;
+                }
+            if ((strgroupstring.ToLower() == &quot;exchfulladmins&quot;) || (strgroupstring.ToLower() == &quot;exch2k7servicedesk&quot;))
+                {
+                    boolIsMemberOfAdminGroup = true;
+                    break;
+                }
+            }
+        }
+        #endregion
+        #region Results of Admin Group Checks
+        if (boolIsValidCompany == true)
+        {
+            if (boolIsMemberOfAdminGroup == false)
+            {
+                Response.Write(&quot;User &quot; + strUserToCheck.ToLower() + &quot; is not a member of &quot; + strMBXGroup + &quot;. You will not be able to modify objects.&lt;br&gt;&lt;br&gt;&quot;);
+            }
+            else
+            {
+                if (strMBXGroup.Length &gt; 0)
+                {
+                    Response.Write(&quot;User &quot; + strUserToCheck.ToLower() + &quot; is a member of &quot; + strMBXGroup + &quot;.&lt;br&gt;&lt;br&gt;&quot;);
+                }
+                Results = runposh(&quot;Add-PSSnapin Microsoft.Exchange.Management.PowerShell.Admin&quot;);
+                Results = runposh(&quot;get-user &quot; + strNTUser + &quot; |fl -property userprincipalname |out-string&quot;);
+                strUPN = Results[0].ToString().Replace(&quot;UserPrincipalName :&quot;, &quot;&quot;).Trim();
+                switch (strTask.ToLower())
+                {
+                    case &quot;create mailbox&quot;:
+                        fnCreateMailboxChecks(strTargPath, strUserName, strUserToCheck.ToLower(), strTargName, strAgencyOU);
+                        break;
+                    case &quot;delete mailbox&quot;:
+                        fnDeleteMailboxChecks(strTargPath, strUPN, strUserToCheck.ToLower());
+                        break;
+                    case &quot;change address&quot;:
+                        fnChangeAddressChecks(strTargPath, strUserToCheck.ToLower());
+                        break;
+                }
+            }
+        }
+        #endregion
+    }
+    void fnCreateMailboxChecks(string strUserPath, string strAdminUser, string strAdminName, string strTargName, string strAgencyOU)
+    {
+        Collection&lt;PSObject&gt; Results;
+        string strCompany = strAgencyOU;
+        string strLastName = &quot;&quot;;
+        string strExchangeServer = &quot;&quot;;
+
+        Response.Write(&quot;Requested action is Create Mailbox&quot;);
+        Response.Write(&quot;&lt;table border&gt;&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;th&gt;Attribute&lt;/th&gt;&lt;th&gt;Value&lt;/th&gt;&lt;th&gt;Expected State&lt;/th&gt;&lt;/tr&gt;&quot;);
+        Results = runposh(&quot;dsget user &quot; + strUserPath + &quot; -samid&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Logon ID&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + Results[1].ToString() + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        Results = runposh(&quot;dsget user &quot; + strUserPath + &quot; -display&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Name&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + Results[1].ToString() + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Directory Path&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + strUserPath + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        Results = runposh(&quot;dsget user &quot; + strUserPath + &quot; -ln&quot;);
+        strLastName = Results[1].ToString();
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Last Name&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + strLastName + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        Results = runposh(&quot;dsget user &quot; + strUserPath + &quot; -company&quot;);
+        strCompany = Results[1].ToString();
+        Results = runposh(&quot;dsget user &quot; + strUserPath + &quot; -upn&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Agency&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + strCompany + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        Results = runposh(&quot;get-mailbox -identity &quot; + strUserPath + &quot; |fl servername |out-string&quot;);
+        if (Results[0].ToString() != &quot;&quot;)
+        {
+            strExchangeServer = Results[0].ToString().TrimEnd(Convert.ToChar(32)).TrimStart(Convert.ToChar(32));
+            strExchangeServer = strExchangeServer.Substring(17);
+            Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Exchange Server&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + strExchangeServer + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Empty&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&quot;);
+        }
+        else
+        {
+            Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Exchange Server&lt;/td&gt;&lt;td&gt;&lt;b&gt;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Empty&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&quot;);
+        }
+        if ((strCompany.Replace(&quot; &quot;,&quot;&quot;) == &quot;&quot;) || (strLastName.Replace(&quot; &quot;,&quot;&quot;) == &quot;&quot;) || ((strExchangeServer.Replace(&quot; &quot;,&quot;&quot;) != &quot;&quot;)))
+        {
+            Response.Write(&quot;&lt;span style='color:Red'&gt;One or more required fields is in an incorrect state. Please check the values listed above and try again.&lt;/span&gt;&quot;);
+            fnAddBackButton();
+        }
+        else
+        {
+            Session[&quot;AdminID&quot;] = strAdminUser;
+            Session[&quot;AdminUser&quot;] = strAdminName;
+            Session[&quot;LastName&quot;] = strLastName;
+            Session[&quot;DirPath&quot;] = strUserPath;
+            Session[&quot;Agency&quot;] = strCompany;
+            Button btnCreate = new Button();
+            btnCreate.Attributes.Add(&quot;onclick&quot;, &quot;this.value='Please wait...';this.disabled= true;&quot; + ClientScript.GetPostBackEventReference(new PostBackOptions(this, &quot;btnCreate&quot;)));
+            btnCreate.Text = &quot;Create Mailbox&quot;;
+            frmMailboxConfirm.Controls.Add(btnCreate);
+        }
+    }
+    void fnDeleteMailboxChecks(string strTargPath, string strAdminUser, string strAdminName)
+    {
+        Collection&lt;PSObject&gt; colDeleteResults;
+
+        string strExchangeServer;
+
+        Session[&quot;AdminID&quot;] = strAdminUser;
+        Session[&quot;AdminUser&quot;] = strAdminName;
+        Session[&quot;DirPath&quot;] = strTargPath;
+
+        Response.Write(&quot;Requested action is DELETE Mailbox&lt;br&gt;&quot;);
+        Response.Write(&quot;&lt;table border&gt;&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;th&gt;Attribute&lt;/th&gt;&lt;th&gt;Value&lt;/th&gt;&lt;th&gt;Expected State&lt;/th&gt;&lt;/tr&gt;&quot;);
+        colDeleteResults = runposh(&quot;dsget user &quot; + strTargPath + &quot; -samid&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Logon ID&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + colDeleteResults[1].ToString() + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        colDeleteResults = runposh(&quot;dsget user &quot; + strTargPath + &quot; -display&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Name&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + colDeleteResults[1].ToString() +  &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Directory Path&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + strTargPath + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        colDeleteResults = runposh(&quot;get-mailbox -identity &quot; + strTargPath + &quot; |fl servername |out-string&quot;);
+        if (colDeleteResults[0].ToString() != &quot;&quot;)
+        {
+            strExchangeServer = colDeleteResults[0].ToString().TrimEnd(Convert.ToChar(32)).TrimStart(Convert.ToChar(32));
+            strExchangeServer = strExchangeServer.Substring(17);
+
+            Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Exchange Server&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + strExchangeServer + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&quot;);
+            Button btnDelete = new Button();
+            btnDelete.Attributes.Add(&quot;onclick&quot;, &quot;this.value='Please wait...';this.disabled= true;&quot; + ClientScript.GetPostBackEventReference(new PostBackOptions(this, &quot;btnDelete&quot;)));
+            btnDelete.Text = &quot;!DELETE Mailbox!&quot;;
+            frmMailboxConfirm.Controls.Add(btnDelete);
+        }
+        else
+        {
+            Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Exchange Server&lt;/td&gt;&lt;td&gt;&lt;b&gt;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&quot;);
+            Response.Write(&quot;&lt;br /&gt;&lt;span style='color:Red'&gt;One or more required fields is in an incorrect state. Please check the values listed above and try again.&lt;/span&gt;&quot;);
+            fnAddBackButton();
+        }
+    }
+    void fnChangeAddressChecks(string strTargetPath, string strAdminName)
+    {
+        Collection&lt;PSObject&gt; colChangeResults;
+
+        string strCompany = &quot;&quot;;
+        string strLastName = &quot;&quot;;
+        string strEmailAddress = &quot;&quot;;
+        Session[&quot;DirPath&quot;] = strTargetPath;
+
+        Response.Write(&quot;Requested action is Change Address&quot;);
+        Response.Write(&quot;&lt;table border&gt;&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;th&gt;Attribute&lt;/th&gt;&lt;th&gt;Value&lt;/th&gt;&lt;th&gt;Expected State&lt;/th&gt;&lt;/tr&gt;&quot;);
+        colChangeResults = runposh(&quot;dsget user &quot; + strTargetPath + &quot; -samid&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Logon ID&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + colChangeResults[1].ToString() + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        colChangeResults = runposh(&quot;dsget user &quot; + strTargetPath + &quot; -display&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Name&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + colChangeResults[1].ToString() + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Directory Path&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + strTargetPath + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&quot;);
+        colChangeResults = runposh(&quot;get-mailbox -identity &quot; + strTargetPath + &quot; |select PrimarySmtpAddress&quot;);
+        if (colChangeResults.Count != 0)
+        {
+            strEmailAddress = colChangeResults[0].ToString();
+            strEmailAddress = strEmailAddress.Substring(20);
+            strEmailAddress = strEmailAddress.Substring(1, strEmailAddress.Length - 2);
+            Session[&quot;AdminUser&quot;] = strAdminName;
+            Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Current Adress&lt;/td&gt;&lt;td&gt;&lt;b&gt;&quot; + strEmailAddress + &quot;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&quot;);
+        }
+        else
+        {
+            Response.Write(&quot;&lt;tr&gt;&lt;td&gt;Current Adress&lt;/td&gt;&lt;td&gt;&lt;b&gt;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Populated&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&quot;);
+        }
+
+        Label lblNewAddress = new Label();
+        lblNewAddress.Text = &quot;New Address: &quot;;
+        lblNewAddress.Style[&quot;Position&quot;] = &quot;Absolute&quot;;
+        lblNewAddress.Style[&quot;Top&quot;] = &quot;290px&quot;;
+        lblNewAddress.Style[&quot;Left&quot;]= &quot;10px&quot;;
+        frmMailboxConfirm.Controls.Add(lblNewAddress);
+        newAddress.Style[&quot;Position&quot;] = &quot;Absolute&quot;;
+        newAddress.Style[&quot;Top&quot;] = &quot;290px&quot;;
+        newAddress.Style[&quot;Left&quot;] = &quot;100px&quot;;
+        newAddress.Visible = true;
+        Label lblDomain = new Label();
+        lblDomain.Text = &quot;@domain.com&quot;;
+        lblDomain.Style[&quot;Position&quot;] = &quot;Absolute&quot;;
+        lblDomain.Style[&quot;Top&quot;] = &quot;290px&quot;;
+        lblDomain.Style[&quot;Left&quot;] = &quot;270px&quot;;
+        frmMailboxConfirm.Controls.Add(lblDomain);
+        chkKeepAddress.Style[&quot;Position&quot;] = &quot;Absolute&quot;;
+        chkKeepAddress.Style[&quot;Top&quot;] = &quot;290px&quot;;
+        chkKeepAddress.Style[&quot;Left&quot;] = &quot;385px&quot;;
+        chkKeepAddress.Visible = true;
+        colChangeResults = runposh(&quot;dsget user &quot; + strTargetPath + &quot; -company&quot;);
+        strCompany = colChangeResults[1].ToString();
+        colChangeResults = runposh(&quot;dsget user &quot; + strTargetPath + &quot; -ln&quot;);
+        strLastName = colChangeResults[1].ToString();
+
+        if ((strCompany.Replace(&quot; &quot;, &quot;&quot;) == &quot;&quot;) || (strLastName.Replace(&quot; &quot;, &quot;&quot;) == &quot;&quot;) || ((strEmailAddress == &quot;&quot;)))
+        {
+            Response.Write(&quot;&lt;span style='color:Red'&gt;One or more required fields is in an incorrect state. Please check the values listed above and try again.&lt;/span&gt;&quot;);
+            newAddress.Visible = false;
+            lblNewAddress.Visible = false;
+            lblDomain.Visible = false;
+            fnAddBackButton();
+        }
+        else
+        {
+            Session[&quot;AdminUser&quot;] = strAdminName;
+            Session[&quot;LastName&quot;] = strLastName;
+            Session[&quot;Agency&quot;] = strCompany;
+            Session[&quot;OldAddress&quot;] = strEmailAddress;
+            Session[&quot;Action&quot;] = &quot;Change Address&quot;;
+            Session[&quot;AdminID&quot;] = strAdminName;
+            Button btnChange = new Button();
+            btnChange.Attributes.Add(&quot;onclick&quot;, &quot;this.value='Please wait...';this.disabled= true;&quot; + ClientScript.GetPostBackEventReference(new PostBackOptions(this, &quot;btnChange&quot;)));
+            btnChange.Text = &quot;Change Address&quot;;
+            btnChange.Style[&quot;Position&quot;] = &quot;Absolute&quot;;
+            btnChange.Style[&quot;Top&quot;] = &quot;325px&quot;;
+            btnChange.Style[&quot;Left&quot;] = &quot;10px&quot;;
+            frmMailboxConfirm.Controls.Add(btnChange);
+        }
+    }
+    void fnAddBackButton()
+    {
+        Session[&quot;AdminUser&quot;] = &quot;&quot;;
+        Button btnBack = new Button();
+        btnBack.Attributes.Add(&quot;onclick&quot;, &quot;this.value='Please wait...';this.disabled= true;&quot; + ClientScript.GetPostBackEventReference(new PostBackOptions(this, &quot;btnBack&quot;)));
+        btnBack.Text = &quot;Return&quot;;
+        frmMailboxConfirm.Controls.Add(btnBack);
+    }
+    protected Collection&lt;PSObject&gt; runposh(string strCommand)
+    {
+        Runspace rs = GetRunspace();
+            Pipeline currentPipeline = GetPipeline(rs, strCommand);
+            if (currentPipeline.PipelineStateInfo.State == PipelineState.NotStarted)
+            {
+                Collection&lt;PSObject&gt; results = currentPipeline.Invoke();
+                currentPipeline.Dispose();
+                Cache.Remove(&quot;currentPipe&quot;);
+                return (results);
+            }
+        else
+        {
+            return null;
+        }
+    }
+    protected Runspace GetRunspace()
+    {
+        if (Cache[&quot;rs&quot;] == null)
+        {
+            Runspace rs = RunspaceFactory.CreateRunspace();
+            rs.Open();
+            Cache[&quot;rs&quot;] = rs;
+        }
+        return (Runspace)Cache[&quot;rs&quot;];
+    }
+    protected Pipeline GetPipeline(Runspace rs, string strCommand)
+    {
+        if (Cache[&quot;currentPipe&quot;] == null)
+        {
+            Pipeline currentPipeline = rs.CreatePipeline(strCommand);
+            Cache[&quot;currentPipe&quot;] = currentPipeline;
+        }
+        return (Pipeline)Cache[&quot;currentPipe&quot;];
+
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

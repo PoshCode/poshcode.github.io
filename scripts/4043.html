@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Carlos Perez">
+    <title>Download DefragTools - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Download DefragTools</h1>
+<h3><a href="//scripts/4043.ps1">download</a> - <a href="//scripts/4042.md">parent</a></h3>
+<p>Downloads the all or the last video episode of Defrag Tools show from Channel 9</p>
+<pre><code class="language-posh">#requires -version 2.0
+&lt;#
+.Synopsis
+   Downloads Channel 9 Defrag Tool Episode Video
+.DESCRIPTION
+   Downloads Channel 9 Defrag Tool Episode Video in the format selected and to a given path.
+.EXAMPLE
+   Downloads all shows in WMV format to the default Downloads Folder for the user.
+
+   Get-DefragToolsShow -All -VideoType wmv
+
+.EXAMPLE
+   Downloads only the last show of the series in MP4 format
+
+   Get-DefragToolsShow -Last -VideoType MP4
+.NOTES
+    Author: Carlos Perez carlos_perez[at]darkoperator.com
+#&gt;
+function Get-DefragToolsShow
+{
+    [CmdletBinding()]
+    Param
+    (
+
+        [Parameter(Mandatory=$false,
+                   Position=0)]
+        $Path = &quot;$($env:USERPROFILE)\downloads&quot;,
+
+        [Parameter(Mandatory=$false,
+        ParameterSetName=&quot;All&quot;)]
+        [switch]$All = $true,
+
+        [Parameter(Mandatory=$false,
+        ParameterSetName=&quot;Last&quot;)]
+        [switch]$Last = $true,
+
+        [Parameter(Mandatory=$false)]
+        [ValidateSet(&quot;MP4HD&quot;,&quot;MP4&quot;,&quot;WMVHD&quot;,&quot;WMV&quot;)]
+        [string]$VideoType =  &quot;MP4HD&quot;
+        
+    )
+
+    Begin
+    {
+        $WebClient =  New-Object System.Net.WebClient
+        $Global:downloadComplete = $false
+
+        $eventDataComplete = Register-ObjectEvent $WebClient DownloadFileCompleted `
+            -SourceIdentifier WebClient.DownloadFileComplete `
+            -Action {$Global:downloadComplete = $true}
+        $eventDataProgress = Register-ObjectEvent $WebClient DownloadProgressChanged `
+            -SourceIdentifier WebClient.DownloadProgressChanged `
+            -Action { $Global:DPCEventArgs = $EventArgs }    
+
+        # Lets change to the proper path
+        Set-Location (Resolve-Path $Path).Path
+    }
+    Process
+    {
+        switch ($PsCmdlet.ParameterSetName)
+        {
+            &quot;All&quot;{$all = $true}
+            &quot;Last&quot;{$all =  $false}
+
+        }
+
+        switch ($VideoType)
+        {
+            &quot;MP4HD&quot;  {$feedURL = &quot;http://channel9.msdn.com/Shows/Defrag-Tools/feed/mp4high&quot;} 
+            &quot;MP4&quot;    {$feedURL = &quot;http://channel9.msdn.com/Shows/Defrag-Tools/feed/mp4&quot;}
+            &quot;WMVHD&quot;  {$feedURL = &quot;http://channel9.msdn.com/Shows/Defrag-Tools/feed/wmvhigh&quot;}
+            &quot;WMV&quot;    {$feedURL = &quot;http://channel9.msdn.com/Shows/Defrag-Tools/feed/wmv&quot;}
+        }
+
+        $feed = [xml]$WebClient.DownloadString($feedURL)
+
+
+        if ($All)
+        {
+            foreach ($episode in $feed.rss.channel.Item)
+            {
+                # Create a proper URI for parsing
+                $episodeURL = [System.Uri]$episode.enclosure.url
+
+                # Get the episode file name
+                $file = $episodeURL.Segments[-1]
+
+                #Check if the file exists if it does skip it
+                if (!(Test-Path $file))
+                {
+                    Write-Progress -Activity 'Downloading file' -Status $file
+                    $WebClient.DownloadFileAsync($episodeURL,$file)
+
+                     while (!($Global:downloadComplete)) 
+                     {                
+                        $pc = $Global:DPCEventArgs.ProgressPercentage
+                        if ($pc -ne $null) 
+                        {
+                            Write-Progress -Activity 'Downloading file' -Status $file -PercentComplete $pc
+                        }
+                    }
+                    $Global:downloadComplete = $false
+                }
+            }
+        }
+        else
+        {
+            $episodeURL = [System.Uri]$feed.rss.channel.Item[0].enclosure.url
+            # Get the episode file name
+            $file = $episodeURL.Segments[-1]
+
+            #Check if the file exists if it does skip it
+            if (!(Test-Path $file))
+            {
+                Write-Progress -Activity 'Downloading file' -Status $file
+                $WebClient.DownloadFileAsync($episodeURL,$file)
+                # Lets wait for it to finish
+                while (!($Global:downloadComplete)) 
+                {                
+                    $pc = $Global:DPCEventArgs.ProgressPercentage
+                    if ($pc -ne $null) 
+                    {
+                        Write-Progress -Activity 'Downloading file' -Status $file -PercentComplete $pc
+                    }
+                }
+            }
+        }
+    }
+    End
+    {
+        Unregister-Event -SourceIdentifier WebClient.DownloadProgressChanged
+        Unregister-Event -SourceIdentifier WebClient.DownloadFileComplete
+        $Global:downloadComplete = $null
+        $Global:DPCEventArgs = $null
+        [GC]::Collect()    
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

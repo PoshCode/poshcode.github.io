@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="not_laughing">
+    <title>Example user addition - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Example user addition</h1>
+<h3><a href="//scripts/4180.ps1">download</a> - <a href="//scripts/4179.md">parent</a></h3>
+<p>User addition for Exchange/AD/Lync. Still work in progress, as all of the Lync functionality is not quite implemented. For example only, run at your own risk.</p>
+<pre><code class="language-posh">&lt;#
+
+Add-User script. This script accesses multiple 
+PSSessions to add a new user, including creation of a
+home directory, Lync creation, Exchange account and 
+contact information. 
+
+This script is intended to be run on a domain member server
+or workstation. You MUST have the ActiveDirectory powershell module
+installed to run this script. I recommend storing and running this 
+script on your Default-First-Site domain controller. Be sure to run 
+Powershell as administrator. 
+
+WinRM requires additional configuration to run
+this script from a machine that isn't joined to the domain.
+
+This script assumes that you have put the account you have
+all the correct permissions in Lync/Exchange. 
+
+#&gt;
+
+# Variable Init:
+
+# Global - Server names/Company Name/File locations
+$exchangeServer = &quot;exch1.contoso.local&quot;
+$lyncServer = &quot;lync1.contoso.local&quot;
+$fileserver = &quot;file.contoso.local&quot;
+$activeDir = &quot;dc.contoso.local&quot; # Use the DC in the same site as Exchange/Lync
+$companyName = &quot;contoso&quot;
+$fullCo = &quot;Contoso Fake Inc.&quot;
+$homedir = &quot;\\$fileServer\HOME$&quot; 
+&lt;# Domain users group. When creating home directories, this group will be removed from the 
+file permissions #&gt;
+$badgroup = &quot;DOMAIN\Users&quot;
+
+&lt;# File where Lync exts are stored. The script is expecting an msdos formatted
+   CSV file in the format of username,extension. The user deletion file will 
+   remove items from this list as well. #&gt;
+
+$extFile = &quot;\\$fileServer\IT\Documentation\Extensions.csv&quot;
+
+# Lync info
+$UMPolicy = &quot;contoso Default Policy&quot;
+# Stuff that needs to be set once contoso is on Lync. Will need to mod the Lync command below.
+# $VoicePolicy = &quot;contoso Calls&quot;
+# $DialPolicy = &quot;&quot;
+ 
+
+# Prompt for user information
+$name = read-host -prompt &quot;Enter the user's first and last name (e.g. John Smith)&quot;
+$split = $name.split(&quot; &quot;)
+# Creates username in the format: first initial + last name (JSMITH)
+$user = $user = $split[0].Substring(0,1)+$split[1]
+$upn = $user+&quot;@contoso.local&quot;
+$sipSuffix = &quot;@contoso.com&quot;
+
+$department = read-host -prompt &quot;Enter Department&quot;
+$desc = read-host -prompt &quot;Employee Title&quot;
+$ext = Read-Host -Prompt &quot;User's Lync extension&quot;
+$telURI = &quot;tel:+&quot;+$ext
+
+# Get password as secure string
+$accountPassword = read-host -AsSecureString -Prompt &quot;Please enter a temporary password&quot;
+
+&lt;# Auto-populate location specific information. Eventually this should all be stored in
+   a separate csv document. That would make modifying office information easier and 
+   the script would be less cluttered. #&gt;
+
+Write-Host &quot;Choose where this user will be based: &quot;
+Write-Host &quot;A) Office 1&quot; 
+Write-Host &quot;B) Office 2&quot;
+Write-Host &quot;C) Office 3&quot;
+Write-Host &quot;D) Office 4&quot;
+Write-Host &quot;E) Office 5&quot;
+Write-Host &quot;F) Office 6&quot;
+Write-Host &quot;G) Office 7&quot;
+Write-Host &quot;H) Office 8&quot;
+Write-Host &quot;I) Office 9&quot;
+Write-Host &quot;J) Office 10&quot;
+$selection = Read-Host
+	if ($selection.ToUpper() -eq &quot;A&quot;) {
+		$office = &quot;Office 1&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 1,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;B&quot;) {
+		$office = &quot;Office 2&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 2,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;C&quot;) {
+		$office = &quot;Office 3&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 3,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;D&quot;) {
+		$office = &quot;Office 4&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 4,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;E&quot;) {
+		$office = &quot;Office 5&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 5,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;F&quot;) {
+		$office = &quot;Office 6&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 6,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;G&quot;) {
+		$office = &quot;Office 7&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 7,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;H&quot;) {
+		$office = &quot;Office 8&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 8,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;I&quot;) {
+		$office = &quot;Office 9&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 9,OU=Staff,DC=contoso,DC=ORG&quot;
+	}elseif ($selection.ToUpper() -eq &quot;J&quot;) {
+		$office = &quot;Office 10&quot;
+		$fax = &quot;123-456-7890&quot;
+		$phone = &quot;+1123456789;&quot;+&quot;ext=&quot;+$ext
+		$street = &quot;123 Fake St.&quot;
+		$zip = &quot;12345&quot;
+        $state = &quot;AB&quot;
+		$ou = &quot;OU=Office 10,OU=Staff,DC=contoso,DC=ORG&quot;
+	}
+
+# Check to see if user has direct-dial number, if so rewrite $phone with correct info
+$yes = New-Object System.Management.Automation.Host.ChoiceDescription &quot;&amp;Yes&quot;,&quot;&quot;
+$no = New-Object System.Management.Automation.Host.ChoiceDescription &quot;&amp;No&quot;,&quot;&quot;
+$choices = [System.Management.Automation.Host.ChoiceDescription[]]($yes,$no)
+$message = &quot;Does this user have a full direct phone number?&quot;
+$result = $Host.UI.PromptForChoice($caption,$message,$choices,0)
+    if($result -eq 0) { 
+        $plainPhone = Read-Host -Prompt &quot;Enter Full DID number, in the format 12223334444&quot; 
+        $phone = &quot;+&quot;+$plainPhone+&quot;;ext=&quot;+$ext }
+    if($result -eq 1) { Write-Host &quot;No DID number.&quot; }
+
+
+# Remotely load posh modules
+$userCredential = Get-Credential
+
+# Exchange
+if ( (Get-PSSession -ComputerName $exchangeServer -ErrorAction SilentlyContinue) -eq $null )
+    {
+        $exchangeSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri http://$exchangeserver/PowerShell -Authentication Kerberos -Credential $UserCredential
+        Import-PSSession $exchangeSession
+    }
+
+# Lync
+if ( (Get-PSSession -ComputerName $lyncServer -ErrorAction SilentlyContinue) -eq $null)
+    {
+        # $lyncOptions = New-PSSessionOption -SkipRevocationCheck -SkipCACheck -SkipCNCheck
+        $lyncsession = New-PSSession -ConnectionUri https://$lyncServer/ocspowershell -Credential $userCredential
+        Import-PSSession $lyncsession
+    }
+
+# ActiveDirectory
+if ( (Get-Module -Name ActiveDirectory -ErrorAction SilentlyContinue) -eq $null)
+    {
+        Import-Module ActiveDirectory
+    }
+
+# Ensure the desired username doesn't match any existing sAMAccount or UPN
+$saneUser = Get-ADUser -LDAPFilter &quot;(|(sAMAccountName=$user)(UserPrincipalName=$upn))&quot;
+if ($saneUser -eq $Null) {
+    Write-Host -ForegroundColor Green &quot;The username $user is valid.&quot; 
+    } Else {
+    do {
+        $user = Read-Host -Prompt &quot;Already a user with that username. Please input alternate&quot;
+        $upn = $user+&quot;@contoso.local&quot;
+        $saneUser = Get-ADUser -LDAPFilter &quot;(|(sAMAccountName=$user)(UserPrincipalName=$upn))&quot;
+       }  # end Do
+    while ($saneUser -ne $Null)
+} # end Else
+
+$sip = $user+$sipSuffix
+    
+# Add the user in Exchange
+New-Mailbox -name $name -userprincipalname $upn -Alias $user `
+        -OrganizationalUnit $ou -SamAccountName $user -FirstName $FirstName `
+        -Initials '' -LastName $Lastname -Password $accountpassword `
+        -ResetPasswordOnNextLogon $true
+
+# Pause for AD to catch up
+write-host -ForegroundColor Green &quot;Waiting for $activeDir to catch up. Don't touch anything...&quot;
+Start-Sleep -s 20
+
+# Set the additional user properties
+Set-User -Identity $user -City $office -Company $fullCo -Fax $fax `
+        -Phone $phone -PostalCode $zip -StateOrProvince $state `
+        -StreetAddress $street -Title $desc -Department $department -Office $office
+
+# Set the ipPhone attribute required by Lync
+write-host -ForegroundColor Green &quot;Setting ipPhone info in AD&quot;
+$lyncEXT = &quot;+&quot;+$ext
+$UserN = Get-ADUser -Identity $user -Properties ipPhone
+$UserN.ipPhone = $LyncEXT
+Set-ADUser -Server $activeDir -Instance $UserN
+
+
+# Add user in Lync
+Enable-CSUser -Identity $user -RegistrarPool $lyncServer -SipAddress &quot;sip:$sip&quot;
+#Start-Sleep -s 10
+#Set-CSUser -Identity $username -EnterpriseVoiceEnabled $True -lineuri $telURI
+
+# Enable Unified Messaging
+Enable-UMMailbox -Identity $user -UMMailboxPolicy $UMPolicy -Extension $ext -PIN 5673942 -SIPResourceIdentifier $sip -PINExpired $true
+
+# Record extension
+echo &quot;$username,$ext&quot; &gt;&gt; $extFile
+
+# Create home directory. This script assumes that you're setting home directories with a GPO
+write-host -ForegroundColor Green &quot;Creating user's home directory&quot;
+$userdir = &quot;$homedir\$user&quot;
+if ( (Test-Path $userdir) -eq $False ) {
+    New-Item $homedir -Name $user -ItemType Directory
+    $acl = Get-Acl $userdir
+    $acl.SetAccessRuleProtection($true,$true)
+    $acl.Access |where {$_.IdentityReference -eq $badgroup} | %{$acl.RemoveAccessRule($_)}
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(&quot;Administrators&quot;,&quot;FullControl&quot;, &quot;ContainerInherit, ObjectInherit&quot;, &quot;None&quot;, &quot;Allow&quot;)
+    $acl.AddAccessRule($rule)
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($user, &quot;FullControl&quot;, &quot;ContainerInherit, ObjectInherit&quot;, &quot;None&quot;, &quot;Allow&quot;)
+    $acl.AddAccessRule($rule)
+    $acl.SetOwner([System.Security.Principal.NTAccount] $user)
+    Set-Acl -Path $userdir -AclObject $acl } 
+Else {
+    Write-Host -ForegroundColor Red &quot;User's home directory $userdir exists. Please manually verify.&quot;
+}
+
+ 
+write-host -foregroundcolor Green &quot;Pausing to finalize changes, wait for another little bit.&quot;
+Start-Sleep -s 10
+write-host -foregroundcolor Green &quot;Completed. User created: &quot;
+Write-Host -foregroundcolor Red &quot;Immediately input new user&quot; $user &quot;into MAILPROTECTOR!&quot;
+
+write-host -foregroundcolor Green &quot;Press any key to exit...&quot;
+$x = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+
+exit
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

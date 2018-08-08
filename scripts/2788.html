@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Justin">
+    <title>SQL Log Backup - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SQL Log Backup</h1>
+<h3><a href="//scripts/2788.ps1">download</a></h3>
+<p>This is the log backup script to be used with the Async Backup Script http://poshcode.org/2787
+The log backup is NOT async</p>
+<p>enjoy!
+Justin
+jrich523.wordpress.com</p>
+<pre><code class="language-posh">## log backup
+
+$backuppath = &quot;\\server\sqlbackups\&quot;
+$alertaddress = &quot;jrich@domain.com&quot;
+$smtp = &quot;smtp.domain.com&quot;
+$hname = (gwmi win32_computersystem).name
+[System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.SMO&quot;) | Out-Null
+[System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.SmoExtended&quot;) | Out-Null
+$dt = get-date -format &quot;MMddyy-hhmm&quot;
+
+
+$Instances = Get-Item &quot;HKLM:\software\microsoft\microsoft sql server\instance names\sql&quot;
+
+foreach($InstanceName in $Instances.property)
+{
+	$body =@()
+	$errorstate = 0
+	$InstancePath = $Instances.GetValue($InstanceName)
+	if(Test-Path (&quot;HKLM:\software\microsoft\microsoft sql server\&quot; + $InstancePath + &quot;\cluster&quot;))
+	{ #is cluster
+		$ServerName = (gp (&quot;HKLM:\software\microsoft\microsoft sql server\&quot; + $InstancePath + &quot;\cluster&quot;)).ClusterName
+	}
+	else #not cluster
+	{
+		$ServerName = $hname
+	}
+	
+	if($InstanceName -eq &quot;MSSQLSERVER&quot;)
+	{#default Instance
+		$InstConn = $ServerName
+	}
+	else
+	{#named instance
+		$InstConn = $ServerName + &quot;\&quot; + $InstanceName
+	}
+
+
+	$sql = New-Object Microsoft.SqlServer.management.Smo.Server $InstConn
+	$backuppath += $sql.name + &quot;\&quot;
+	$backuppath += $sql | ?{$_.instancename -ne &quot;&quot; -or $_.instancename -ne &quot;MSSQLSERVER&quot;} | %{$_.instancename + &quot;\&quot;}
+	$dbs = $sql.databases | ? {!$_.isSystemObject -And $_.recoverymodel -eq  [microsoft.sqlserver.management.smo.recoverymodel]::full}
+	
+	
+	foreach ($db in $dbs)
+	{
+		$path = $backuppath + $db.name + &quot;\&quot;
+	    #clean old trans logs
+		$lwt = (gci $path *.bak |sort lastwritetime | select -Last 1).lastwritetime
+		gci $path $.trn | where {$_.lastwritetime -le $lwt} | ri -force
+		
+		if(!(Test-Path $path)){mkdir $path | Out-Null}
+	    $conn = New-Object Microsoft.SqlServer.management.Smo.Server $InstConn
+	    $bk = new-object microsoft.sqlserver.management.smo.backup
+	    $bk.BackupSetDescription = &quot;log backup of $($db.name) at $(get-date)&quot;
+		$bk.action = [microsoft.SqlServer.management.smo.backupactiontype]::log
+	    $bk.BackupSetName = &quot;log backup&quot;
+	    $bk.database = $db.name
+	    $bk.Devices.AddDevice(&quot;$backuppath$($db.name)\$($db.name)-$dt.trn&quot;,'File') 
+		try{
+		$msg = &quot;$($bk.database) completed successfully&quot;
+		$bk.sqlbackup($sql)}
+		catch{$errorstate = 1; $msg = &quot;$($bk.database) Failed : $_&quot;}
+		$body += $msg
+	}
+	
+	if($errorstate -eq 1){$subject = &quot;Log Failure on $hname&quot;} else {$subject = &quot;Log Success on $hname&quot;}
+	Send-MailMessage -Subject $subject -BodyAsHtml ([string]::join(&quot;&lt;br&gt;&quot;,$body)) -From $alertaddress -To $alertaddress -SmtpServer $smtp
+	
+}
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

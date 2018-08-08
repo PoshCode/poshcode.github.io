@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="misth">
+    <title>192.168.5.10 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>192.168.5.10</h1>
+<h3><a href="//scripts/6552.ps1">download</a> - <a href="//scripts/2676.md">parent</a></h3>
+<p>This script uses current Show-UI and SQLite to query a copy of your Firefox Bookmark Database for Bookmarks tagged with combinations of 1 to 3 keywords. It uses the WPF 4.0 Datagrid. (Improvements in Eventhandling of Hyperlinks are welcome)</p>
+<pre><code class="language-posh">if (!( gmo ShowUI)) {ipmo showui}
+
+if(!(Get-Command DataGrid -ErrorAction SilentlyContinue)) {
+    Add-UIFunction -Type System.Windows.Controls.DataGrid
+}
+
+if(!(Get-Command DataGridTextColumn -ErrorAction SilentlyContinue)) {
+    Add-UIFunction -Type  System.Windows.Controls.DataGridTextColumn
+}
+
+if(!(Get-Command DataGridHyperlinkColumn -ErrorAction SilentlyContinue)) {
+    Add-UIFunction -Type  System.Windows.Controls.DataGridHyperlinkColumn
+}
+
+# Attention this uses WPF 4.0 cf. http://stackoverflow.com/questions/2094694/launch-powershell-under-net-4/5069146#5069146
+# Firefox Bookmarks http://stackoverflow.com/questions/464516/firefox-bookmarks-sqlite-structure
+# System.Data.SQLite Download  http://system.data.sqlite.org/index.html/doc/trunk/www/downloads.wiki
+# Currently DONT INSTALL IT IN GAC http://system.data.sqlite.org/index.html/tktview?name=54e52d4c6f
+
+if (! $sqlitedll)
+{
+    $sqlitedll = [System.Reflection.Assembly]::LoadFrom(&quot;C:\Program Files\System.Data.SQLite\bin\System.Data.SQLite.dll&quot;) 
+}
+
+# copy your firefox bookmarks and tell youe system where to find the copy
+$ConnectionString = &quot;Data Source=C:\Var\sqlite_ff4\places.sqlite&quot;
+
+$conn = new-object System.Data.SQLite.SQLiteConnection 
+$conn.ConnectionString = $ConnectionString 
+$conn.Open() 
+
+# $sql = &quot;SELECT * from moz_bookmarks t1 where parent = 4 and t1.title = 'sqlite' or t1.title = 'sql'&quot;
+
+function Invoke-sqlite
+{
+    param( [string]$sql,
+           [System.Data.SQLite.SQLiteConnection]$connection
+           )
+    $cmd = new-object System.Data.SQLite.SQLiteCommand($sql,$connection)
+    $ds = New-Object system.Data.DataSet
+    $da = New-Object System.Data.SQLite.SQLiteDataAdapter($cmd)
+    $da.fill($ds) | Out-Null
+    return $ds.tables[0]
+}
+
+function Invoke-sqlite2
+{
+    param( [string]$sql,
+           [System.Data.SQLite.SQLiteConnection]$connection
+           )
+    $cmd = new-object System.Data.SQLite.SQLiteCommand($sql,$connection)
+    $ds = New-Object system.Data.DataSet
+    $da = New-Object System.Data.SQLite.SQLiteDataAdapter($cmd)
+    $da.fill($ds) | Out-Null
+    $ds.tables[0]
+}
+
+# $o1   =  Invoke-sqlite $sql $conn
+# $o2   =  Invoke-sqlite2 $sql $conn
+
+
+function Show-Bockmarks ($conn) {
+    Show  -Parameters $conn -width 1600 -top 100 -left 10 -height 300 -maxheight 900 {
+        Param(
+            $conn
+        )
+        
+        $useDataGrid = $true
+
+        $global:UIInputWindow = $this
+        GridPanel -ColumnDefinitions @(
+                ColumnDefinition -Width 900*
+            ) -RowDefinitions @(
+                RowDefinition -Height 30
+                RowDefinition -Height 600*
+            )     {
+                StackPanel -Orientation horizontal  -Grid-Column 0 -Grid-Row 0 -Children {
+                     Label    '1. Keyword'
+                     TextBox  -Name tag1 -width 200
+                     Label    '2. Keyword'
+                     TextBox  -Name tag2 -width 200
+                     Label    '3. Keyword'
+                     TextBox  -Name tag3 -width 200
+                     Button -Name Search &quot;search&quot; -On_Click {
+                    $text1 = Select-UIElement $global:UIInputWindow Tag1
+                    $tag1 = $text1.Text
+                    $text2 = Select-UIElement $global:UIInputWindow Tag2
+                    $tag2 = $text2.Text
+                    $text3 = Select-UIElement $global:UIInputWindow Tag3
+                    $tag3 = $text3.Text
+                    if ( $tag2 -ne '') {
+$clause2 = @&quot;            
+    join moz_bookmarks l2 on b.fk = l2.fk and b.id &lt;&gt; l2.id
+    join moz_bookmarks t2 on l2.parent = t2.id and  t2.parent = 4 and upper(t2.title) = upper('$tag2')
+&quot;@                        
+            } else { $clause2 = '' }        
+
+            if ( $tag3 -ne '') {
+$clause3 = @&quot;            
+    join moz_bookmarks l3 on b.fk = l3.fk and b.id &lt;&gt; l3.id
+    join moz_bookmarks t3 on l3.parent = t3.id and  t3.parent = 4 and upper(t3.title) = upper('$tag3')
+&quot;@                        
+            } else { $clause3 = '' }        
+
+$ff_sql = @&quot;
+SELECT b.title, datetime (b.dateAdded / 1000000, 'unixepoch', 'localtime') dateAdded , p.url
+    from moz_bookmarks b
+    join moz_bookmarks l1 on b.fk = l1.fk and b.id &lt;&gt; l1.id
+    join moz_bookmarks t1 on l1.parent = t1.id and  t1.parent = 4 and upper(t1.title) = upper('$tag1')
+    join moz_places p  on b.fk = p.id $clause2 $clause3
+where b.title is not null and b.type = 1
+order by b.dateAdded
+&quot;@
+                    Write-Host $ff_sql
+            $global:UIInputWindow.Title = &quot;$($conn.database) Database Browser&quot;
+            $dg = Select-UIElement $global:UIInputWindow  TableView
+            $dg.ItemsSource = @(Invoke-sqlite -sql $ff_sql -connection $conn)
+#            $TableView.DataContext = @(Invoke-sqlite -sql $ff_sql -connection $conn)
+             } 
+             Button -Name Cancel &quot;Close&quot; -On_Click {$global:UIInputWindow.Close()} 
+        }
+
+        If ($useDataGrid)
+        {
+               DataGrid -Grid-Column 0 -Grid-Row 1 `
+                -Name TableView `
+                -columns {
+                    DataGridTextColumn -width 500* -Header &quot;title&quot;     -Binding { Binding -Path &quot;title&quot; }
+                    DataGridTextColumn -width 100* -Header &quot;dateAdded&quot; -Binding { Binding -Path &quot;dateAdded&quot; }
+                    DataGridHyperlinkColumn -width 500* -Header &quot;url&quot;  -Binding { Binding -Path &quot;url&quot; }  `
+                        -ContentBinding  { Binding -Path &quot;url&quot; }  
+#                         -On_HyperlinkClick {
+#                             Write-Host  $this    
+#                         }       
+                }   -On_SelectionChanged {
+                     start $this.selecteditem.url
+                }  
+        } else {
+                ListView -Grid-Column 0 -Grid-Row 1 -Name TableView -View {
+                   GridView -AllowsColumnReorder -Columns {
+                       GridViewColumn -Header &quot;title&quot;     -DisplayMemberBinding { Binding -Path &quot;title&quot; }
+                       GridViewColumn -Header &quot;dateAdded&quot; -DisplayMemberBinding { Binding -Path &quot;dateAdded&quot; }
+                       GridViewColumn -Header &quot;url&quot;       -DisplayMemberBinding { Binding -Path &quot;url&quot; } 
+                   }
+                }   -On_SelectionChanged {
+                     start $this.selecteditem.url
+                }
+
+        }
+    }
+    }
+}
+
+Show-Bockmarks $conn
+$conn.close()
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

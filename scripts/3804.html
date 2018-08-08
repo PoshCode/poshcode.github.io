@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Na_pope">
+    <title>Change Server 2012 type - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Change Server 2012 type</h1>
+<h3><a href="//scripts/3804.ps1">download</a></h3>
+<p>With the ablity to change between core, minimal, and GUI as the interface with Windows Server 2012, I put this together to make it easy to switch between the different types.  It will install or uninstall the necessary features to get to state that you supply the script.
+Convert-Win2012ServerType -Type Core</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Use this script to change Windows Server 2012 to 1 of 4 types.  The script installs or uninstalls
+windows features to get to the desired type.  The 4 types are:
+Core - just a commandline
+Minimal - commandline with added binaries to run some MMCs and Server Manager
+Full GUI - standard desktop look with all GUI tools
+RemoteDesktop - Add the desktop experience pack to be used in a Remote Desktop farm setting.
+
+.DESCRIPTION
+Convert-Win2012ServerType -Type (Core, Min, Gui, RemoteDesktop)
+
+.PARAMETER Type
+Choose one of the following - Core, Min, Gui, RemoteDesktop
+
+.Notes
+	* Author  - Nate Pope
+	* Date	  - 11/28/2012
+	* Version - .3
+.EXAMPLE
+To convert to a core install:
+Convert-Win2012ServerType -Type Core
+
+Convert to a GUI install:
+Convert-Win2012ServerType -Type GUI
+
+ #&gt;
+ param(
+ [Parameter(Mandatory=$true)]
+ [String[]]$Type
+ )
+ 
+Function InstallMask {
+$InstallMask = 0
+if ((get-windowsfeature server-gui-mgmt-infra).installed) {
+	$InstallMask += 1
+}
+if ((get-windowsfeature server-gui-Shell).installed) {
+	$InstallMask += 2
+}
+if ((get-windowsfeature Desktop-Experience).installed) {
+	$InstallMask += 4
+}
+return $InstallMask
+}
+
+Function Covert2Core($mask) {
+if ($mask -eq 0){ 
+Write-Verbose &quot;Already Core&quot;
+return
+}
+$inst = uninstall-windowsFeature -Name Desktop-Experience, server-gui-Shell, server-gui-mgmt-infra 
+
+return $inst.RestartNeeded
+}
+
+Function Covert2Min($mask) {
+if ($mask -eq 1){ 
+Write-Verbose &quot;Already Min&quot;
+return
+}else {
+uninstall-windowsFeature -name server-gui-shell, desktop-Experience 
+}
+$inst = install-windowsFeature server-gui-mgmt-infra
+return $inst.RestartNeeded
+}
+
+Function Covert2Gui($mask) {
+if ($mask -eq 3){ 
+Write-Verbose &quot;Already Full Gui&quot;
+return
+}elseif ($mask -gt 4 ) {
+uninstall-windowsFeature -name Desktop-Experience
+}
+$inst = install-windowsFeature -Name server-gui-Shell, server-gui-mgmt-infra
+return $inst.RestartNeeded
+}
+
+Function Covert2RD($mask) {
+if ($mask -eq 7){ 
+Write-Verbose &quot;Already Remote Desktop &quot;
+return
+}
+$inst = install-windowsFeature -Name Desktop-Experience, server-gui-Shell, server-gui-mgmt-infra
+return $inst.RestartNeeded
+}
+
+ 
+########################################################################################################### 
+ 
+
+ $mask = InstallMask
+ switch ($Type) {
+	Core {
+		$reboot = Covert2Core($mask)
+		break
+	}
+	Min {
+		$reboot = Covert2Min($mask)
+		break
+	}
+	Gui {
+		$reboot = Covert2Gui($mask)
+		break
+	}
+	RemoteDesktop {
+		$reboot = Covert2RD($mask)
+		break
+	}
+	default {
+		Write-Warning &quot;The TYPE parameter must be specified (Core, Min, Gui, or RemoteDesktop)&quot;
+		break
+	}
+}
+if ($reboot) { Restart-Computer }
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

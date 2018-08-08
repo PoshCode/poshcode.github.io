@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Add-Junction - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Add-Junction</h1>
+<h3><a href="//scripts/5638.ps1">download</a></h3>
+<pre><code class="language-posh">function Add-Junction {
+  &lt;#
+    .DESCRIPTION
+        Windows junction creator.
+    .EXAMPLE
+        C:\&gt; $junc = [Environment]::GetFolderPath([Environmetn+SpecialFolder]::Desktop) + '\foo'
+        C:\&gt; Add-Junction $junc E:\bar
+    .NOTES
+        Author: greg zakharov
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true, Position=0)]
+    [ValidateNotNullOrEmpty()]
+    [String]$JunctionPoint,
+    
+    [Parameter(Mandatory=$true, Position=1)]
+    [ValidateScript({Test-Path $_})]
+    [String]$SourcePath
+  )
+  
+  begin {
+    #Marshal accelerator
+    if ([Array]($ta = [Type]::GetType(
+      'System.Management.Automation.TypeAccelerators'
+    ))::Get.Keys -notcontains 'marshal') {
+      $ta::Add('marshal', [Type][Runtime.InteropServices.Marshal])
+    }
+    #CreateFile and DeviceIoControl
+    $CreateFile = ($asm = ($all = (
+      $cd = [AppDomain]::CurrentDomain).GetAssemblies()) | ? {
+        $_.ManifestModule.ScopeName -match '(?:(System.dll)|(System.Data.dll))'
+    })[0].GetType(
+      'Microsoft.Win32.UnsafeNativeMethods'
+    ).GetMethod('CreateFile', [Reflection.BindingFlags]40)
+    $DeviceIoControl = $asm[1].GetType(
+      'System.Data.SqlTypes.UnsafeNativeMethods'
+    ).GetMethod('DeviceIoControl', [Reflection.BindingFlags]40)
+    #REPARSE_DATA_BUFFER
+    if (!($all | ? {
+      $_.FullName.Contains('Junction')
+    })) {
+      $ctr = [Runtime.InteropServices.MarshalAsAttribute].GetConstructor(
+        [Reflection.BindingFlags]20, $null, [Type[]]@([Runtime.InteropServices.UnmanagedType]), $null
+      )
+      $cnt = @([Runtime.InteropServices.MarshalAsAttribute].GetField('SizeConst'))
+      $atr = New-Object Reflection.Emit.CustomAttributeBuilder(
+        $ctr, [Runtime.InteropServices.UnmanagedType]30, $cnt, @([Int32]0x3FF0)
+      )
+      
+      $type = (($cd.DefineDynamicAssembly(
+        (New-Object Reflection.AssemblyName('Junction')), 'Run'
+      )).DefineDynamicModule('Junction', $false)).DefineType(
+        'REPARSE_DATA_BUFFER', 'AnsiClass, Class, Public, Sealed, SequentialLayout, BeforeFieldInit'
+      )
+      [void]$type.DefineField('ReparseTag',           [UInt32], 'Public')
+      [void]$type.DefineField('ReparseDataLength',    [UInt16], 'Public')
+      [void]$type.DefineField('Reserved',             [UInt16], 'Public')
+      [void]$type.DefineField('SubstitudeNameOffset', [UInt16], 'Public')
+      [void]$type.DefineField('SubstitudeNameLength', [UInt16], 'Public')
+      [void]$type.DefineField('PrintNameOffset',      [UInt16], 'Public')
+      [void]$type.DefineField('PrintNameLength',      [UInt16], 'Public')
+      
+      $unm = $type.DefineField('PathBuffer', [Byte[]], 'Public')
+      $unm.SetCustomAttribute($atr)
+      
+      Set-Variable REPARSE_DATA_BUFFER -Value $type.CreateType() -Option ReadOnly -Scope global
+    }
+    #readable variables
+    $GENERIC_WRITE                = 0x40000000
+    $FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+    $FILE_FLAG_BACKUP_SEMANTICS   = 0x02000000
+    $PathPrefix                   = '\??\'
+    
+    [UInt32]$IO_REPARSE_TAG_MOUNT_POINT = 2684354563
+    [UInt32]$FSCTL_SET_REPARSE_POINT    = 0x000900A4
+  }
+  process {
+    $SorcePath = Convert-Path $SourcePath
+    if (Test-Path $JunctionPoint) {
+      Write-Warning &quot;could not create junction point.&quot;
+      return
+    }
+    
+    try {
+      New-Item $JunctionPoint -ItemType Directory | Out-Null
+      if (($sfh = $CreateFile.Invoke($null,
+        @($JunctionPoint,
+          $GENERIC_WRITE,
+          7, #FileShare.ReadWrite | FileShare.Delete
+          [IntPtr]::Zero,
+          3, #FileMode.Open
+          ($FILE_FLAG_OPEN_REPARSE_POINT -bxor $FILE_FLAG_BACKUP_SEMANTICS),
+          [IntPtr]::Zero
+        )
+      )).IsInvalid) {
+        Remove-Item $JunctionPoint
+        [Marshal]::ThrowExceptionForHR([Marshal]::GetHRForLastWin32Error())
+      } #if
+      
+      $bts = [Text.Encoding]::Unicode.GetBytes($PathPrefix + $SourcePath)
+      $rdb = [Activator]::CreateInstance($REPARSE_DATA_BUFFER)
+      $rdb.ReparseTag           = $IO_REPARSE_TAG_MOUNT_POINT
+      $rdb.ReparseDataLength    = [UInt16]($bts.Length + 12)
+      $rdb.SubstitudeNameOffset = [UInt16]0
+      $rdb.SubstitudeNameLength = [UInt16]$bts.Length
+      $rdb.PrintNameOffset      = [UInt16]($bts.Length + 2)
+      $rdb.PrintNameLength      = [UInt16]0
+      $rdb.PathBuffer           = New-Object &quot;Byte[]&quot; 0x3FF0
+      
+      [Array]::Copy($bts, $rdb.PathBuffer, $bts.Length)
+      $ptr = [Marshal]::AllocHGlobal(([Marshal]::SizeOf($rdb)))
+      [Marshal]::StructureToPtr($rdb, $ptr, $false)
+      if (!($DeviceIoControl.Invoke($null,
+        @($sfh,
+          $FSCTL_SET_REPARSE_POINT,
+          $ptr,
+          [UInt32]($bts.Length + 20),
+          [IntPtr]::Zero,
+          [UInt32]0,
+          [UInt32]$ret,
+          [IntPtr]::Zero
+        )
+      ))) {
+        [Marshal]::ThrowExceptionForHR([Marshal]::GetHRForLastWin32Error())
+      }
+    }
+    catch { $_ }
+    finally {
+      if ($ptr -ne $null) { [Marshal]::FreeHGlobal($ptr) }
+      if ($sfh -ne $null) { $sfh.Close() }
+    }
+  }
+  end {
+    [void]$ta::Remove('marshal')
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

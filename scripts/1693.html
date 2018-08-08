@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Tome Tanasovski">
+    <title>Set-WinSchedule - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-WinSchedule</h1>
+<h3><a href="//scripts/1693.ps1">download</a></h3>
+<p>Set-Computer gives a GUI to select a schedule and schedules a task using schtasks
+This is a beta.  There are still a lot of features to implement:
+Need to have more scheduling options.  I expect to have all options available in a recurring outlook calendar item
+Need to have methods for scheduling with all 3 providers: schtasks, wmi, and at.  Currently it only uses schtasks
+Need to design the return object properties:
+Should contain the text paths for each provider type
+Should contain a date/time for start time
+Need to provide a method to overwrite an existing task if it has the same name and the user confirms that it is ok to overwrite.  Should also provide
+a -force parameter for this option.
+Need to ensure that files piped from get-item will be scheduled
+Need a parameter to override ok box at the end</p>
+<pre><code class="language-posh"># Set-WinSchedule
+# Written by Tome Tanasovski
+# http://powertoe.wordpress.com
+# version 1.0
+# Created March 2010
+# 
+# Please read through the synopsis-&gt;Description to see the list of features that I hope to get
+# in a final release.  If you choose to work on any of the issues by all means, but please contact
+# me to let me know so that no effort is duplicated
+
+# Winform Assemblies
+[reflection.assembly]::loadwithpartialname(&quot;System.Drawing&quot;) | Out-Null
+[reflection.assembly]::loadwithpartialname(&quot;System.Windows.Forms&quot;) | Out-Null
+
+function Set-WinSchedule {
+    &lt;#
+      .Synopsis
+        Creates a winform to select a schedule and creates a scheduled task
+       .Description
+        Set-Computer gives a GUI to select a schedule and schedules a task using schtasks
+        This is a beta.  There are still a lot of features to implement:
+            Need to have more scheduling options.  I expect to have all options available in a recurring outlook calendar item
+            Need to have methods for scheduling with all 3 providers: schtasks, wmi, and at.  Currently it only uses schtasks
+            Need to design the return object properties:
+                Should contain the text paths for each provider type
+                Should contain a date/time for start time
+            Need to provide a method to overwrite an existing task if it has the same name and the user confirms that it is ok to overwrite.  Should also provide
+            a -force parameter for this option.
+            Need to ensure that files piped from get-item will be scheduled
+            Need a parameter to override ok box at the end
+       .Example
+        Set-Schedule c:\windows\notepad.exe    
+       .Parameter TaskRun
+        The name of the command to be scheduled
+       .Parameter ScheduleName
+        The name that the scheduled task will be given.   
+       .Notes
+        NAME:  Set-Schedule
+        AUTHOR: Tome Tanasovski
+        LASTEDIT: 3/11/2010
+        KEYWORDS:
+       .Link
+         http://powertoe.wordpress.com
+     #&gt;
+    param(
+        [Parameter(Position=1,Mandatory=$true)]
+        [string] $taskrun,
+        [Parameter(Position=2,Mandatory=$true)]
+        [string] $taskname
+    )
+    $command = &quot;&amp; schtasks.exe /query /tn $taskname&quot;
+    $job = start-job $ExecutionContext.InvokeCommand.NewScriptBlock($command)
+    Wait-Job $job
+    if ($job.ChildJobs[0].output -ne &quot;&quot;) {  
+        [System.windows.forms.messagebox]::show(&quot;A task named $taskname already exists.  You must delete this task before you can use the name.&quot;)
+        return        
+    }
+    
+    
+    $SchedulePickerForm = New-Object System.Windows.Forms.Form
+    $comboTime = New-Object System.Windows.Forms.ComboBox
+    $label4 = New-Object System.Windows.Forms.Label
+    $buttonCancel = New-Object System.Windows.Forms.Button
+    $buttonOK = New-Object System.Windows.Forms.Button
+    $group = New-Object System.Windows.Forms.GroupBox
+    $checkSaturday = New-Object System.Windows.Forms.CheckBox
+    $checkFriday = New-Object System.Windows.Forms.CheckBox
+    $checkThursday = New-Object System.Windows.Forms.CheckBox
+    $checkWednesday = New-Object System.Windows.Forms.CheckBox
+    $checkTuesday = New-Object System.Windows.Forms.CheckBox
+    $checkMonday = New-Object System.Windows.Forms.CheckBox
+    $checkSunday = New-Object System.Windows.Forms.CheckBox
+    $labelDays = New-Object System.Windows.Forms.Label
+    $labelHours = New-Object System.Windows.Forms.Label
+    $boxHourlyDaily = New-Object System.Windows.Forms.TextBox
+    $labelEvery = New-Object System.Windows.Forms.Label
+    $radioHourly = New-Object System.Windows.Forms.RadioButton
+    $radioWeekly = New-Object System.Windows.Forms.RadioButton
+    $radioDaily = New-Object System.Windows.Forms.RadioButton
+    $InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
+    $checkboxes = ($checkMonday,$checkTuesday,$checkWednesday,$checkThursday,$checkFriday,$checkSaturday,$checkSunday)
+
+    function VisibleInvisibleCheckBoxes {
+        Write-Host $checkboxes
+        $checkboxes |foreach {$_.visible = -not $_.visible}
+    }
+    # Events
+    $handler_radioButtonChanged = {    
+        switch ($true) {
+            ($radioHourly.Checked) {
+                $labelHours.Visible = $true
+                $labelDays.Visible = $false
+                $boxHourlyDaily.Visible = $true
+                $checkboxes |foreach {$_.visible = $false}
+            }
+            ($radioDaily.Checked) {
+                $labelHours.Visible = $false
+                $labelDays.Visible = $true
+                $boxHourlyDaily.Visible = $true
+                $checkboxes |foreach {$_.visible = $false}
+            }
+            ($radioWeekly.Checked) {
+                $labelHours.Visible = $false
+                $labelDays.Visible = $false
+                $boxHourlyDaily.Visible = $false
+                $checkboxes |foreach {$_.visible = $true}
+            }
+        }
+    }
+
+    $buttonCancel_OnClick = {
+        $SchedulePickerForm.Close()
+        return $null
+    }
+
+    $buttonOK_OnClick = {
+        $doit = $false
+        switch ($true) {
+            ($radioHourly.Checked -or $radioDaily.Checked) {
+                try {
+                    $recurrence = [Convert]::ToInt32($boxHourlyDaily.Text)
+                    if ($recurrence -gt 0) {
+                        try {
+                            switch ($true) {
+                                ($radiohourly.checked) {
+                                    if ($recurence -gt 23) {
+                                        [System.windows.forms.messagebox]::show(&quot;Hourly recurrence must be 1-23 hours&quot;)
+                                        $boxHourlyDaily.Focus()
+                                    }
+                                    else {                                
+                                        &amp; schtasks /create /tn $taskname /tr &quot;$taskrun&quot; /sc hourly /mo $boxHourlyDaily.Text /st $comboTime.Text /f
+                                        [System.Windows.Forms.Messagebox]::show(&quot;Task has been scheduled&quot;)
+                                        $SchedulePickerForm.Close()                                                                        
+                                    }
+                                }
+                                ($radioDaily.checked) {
+                                    if ($recurence -gt 365) {
+                                        [System.windows.forms.messagebox]::show(&quot;Hourly recurrence must be 1-365 hours&quot;)
+                                        $boxhourlydaily.focus()
+                                    }
+                                    else {
+                                        &amp; schtasks /create /tn $taskname /tr $taskrun /sc daily /mo $boxHourlyDaily.Text /st $comboTime.Text /f
+                                        $SchedulePickerForm.Close()                                
+                                    }
+                                }
+                            }                            
+                        }
+                        catch {
+                            [System.windows.forms.messagebox]::show($error[0])
+                        }
+                    }
+                    else {
+                        [System.windows.forms.messagebox]::show(&quot;Recurrence must be greater than 0&quot;)
+                        $boxHourlyDaily.Focus()
+                    }
+                }
+                catch {
+                    [System.windows.forms.messagebox]::show(&quot;You must enter a valid integer recurrence&quot;)
+                    $boxHourlyDaily.Focus()
+                }
+            }
+            ($radioWeekly.Checked) {
+                $dflag = &quot;&quot;
+                $checkboxes|foreach {
+                    if ($_.checked) {
+                        $dflag += $_.text.substring(0,3) + &quot;,&quot;                        
+                    }
+                }
+                if ($dflag -ne &quot;&quot;) {        
+                    $dflag = $dflag.substring(0,$dflag.length-1)
+                    &amp; schtasks /create /tn $taskname /tr $taskrun /sc weekly /st $comboTime.Text /d &quot;$dflag&quot; /f
+                    $SchedulePickerForm.Close()
+                }
+                else {
+                    [System.windows.forms.messagebox]::show(&quot;You must select at least one day for weekly recurrence&quot;)
+                }
+            }
+        }
+
+    }
+
+    $OnLoadForm_StateCorrection={
+        #Correct the initial state of the form to prevent the .Net maximized form issue
+    	$SchedulePickerForm.WindowState = $InitialFormWindowState
+    }
+
+    $SchedulePickerForm.Text = &quot;Schedule Picker&quot;
+    $SchedulePickerForm.MaximizeBox = $False
+    $SchedulePickerForm.Name = &quot;SchedulePickerForm&quot;
+    $SchedulePickerForm.DataBindings.DefaultDataSourceUpdateMode = 0
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 476
+    $System_Drawing_Size.Height = 157
+    $SchedulePickerForm.ClientSize = $System_Drawing_Size
+    $SchedulePickerForm.FormBorderStyle = 5
+
+    $comboTime.FormattingEnabled = $True
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 121
+    $System_Drawing_Size.Height = 21
+    $comboTime.Size = $System_Drawing_Size
+    $comboTime.DataBindings.DefaultDataSourceUpdateMode = 0
+    $comboTime.Name = &quot;comboTime&quot;
+    $comboTime.Items.Add(&quot;00:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;00:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;01:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;01:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;02:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;02:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;03:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;03:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;04:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;04:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;05:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;05:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;06:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;06:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;07:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;07:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;08:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;08:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;09:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;09:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;10:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;10:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;11:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;11:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;12:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;12:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;13:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;13:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;14:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;14:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;15:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;15:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;16:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;16:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;17:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;17:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;18:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;18:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;19:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;19:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;20:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;20:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;21:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;21:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;22:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;22:30&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;23:00&quot;)|Out-Null
+    $comboTime.Items.Add(&quot;23:30&quot;)|Out-Null
+    $comboTime.Text = &quot;08:00&quot;
+    $comboTime.DropDownStyle = &quot;DropDownList&quot;
+    
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 53
+    $System_Drawing_Point.Y = 119
+    $comboTime.Location = $System_Drawing_Point
+    $comboTime.TabIndex = 1
+
+    $SchedulePickerForm.Controls.Add($comboTime)
+
+    $label4.TabIndex = 3
+    $label4.TextAlign = 16
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 35
+    $System_Drawing_Size.Height = 23
+    $label4.Size = $System_Drawing_Size
+    $label4.Text = &quot;Start:&quot;
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 12
+    $System_Drawing_Point.Y = 116
+    $label4.Location = $System_Drawing_Point
+    $label4.DataBindings.DefaultDataSourceUpdateMode = 0
+    $label4.Name = &quot;label4&quot;
+
+    $SchedulePickerForm.Controls.Add($label4)
+
+    $buttonCancel.TabIndex = 3
+    $buttonCancel.Name = &quot;buttonCancel&quot;
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 75
+    $System_Drawing_Size.Height = 23
+    $buttonCancel.Size = $System_Drawing_Size
+    $buttonCancel.UseVisualStyleBackColor = $True
+
+    $buttonCancel.Text = &quot;Cancel&quot;
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 368
+    $System_Drawing_Point.Y = 119
+    $buttonCancel.Location = $System_Drawing_Point
+    $buttonCancel.DataBindings.DefaultDataSourceUpdateMode = 0
+    $buttonCancel.add_Click($buttonCancel_OnClick)
+
+    $SchedulePickerForm.Controls.Add($buttonCancel)
+
+    $buttonOK.TabIndex = 2
+    $buttonOK.Name = &quot;buttonOK&quot;
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 75
+    $System_Drawing_Size.Height = 23
+    $buttonOK.Size = $System_Drawing_Size
+    $buttonOK.UseVisualStyleBackColor = $True
+
+    $buttonOK.Text = &quot;OK&quot;
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 287
+    $System_Drawing_Point.Y = 119
+    $buttonOK.Location = $System_Drawing_Point
+    $buttonOK.DataBindings.DefaultDataSourceUpdateMode = 0
+    $buttonOK.add_Click($buttonOK_OnClick)
+
+    $SchedulePickerForm.Controls.Add($buttonOK)
+
+    $group.Name = &quot;group&quot;
+
+    $group.Text = &quot;Recurrence pattern&quot;
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 431
+    $System_Drawing_Size.Height = 101
+    $group.Size = $System_Drawing_Size
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 12
+    $System_Drawing_Point.Y = 12
+    $group.Location = $System_Drawing_Point
+    $group.TabStop = $False
+    $group.TabIndex = 0
+    $group.DataBindings.DefaultDataSourceUpdateMode = 0
+
+    $SchedulePickerForm.Controls.Add($group)
+
+    $checkSaturday.UseVisualStyleBackColor = $True
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 73
+    $System_Drawing_Size.Height = 24
+    $checkSaturday.Size = $System_Drawing_Size
+    $checkSaturday.TabIndex = 13
+    $checkSaturday.Text = &quot;Saturday&quot;
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 274
+    $System_Drawing_Point.Y = 64
+    $checkSaturday.Location = $System_Drawing_Point
+    $checkSaturday.DataBindings.DefaultDataSourceUpdateMode = 0
+    $checkSaturday.Name = &quot;checkSaturday&quot;
+
+    $checkSaturday.Visible = $False
+
+    $group.Controls.Add($checkSaturday)
+
+
+    $checkFriday.UseVisualStyleBackColor = $True
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 64
+    $System_Drawing_Size.Height = 24
+    $checkFriday.Size = $System_Drawing_Size
+    $checkFriday.TabIndex = 12
+    $checkFriday.Text = &quot;Friday&quot;
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 204
+    $System_Drawing_Point.Y = 64
+    $checkFriday.Location = $System_Drawing_Point
+    $checkFriday.DataBindings.DefaultDataSourceUpdateMode = 0
+    $checkFriday.Name = &quot;checkFriday&quot;
+
+    $checkFriday.Visible = $False
+
+    $group.Controls.Add($checkFriday)
+
+
+    $checkThursday.UseVisualStyleBackColor = $True
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 70
+    $System_Drawing_Size.Height = 24
+    $checkThursday.Size = $System_Drawing_Size
+    $checkThursday.TabIndex = 11
+    $checkThursday.Text = &quot;Thursday&quot;
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 129
+    $System_Drawing_Point.Y = 64
+    $checkThursday.Location = $System_Drawing_Point
+    $checkThursday.DataBindings.DefaultDataSourceUpdateMode = 0
+    $checkThursday.Name = &quot;checkThursday&quot;
+
+    $checkThursday.Visible = $False
+
+    $group.Controls.Add($checkThursday)
+
+
+    $checkWednesday.UseVisualStyleBackColor = $True
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 83
+    $System_Drawing_Size.Height = 24
+    $checkWednesday.Size = $System_Drawing_Size
+    $checkWednesday.TabIndex = 10
+    $checkWednesday.Text = &quot;Wednesday&quot;
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 342
+    $System_Drawing_Point.Y = 44
+    $checkWednesday.Location = $System_Drawing_Point
+    $checkWednesday.DataBindings.DefaultDataSourceUpdateMode = 0
+    $checkWednesday.Name = &quot;checkWednesday&quot;
+
+    $checkWednesday.Visible = $False
+
+    $group.Controls.Add($checkWednesday)
+
+
+    $checkTuesday.UseVisualStyleBackColor = $True
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 68
+    $System_Drawing_Size.Height = 24
+    $checkTuesday.Size = $System_Drawing_Size
+    $checkTuesday.TabIndex = 9
+    $checkTuesday.Text = &quot;Tuesday&quot;
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 274
+    $System_Drawing_Point.Y = 44
+    $checkTuesday.Location = $System_Drawing_Point
+    $checkTuesday.DataBindings.DefaultDataSourceUpdateMode = 0
+    $checkTuesday.Name = &quot;checkTuesday&quot;
+
+    $checkTuesday.Visible = $False
+
+    $group.Controls.Add($checkTuesday)
+
+
+    $checkMonday.UseVisualStyleBackColor = $True
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 64
+    $System_Drawing_Size.Height = 24
+    $checkMonday.Size = $System_Drawing_Size
+    $checkMonday.TabIndex = 8
+    $checkMonday.Text = &quot;Monday&quot;    
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 204
+    $System_Drawing_Point.Y = 44
+    $checkMonday.Location = $System_Drawing_Point
+    $checkMonday.DataBindings.DefaultDataSourceUpdateMode = 0
+    $checkMonday.Name = &quot;checkMonday&quot;
+
+    $checkMonday.Visible = $False
+
+    $group.Controls.Add($checkMonday)
+
+
+    $checkSunday.UseVisualStyleBackColor = $True
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 104
+    $System_Drawing_Size.Height = 24
+    $checkSunday.Size = $System_Drawing_Size
+    $checkSunday.TabIndex = 7
+    $checkSunday.Text = &quot;Sunday&quot;
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 129
+    $System_Drawing_Point.Y = 44
+    $checkSunday.Location = $System_Drawing_Point
+    $checkSunday.DataBindings.DefaultDataSourceUpdateMode = 0
+    $checkSunday.Name = &quot;checkSunday&quot;
+
+    $checkSunday.Visible = $False
+
+    $group.Controls.Add($checkSunday)
+
+    $labelDays.TabIndex = 6
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 64
+    $System_Drawing_Size.Height = 18
+    $labelDays.Size = $System_Drawing_Size
+    $labelDays.Visible = $False
+    $labelDays.Text = &quot;day(s)&quot;
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 189
+    $System_Drawing_Point.Y = 23
+    $labelDays.Location = $System_Drawing_Point
+    $labelDays.DataBindings.DefaultDataSourceUpdateMode = 0
+    $labelDays.Name = &quot;labelDays&quot;
+
+    $group.Controls.Add($labelDays)
+
+    $labelHours.TabIndex = 5
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 100
+    $System_Drawing_Size.Height = 23
+    $labelHours.Size = $System_Drawing_Size
+    $labelHours.Text = &quot;hour(s)&quot;
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 189
+    $System_Drawing_Point.Y = 23
+    $labelHours.Location = $System_Drawing_Point
+    $labelHours.DataBindings.DefaultDataSourceUpdateMode = 0
+    $labelHours.Name = &quot;labelHours&quot;
+
+    $group.Controls.Add($labelHours)
+
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 28
+    $System_Drawing_Size.Height = 20
+    $boxHourlyDaily.Size = $System_Drawing_Size
+    $boxHourlyDaily.DataBindings.DefaultDataSourceUpdateMode = 0
+    $boxHourlyDaily.Text = &quot;1&quot;
+    $boxHourlyDaily.Name = &quot;boxHourlyDaily&quot;
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 155
+    $System_Drawing_Point.Y = 20
+    $boxHourlyDaily.Location = $System_Drawing_Point
+    $boxHourlyDaily.TabIndex = 4
+
+    $group.Controls.Add($boxHourlyDaily)
+
+    $labelEvery.TabIndex = 3
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 67
+    $System_Drawing_Size.Height = 23
+    $labelEvery.Size = $System_Drawing_Size
+    $labelEvery.Text = &quot;Every&quot;
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 116
+    $System_Drawing_Point.Y = 23
+    $labelEvery.Location = $System_Drawing_Point
+    $labelEvery.DataBindings.DefaultDataSourceUpdateMode = 0
+    $labelEvery.Name = &quot;labelEvery&quot;
+
+    $group.Controls.Add($labelEvery)
+
+    $radioHourly.TabIndex = 0
+    $radioHourly.Name = &quot;radioHourly&quot;
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 104
+    $System_Drawing_Size.Height = 24
+    $radioHourly.Size = $System_Drawing_Size
+    $radioHourly.UseVisualStyleBackColor = $True
+
+    $radioHourly.Text = &quot;Hourly&quot;
+    $radioHourly.Checked = $True
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 6
+    $System_Drawing_Point.Y = 17
+    $radioHourly.Location = $System_Drawing_Point
+    $radioHourly.DataBindings.DefaultDataSourceUpdateMode = 0
+    $radioHourly.TabStop = $True
+    $radioHourly.add_Click($handler_radioButtonChanged)
+    
+    $group.Controls.Add($radioHourly)
+
+    $radioWeekly.TabIndex = 2
+    $radioWeekly.Name = &quot;radioWeekly&quot;
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 104
+    $System_Drawing_Size.Height = 24
+    $radioWeekly.Size = $System_Drawing_Size
+    $radioWeekly.UseVisualStyleBackColor = $True
+
+    $radioWeekly.Text = &quot;Weekly&quot;
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 6
+    $System_Drawing_Point.Y = 56
+    $radioWeekly.Location = $System_Drawing_Point
+    $radioWeekly.DataBindings.DefaultDataSourceUpdateMode = 0
+    $radioWeekly.add_Click($handler_radioButtonChanged)
+
+    $group.Controls.Add($radioWeekly)
+
+    $radioDaily.TabIndex = 1
+    $radioDaily.Name = &quot;radioDaily&quot;
+    $System_Drawing_Size = New-Object System.Drawing.Size
+    $System_Drawing_Size.Width = 104
+    $System_Drawing_Size.Height = 24
+    $radioDaily.Size = $System_Drawing_Size
+    $radioDaily.UseVisualStyleBackColor = $True
+
+    $radioDaily.Text = &quot;Daily&quot;
+
+    $System_Drawing_Point = New-Object System.Drawing.Point
+    $System_Drawing_Point.X = 6
+    $System_Drawing_Point.Y = 37
+    $radioDaily.Location = $System_Drawing_Point
+    $radioDaily.DataBindings.DefaultDataSourceUpdateMode = 0
+    $radioDaily.add_Click($handler_radioButtonChanged)
+
+    $group.Controls.Add($radioDaily)
+    
+    $SchedulePickerForm.CancelButton = $buttonCancel
+    $SchedulePickerForm.AcceptButton = $buttonOK
+
+    #Save the initial state of the form
+    $InitialFormWindowState = $SchedulePickerForm.WindowState
+    #Init the OnLoad event to correct the initial state of the form
+    $SchedulePickerForm.add_Load($OnLoadForm_StateCorrection)
+    #Show the Form
+    $SchedulePickerForm.ShowDialog() |out-null
+
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Parul Jain">
+    <title>BER Encoding Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>BER Encoding Module</h1>
+<h3><a href="//scripts/3379.ps1">download</a></h3>
+<p>Takes ASN types integer, octet (string), octet (byte array), and OID (string) values and encodes into byte array using Basic Encoding Rules (BER). BER encoded values are used for SNMP, X.509 certificates, etc.</p>
+<pre><code>There will be a companion BER decoding library posted soon. There will also
+be a SNMP library that makes use of BER encoding and decoding libraries
+</code></pre>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+    BER encoding library
+
+.DESCRIPTION
+    Takes ASN types integer, octet (string), octet (byte array), and OID
+    (string) values and encodes into byte array using Basic Encoding Rules (BER)
+    BER encoding is used for SNMP, X.509 certificates, etc.
+
+    There will be a companion BER decoding library posted soon. There will also
+    be a SNMP library that makes use of BER encoding and decoding libraries
+
+.NOTES
+    Author: Parul Jain, paruljain@hotmail.com
+    Version: 0.1, April 21, 2012
+    Requires: PowerShell v2 or better
+
+.EXAMPLE
+    # The following constructs a GetRequest SNMP message based on
+    # http://www.rane.com/note161.html
+    $varbindList = encOID '1.3.6.1.4.1.2680.1.2.7.3.2.0' | encNull | encSeq | encSeq
+    $pdu = ((encInt 1 | encInt 0 | encInt 0) + $varbindList) | encSeq 0xA0
+    $message = ((encInt 0 | encOctet 'private') + $pdu) | encSeq
+#&gt;
+
+# We need binary right shift for OID encoding. There is no shift in PS v2
+# So we add it via inline C# code. Very cool!
+Add-Type @&quot;
+public class Shift {
+   public static long  Right(long x,  int count) { return x &gt;&gt; count; }
+}                    
+&quot;@
+
+function byte2hex {
+    # Not really a part of this library. Helps debug the code
+    # Takes byte array and converts to hex printable string
+
+    [string]$ret = ''
+    $input | % { $ret += '{0:X2} ' -f $_ }
+    $ret.TrimEnd(' ')
+}
+
+function trimLeft([byte[]]$buffer) {
+    # Removes leading 0 value bytes from a byte array
+
+    $i = 0
+    while ($buffer[$i] -eq 0) { $i++ } 
+    $buffer[$i..($buffer.length-1)]
+}
+
+function encLength([long]$length) {
+    # BER code is TLV - Type Length Value
+    # Length itself needs to be encoded if more than 127 bytes
+    # This function takes the length (of the Value) and encodes it
+
+    if ($length -lt 128) { return [byte]$length }
+    # The length is more than 127 so do the coding
+    $buffer = [BitConverter]::GetBytes($length)
+    # Reverse to make Big-endian
+    [Array]::Reverse($buffer)
+    # Eliminate leading zeros
+    [byte[]]$buffer = trimLeft $buffer
+    # Add length for the length and return
+    @(128 + $buffer.length) + $buffer
+}
+
+function encInt([int]$value) {
+    # Encodes Integer value to BER and adds to input stream
+    # BER type for integer is 2
+
+    $b = [BitConverter]::GetBytes($value)
+    [Array]::Reverse($b)
+    [byte[]]$b = trimLeft $b
+    $input + [byte[]](2, $b.length) + $b
+}
+
+function encOctet($buffer) {
+    # Encodes octet string to BER and adds to input stream
+    # The string can be provided as [string] or as [byte[]]
+    # BER type for octet string is 4
+
+    if ($buffer -is [string]) { $b = [Text.Encoding]::UTF8.GetBytes($buffer) }
+        elseif ($buffer -is [byte[]]) { $b = $buffer }
+            else { throw('Must be string or byte[] type') }
+    $input + [byte[]](4, (encLength $b.length)) + $b
+}
+
+function encOID ([string]$oid) {
+    # Encodes OID to BER and adds to input stream
+    # BER OID encoding is the most complex of all BER encoding
+    # BER type for OID is 6
+
+    # Remove any starting or trailing . from OID string
+    $oid = ($oid.TrimStart('.')).TrimEnd('.')
+    
+    $octets = $oid.split('.')
+    if ($octets.count -lt 2) { throw 'Error: Invalid OID; must have at least two octects' }
+    if ([int]$octets[0] -gt 2 -or [int]$octets[1] -gt 39) { throw 'Error: Invalid OID' }
+    [byte[]]$buffer = @()
+    $buffer += 40 * [int]$octets[0] + [int]$octets[1] # First two octets encode special
+    # Encode remaining octets normally
+    if ($octets.count -gt 2) {
+        for($i=2; $i -lt $octets.count; $i++) {
+            [byte[]]$buff= @()
+            $value = [long]$octets[$i]
+            do {
+                $b = [System.BitConverter]::GetBytes($value)
+                $b[0] = $b[0] -bor 0x80
+                $buff += $b[0]
+                $value = [shift]::right($value, 7)
+            } until ($value -eq 0)
+            $buff[0] = $buff[0] -band 0x7F
+            [array]::Reverse($buff)
+            $buffer += $buff
+        }
+    }
+    $input + [byte[]](6, (encLength $buffer.length)) + $buffer
+}
+
+function encNull {
+    # Adds BER Null value to input stream
+    # BER type for Null is 5
+
+    $input + [byte[]](5, 0)
+}
+
+function encSeq([byte]$type=0x30) {
+    # Encodes input stream into a BER Sequence
+    # For BER Type, 0x30 is used by default but any other Type value can
+    # be provided
+
+    $buffer = @($input)
+    [byte[]]($type, (encLength $buffer.length)) + $buffer
+}
+        
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

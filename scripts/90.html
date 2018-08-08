@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BSonPosh">
+    <title>Citrix-Functions.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Citrix-Functions.ps1</h1>
+<h3><a href="//scripts/90.ps1">download</a></h3>
+<p>A collection of Powershell functions for Citrix Management</p>
+<pre><code class="language-posh">#########################################
+####     Citrix Farm Functions       ####
+#########################################
+# Get Citrix Farm
+function Get-CitrixFarm{
+    param($Server)
+    $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaframeFarm&quot;,$Server)
+    $mfarm = [system.Activator]::CreateInstance($type)
+    $mfarm.Initialize(1)
+    return $mFarm
+}
+
+# Get Online Servers by Zone
+function Get-CitrixOnline {
+    Param($zone)
+    $mfzone = New-Object -ComObject MetaFrameCOM.MetaFrameZone
+    $mfzone.Initialize($zone)
+    $servers = $mfzone.OnlineServers
+    $servers
+}
+
+# Get Citrix Load Evaluators (only 4.0/4.5)
+function Get-CitrixLE{
+    Param($server=$(throw &quot;Server is Required&quot;))
+    function Load-Farm{
+        param($srv)
+        $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaframeFarm&quot;,$srv)
+        $mfarm = [system.Activator]::CreateInstance($type)
+        $mfarm.Initialize(1)
+        return $mFarm
+    }
+    $Farm = load-farm $server
+    if($Farm.LoadEvaluators){
+        foreach($eval in $Farm.LoadEvaluators)
+        {
+            $eval.loadData(1)
+            &quot;+ Load Evaluator: {0}&quot; -f $eval.LEName
+            $servers = $eval.AttachedServers(1)
+            if($servers.count -ne 0)
+            {
+                &quot;  + Servers&quot;
+                $servers | %{&quot;    - {0}&quot; -f $_.ServerName}
+            }
+            $rules = $eval.rules | Select-Object RuleType,HWM,LWM,Schedules
+            if($rules.count -ne 0)
+            {
+                &quot;  + Rules&quot;
+                foreach($rule in $rules)
+                {
+                    &quot;    - {0}&quot; -f $rule
+                }
+            }
+        }
+    }
+}
+
+# Gets the Citrix Printer Drivers for the Farm (Can be REAL slow)
+function Get-CitrixPrintDrivers{
+    Param($server=$(throw &quot;Server is Required&quot;))
+    function Load-Farm{
+        param($srv)
+        $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaframeFarm&quot;,$srv)
+        $mfarm = [system.Activator]::CreateInstance($type)
+        $mfarm.Initialize(1)
+        return $mFarm
+    }
+    $farm = Load-Farm $Server
+    $farm.Drivers 
+}
+
+# Gets Citrix Policies
+function Get-CitrixPolicies{
+    param($Server)
+    function Load-Farm{
+        param($srv)
+        $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaframeFarm&quot;,$srv)
+        $mfarm = [system.Activator]::CreateInstance($type)
+        $mfarm.Initialize(1)
+        return $mFarm
+    }
+    $farm = Load-Farm $server
+    $type = [System.Type]::GetTypeFromProgID(&quot;MetaFrameCOM.MetaFrameUserPolicy&quot;)
+    foreach($pol in $Farm.policies($type))
+    {
+        $pol.loadData(1)
+        &quot;+ Name: {0}&quot; -f $pol.Name
+        &quot;  - Description: {0}&quot; -f $pol.Description
+        &quot;  - Enabled: {0}&quot; -f $pol.Enabled
+        if($pol.AllowedAccounts)
+        {
+            &quot;  + AllowedAccounts&quot;
+            foreach($aa in $pol.AllowedAccounts)
+            {
+                &quot;    - {0}&quot; -f $aa.AccountName
+            }
+        }
+        if($pol.UserPolicy2)
+        {
+            &quot;  + UserPolicy&quot;
+            $props = $pol.UserPolicy2 | Get-Member -membertype Property | %{$_.Name} | Sort-Object Name
+            foreach($prop in $props)
+            {
+                if(($pol.UserPolicy2.$prop -match &quot;\d&quot;) -and ($pol.UserPolicy2.$prop -ne 0))
+                {
+                    &quot;     - {0}:{1}&quot; -f $prop,$pol.UserPolicy2.$prop
+                }
+            }
+        }
+        write-Output &quot; &quot;
+    }
+}
+
+# Set-CitrixLoadEvalutor
+function Set-CitrixLoadEvalutor{
+    Param($server = $(throw '$Server is Required'),$LoadEvaluator = &quot;MFDefaultLE&quot;)
+    
+    # Loading Server Object
+    $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaframeServer&quot;,$Server)
+    $mfServer = [system.Activator]::CreateInstance($type)
+    $mfServer.Initialize(6,$Server)
+    
+    # Getting Current LE
+    $le = $mfServer.AttachedLE
+    $le.LoadData(1)
+    Write-Host &quot;Old Evaluator: $($le.LEName)&quot;
+    Write-Host &quot;Setting Load Evaluator on $server to $LoadEvaluator&quot;
+    
+    # Assigning New LE
+    $mfServer.AttachLEByName($LoadEvaluator)
+    
+    # Checking LE
+    $le = $mfServer.AttachedLE
+    $le.LoadData(1)
+    Write-Host &quot;Load Evaluator Set to $($le.LEName)&quot;
+}
+
+#########################################
+####     Citrix App Functions        ####
+#########################################
+
+# Gets Citrix App
+function Get-CTXApplication{
+    Param($Server,$AppName)
+    $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaFrameApplication&quot;,$Server)
+    $app = [system.Activator]::CreateInstance($type)
+    Write-Verbose &quot;Loading Farm for $Server&quot;
+    $app.Initialize(3,$appName)
+    $app.LoadData(0)
+    $app
+}
+
+# Outputs the number of Users using a Citrix App or Apps
+function Get-ApplicationUserCount {
+    Param([string]$app,[string]$farmServer = $(throw '$FarmServer is Required'))
+    function List-AllCitrixApps{
+        Param($mFarm)
+        ForEach($app in $mFarm.Applications) 
+        {
+            $name = $app.BrowserName.PadRight(25)
+            $count = &quot;$($app.Sessions.Count)&quot;
+            $count = $count.PadRight(10)
+            Write-Host &quot;$name $count&quot;
+        }
+    }
+    function List-App{
+        param($mApp,$mfFarm)
+        ForEach($app in $mfFarm.Applications) 
+        {
+            if($app.BrowserName -eq &quot;$mApp&quot;) 
+            { 
+                $name = $app.BrowserName.PadRight(25)
+                $count = &quot;$(($app.Sessions | ?{$_.SessionState -eq 1}).Count)&quot;
+                $count = $count.PadRight(10)
+                Write-Host &quot;$name $count&quot;
+            }
+        }
+    }
+    function Load-Farm{
+        $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaframeFarm&quot;,$srv)
+        $mfarm = [system.Activator]::CreateInstance($type)
+        $mfarm.Initialize(1)
+        return $mFarm
+    }
+    Write-Host 
+    $title1 = &quot;Application&quot;.PadRight(25)
+    $title2 = &quot;===========&quot;.PadRight(25)
+    Write-Host &quot;$title1 User Count&quot; -ForegroundColor White
+    Write-Host &quot;$title2 ==========&quot; -ForegroundColor Red
+    $mf = Load-Farm $farmServer
+    While($true) 
+    {
+        $oldpos = $host.UI.RawUI.CursorPosition
+        If($app) 
+        {
+            List-App $app $mf
+        }
+        else
+        {
+            List-AllCitrixApps $mf                    
+        }
+        sleep(5)
+        $host.UI.RawUI.CursorPosition = $oldpos
+    }
+    Write-Host &quot;&quot;
+}
+
+# Finds what Server a User is on
+function Find-CitrixUser {
+    Param([string]$LoginName,[switch]$verbose)
+    $user = $LoginName.Split(&quot;\&quot;)[1]
+    $Domain = $LoginName.Split(&quot;\&quot;)[0]
+    $mfuser = New-Object -ComObject MetaframeCOM.MetaframeUser
+    $mfuser.Initialize(1,$Domain,1,$user)
+    Write-Host
+    Write-Host &quot;User: $($mfuser.UserName) found on the Following:&quot;
+    foreach ($s in $mfuser.Sessions)
+    {
+        if($verbose)
+        {
+            Write-Host 
+            Write-Host &quot;$($s.ServerName)&quot;
+            Write-Host &quot;-=-=-=-=-=-&quot;
+            Write-Host &quot;AppName          : $($s.AppName)&quot; -foregroundcolor yellow
+            Write-Host &quot;SessionName      : $($s.SessionName)&quot; -foregroundcolor yellow
+            Write-Host &quot;SessionID        : $($s.SessionID)&quot; -foregroundcolor yellow
+            Write-Host &quot;ClientAddress    : $($s.ClientAddress)&quot; -foregroundcolor yellow
+            Write-Host &quot;ClientEncryption : $($s.ClientEncryption)&quot; -foregroundcolor yellow
+            Write-Host  
+            Write-Host &quot;Processes&quot;
+            Write-Host &quot;=========&quot;
+            foreach ($proc in $s.Processes)
+            {
+                Write-Host $proc.ProcessName -foregroundcolor Green
+            }
+            Write-host
+        }
+        else
+        {
+            write-Host &quot;   -&gt; $($s.ServerName)&quot;        
+        }
+    }
+}
+
+# Gets Servers Published for specified App (or just returns count)
+function Get-CitrixAppServers {
+    Param($app = $(throw '$app is required'),[switch]$count)
+    $mfm = New-Object -com MetaFrameCOM.MetaFrameFarm
+    $mfm.Initialize(1)
+    $servers = $mfm.Applications | ?{$_.AppName -eq $app}
+    $servers = $servers.Servers | sort -Property ServerName
+    if($count)
+    {
+        Write-Host 
+        Write-Host &quot;Found [$($Servers.Count)] Servers for Application [$app]&quot; -ForegroundColor White
+        Write-Host 
+    }
+    else
+    {
+        Write-Host &quot;&quot;
+        Write-Host &quot;Found [$($Servers.Count)] Servers for Application [$app]&quot; -ForegroundColor White
+        Write-Host &quot;-----------------------------------------------&quot; -ForegroundColor gray
+        foreach($server in $servers){Write-Host &quot;$($server.ServerName)&quot; -ForegroundColor Green}
+        Write-Host &quot;-----------------------------------------------&quot; -ForegroundColor gray
+        Write-Host &quot;Found [$($Servers.Count)] Servers for Application [$app]&quot; -ForegroundColor White
+        Write-Host &quot;&quot;
+    }
+}
+
+# Returns Users currently using Citrix App
+function Get-CitrixAppUsers {
+	Param($app = $(throw '$app is required'),[switch]$count)
+	$ErrorActionPreference = &quot;SilentlyContinue&quot;
+	Write-host
+	$mfm = New-Object -com MetaFrameCOM.MetaFrameFarm
+	$mfm.Initialize(1)
+	$users = $mfm.Applications | ?{$_.AppName -eq $app} 
+	$Users = $users.Sessions | sort -Property UserName
+	if($count){
+		Write-Host &quot;Found [$($Users.Count)] Users for Application [$app]&quot; -ForegroundColor White
+		Write-Host
+	}
+	else{
+		Write-Host &quot;&quot;
+		Write-Host &quot;Found [$($Users.Count)] Users for Application [$app]&quot; -ForegroundColor White
+		Write-Host &quot;-----------------------------------------------------&quot; -ForegroundColor gray
+		foreach($user in $Users){
+			If($User.SessionState -eq 1){
+				Write-Host ($User.UserName).PadRight(10) -ForegroundColor Green -NoNewline 
+			}
+			else{
+				Write-Host ($User.UserName).PadRight(10) -ForegroundColor yellow -NoNewline 
+			}
+		}
+		Write-Host 
+		Write-Host &quot;-----------------------------------------------------&quot; -ForegroundColor gray
+		Write-Host &quot;Found [$($Users.Count)] Users for Application [$app]&quot; -ForegroundColor White
+		Write-Host
+	}
+}
+
+# Sets PNFolder for App
+function Set-CTXAppFolder{
+    param($Server,$folder,$filter,[switch]$add,[switch]$remove,[switch]$verbose,[switch]$whatif)
+    if($verbose){$VerbosePreference = &quot;Continue&quot;}
+    Write-Verbose &quot;Loading Remote DCOM&quot;
+    $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaframeFarm&quot;,$Server)
+    $mfarm = [system.Activator]::CreateInstance($type)
+    Write-Verbose &quot;Loading Farm for $Server&quot;
+    $mfarm.Initialize(1)
+    if($filter)
+    {
+        Write-Verbose &quot;Getting Apps for $Filter&quot;
+        $Applications = $mFarm.Applications | Where-Object{$_.BrowserName -match $filter}
+    }
+    else
+    {
+        Write-Verbose &quot;Returning All Apps&quot;
+        $Applications = $mFarm.Applications | Where-Object{$_.BrowserName -match $filter}
+    }
+    foreach($app in $Applications)
+    {
+        Write-Verbose &quot;Loading $($app.BrowserName)&quot;
+        $app.LoadData(0)
+        if($Remove)
+        {
+            if($app.PNFolder -eq $folder)
+            {
+                Write-Verbose &quot;Removing $Folder for $($app.BrowserName)&quot;
+                $app.PNFolder = &quot;&quot;
+                if(!$whatif){$app.SaveData()}
+            }
+        }
+        if($add)
+        {
+            Write-Verbose &quot;Adding $Folder for $($app.BrowserName)&quot;
+            $app.PNFolder = $folder
+            if(!$whatif){$app.SaveData()}
+        }
+        &quot;APP: {0,-15}Folder:{1}&quot; -f $app.BrowserName,$app.PNFolder
+    }
+}
+
+# Adds user to Citrix App
+function Add-CTXApplicationUser{
+    Param($Server,$AppName,$UserName)
+    $domain = $userName.split('\')[0]
+    $user = $userName.split('\')[1]
+    $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaFrameApplication&quot;,$Server)
+    $app = [system.Activator]::CreateInstance($type)
+    Write-Verbose &quot;Loading Farm for $Server&quot;
+    $app.Initialize(3,$appName)
+    $app.LoadData(0)
+    $app.AddUser(1,$domain,2,$user)
+    $app.SaveData()
+}
+
+##########################################
+####     Citrix Server Functions      ####
+##########################################
+# Get a Citrix Server Object
+function Get-CitrixServer{
+    Param($Server)
+    $type = [System.Type]::GetTypeFromProgID(&quot;MetaframeCOM.MetaframeServer&quot;,$Server)
+    $mfServer = [system.Activator]::CreateInstance($type)
+    $mfServer.Initialize(6,$Server)
+    $mfServer
+}
+
+# Publish Application to Server(s)
+function Publish-CitrixApplication{
+	Param([string]$server,[string]$app)
+	Begin{
+		Write-Host
+		function cPublish {
+			Param([string]$Srv,[string]$myapp)
+			$Srv = $Srv.toUpper()
+			$mfSrv = New-Object -ComObject MetaFrameCOM.MetaFrameServer
+			$mfSrv.Initialize(6,&quot;$Srv&quot;)
+			$mfApp = New-Object -ComObject MetaFrameCOM.MetaFrameApplication
+			$mfApp.Initialize(3,&quot;Applications\$myapp&quot;)
+			$mfApp.LoadData($true)
+			$mfAppBinding = New-Object -ComObject MetaFrameCOM.MetaFrameAppSrvBinding
+			$mfAppBinding.Initialize(6,$Srv,&quot;Applications\$app&quot;)
+			if($mfAppBinding) 
+            {
+				Write-Host &quot;Publishing App[$myapp] on Server [$Srv]&quot; -ForegroundColor Green
+				$mfApp.AddServer($mfAppBinding)
+				$mfApp.SaveData()
+			}
+			else 
+            {
+				Write-Host &quot;Unable To Create App Binding&quot; -ForegroundColor Red
+			}
+		}
+		$process = @()
+	}
+	Process{
+		if($_){
+			if($_.ServerName){
+				$process += $_.ServerName
+			}
+			else{
+				$process += $_
+			}
+		}
+	}
+	End{
+		if($Server){$Process += $Server}
+		foreach($s in $process){
+			cPublish -srv $s -myapp $app
+			Write-Host
+		}
+	}
+}
+
+# UnPublish All Application from Server(s)
+function UnPublish-CitrixServer{
+	Param([string]$server)
+	Begin{
+		function cUnPublish {
+			Param([string]$Srv)
+			$Srv = $Srv.toUpper()
+			$mfSrv = New-Object -ComObject MetaFrameCOM.MetaFrameServer
+			$mfSrv.Initialize(6,&quot;$Srv&quot;)
+			If($mfSrv.Applications.Count -gt 0) 
+            {
+				Write-Host &quot;Removing All Published Applications from $Srv&quot; -ForegroundColor Red
+				Write-Host &quot;===================================================&quot; -ForegroundColor Green
+				ForEach($a in $mfSrv.Applications) 
+                {	     
+					$myApp = $a.AppName
+					Write-Host &quot;Removing App [$myApp] from Server [$Srv]&quot; -ForegroundColor White
+					$a.RemoveServer($Srv)
+					$a.SaveData()
+				}
+			}
+			else 
+            {
+				Write-Host &quot;No Published Applications for $Srv&quot; -ForegroundColor Red
+			}
+		}
+		Write-Host
+		$process = @()
+	}
+	Process{
+		if($_){
+			if($_.ServerName)
+            {
+				$process += $_.ServerName
+			}
+			else
+            {
+				$process += $_
+			}
+		}
+	}
+	End{
+		if($Server){$Process += $Server}
+		foreach($s in $process){
+			cUnPublish $s
+			Write-Host
+		}
+	}
+}
+
+# Remove a Citrix App from Server
+function Remove-CitrixApplication {
+	Param([string]$server,[string]$app)
+	Begin{
+		function RemoveApp {
+			Param([string]$Srv,[string]$myapp)
+			$AppRemoved = $false
+			$Srv = $Srv.toUpper()
+			$mfSrv = New-Object -ComObject MetaFrameCOM.MetaFrameServer
+			$mfSrv.Initialize(6,&quot;$Srv&quot;)
+			If($mfSrv.Applications.Count -gt 0) 
+            {
+				ForEach($a in $mfSrv.Applications) 
+                {	     
+					If($a.AppName -eq &quot;$myapp&quot;) 
+                    {
+						Write-Host &quot;Removing App [$myApp] from Server [$Srv]&quot; -ForegroundColor Green
+						$a.RemoveServer($Srv)
+						$a.SaveData()
+						$AppRemoved = $true
+					}
+				} 
+			}
+			else 
+            {
+				Write-Host &quot;No Applications Published for $Srv&quot; -ForegroundColor Red
+				$AppRemoved = $true
+			}
+			If($AppRemoved -eq $false) 
+            {
+				Write-Host &quot;This Application not Published for $Srv&quot; -ForegroundColor Red
+			}
+		}
+		Write-Host
+		$process = @()
+	}
+	Process{
+		if($_)
+        {
+			if($_.ServerName){
+            
+				$process += $_.ServerName
+			}
+			else
+            {
+				$process += $_
+			}
+		}
+	}
+	End{
+		if($Server){$Process += $Server}
+		if($process.Length -eq 0){$Process += get-content env:COMPUTERNAME}
+		foreach($s in $process)
+        {
+			RemoveApp -Srv $s -myapp $app
+			Write-Host
+		}
+	}
+}
+
+# List Citrix Apps Published to Server
+function Get-CitrixApplications {
+	Param([string]$Server)
+	Begin {
+		Write-Host
+		function cGetApps {
+			param([string]$srv)
+			$srv = $srv.ToUpper()
+			$mfsrv = New-Object -ComObject MetaFrameCOM.MetaFrameServer
+			$mfsrv.Initialize(6,&quot;$srv&quot;)
+			Write-Host &quot;SERVER $srv&quot; -foregroundcolor Red
+			Write-Host &quot;==================&quot; -ForegroundColor Green
+			If($mfSrv.Applications.Count -gt 0) {
+				$mfSrv.Applications | %{Write-Host &quot;Published:   $($_.AppName.ToUpper())&quot;}
+			}
+			else {
+				Write-Host &quot;No Applications Published for $srv&quot; -foregroundcolor white
+			}
+		}
+		$process = @()
+	}
+	Process{
+		if($_){
+			if($_.ServerName){
+				$process += $_.ServerName
+			}
+			else{
+				$process += $_
+			}
+		}
+	}
+	End {
+		if($Server){$Process += $Server}
+		foreach($s in $process){
+			cGetApps $s
+			Write-Host
+		}
+	}
+}
+
+# Return Current Terminal Server User Count
+function Get-TSUserCount {
+	Param([string]$Server)
+	Begin{
+		function TsUserCount {
+			param([string]$srv)
+			$msg = &quot;Checking For Users on Server [$srv]&quot;
+			$msg = $msg.PadRight($pad)
+			Write-host $msg -ForegroundColor White 
+			$msg = &quot;===========================================&quot;
+			$msg = $msg.PadRight($pad)
+			Write-host $msg -ForegroundColor gray 
+			$msg = &quot;Terminal Server User Count on Server &quot; 
+			$msg1 = &quot;[$srv]&quot;
+			$msg1 = $msg1.PadRight($pad)
+			$ts = Get-WmiObject Win32_PerfFormattedData_TermService_TerminalServices -ComputerName $srv
+			$count = $ts.activeSessions
+			If($count -eq 0) 
+            {
+				Write-host &quot;$msg [Users:$count]&quot; -ForegroundColor Green
+			}
+			else 
+            {
+				Write-host &quot;$msg [Users:$count]&quot; -ForegroundColor Yellow
+			}
+		}
+		$process = @()
+	}
+	Process{
+		if($_){
+			if($_.ServerName)
+            {
+				$process += $_.ServerName
+			}
+			else
+            {
+				$process += $_
+			}
+		}
+	}
+	End{
+		if($Server){$Process += $Server}
+		if($process.Length -eq 0){$Process += get-content env:COMPUTERNAME}
+		foreach($s in $process)
+        {
+			TSUserCount $s
+			Write-Host
+		}
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

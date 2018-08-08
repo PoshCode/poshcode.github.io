@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>chkhash.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>chkhash.ps1</h1>
+<h3><a href="//scripts/2874.ps1">download</a> - <a href="//scripts/2863.md">parent</a></h3>
+<p>ChkHash.ps1 - ChkHash.ps1 can create a .XML database of files and their SHA-512 hashes and check files against the database, in order to detect corrupt or hacked files.
+Run with -h option for help and usage. Options include -u to add new and modified files to a database, -e to exclude directories, -c to create a database, -x to specify a .xml file to create/use. Subdirs are automatically processed.</p>
+<pre><code class="language-posh"># calculate SHA512 of file.
+
+function Get-SHA512([System.IO.FileInfo] $file = $(throw 'Usage: Get-MD5 [System.IO.FileInfo]'))
+{
+  	$stream = $null;
+  	$cryptoServiceProvider = [System.Security.Cryptography.SHA512CryptoServiceProvider];
+  	$hashAlgorithm = new-object $cryptoServiceProvider
+  	$stream = $file.OpenRead();
+  	$hashByteArray = $hashAlgorithm.ComputeHash($stream);
+  	$stream.Close();
+
+  	## We have to be sure that we close the file stream if any exceptions are thrown.
+
+  	trap
+  	{
+   		if ($stream -ne $null)
+    		{
+			$stream.Close();
+		}
+  		break;
+	}	
+
+ 	foreach ($byte in $hashByteArray) { if ($byte -lt 16) {$result += “0{0:X}” -f $byte } else { $result += “{0:X}” -f $byte }}
+	return [string]$result;
+}
+
+function noequal ( $first, $second)
+{
+    if (!($second) -or $second -eq &quot;&quot;) {return $true}
+    $first=join-path $first &quot;\&quot;
+    foreach($s in $second)
+    {
+        if ($first.tolower().startswith($s.tolower())) {return $false}
+    }
+    return $true
+}
+
+# functions to print overwriting multi-line messages.  Test script will accept a file/filespec/dir and iterate through all files in all subdirs printing a test message + file name to demostrate.
+# e.g. PS&gt;.\writefilename.ps1 c:\
+# call WriteFileName [string]
+# after done writing series of overwriting messages, call WriteFileNameEnd
+
+function WriteFileName ( [string]$writestr )                        # this function prints multiline messages on top of each other, good for iterating through filenames without filling
+{                                                                   # the console with a huge wall of text.  Call this function to print each of the filename messages, then call WriteFileNameEnd when done
+                                                                    # before printing anything else, so that you are not printing into a long file name with extra characters from it visible.
+    if ($Host.Name -match 'ise') 
+    { write-host $writestr; return }
+                                                                            
+    if ($global:wfnlastlen -eq $null) {$global:wfnlastlen=0}              
+    $ctop=[console]::cursortop
+    $cleft=[console]::cursorleft	
+
+	$oldwritestrlen=$writestr.length
+    
+    $rem=$null
+	$writelines = [math]::divrem($writestr.length+$cleft, [console]::bufferwidth, [ref]$rem)
+	#if ($rem -ne 0) {$writelines+=1}
+
+    $cwe = ($writelines-(([console]::bufferheight-1)-$ctop))                                       # calculate where text has scroll back to.
+    if ($cwe -gt 0) {$ctop-=($cwe)}
+
+	write-host &quot;$writestr&quot; -nonewline    
+	$global:wfnoldctop=[console]::cursortop
+	$global:wfnoldcleft=[console]::cursorleft
+	
+	if ($global:wfnlastlen -gt $writestr.length)
+	{
+		write-host (&quot; &quot; * ($global:wfnlastlen-$writestr.length)) -nonewline                    # this only overwrites previously written text if needed, so no need to compute buffer movement on this
+	}
+	
+	
+	$global:wfnlastlen = $oldwritestrlen
+
+	[console]::cursortop=$ctop
+	[console]::cursorleft=$cleft
+}
+function WriteFileNameEnd ( $switch=$true)                                                      # call this function when you are done overwriting messages on top of each other
+{                                                                                               # and before printing something else.  Default switch=$true, which prints a newline, $false restores cursor position,
+                                                                                                # to end of last WriteFileName printed message.            
+    if ($Host.Name -match 'ise')                                                                
+    { return }
+    if ($global:wfnoldctop -ne $null -and $global:wfnoldcleft -ne $null) 
+    {
+        [console]::cursortop=$global:wfnoldctop
+        [console]::cursorleft=$wfnoldcleft  
+        if ($global:wfnoldcleft -ne 0 -and $switch)
+        {
+            write-host &quot;&quot;
+        }
+    }    
+    $global:wfnoldctop=$null
+    $global:wfnlastlen=$null
+    $global:wfnoldcleft=$null
+}
+
+#   chkhash.ps1 [file(s)/dir #1] [file(s)/dir #2] ... [file(s)/dir #3] [-u] [-h [path of .xml database]]
+#   -u updates the XML file database and exits
+#   otherwise, all files are checked against the XML file database.
+#   -h specifies location of xml hash database
+
+
+$hashespath=&quot;.\hashes.xml&quot;
+del variable:\args3 -ea 0
+del variable:\args2 -ea 0
+del variable:\xfiles -ea 0
+del variable:\files -ea 0
+del variable:\exclude -ea 0
+$args3=@()
+$args2=@($args)
+$nu = 0
+$errs = 0
+$fc = 0
+$fm = 0
+$upd = $false
+$create = $false
+$n = $null
+
+&quot;ChkHash.ps1 - ChkHash.ps1 can create a .XML database of files and their SHA-512 hashes and check files against the database, &quot;
+&quot;in order to detect corrupt or hacked files.&quot;
+&quot;&quot;
+&quot;.\chkhash.ps1 -h for usage.&quot;
+&quot;&quot;
+
+for($i=0;$i -lt $args2.count; $i++)
+{
+    if ($args2[$i] -like &quot;-h*&quot;)                                             # -help specified?
+    {
+        &quot;Usage:    .\chkhash.ps1 [-h] [-u] [-c] [-x &lt;file path of hashes .xml database&gt;] [file(s)/dir #1] [file(s)/dir #2] ... [file(s)/dir #n] [-e &lt;Dirs&gt;]&quot;
+        &quot;Options:  -h - Help display.&quot;
+        &quot;          -c - Create hash database. If .xml hash database does not exist, -c will be assumed.&quot;
+        &quot;          -u - Update changed files and add new files to existing database.&quot;
+        &quot;          -x - specifies .xml database file path to use. Default is .\hashes.xml&quot;
+        &quot;          -e - exclude dirs. Put this after the files/dirs you want to check with SHA512 and needs to be fullpath (e.g. c:\users\bob not ..\bob).&quot;
+        &quot;&quot;
+        &quot;Examples: PS&gt;.\chkhash.ps1 c:\ d:\ -c -x c:\users\bob\hashes\hashes.xml&quot;
+        &quot;             [hash all files on c:\ and d:\ and subdirs, create and store hashes in c:\users\bob\hashes\hashes.xml]&quot;
+        &quot;          PS&gt;.\chkhash.ps1 c:\users\alice\pictures\sunset.jpg -u -x c:\users\alice\hashes\pictureshashes.xml]&quot;
+        &quot;             [hash c:\users\alice\pictures\sunset.jpg and add or update the hash to c:\users\alice\hashes\picturehashes.xml&quot;
+        &quot;          PS&gt;.\chkhash.ps1 c:\users\eve\documents d:\media\movies -x c:\users\eve\hashes\private.xml&quot;
+        &quot;             [hash all files in c:\users\eve\documents and d:\media\movies, check against hashes stored in c:\users\eve\hashes\private.xml&quot;
+        &quot;              or create it and store hashes there if not present]&quot;
+        &quot;          PS&gt;.\chkhash.ps1 c:\users\eve -x c:\users\eve\hashes\private.xml -e c:\users\eve\hashes&quot;
+        &quot;             [hash all files in c:\users\eve and subdirs, check hashes against c:\users\eve\hashes\private.xml or store if not present, exclude &quot;
+        &quot;              c:\users\eve\hashes directory and subdirs]&quot;
+        &quot;          PS&gt;.\chkhash.p1s c:\users\ted\documents\f* d:\data -x d:\hashes.xml -e d:\data\test d:\data\favorites -u&quot;
+        &quot;             [hash all files starting with 'f' in c:\users\ted\documents, and all files in d:\data, add or update hashes to&quot;
+        &quot;              existing d:\hashes.xml, exclude d:\data\test and d:\data\favorites and subdirs]&quot;
+        &quot;          PS&gt;.\chkhash -x c:\users\alice\hashes\hashes.xml&quot;
+        &quot;             [Load hashes.xml and check hashes of all files contained within.]&quot;
+        &quot;&quot;
+        &quot;Note:     files in subdirectories of any specified directory are automatically processed.&quot;
+        &quot;          if you specify only an -x option, or no option and .\hash.xml exists, only files in the database will be checked.&quot;
+        exit
+    }
+    if ($args2[$i] -like &quot;-u*&quot;) {$upd=$true;continue}                       # Update and Add new files to database?
+    if ($args2[$i] -like &quot;-c*&quot;) {$create=$true;continue}                    # Create database specified?
+    if ($args2[$i] -like &quot;-x*&quot;) 
+    {
+        $i++                                                                # Get hashes xml database path    
+        if ($i -ge $args2.count) 
+        {
+            write-host &quot;-X specified but no file path of .xml database specified. Exiting.&quot;
+            exit
+        }
+        $hashespath=$args2[$i]
+        continue
+    }
+    if ($args2[$i] -like &quot;-e*&quot;)                                             # Exclude files, dirs
+    {
+        while (($i+1) -lt $args2.count)
+        {
+            $i++
+            if ($args2[$i] -like &quot;-*&quot;) {break}            
+            $exclude+=@(join-path $args2[$i] &quot;\&quot;)                           # collect array of excluded directories.            
+        }
+        continue
+    }        
+    $args3+=@($args2[$i])                                                   # Add files/dirs
+}
+
+if ($args3.count -ne 0) 
+{
+    # Get list of files and SHA512 hash them.    
+ 
+    &quot;Enumerating files from specified locations...&quot;  
+    $files=@(dir $args3 -recurse -ea 0 | ?{$_.mode -notmatch &quot;d&quot;} | ?{noequal $_.directoryname $exclude})              # Get list of files, minus directories and minus files in excluded paths
+
+    if ($create -eq $true -or !(test-path $hashespath))                        # Create database?
+    {       
+        # Create SHA512 hashes of files and write to new database
+        if ($files.count -eq 0) {&quot;No files found. Exiting.&quot;; exit}
+ 
+        $files = $files | %{WriteFileName &quot;SHA-512 Hashing: `&quot;$($_.fullname)`&quot; ...&quot;;add-member -inputobject $_ -name SHA512 -membertype noteproperty -value $(get-SHA512 $_.fullname) -passthru}
+        WriteFileNameEnd
+        $files |export-clixml $hashespath    
+        &quot;Created $hashespath&quot;
+        &quot;$($files.count) file hash(es) saved. Exiting.&quot;
+        exit
+    }
+    write-host &quot;Loading file hashes from $hashespath...&quot; -nonewline
+    $xfiles=@(import-clixml $hashespath|?{noequal $_.directoryname $exclude})  # Load database    
+    if (($xfiles.count -eq 0) -or ($files.count -eq 0)) {&quot;No files in Database or no files specified. Exiting.&quot;;Exit}
+    
+}
+else
+{
+    if (!(test-path $hashespath)) {&quot;No database found or specified, exiting.&quot;; exit}
+    write-host &quot;Loading file hashes from $hashespath...&quot; -nonewline
+    $xfiles=@(import-clixml $hashespath|?{noequal $_.directoryname $exclude}) # Load database and check it
+    if ($xfiles.count -eq 0) {&quot;No files specified and no files in Database. Exiting.&quot;;Exit}
+    $files=$xfiles | %{get-item -ea 0 -literalpath $_.fullname}
+}
+
+&quot;Loaded $($xfiles.count) file hash(es).&quot;
+    
+$hash=@{}
+for($x=0;$x -lt $xfiles.count; $x++)                                    # Build dictionary (hash) of filenames and indexes into file array
+{
+    if ($hash.contains($xfiles[$x].fullname)) {continue}
+    $hash.Add($xfiles[$x].fullname,$x)   
+}
+     
+foreach($f in $files)
+{
+    if ((get-item -ea 0 -literalpath $f.fullname) -eq $null) {continue}              # skip if file no longer exists.
+    
+    $n=($hash.($f.fullname))
+    if ($n -eq $null)
+    {    
+        $nu++                                           # increment needs/needed updating count
+        if ($upd -eq $false) {WriteFileName &quot;Needs to be added: `&quot;$($f.fullname)`&quot;&quot;;WriteFileNameEnd;continue}                 # if not updating, then  continue
+    
+        WriteFileName &quot;SHA-512 Hashing `&quot;$($f.fullname)`&quot; ...&quot;
+        
+        # Create SHA512 hash of file
+        
+        $f=$f |%{add-member -inputobject $_ -name SHA512 -membertype noteproperty -value $(get-SHA512 $_.fullname) -passthru -force}
+        
+        $xfiles+=@($f)                                  # then add file + hash to list
+        continue
+    }      
+    
+    WriteFileName &quot;SHA-512 Hashing and checking: `&quot;$($f.fullname)`&quot; ...&quot;
+    
+    
+    $fc++                                               # File checked increment.
+    
+    if (($upd -eq $false) -and ($f.length -ne $xfiles[$n].length))
+    {
+        $errs++
+        WriteFileName &quot;Size mixmatch: `&quot;$($f.fullname)`&quot;&quot;; WriteFileNameEnd
+        continue
+    }
+    
+    $f=$f |%{add-member -inputobject $_ -name SHA512 -membertype noteproperty -value $(get-SHA512 $_.fullname) -passthru -force}      
+                                                        # Check SHA512 and size for mixmatch.
+    if ($xfiles[$n].length -eq $f.length)
+    {
+        if ($xfiles[$n].SHA512 -eq $f.SHA512)
+        {
+            $fm++;continue                              # if matched, increment file matches and continue loop  
+                                        
+        }
+    } 
+    
+    $errs++                                             # increment mixmatches
+    if ($upd -eq $true) { $xfiles[$n]=$f; WriteFileName &quot;Updated `&quot;$($f.fullname)`&quot;&quot;; WriteFileNameEnd;continue}                                                   
+    WriteFileName &quot;SHA-512 and/or size mixmatch found: `&quot;$($f.fullname)`&quot;&quot;; WriteFileNameEnd
+}
+
+WriteFileNameEnd                                        # restore cursor position after last write string
+
+if ($upd -eq $true)                                     # if database updated
+{
+    $xfiles|export-clixml $hashespath                   # write xml database
+    &quot;Updated Database: $hashespath&quot;
+    &quot;$nu file hash(es) added to Database.&quot;
+    &quot;$errs file hash(es) updated in Database.&quot;
+    exit
+}
+
+&quot;$errs SHA-512 or size mixmatch(es) found.&quot;
+&quot;$fm file(s) SHA512 and size matched.&quot; 
+&quot;$fc file(s) checked total.&quot;
+if ($nu -ne 0) {&quot;$nu file(s) need to be added [run with -u option to Add file hashes to database].&quot;}    
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

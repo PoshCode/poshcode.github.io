@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jan Egil Ring">
+    <title>Start-Job proxy function - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Start-Job proxy function</h1>
+<h3><a href="//scripts/2492.ps1">download</a> - <a href="//scripts/2491.md">parent</a></h3>
+<p>Example on how to use Proxy Cmdlets in combination with object events.</p>
+<p>For more information see:
+http://blog.powershell.no/2011/02/07/powershell-using-proxy-cmdlets-in-combination-with-object-events</p>
+<p>Update 07.02.2011: Updated the function, the first version didn`t work as intended.</p>
+<pre><code class="language-posh">&lt;#
+	Example on how to use Proxy Cmdlets in combination with object events.
+	For more information see:
+	
+	http://blog.powershell.no/2011/02/07/powershell-using-proxy-cmdlets-in-combination-with-object-events
+
+	For more information about proxy functions, see the following article on the
+	Microsoft PowerShell Team blog:
+
+	http://blogs.msdn.com/powershell/archive/2009/01/04/extending-and-or-modifing-commands-with-proxies.aspx
+#&gt;
+
+function Start-Job {
+	&lt;#
+		To create a proxy function for the Start-Job cmdlet, paste the results of the following command into the body of this function and then remove this comment:
+		[Management.Automation.ProxyCommand]::Create((New-Object Management.Automation.CommandMetaData (Get-Command Start-Job)))
+	#&gt;
+
+[CmdletBinding(DefaultParameterSetName='ComputerName')]
+param(
+    [Parameter(ValueFromPipelineByPropertyName=$true)]
+    [System.String]
+    ${Name},
+
+    [Parameter(ParameterSetName='ComputerName', Mandatory=$true, Position=0)]
+    [Alias('Command')]
+    [System.Management.Automation.ScriptBlock]
+    ${ScriptBlock},
+
+    [System.Management.Automation.PSCredential]
+    ${Credential},
+
+    [Parameter(ParameterSetName='FilePathComputerName', Position=0)]
+    [Alias('PSPath')]
+    [System.String]
+    ${FilePath},
+
+    [System.Management.Automation.Runspaces.AuthenticationMechanism]
+    ${Authentication},
+
+    [Parameter(Position=1)]
+    [System.Management.Automation.ScriptBlock]
+    ${InitializationScript},
+
+    [Switch]
+    ${RunAs32},
+	
+	[System.Management.Automation.ScriptBlock]
+    ${OnCompletionAction},
+
+    [Parameter(ValueFromPipeline=$true)]
+    [System.Management.Automation.PSObject]
+    ${InputObject},
+
+    [Alias('Args')]
+    [System.Object[]]
+    ${ArgumentList})
+
+begin
+{
+    try {
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Start-Job', [System.Management.Automation.CommandTypes]::Cmdlet)
+        
+		# define string variable to become the target command line
+        #region Initialize helper variable to create command
+        $scriptCmdPipeline = ''
+        #endregion
+
+        # add new parameter handling
+        #region Process and remove the Path parameter if it is present
+        if ($OnCompletionAction) {
+            $PSBoundParameters.Remove('OnCompletionAction') | Out-Null
+            $scriptCmdPipeline += &quot; | foreach-object{
+    `$job = Register-ObjectEvent -InputObject `$_ -EventName StateChanged -SourceIdentifier JobEndAlert -Action {
+	 if(`$sender.State -eq 'Completed')
+     {
+	  `&amp; {
+	  $OnCompletionAction
+	  }
+      Unregister-Event -SourceIdentifier JobEndAlert -Force
+     }
+    }         
+          }&quot;
+        }
+        #endregion
+		
+		$scriptCmd = {&amp; $wrappedCmd @PSBoundParameters }
+		
+		  $scriptCmd = $ExecutionContext.InvokeCommand.NewScriptBlock(
+                [string]$scriptCmd + $scriptCmdPipeline
+            )
+		
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+&lt;#
+
+.ForwardHelpTargetName Start-Job
+.ForwardHelpCategory Cmdlet
+
+#&gt;
+
+
+	
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

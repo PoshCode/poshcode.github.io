@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Ted Wagner">
+    <title>Create AD Test Lab - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Create AD Test Lab</h1>
+<h3><a href="//scripts/1666.ps1">download</a></h3>
+<p>This script expands on Dmitry Sotnikov's blog post on creating demo Active Directory environments.  http://dmitrysotnikov.wordpress.com/2007/12/14/setting-demo-ad-environments/</p>
+<p>I liked his script and used it often, but found I needed something a bit more substatial to save me time while doing tests.  So, I used his script as a &quot;base&quot; and have highly modified it since last fall.  In January I began to make much more substantial changes to it with the goal of adding it to poshcode.org. The comments in this script are more detailed.  I will post updates as the script improves.</p>
+<pre><code class="language-posh"># ---------------------------------------------------------------------------
+### &lt;Script&gt;
+### &lt;Author&gt;Ted Wagner&lt;/Author&gt;
+### &lt;Version='2.4'&gt;
+### &lt;Script Name='Create-ADTestLabContent.ps1'&gt;
+### &lt;Derived From='Dmitry Sotnikov - http://dmitrysotnikov.wordpress.com/2007/12/14/setting-demo-ad-environments/'&gt;
+### &lt;Description&gt;
+### This script design uses the original script (base script) written by Dmitry Sotnikov.  The script's
+### original comments are included below.  I am referring to Dmitry's script as &quot;version 1.0&quot;
+### 
+### My goal is to standardize variables, functions and libraries such that the script is portable.  
+### This is so that I can place all files for PowerShell on an ISO file and re-use the content 
+### with as little modification as possible from test scenario to test scenario.
+###
+### My scripts folder is a directory copied from the ISO file.  When I build a virtual environment, 
+### I bring up a completely configured and empty AD domain.  I then attach the ISO to the VM and 
+### copy the &quot;scripts&quot; folder to the root of C:.  I then drop in a default profile.ps1 into the 
+### WindowsPowerShell directory (the default All Users profile) and run this script.
+### 
+### There is more work, yet to do; I want to &quot;pare down&quot; the functions so that the functions could be added to
+### a functions.ps1 &quot;library&quot; file.
+### 
+### The labs I set up for testing use an OU structure similar to the following:
+###
+### OU=DeptName	-
+###		|- Computers
+###		|- Groups
+###		|- Users
+### 
+### The profile.ps1 sets up the PSDrive and then creates a variable to the provider.  The profile.ps1
+### script is in the root of the scripts directoy which is copied from the ISO file.
+###
+### Contents of the profile.ps1 file:
+###
+### New-PSDrive -name ScriptLib -psProvider FileSystem -root &quot;C:\Scripts&quot;
+### $ScriptLib = 'ScriptLib:'
+### 
+### The Scripts folder contains a subfolder named &quot;LabSetup&quot;.  The LabSetup folder contains this script,
+### titled &quot;Create-ADTestLabContent.ps1&quot; and all of the text files necessary for creating the user 
+### objects, OU's, etc.  You can create your own files and/or edit this script to match your file names.
+### I've listed the contents of each file below.
+###
+### I deviated from the original text files from Dmitry's script.
+### My goal was to have a &quot;true&quot; list of random names by utilizing the &quot;select-random&quot; written by
+### Joel Bennett.  This can be downloaded from poshcode.org.  I found that the combination of the
+### select-ramdom on the census files and parsing the extra data was extremely time consuming.
+### I went to the census.org page for year 2000 and downloaded the top 1000 names spreadsheet.
+### Then, I simply stripped off ALL of the extra data (first row and all columns after column A)
+### and saved it as an ascii file called &quot;surnames.txt&quot;.  The link to that page is:
+### http://www.census.gov/genealogy/www/data/2000surnames/index.html
+###
+### Additionally, I did something similar with the first names.
+### I downloaded common male and female names from http://infochimps.org/collections/moby-project-word-lists
+### Those files are named fgivennames.txt and mgivennames.txt.  You can alternately download a text file
+### of 21,000+ common given names from the same site instead of using the surnames from census.gov.
+### However, for my testing, a sample of 1000 last names was sufficient for my needs.
+###
+### departments.txt - Name of each Department which will be both an OU, group, and the department 
+### property on user objects.
+### ous.txt - Name of child-containers for each Department OU (Computers, Groups, Users).  
+### cities.txt - Names of cities I will use on user properties
+### dist.all.last.txt - ASCII file of last names downloaded from the Census.gov website
+### dist.male.first.txt - ASCII file of male first names downloaded from the Census.gov website
+### dist.female.first.txt - ASCII file of female first names downloaded from the Census.gov website
+###
+### The descriptions of the deparments match the OU name.  This differentiates them from the default 
+### containers created when AD is set up from those added by this script.  This allows for easily removing 
+### containers and all child items quickly during testing.
+### &lt;/Description&gt;
+###
+### &lt;Dependencies&gt; 
+### Requires ActiveRoles Management Shell for Active Directory.  This script will check
+### for the snapin and add the snapin at runtime.
+### &lt;/Dependencies&gt;
+###
+### &lt;History&gt;
+### changes 01/08/2010 - version 2.0
+###  	- Change Display name and full name properties to format of Lastname, Firstname
+### 	- Change password to p@ssw0rd
+### Changes 01/11/2010 - version 2.1
+###  - Assume base config of empty domain.  Create variable for root domain name
+###  - make sure not attempt is made to duplicate usernames
+###  - Create containers
+### Changes 02/19/2010 - version 2.2
+###  - added function to create empty departmental OUs and child containers for users, groups and computers
+### Changes 02/22/2010 - version 2.3
+###  - added computer account creation to occur when the user is added
+###  - dot source functions.ps1
+###  - added Joel Bennett's select-random v2.2 script to functions.ps1.  functions.ps1 in root of scripts folder
+### Changes 02/23/2010
+###  - Made script more readible by using word-wrap
+###	 - Cleaned up description and commenting
+### Changes 02/24/2010 - Version 2.4
+###  - Using new ascii files for first and given names (see notes)
+###  - Removed original lines for parsing census.gov files
+### Changes 02/25/2010
+###  - added better description for containers added via script to differentiate them to account for 
+###  manually added containers
+###	 - fixed issue with computer object creation - computer objects weren't always getting created
+###
+### Original Script name:  demoprovision.ps1
+##################################################
+### Script to provision demo AD labs
+### (c) Dmitry Sotnikov, xaegr
+### Requires AD cmdlets
+##################################################
+###
+### set folder in which the data files are located
+### this folder should contain files from
+### http://www.census.gov/genealogy/names/names_files.html
+### as well as cities.txt and departments.txt with the
+### lists of cities and departments for the lab
+### &lt;/History&gt;
+### &lt;/Script&gt;
+# ---------------------------------------------------------------------------
+
+#Load Function Library
+. $ScriptLib\functions.ps1
+
+# function to create empty OUs
+function create-LabOUs (){
+	# Create Each Dept OU
+	for ($i = 0; $i -le $DeptOUs.Length - 1; $i++){
+		$OUName = &quot;Test Lab Container - &quot; + $DeptOUs[$i]
+		$CreateDeptOU += @(new-QADObject -ParentContainer $RootDomain.RootDomainNamingContext `
+		-type 'organizationalUnit' -NamingProperty 'ou' -name $DeptOUs[$i] -description $OUName )
+	}
+
+	# Create Child OUs for each Dept
+	foreach ($DeptOU in $CreateDeptOU){
+		for ($i = 0; $i -le $ChildOUs.Length - 1; $i++){
+			new-qadObject -ParentContainer $DeptOU.DN -type 'organizationalUnit' -NamingProperty 'ou' `
+			-name $ChildOUs[$i]
+		}
+	}
+}
+
+function New-RandomADUser (){
+	# set up random number generator
+	$rnd = New-Object System.Random
+
+	# pick a male or a female first name
+	if($rnd.next(2) -eq 1) {
+		$fn = $firstm[$rnd.next($firstm.length)]
+	} else {
+		$fn = $firstf[$rnd.next($firstf.length)]
+	}
+	# random last name
+	$ln = $last[$rnd.next($last.length)]
+
+	# Set proper caps
+	$ln = $ln[0] + $ln.substring(1, $ln.length - 1).ToLower()
+	$fn = $fn[0] + $fn.substring(1, $fn.length - 1).ToLower()
+
+	# random city and department
+	$city = $cities[$rnd.next($cities.length)]
+	$dept = $depts[$rnd.next($depts.length)]
+
+	$SName = ($fn.substring(0,1) + $ln)
+
+	# set user OU variable
+	switch ($dept){
+		$DeptContainers[0].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[0].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }} 
+		$DeptContainers[1].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[1].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+		$DeptContainers[2].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[2].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+		$DeptContainers[3].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[3].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+		$DeptContainers[4].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[4].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+		$DeptContainers[5].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[5].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+		$DeptContainers[6].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[6].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+		$DeptContainers[7].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[7].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+		$DeptContainers[8].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[8].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+		$DeptContainers[9].name {$UserOU = Get-QADObject -SearchRoot $DeptContainers[9].DN | `
+			where { $_.DN -match &quot;Users&quot; -and $_.Type -ne &quot;user&quot; }}
+	}
+
+	# Check for account, if not exist, create account
+	if ((get-qaduser $SName) -eq $null){
+		# Create and enable a user
+		New-QADUser -Name &quot;$ln`, $fn&quot; -SamAccountName $SName -ParentContainer $UserOU -City $city `
+		-Department $dept -UserPassword &quot;p@ssw0rd&quot; -FirstName $fn -LastName $ln -DisplayName &quot;$ln`, $fn&quot; `
+		-Description &quot;$city $dept&quot; -Office $city | Enable-QADUser
+	}
+
+	# set group OU variable
+	switch ($dept){
+		$DeptContainers[0].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[0].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }} 
+		$DeptContainers[1].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[1].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+		$DeptContainers[2].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[2].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+		$DeptContainers[3].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[3].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+		$DeptContainers[4].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[4].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+		$DeptContainers[5].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[5].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+		$DeptContainers[6].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[6].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+		$DeptContainers[7].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[7].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+		$DeptContainers[8].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[8].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+		$DeptContainers[9].name {$GroupOU = Get-QADObject -SearchRoot $DeptContainers[9].DN | `
+			where { $_.DN -match &quot;Groups&quot; -and $_.Type -ne &quot;group&quot; }}
+	}
+
+	# Create groups for each department, create group if it doesn't exist
+	if ((get-QADGroup $dept) -eq $null){
+		New-QADGroup -Name $dept -SamAccountName $dept -ParentContainer $GroupOU -Description &quot;$dept Users&quot;
+	}
+
+	# Add user to the group based on their department
+	Get-QADUser $SName -SearchRoot $UserOU | Add-QADGroupMember -Identity { $_.Department }
+	
+	# set computer OU variable
+	switch ($dept){
+		$DeptContainers[0].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[0].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }} 
+		$DeptContainers[1].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[1].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+		$DeptContainers[2].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[2].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+		$DeptContainers[3].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[3].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+		$DeptContainers[4].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[4].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+		$DeptContainers[5].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[5].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+		$DeptContainers[6].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[6].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+		$DeptContainers[7].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[7].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+		$DeptContainers[8].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[8].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+		$DeptContainers[9].name {$ComputerOU = Get-QADObject -SearchRoot $DeptContainers[9].DN | `
+			where { $_.DN -match &quot;Computers&quot; -and $_.Type -ne &quot;computer&quot; }}
+	}
+
+	# Create a computer account for the user
+	if ((get-qadcomputer &quot;$SName-Computer&quot;) -eq $null){
+		New-QADComputer -Name &quot;$SName-Computer&quot; -SamAccountName &quot;$SName-Computer&quot; -ParentContainer `
+		$ComputerOU -Location &quot;$city $dept&quot;
+	}
+}
+
+$TestQADSnapin = get-pssnapin | where { $_.Name -eq &quot;Quest.ActiveRoles.ADManagement&quot;} 
+if($TestQADSnapin -eq $null){
+	add-pssnapin -Name Quest.ActiveRoles.ADManagement -ErrorAction SilentlyContinue
+} 
+
+# number of accounts to generate - edit
+$num = 50
+
+# Read root domain text
+$RootDomain = Get-QADRootDSE
+
+# Read all text data
+# OU's to create
+$DeptOUs = @(Get-Content &quot;$ScriptLib\LabSetup\Departments.txt&quot;)
+$ChildOUs = @(Get-Content &quot;$ScriptLib\labsetup\ous.txt&quot;)
+# read department and city info
+$cities = Get-Content C:\scripts\LabSetup\Cities.txt
+$depts = Get-Content C:\scripts\LabSetup\Departments.txt
+
+# read name files
+# randomly select names from census files
+# Use Joel Bennet's select-random v 2.2; saved in functions.ps1
+1..$num | ForEach-Object {
+	$last += @(Get-Content C:\scripts\LabSetup\surnames.txt | select-random)
+	$firstm += @(Get-Content C:\scripts\LabSetup\mgivennames.txt | select-random)
+	$firstf += @(Get-Content C:\scripts\LabSetup\fgivennames.txt | select-random)
+}
+
+# Let's do the work
+
+# Create OUs first - call function
+create-LabOUs
+
+# Retrieve all newly created OU DN's for use in next function
+$DeptContainers = @(Get-QADObject -Type &quot;organizationalUnit&quot; | where {$_.Name -ne &quot;Computers&quot; -and $_.Name `
+	-ne &quot;Groups&quot; -and $_.Name -ne &quot;Users&quot; -and $_.Description -match &quot;Test Lab Container&quot;})
+
+foreach ($item in $DeptContainers){
+	$item.description
+}
+# Create users, create dept groups
+1..$num | ForEach-Object { New-RandomADUser }
+
+trap{
+	Write-Host &quot;ERROR: script execution was terminated.`n&quot; $_.Exception.Message
+	break
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

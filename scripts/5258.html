@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BigBen">
+    <title>NPS Server Synchronize - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>NPS Server Synchronize</h1>
+<h3><a href="//scripts/5258.ps1">download</a> - <a href="//scripts/1502.md">parent</a></h3>
+<p>This script can be run on a secondary Network Policy Server and will mirror the configuration from the specified Primary Server, simplifying the management of a redundant or distributed configuration. This script is designed to run as a Scheduled task.</p>
+<pre><code class="language-posh">###Network Policy Server Synchronization Script
+#This script copies the configuration from the NPS Master Server and imports it on this server.
+#The Account that this script runs under must have Local Administrator rights to the NPS Master.
+#This was designed to be run as a scheduled task on the NPS Secondary Servers on an hourly,daily, or as-needed basis.
+#Last Modified 01 Dec 2009 by JGrote &lt;jgrote AT enpointe NOSPAM-DOTCOM&gt;
+
+###Variables
+#NPSMaster - Your Primary Network Policy Server you want to copy the config from.
+$NPSMaster = &quot;Server1&quot;
+#NPSConfigTempFile - A temporary location to store the XML config. Use a UNC path so that the primary can save the XML file across the network. Be sure to set secure permissions on this folder, as the configuration including pre-shared keys is temporarily stored here during the import process.
+$NPSConfigTempFile = &quot;\\server2\C$\Temp\NPSConfigTemp\NPSConfig-$NPSMaster.xml&quot;
+
+#Check if master server is available. Exit script if not
+if (!(Test-Connection -ComputerName $NPSMaster -Quiet)) {exit}
+
+#Create an NPS Sync Event Source if it doesn't already exist
+if (!(get-eventlog -logname &quot;System&quot; -source &quot;NPS-Sync&quot;)) {new-eventlog -logname &quot;System&quot; -source &quot;NPS-Sync&quot;}
+
+#Write an error and exit the script if an exception is ever thrown
+trap {write-eventlog -logname &quot;System&quot; -eventID 1 -source &quot;NPS-Sync&quot; -EntryType &quot;Error&quot; -Message &quot;An Error occured during NPS Sync: $_. Script run from $($MyInvocation.MyCommand.Definition)&quot;; exit}
+
+#Connect to NPS Master and export configuration
+$configExportResult = invoke-command -ComputerName $NPSMaster -ArgumentList $NPSConfigTempFile -scriptBlock {param ($NPSConfigTempFile) netsh nps export filename = $NPSConfigTempFile exportPSK = yes}
+
+#Verify that the import XML file was created. If it is not there, it will throw an exception caught by the trap above that will exit the script.
+$NPSConfigTest = Get-Item $NPSConfigTempFile
+
+#Clear existing configuration and import new NPS config
+$configClearResult = netsh nps reset config
+$configImportResult = netsh nps import filename = $NPSConfigTempFile
+
+#Delete Temporary File
+remove-item -path $NPSConfigTempFile
+
+#Compose and Write Success Event
+$successText = &quot;Network Policy Server Configuration successfully synchronized from $NPSMaster.
+
+Export Results: $configExportResult
+
+Import Results: $configImportResult
+
+Script was run from $($MyInvocation.MyCommand.Definition)&quot;
+
+write-eventlog -logname &quot;System&quot; -eventID 1 -source &quot;NPS-Sync&quot; -EntryType &quot;Information&quot; -Message $successText
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

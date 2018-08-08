@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Mark E Schill">
+    <title>Get-VMStorageAdapters - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-VMStorageAdapters</h1>
+<h3><a href="//scripts/1404.ps1">download</a></h3>
+<p>This script iterates through each Datacenter,Cluster, and Host in a vCenter environment and then lists the Fibre Channel HBAs that are present.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+	Reports on Fibre Channel Adapters in the ESX hosts for a vCenter environment.
+.DESCRIPTION
+	This script iterates through each Datacenter,Cluster, and Host in a vCenter environment and then lists the Fibre Channel HBAs that are present. 
+.LINK
+.EXAMPLE
+	PS&gt; Get-VMStorageAdapters.ps1 -FileName hba.txt
+	
+	This example runs the script and directs output to be saved to hba.txt in addition to the console. 
+.PARAMETER Server
+	Connect to the specified vCenter server for the environment you wish to collect information from.
+.PARAMETER Credential
+	Credential to connect to the vCenter server. If no credentials are specified script will prompt for them.
+.PARAMETER FileName
+	Name of text file to save script output in addition to the console
+.NOTES
+  Name:			Get-VMStorageAdapters
+  Author:		Mark E. Schill
+  Date Created:	10/01/2009
+  Date Revised:	10/01/2009
+  Version:		1.0
+  History:		1.0 10/01/2009 - Initial Revision
+  
+  #requires –Version 2.0
+  #requires -PsSnapIn VMware.VimAutomation.Core -Version 2
+#&gt;
+[CmdletBinding()]
+param(
+[Parameter(Position=1,Mandatory=$false)]
+[Alias(&quot;VIServer&quot;)]
+$Server
+,
+[Parameter(Position=2,Mandatory=$false)]
+[Alias(&quot;PSCredential&quot;)]
+[System.Management.Automation.PSCredential]$Credential
+,
+[Parameter(Position=3,Mandatory=$False)]
+$FileName
+)
+Begin
+{
+	# Were credentials specified? If not then prompt for them.
+	if(!$Credential)
+	{
+		$Credential = Get-Credential
+	}
+	
+	# Are we outputing to file? If so then set filename and create.
+	if ($FileName)
+	{
+		$ScriptPath = Split-Path $MyInvocation.MyCommand.Definition -Parent
+		$FileName = &quot;$ScriptPath\$FileName&quot;			
+		Set-Content -Path $FileName -Value &quot;&quot; -force
+	}
+	
+	#Connect to vCenter Server
+	Connect-VIServer -Server $VIServer -Credential $Credential
+
+	#Iterate Datacenters
+	Get-Datacenter | % { 
+		Write-Host $([string]::Format( &quot;{0}&quot;,$_.Name)) -ForegroundColor Cyan
+		if ($FileName) {Add-Content -Path $FileName -Value $([string]::Format( &quot;{0}&quot;,$_.Name))}
+		
+		#Iterate Clusters
+		Get-Cluster -Location $_ | % {
+			Write-Host $([string]::Format( &quot;`t{0}&quot;,$_.Name)) -ForegroundColor Cyan
+			if ($FileName) {Add-Content -Path $FileName -Value $([string]::Format( &quot;`t{0}&quot;,$_.Name))}
+			
+			#Iterate ESX Hosts
+			Get-VMHost -Location $_ | % { 
+				Write-Host $([string]::Format( &quot;`t`t{0}&quot;,$_.Name)) -ForegroundColor Cyan
+				if ($FileName) {Add-Content -Path $FileName -Value $([string]::Format( &quot;`t`t{0}&quot;,$_.Name))}
+				
+				#Iterate through storage adapters on server and filter out Fibre Channel Adapters. 
+				$StorageView = Get-VMHostStorage -VMHost $_ | Get-View
+				$StorageAdapter = $StorageView.StorageDeviceInfo.HostBusAdapter
+				$StorageAdapter | % { 
+					if ( $_.key -match &quot;FibreChannelHba&quot; )
+					{
+						# Output the Device Name and Port and Node WWNs respectively.
+						Write-Host $([string]::Format(&quot;`t`t`t{0} {1:X} {2:X}&quot;,$_.Device, $_.PortWorldWideName, $_.NodeWorldWideName)) -ForegroundColor Yellow
+						if ($FileName) {Add-Content -Path $FileName -Value $([string]::Format(&quot;`t`t`t{0} {1:X} {2:X}&quot;,$_.Device, $_.PortWorldWideName, $_.NodeWorldWideName))}
+					}
+				}
+			}
+		}
+	}
+}
+Process
+{
+}
+End
+{
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

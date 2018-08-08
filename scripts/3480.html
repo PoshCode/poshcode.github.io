@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Get-SPListItem - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-SPListItem</h1>
+<h3><a href="//scripts/3480.ps1">download</a></h3>
+<p>Gets stuff from SharePoint lists and turns it into objects.</p>
+<pre><code class="language-posh">#.Example
+# 	Get-SPListItem &quot;Scrum Team Assignments&quot; 
+# 	Gets all the items in the list with the default columns on them
+#.Example
+# 	Get-SPListItem -Name &quot;Scrum Team Assignments&quot; -Property &quot;Scrum Team&quot;,&quot;Team Role&quot;,&quot;Last&quot;,&quot;First&quot;
+# 	Gets all the items in the list with just the specified columns as properties
+#.Example
+#   Get-SPListItem -ListUrl &quot;https://sharepoint.domain.org/subsite/Lists/ListName/AllItems.aspx&quot;
+#   Deduces list and sharepoint service URL from the list url
+function Get-SPListItem {
+[CmdletBinding(DefaultParameterSetName=&quot;FromListName&quot;)]
+param(
+	# Url of the sharepoint (sub)site where the list is. This is NOT the url to the list, but to the site root
+	# E.g: for https://sharepoint.domain.org/organization/site/Lists/listName/AllItems.aspx
+	# You should put:  https://sharepoint.domain.org/organization/site/
+	[Parameter(Mandatory=$True, Position=0, ParameterSetName=&quot;FromListName&quot;)]
+	[string]$SharepointUrl,
+	# The name of a sharepoint list to retrieve
+	[Parameter(Mandatory=$True, Position=1, ParameterSetName=&quot;FromListName&quot;)]
+	[String]$Name,
+	# The full url to a sharepoint list (this only works if the URL has &quot;/Lists/listname/&quot; in it)...
+	[Parameter(Mandatory=$True,ParameterSetName=&quot;FromListUrl&quot;)]
+	[string]$ListUrl,
+	# Columns that you want to retrieve from the list, as they appear in the list (or extra column names like &quot;Created Date&quot; or &quot;Modified Date&quot;)
+	[String[]]$Property,
+	# Maximum number of items to retrieve (Defaults to 1000)
+	[Int]$MaxCount = 1000
+)
+	if($PSCmdlet.ParameterSetName -eq &quot;FromListUrl&quot;) {
+		if(!$ListUrl.Contains(&quot;/Lists/&quot;)) {
+			throw &quot;Can't deduce list name from ListUrl&quot;
+		}
+		$i = $ListUrl.IndexOf(&quot;/Lists/&quot;)
+		$SharepointUrl = $ListUrl.SubString(0,$i)
+		$ListName = $ListUrl.SubString($i+7, $ListUrl.IndexOf(&quot;/&quot;,$i+7) - $i - 7)
+		if($ListName -match &quot;%&quot;) {
+			Add-Type -Assembly System.Web
+			$ListName = [System.Web.HttpUtility]::UrlDecode($ListName)
+		}
+	}
+
+	$ServiceUrl = $SharepointUrl.Trim(&quot;/&quot;) + &quot;/_vti_bin/Lists.asmx&quot;
+	Write-Verbose &quot;Sharepoint Service Url: $ServiceUrl&quot;
+	Write-Verbose &quot;Sharepoint List Name: $ListName&quot;
+	
+	# Must manually set the Service.Url even after you fetch the service (otherwise it points at the root site)
+	$Service = New-WebServiceProxy $ServiceUrl -UseDefaultCred
+	$Service.Url = $ServiceUrl
+
+	# Help people out (a little) by printing the ErrorString from soap exceptions
+	trap [System.Web.Services.Protocols.SoapException] {
+		Write-Error $_.Exception.Detail.errorstring.&quot;#text&quot;
+		throw $_
+	}
+	
+	# Get the list metadata from sharepoint and figure out what columns it has:
+	$list = $Service.GetList($ListName) 	
+	Write-Verbose &quot;Default List View URL: $(([Uri]$SharepointUrl).GetLeftPart('authority'))$($List.DefaultViewUrl)&quot;
+	$Fields = $list.Fields.Field
+	
+	# A trick for debugging obstinate lists
+	if($DebugPreference -gt &quot;SilentlyContinue&quot;) {
+		$Global:SPListFields = $Fields
+		Write-Debug &quot;Global variable SPListFields set to list fields for debugging purposes&quot;
+	}
+
+	# Filter the list of columns if we were given a list
+	if($Property.Count -gt 0) { 
+		$Fields = $Fields | Where-Object { $Property -contains $_.DisplayName }
+	} else {
+		$Fields = $Fields | Where-Object { $_.FromBaseType -ne &quot;TRUE&quot; -and $_.Hidden -ne &quot;TRUE&quot; }
+	}
+
+	# Turn that list of columns into selectors for GetListItems and Select-Object
+	$ViewFields = @()
+	$ObjectProperties = @()
+	foreach($f in $Fields.GetEnumerator()) {
+		$ViewFields += $f.StaticName 
+		$ObjectProperties += @{ Name = $f.DisplayName; Expression = [ScriptBlock]::Create(&quot;`$_.`&quot;ows_$($f.StaticName)`&quot;&quot;) }
+	}
+
+	# Generate some xml 
+	[xml]$vf = &quot;&lt;ViewFields&gt;$($ViewFields | ForEach-Object { &quot;&lt;FieldRef Name='$_'/&gt;&quot; })&lt;/ViewFields&gt;&quot;
+	Write-Verbose $vf.OuterXml
+	
+	$ListItems = $service.GetListItems($listName, &quot;&quot;, [Xml]&quot;&lt;Query/&gt;&quot;, $vf, $MaxCount, [Xml]&quot;&lt;QueryOptions/&gt;&quot;, &quot;&quot;).Data.Row
+
+	# A trick for debugging obstinate lists
+	if($DebugPreference -gt &quot;SilentlyContinue&quot;) {
+		$Global:SPObjectProperties = $ObjectProperties
+		Write-Debug &quot;Global variable SPObjectProperties set to ObjectProperties for debugging purposes&quot;
+	}
+	
+	# A trick for debugging obstinate lists
+	if($DebugPreference -gt &quot;SilentlyContinue&quot;) {
+		$Global:SPListItems = $ListItems
+		Write-Debug &quot;Global variable SPListItems set to list items for debugging purposes&quot;
+	}
+	$ListItems | Select-Object $ObjectProperties
+}
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Julien LABALME">
+    <title>Get O365 Admin rights - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get O365 Admin rights</h1>
+<h3><a href="//scripts/5964.ps1">download</a></h3>
+<p>This script will help you report which users have whic roles in the O365 platform</p>
+<pre><code class="language-posh">#############################################################################
+#
+# Title : Get O365 users with admin rights
+# Version : 1.0
+# Creator : Julien LABALME
+# Input : $office365Account and $Office365Password
+#
+#############################################################################
+
+##################################VARIABLES##################################
+
+$Date=get-date
+$Date = $Date.Year.tostring() + &quot;-&quot; + $Date.Month.tostring() + &quot;-&quot; + $Date.Day.tostring() + &quot;_&quot; + $Date.Hour.tostring() + &quot;-&quot; + $Date.Minute.tostring()
+$LogFilePath = &quot;$env:USERPROFILE\Desktop\O365UsersWithAdminRights - $Date.csv&quot;
+$ExcelLogFilePath = &quot;$env:USERPROFILE\Desktop\O365UsersWithAdminRights - $Date.xlsx&quot;
+
+$Office365Account = &quot;&quot;
+$Office365Password = &quot;&quot;
+
+##################################FUNCTIONS##################################
+#Write in Log
+function writelog ([string]$text, [int] $color=0)
+{
+	Write-Output  $text | Out-File -Append -FilePath $LogFilePath -Encoding &quot;UTF8&quot;
+	if ($color -eq 0) {write-host $text}
+	if ($color -eq 1) {write-host $text -foregroundcolor green}
+	if ($color -eq 2) {write-host $text -foregroundcolor yellow}
+	if ($color -eq 3) {write-host $text -foregroundcolor red}
+	if ($color -eq 4) {write-host $text -foregroundcolor cyan}
+}	
+
+#Function to connect to Office 365
+Function ConnectOffice365
+{
+	$Connected = $false
+	#if($Script:Onlinecred = $host.ui.PromptForCredential(&quot;Enter Office 365 Credentials &quot;,&quot;Enter Office 365 Credentials&quot;,&quot;&quot;,&quot;&quot;))
+	#{
+		try
+		{
+			$secstr = New-Object -TypeName System.Security.SecureString -ea stop
+			$Office365Password.ToCharArray() | ForEach-Object {$secstr.AppendChar($_)} -ea stop
+			$Onlinecred = new-object -typename System.Management.Automation.PSCredential -argumentlist $Office365Account, $secstr -ea Stop
+			Import-Module MSOnline
+			Connect-MsolService -Credential $Onlinecred
+			#Writelog &quot;INFO,N/A,ConnectOffice365,Connected to Office365&quot; 1
+			$Connected = $true
+		}
+		catch{writelog &quot;ERROR,N/A,ConnectOffice365,$($ERROR[0])&quot; 3}
+	#}
+	return $Connected
+}
+
+#Convert csv to xlsx file
+Function Convert-CSVToExcel
+{
+	[CmdletBinding()]
+	Param
+	(
+		[Parameter(ValueFromPipeline=$True, Position=0, Mandatory=$True, HelpMessage=&quot;Name of CSV/s to import&quot;)]
+		[ValidateNotNullOrEmpty()]
+		[string]$Inputfile,
+
+		[Parameter(ValueFromPipeline=$False, Position=1, Mandatory=$True, HelpMessage=&quot;Name of excel file output&quot;)]
+		[ValidateNotNullOrEmpty()]
+		[string]$Outputfile
+	)
+
+    Begin
+	{
+        If (!(Test-Path -Path $Inputfile))
+        {
+	        write-host &quot;CSV file not found:  {0}&quot;
+	        Exit
+        } 
+		
+        #Create Excel Com Object
+        $Excel = new-object -com excel.application
+        # Excel options
+        $Excel.DisplayAlerts = $False 
+        $Excel.ScreenUpdating = $False 
+        $Excel.Visible = $False 
+        $Excel.UserControl = $False 
+        $Excel.Interactive = $False
+        #Add workbook
+        $workbook = $Excel.workbooks.Add()
+    }
+
+    Process
+	{
+        #Use the first worksheet in the workbook (also the newest created worksheet is always 1)
+        $worksheet = $workbook.worksheets.Item(1)
+        #Add name of CSV as worksheet name
+        #$worksheet.name = &quot;$((GCI $input).basename)&quot;
+        #Open the CSV file in Excel
+        $tempcsv = $Excel.Workbooks.Open($Inputfile) 
+        # Select the first sheet
+        $tempsheet = $tempcsv.Worksheets.Item(1)
+        #Copy contents of the CSV file
+        $tempSheet.UsedRange.Copy() | Out-Null
+        #Paste contents of CSV into existing workbook
+        $worksheet.Paste()
+        #Close temp workbook
+        $tempcsv.close()
+
+        # Rename the 1st sheet
+        $worksheet.Name = 'O365 Admin Rights';
+        # format sheet policy
+        $range = $worksheet.Range(&quot;A1:C1&quot;);
+        $range.Interior.ColorIndex = 43;
+        $range.Font.ColorIndex = 1;
+        $range.Font.Bold = $True;
+        $range = $worksheet.UsedRange;
+		$range.EntireColumn.AutoFit() | out-null
+		$range.Cells.EntireColumn.AutoFilter();
+    }        
+	
+    End
+	{
+        #Save spreadsheet
+        $workbook.saveas(&quot;$Outputfile&quot;)
+        # Wait 2 seconds
+        $Null = Start-sleep -Seconds 2
+		$OutputFile = $OutputFile.Substring(($OutputFile.LastIndexOf(&quot;\&quot;)+1),($OutputFile.Length-$OutputFile.LastIndexOf(&quot;\&quot;)-1))
+		write-host &quot;CSV file $OutputFile successfully converted to XLSX&quot;
+		
+		#Quit Excel
+        $Excel.Quit()
+		
+		#Release processes for Excel
+		while( [System.Runtime.Interopservices.Marshal]::ReleaseComObject($Excel)){}
+		Remove-Variable Excel
+    }
+}
+
+###################MAIN########################
+
+# Launch connection to O365
+if (ConnectOffice365)
+{
+	writelog &quot;ROLE;DISPLAYNAME;EMAILADDRESS&quot;
+
+	# Get O365 roles list
+	$roles = Get-MsolRole | select ObjectId,Name
+	
+	Foreach ($role in $roles)
+	{
+		# For each roles get members
+		$roleMembers = Get-MSOLRoleMember -RoleObjectId $role.ObjectId | select EmailAddress,DisplayName
+		
+		Foreach ($roleMember in $roleMembers)
+		{
+			writelog &quot;$($role.Name);$($roleMember.DisplayName);$($roleMember.EmailAddress)&quot;
+		}
+	}
+}
+	
+#Convert CSV to xlsx file
+$Null = Convert-CSVToExcel -Inputfile $LogFilePath -Outputfile $ExcelLogFilePath
+
+#Clean temp csv file
+Remove-Item -Path $LogFilePath -Force -Confirm:$False
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

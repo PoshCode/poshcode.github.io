@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Oisin">
+    <title>Invoke-Generic - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-Generic</h1>
+<h3><a href="//scripts/2662.ps1">download</a> - <a href="//scripts/2649.md">parent</a></h3>
+<p>Invoke generic method definitions (including static methods) from PowerShell.
+There's still a lot of documentation missing ... but this time it actually works most of the time</p>
+<p>update: applied parameter name fascism (oisin) ;)</p>
+<pre><code class="language-posh">function Invoke-Generic {
+#.Synopsis
+#  Invoke Generic method definitions via reflection:
+[CmdletBinding()]
+param( 
+   [Parameter(Position=0,Mandatory=$true,ValueFromPipelineByPropertyName=$true)]
+   [Alias('On')]
+   $InputObject
+,
+   [Parameter(Position=1,ValueFromPipelineByPropertyName=$true)]
+   [Alias('Named')]
+   [string]$MethodName
+,
+   [Parameter(Position=2)]
+   [Alias(&quot;Types&quot;)]
+   [Type[]]$ParameterType
+, 
+   [Parameter(Position=4, ValueFromRemainingArguments=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;Args&quot;)]
+   [Object[]]$ArgumentList
+,
+   [Switch]$Static
+)
+begin {
+   if($Static) {
+      $BindingFlags = [System.Reflection.BindingFlags]&quot;IgnoreCase,Public,Static&quot;
+   } else {
+      $BindingFlags = [System.Reflection.BindingFlags]&quot;IgnoreCase,Public,Instance&quot;
+   }
+}
+process {
+   $Type = $InputObject -as [Type]
+   if(!$Type) { $Type = $InputObject.GetType() }
+   
+   if($WithArgs -and -not $ParameterTypes) {
+      $ParameterTypes = $withArgs | % { $_.GetType() }
+   } elseif(!$ParameterTypes) {
+      $ParameterTypes = [Type]::EmptyTypes
+   }   
+   
+   
+   trap { continue }
+   $MemberInfo = $Type.GetMethod($MethodName, $BindingFlags)
+   if(!$MemberInfo) {
+      $MemberInfo = $Type.GetMethod($MethodName, $BindingFlags, $null, $NonGenericArgumentTypes, $null)
+   }
+   if(!$MemberInfo) {
+      $MemberInfo = $Type.GetMethods($BindingFlags) | Where-Object {
+         $MI = $_
+         [bool]$Accept = $MI.Name -eq $MethodName
+         if($Accept){
+         Write-Verbose &quot;$Accept = $($MI.Name) -eq $($MethodName)&quot;
+            [Array]$GenericTypes = @($MI.GetGenericArguments() | Select -Expand Name)
+            [Array]$Parameters = @($MI.GetParameters() | Add-Member ScriptProperty -Name IsGeneric -Value { 
+                                       $GenericTypes -Contains $this.ParameterType 
+                                    } -Passthru)
+
+                                    $Accept = $ParameterTypes.Count -eq $Parameters.Count
+            Write-Verbose &quot;  $Accept = $($Parameters.Count) Arguments&quot;
+            if($Accept) {
+               for($i=0;$i -lt $Parameters.Count;$i++) {
+                  $Accept = $Accept -and ( $Parameters[$i].IsGeneric -or ($ParameterTypes[$i] -eq $Parameters[$i].ParameterType))
+                  Write-Verbose &quot;   $Accept =$(if($Parameters[$i].IsGeneric){' GENERIC or'}) $($ParameterTypes[$i]) -eq $($Parameters[$i].ParameterType)&quot;
+               }
+            }
+         }
+         return $Accept
+      } | Sort { @($_.GetGenericArguments()).Count } | Select -First 1
+   }
+   Write-Verbose &quot;Time to make generic methods.&quot;
+   Write-Verbose $MemberInfo
+   [Type[]]$GenericParameters = @()
+   [Array]$ConcreteTypes = @($MemberInfo.GetParameters() | Select -Expand ParameterType)
+   for($i=0;$i -lt $ParameterTypes.Count;$i++){
+      Write-Verbose &quot;$($ParameterTypes[$i]) ? $($ConcreteTypes[$i] -eq $ParameterTypes[$i])&quot;
+      if($ConcreteTypes[$i] -ne $ParameterTypes[$i]) {
+         $GenericParameters += $ParameterTypes[$i]
+      }
+      $ParameterTypes[$i] = Add-Member -in $ParameterTypes[$i] -Type NoteProperty -Name IsGeneric -Value $($ConcreteTypes[$i] -ne $ParameterTypes[$i]) -Passthru
+   }
+   
+    $ParameterTypes | Where-Object { $_.IsGeneric }
+   Write-Verbose &quot;$($GenericParameters -join ', ') generic parameters&quot;
+      
+   $MemberInfo = $MemberInfo.MakeGenericMethod( $GenericParameters )
+   Write-Verbose $MemberInfo
+   
+   if($WithArgs) {
+      [Object[]]$Arguments = $withArgs | %{ $_.PSObject.BaseObject }
+      Write-Verbose &quot;Arguments: $(($Arguments | %{ $_.GetType().Name }) -Join ', ')&quot;
+      $MemberInfo.Invoke( $InputObject, $Arguments )
+   } else {
+      $MemberInfo.Invoke( $InputObject )
+   }
+} }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

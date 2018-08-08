@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jimmy Hester">
+    <title>get-ESXiHostConfigBackup - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>get-ESXiHostConfigBackup</h1>
+<h3><a href="//scripts/4037.ps1">download</a> - <a href="//scripts/4036.md">parent</a></h3>
+<p>Creates config bundle backup for ESXi hosts. Works where 80 is blocked to ESXi host
+Original script by Alan Renouf (http://www.virtu-al.net/2011/02/23/backing-up-the-esxi-system-image)</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Creates config bundle backup for ESXi hosts. Works where 80 is blocked to ESXi host
+Originally script by Alan Renouf (http://www.virtu-al.net/2011/02/23/backing-up-the-esxi-system-image)
+Heavily Modified by Jimmy Hester 
+.DESCRIPTION
+Checks for connection to a vCenter or ESXi server
+If not connected, connects to the server specified
+If already connected, connects to the server listed in $Global:DefaultVIServer
+Connects to each vmhost in a vCenter, pulls a backup of its configuration, and saves it to the client machine.
+If connected to an ESXi host, it will backup that host.
+Once backed up, it will disconnect from the server if the connection was intially created by this script. It will leave pre-existing connections intact.
+
+If run in an environment where access to the ESXi host(s) on port 80 (from the machine running this script) is blocked, 
+the script will bypass the access failure and download the config bundle directly. 
+See this VMware Community thread for details: http://communities.vmware.com/thread/419926
+
+.PARAMETER &lt;paramName&gt;
+VIServer = The name of the vCenter server or ESXi host to use. If a vCenter server is specified, all the hosts in the vCenter will be backed up
+If an ESXi host is specified, only that host will be backed up.
+#&gt;
+
+Param (
+	[string]$VIServer
+	)
+#Check for PowerCLI
+If ( (Get-PSSnapin VMware.VimAutomation.Core -ErrorAction SilentlyContinue) -eq $null) {
+	Add-PSSnapin VMware.VimAutomation.Core
+	}
+
+#Change this to a local folder that already exists	
+$RootFolder = &quot;C:\admin\ESXi_Backups\&quot;
+
+If (($VIServer) -and (-not($VIServer -eq $global:defaultviserver)))  {
+	Connect-VIServer $VIServer -Credential (Get-Credential) | Out-Null
+	Write-Host &quot;&quot;
+	Write-Host &quot;Connecting to $VIServer&quot;
+	Write-Host &quot;&quot;
+	$Disconnect = $true
+	}
+	elseif (!$global:DefaultVIServer) {
+		Write-Host &quot;Cannot determine which VCenter to use. No backups taken.&quot;
+		Write-Host &quot;&quot;
+		break
+		}
+	else {
+		$VIServer = $global:DefaultVIServer
+		Write-Host &quot;Connected to $VIServer&quot;
+		Write-Host &quot;&quot;
+		}
+	
+	$VMhosts = Get-VMHost -Server $VIServer
+	
+	Foreach ($VMhost in $VMhosts) {
+		Write-Host &quot;Backing up state for $VMhost&quot;
+		$Date = Get-Date -f yyyyMMdd_hhmm
+		$Folder = $RootFolder + &quot;$($VIServer)\&quot; + $Date 
+		If (-not (test-path $Folder)) {
+		MD $Folder | Out-Null
+		}
+		
+	 	Get-VMHostFirmware $VMhost -BackupConfiguration -DestinationPath $Folder -ErrorAction SilentlyContinue | Out-Null
+		#Uncomment next line if the path for $Folder has hyphens
+		#MV ($RootFolder + &quot;*&quot;) $Folder -ErrorAction SilentlyContinue
+		
+		#This will bypass the port http get failure in environments where port 80 is blocked to the ESXi host.
+		#This tests to see if the Get-VMHostFirmware cmdlet was able to download the config bundle.
+		#If not, calls the same https URL as the Get-VMHostFirmware cmdlet
+		If (-not (test-path $Folder\configBundle-$vmhost.tgz)){
+		Invoke-Webrequest https://$vmhost/downloads/configBundle-$vmhost.tgz -outfile $folder\configBundle-$vmhost.tgz
+		}
+				
+	}
+If ($Disconnect) {
+	Write-Host &quot;Disconnecting from $VIServer&quot;
+	Disconnect-VIServer $VIServer -Confirm:$false | Out-Null
+	}
+	
+	
+Write-Host &quot;&quot;
+Write-Host &quot;The config backups for $VIServer are located at:&quot;
+Write-Host $Folder
+Write-Host &quot;&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

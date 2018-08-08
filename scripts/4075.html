@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Snippet Compiler - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Snippet Compiler</h1>
+<h3><a href="//scripts/4075.ps1">download</a></h3>
+<p>Some improvements for GUI. And there are some known bugs with output compiling directory (fixing in progress), also I removed code which highlight code in RichTextBox (because it's unstable).</p>
+<pre><code class="language-posh">#Require 2.0
+
+$def = [Environment]::CurrentDirectory
+
+##################################################################################################
+
+$mnuOpen_Click= {
+  (New-Object Windows.Forms.OpenFileDialog) | % {
+    $_.FileName = &quot;source&quot;
+    $_.Filter = &quot;C# (*.cs)|*.cs&quot;
+    $_.InitialDirectory = $def
+
+    if ($_.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+      $sr = New-Object IO.StreamReader $_.FileName
+      $txtEdit.Text = $sr.ReadToEnd()
+      $sr.Close()
+    }
+  }
+}
+
+$mnuFont_Click= {
+  (New-Object Windows.Forms.FontDialog) | % {
+    $_.Font = &quot;Lucida Console&quot;
+    $_.MinSize = 10
+    $_.MaxSize = 12
+    $_.ShowEffects = $false
+
+    if ($_.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+      $txtEdit.Font = $_.Font
+    }
+  }
+}
+
+$mnuOpaF_Click= {
+  $frmMain.Opacity = 1
+  $cur.Checked = $false
+  $mnuOpaF.Checked = $true
+  $cur = $mnuOpaF
+}
+
+$mnuWrap_Click= {
+  $toggle =! $mnuWrap.Checked
+  $mnuWrap.Checked = $toggle
+  $txtEdit.WordWrap = $toggle
+}
+
+$tbTools_ButtonClick= {
+  switch ($_.Button.Tag) {
+    &quot;Atom&quot;     { Invoke-Atom; break }
+    &quot;Progress&quot; { Show-Panel $mnuToS1 $scSplt1; break }
+    &quot;Params&quot;   { Show-Panel $mnuToS2 $scSplt2; break }
+    &quot;Build&quot;    { Invoke-Builder; break }
+    &quot;BuildEx&quot;  { Start-AfterBuilding; break }
+    &quot;Exit&quot;     { $frmMain.Close(); break }
+  }
+}
+
+$cboPlat_SelectedIndexChanged= {
+  switch ($cboPlat.SelectedIndex) {
+    &quot;0&quot; { $lboRefs.Items.Remove(&quot;`&quot;System.Core.dll`&quot;&quot;); break }
+    &quot;1&quot; { $lboRefs.Items.Add(&quot;`&quot;System.Core.dll`&quot;&quot;); break }
+  }
+}
+
+$chkExec_Click= {
+  switch ($chkExec.Checked) {
+    $true  {
+      $txtIOut.Text = $def + '\app.exe'
+      $chkWApp.Enabled = $true
+      $chkIMem.Enabled = $false
+      $mnuBnRA.Enabled = $true
+      $btnBnRA.Enabled = $true
+      break
+    }
+    $false {
+      $txtIOut.Text = $def + '\lib.dll'
+      $chkWApp.Enabled = $false
+      $chkIMem.Enabled = $true
+      $mnuBnRA.Enabled = $false
+      $btnBnRA.Enabled = $false
+      break
+    }
+  }
+}
+
+$chkWApp_Click= {
+  switch ($chkWApp.Checked) {
+    $true  {
+      $lboRefs.Items.AddRange(@(&quot;`&quot;System.Drawing.dll`&quot;&quot;, &quot;`&quot;System.Windows.Forms.dll`&quot;&quot;))
+      break
+    }
+    $false {
+      $lboRefs.Items.Remove(&quot;`&quot;System.Windows.Forms.dll`&quot;&quot;)
+      $lboRefs.Items.Remove(&quot;`&quot;System.Drawing.dll`&quot;&quot;)
+      break
+    }
+  }
+}
+
+$mnuICnM_Click= {
+  $script:buff = $lboRefs.SelectedItem
+  $lboRefs.Items.Remove($lboRefs.SelectedItem)
+}
+
+$mnuIIns_Click= {
+  (New-Object Windows.Forms.OpenFileDialog) | % {
+    $_.Filter = &quot;PE File (*.dll)|*.dll&quot;
+    $_.InitialDirectory = [Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
+
+    if ($_.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+      $lboRefs.Items.Add('&quot;' + (Split-Path -leaf $_.FileName) + '&quot;')
+    }
+  }
+}
+
+$frmMain_Load= {
+  $txtIOut.Text = $def + '\app.exe'
+  $sbPnl_2.Text = &quot;Str: 1, Col: 0&quot;
+  $lboRefs.Items.Add(&quot;`&quot;System.dll`&quot;&quot;)
+}
+
+##################################################################################################
+
+function frmMain_Show {
+  Add-Type -AssemblyName System.Windows.Forms
+  [Windows.Forms.Application]::EnableVisualStyles()
+
+  $ico = [Drawing.Icon]::ExtractAssociatedIcon($($PSHome + '\powershell_ise.exe'))
+
+  $cdcp = New-Object CodeDom.Compiler.CompilerParameters
+  $dict = New-Object &quot;Collections.Generic.Dictionary[String, String]&quot;
+  $dict.Add(&quot;CompilerVersion&quot;, &quot;v3.5&quot;)
+
+  $frmMain = New-Object Windows.Forms.Form
+  $mnuMain = New-Object Windows.Forms.MainMenu
+  $mnuFile = New-Object Windows.Forms.MenuItem
+  $mnuAtom = New-Object Windows.Forms.MenuItem
+  $mnuOpen = New-Object Windows.Forms.MenuItem
+  $mnuEmp1 = New-Object Windows.Forms.MenuItem
+  $mnuExit = New-Object Windows.Forms.MenuItem
+  $mnuEdit = New-Object Windows.Forms.MenuItem
+  $mnuUndo = New-Object Windows.Forms.MenuItem
+  $mnuEmp2 = New-Object Windows.Forms.MenuItem
+  $mnuCopy = New-Object Windows.Forms.MenuItem
+  $mnuPast = New-Object Windows.Forms.MenuItem
+  $mnuICut = New-Object Windows.Forms.MenuItem
+  $mnuEmp3 = New-Object Windows.Forms.MenuItem
+  $mnuSAll = New-Object Windows.Forms.MenuItem
+  $mnuView = New-Object Windows.Forms.MenuItem
+  $mnuFont = New-Object Windows.Forms.MenuItem
+  $mnuEmp4 = New-Object Windows.Forms.MenuItem
+  $mnuOpac = New-Object Windows.Forms.MenuItem
+  $mnuOp50 = New-Object Windows.Forms.MenuItem
+  $mnuOp60 = New-Object Windows.Forms.MenuItem
+  $mnuOp70 = New-Object Windows.Forms.MenuItem
+  $mnuOp80 = New-Object Windows.Forms.MenuItem
+  $mnuOp90 = New-Object Windows.Forms.MenuItem
+  $mnuOpaF = New-Object Windows.Forms.MenuItem
+  $mnuTgls = New-Object Windows.Forms.MenuItem
+  $mnuWrap = New-Object Windows.Forms.MenuItem
+  $mnuToS1 = New-Object Windows.Forms.MenuItem
+  $mnuToS2 = New-Object Windows.Forms.MenuItem
+  $mnuMake = New-Object Windows.Forms.MenuItem
+  $mnuBAsm = New-Object Windows.Forms.MenuItem
+  $mnuBnRA = New-Object Windows.Forms.MenuItem
+  $mnuHelp = New-Object Windows.Forms.MenuItem
+  $mnuInfo = New-Object Windows.Forms.MenuItem
+  $tbTools = New-Object Windows.Forms.ToolBar
+  $btnAtom = New-Object Windows.Forms.ToolBarButton
+  $btnToS1 = New-Object Windows.Forms.ToolBarButton
+  $btnMake = New-Object Windows.Forms.ToolBarButton
+  $btnBAsm = New-Object Windows.Forms.ToolBarButton
+  $btnBnRA = New-Object Windows.Forms.ToolBarButton
+  $btnExit = New-Object Windows.Forms.ToolBarButton
+  $scSplt1 = New-Object Windows.Forms.SplitContainer
+  $scSplt2 = New-Object Windows.Forms.SplitContainer
+  $lstView = New-Object Windows.Forms.ListView
+  $chPoint = New-Object Windows.Forms.ColumnHeader
+  $chError = New-Object Windows.Forms.ColumnHeader
+  $chCause = New-Object Windows.Forms.ColumnHeader
+  $txtEdit = New-Object Windows.Forms.RichTextBox
+  $gboMake = New-Object Windows.Forms.GroupBox
+  $lblLab1 = New-Object Windows.Forms.Label
+  $cboPlat = New-Object Windows.Forms.ComboBox
+  $chkExec = New-Object Windows.Forms.CheckBox
+  $chkWApp = New-Object Windows.Forms.CheckBox
+  $chkIDbg = New-Object Windows.Forms.CheckBox
+  $chkIMem = New-Object Windows.Forms.CheckBox
+  $lblLab2 = New-Object Windows.Forms.Label
+  $txtIOut = New-Object Windows.Forms.TextBox
+  $lblLab3 = New-Object Windows.Forms.Label
+  $lboRefs = New-Object Windows.Forms.ListBox
+  $sbPanel = New-Object Windows.Forms.StatusBar
+  $sbPnl_1 = New-Object Windows.Forms.StatusBarPanel
+  $sbPnl_2 = New-Object Windows.Forms.StatusBarPanel
+  $imgList = New-Object Windows.Forms.ImageList
+  $mnuRefs = New-Object Windows.Forms.ContextMenu
+  $mnuIMov = New-Object Windows.Forms.MenuItem
+  $mnuICnM = New-Object Windows.Forms.MenuItem
+  $mnuIBuf = New-Object Windows.Forms.MenuItem
+  $mnuIIns = New-Object Windows.Forms.MenuItem
+  #
+  #mnuMain
+  #
+  $mnuMain.MenuItems.AddRange(@($mnuFile, $mnuEdit, $mnuView, $mnuMake, $mnuHelp))
+  #
+  #mnuFile
+  #
+  $mnuFile.MenuItems.AddRange(@($mnuAtom, $mnuOpen, $mnuEmp1, $mnuExit))
+  $mnuFile.Text = &quot;&amp;File&quot;
+  #
+  #mnuAtom
+  #
+  $mnuAtom.Shortcut = &quot;F3&quot;
+  $mnuAtom.Text = &quot;Nu&amp;Clear...&quot;
+  $mnuAtom.Add_Click({Invoke-Atom})
+  #
+  #mnuOpen
+  #
+  $mnuOpen.Shortcut = &quot;CtrlO&quot;
+  $mnuOpen.Text = &quot;&amp;Open&quot;
+  $mnuOpen.Add_Click($mnuOpen_Click)
+  #
+  #mnuEmp1
+  #
+  $mnuEmp1.Text = &quot;-&quot;
+  #
+  #mnuExit
+  #
+  $mnuExit.Shortcut = &quot;CtrlX&quot;
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click({$frmMain.Close()})
+  #
+  #mnuEdit
+  #
+  $mnuEdit.menuItems.AddRange(@($mnuUndo, $mnuEmp2, $mnuCopy, $mnuPast, $mnuICut, `
+                                                               $mnuEmp3, $mnuSAll))
+  $mnuEdit.Text = &quot;&amp;Edit&quot;
+  #
+  #mnuUndo
+  #
+  $mnuUndo.Shortcut = &quot;CtrlZ&quot;
+  $mnuUndo.Text = &quot;&amp;Undo&quot;
+  $mnuUndo.Add_Click({$txtEdit.Undo()})
+  #
+  #mnuEmp2
+  #
+  $mnuEmp2.Text = &quot;-&quot;
+  #
+  #mnuCopy
+  #
+  $mnuCopy.Shortcut = &quot;CtrlC&quot;
+  $mnuCopy.Text = &quot;&amp;Copy&quot;
+  $mnuCopy.Add_Click({if ($txtEdit.SelectionLength -ge 0) {$txtEdit.Copy()}})
+  #
+  #mnuPast
+  #
+  $mnuPast.Shortcut = &quot;CtrlV&quot;
+  $mnuPast.Text = &quot;&amp;Paste&quot;
+  $mnuPast.Add_Click({$txtEdit.Paste()})
+  #
+  #mnuICut
+  #
+  $mnuICut.Shortcut = &quot;Del&quot;
+  $mnuICut.Text = &quot;Cut &amp;Item&quot;
+  $mnuICut.Add_Click({if ($txtEdit.SelectionLength -ge 0) {$txtEdit.Cut()}})
+  #
+  #mnuEmp3
+  #
+  $mnuEmp3.Text = &quot;-&quot;
+  #
+  #mnuSAll
+  #
+  $mnuSAll.Shortcut = &quot;CtrlA&quot;
+  $mnuSAll.Text = &quot;Select &amp;All&quot;
+  $mnuSAll.Add_Click({$txtEdit.SelectAll()})
+  #
+  #mnuView
+  #
+  $mnuView.MenuItems.AddRange(@($mnuFont, $mnuEmp4, $mnuOpac, $mnuTgls))
+  $mnuView.Text = &quot;&amp;View&quot;
+  #
+  #mnuFont
+  #
+  $mnuFont.Text = &quot;&amp;Font...&quot;
+  $mnuFont.Add_Click($mnuFont_Click)
+  #
+  #mnuEmp4
+  #
+  $mnuEmp4.Text = &quot;-&quot;
+  #
+  #mnuOpac
+  #
+  $mnuOpac.MenuItems.AddRange(@($mnuOp50, $mnuOp60, $mnuOp70, $mnuOp80, $mnuOp90, $mnuOpaF))
+  $mnuOpac.Text = &quot;&amp;Opacity&quot;
+  #
+  #mnuOp50
+  #
+  $mnuOp50.Text = &quot;50%&quot;
+  $mnuOp50.Add_Click({Set-Opacity $mnuOp50; $cur = $mnuOp50})
+  #
+  #mnuOp60
+  #
+  $mnuOp60.Text = &quot;60%&quot;
+  $mnuOp60.Add_Click({Set-Opacity $mnuOp60; $cur = $mnuOp60})
+  #
+  #mnuOp70
+  #
+  $mnuOp70.Text = &quot;70%&quot;
+  $mnuOp70.Add_Click({Set-Opacity $mnuOp70; $cur = $mnuOp70})
+  #
+  #mnuOp80
+  #
+  $mnuOp80.Text = &quot;80%&quot;
+  $mnuOp80.Add_Click({Set-Opacity $mnuOp80; $cur = $mnuOp80})
+  #
+  #mnuOp90
+  #
+  $mnuOp90.Text = &quot;90%&quot;
+  $mnuOp90.Add_Click({Set-Opacity $mnuOp90; $cur = $mnuOp90})
+  #
+  #mnuOpaF
+  #
+  $cur = $mnuOpaF #checked item by default
+  $mnuOpaF.Checked = $true
+  $mnuOpaF.Text = &quot;Opaque&quot;
+  $mnuOpaF.Add_Click($mnuOpaF_Click)
+  #
+  #mnuTgls
+  #
+  $mnuTgls.MenuItems.AddRange(@($mnuWrap, $mnuToS1, $mnuToS2))
+  $mnuTgls.Text = &quot;&amp;Toggles&quot;
+  #
+  #mnuWrap
+  #
+  $mnuWrap.Checked = $true
+  $mnuWrap.Shortcut = &quot;CtrlW&quot;
+  $mnuWrap.Text = &quot;&amp;Wrap Mode&quot;
+  $mnuWrap.Add_Click($mnuWrap_Click)
+  #
+  #mnuToS1
+  #
+  $mnuToS1.Checked = $true
+  $mnuToS1.Text = &quot;Building &amp;Progress&quot;
+  $mnuToS1.Add_Click({Show-Panel $mnuToS1 $scSplt1})
+  #
+  #mnuToS2
+  #
+  $mnuToS2.Checked = $true
+  $mnuToS2.Shortcut = &quot;F12&quot;
+  $mnuToS2.Text = &quot;Building P&amp;roperties&quot;
+  $mnuToS2.Add_Click({Show-Panel $mnuToS2 $scSplt2})
+  #
+  #mnuMake
+  #
+  $mnuMake.MenuItems.AddRange(@($mnuBAsm, $mnuBnRA))
+  $mnuMake.Text = &quot;&amp;Build&quot;
+  #
+  #mnuBAsm
+  #
+  $mnuBAsm.Shortcut = &quot;F5&quot;
+  $mnuBAsm.Text = &quot;&amp;Compile&quot;
+  $mnuBAsm.Add_Click({Invoke-Builder})
+  #
+  #mnuBnRA
+  #
+  $mnuBnRA.Shortcut = &quot;F9&quot;
+  $mnuBnRA.Text = &quot;Compile And &amp;Run&quot;
+  $mnuBnRA.Add_Click({Start-AfterBuilding})
+  #
+  #mnuHelp
+  #
+  $mnuHelp.MenuItems.AddRange(@($mnuInfo))
+  $mnuHelp.Text = &quot;&amp;Help&quot;
+  #
+  #mnuInfo
+  #
+  $mnuInfo.Text = &quot;About...&quot;
+  $mnuInfo.Add_Click({frmInfo_Show})
+  #
+  #tbTools
+  #
+  $tbTools.Buttons.AddRange(@($btnAtom, $btnToS1, $btnMake, $btnBAsm, $btnBnRA, $btnExit))
+  $tbTools.ImageList = $imgList
+  $tbTools.Add_ButtonClick($tbTools_ButtonClick)
+  #
+  #btnAtom
+  #
+  $btnAtom.ImageIndex = 0
+  $btnAtom.Tag = &quot;Atom&quot;
+  $btnAtom.ToolTipText = &quot;NuClear (F3)&quot;
+  #
+  #btnToS1
+  #
+  $btnToS1.ImageIndex = 1
+  $btnToS1.Tag = &quot;Progress&quot;
+  $btnToS1.ToolTipText = &quot;Building Progress Panel&quot;
+  #
+  #btnMake
+  #
+  $btnMake.ImageIndex = 2
+  $btnMake.Tag = &quot;Params&quot;
+  $btnMake.ToolTipText = &quot;Building Properties (F12)&quot;
+  #
+  #btnBAsm
+  #
+  $btnBAsm.ImageIndex = 3
+  $btnBAsm.Tag = &quot;Build&quot;
+  $btnBAsm.ToolTipText = &quot;Compile (F5)&quot;
+  #
+  #btnBnRA
+  #
+  $btnBnRA.ImageIndex = 4
+  $btnBnRA.Tag = &quot;BuildEx&quot;
+  $btnBnRA.ToolTipText = &quot;Compile And Run (F9)&quot;
+  #
+  #btnExit
+  #
+  $btnExit.ImageIndex = 5
+  $btnExit.Tag = &quot;Exit&quot;
+  $btnExit.ToolTipText = &quot;Exit (Ctrl+X)&quot;
+  #
+  #scSplt1
+  #
+  $scSplt1.Anchor = &quot;Left, Top, Right, Bottom&quot;
+  $scSplt1.Location = New-Object Drawing.Point(0, 28)
+  $scSplt1.Orientation = &quot;Horizontal&quot;
+  $scSplt1.Panel1.Controls.Add($scSplt2)
+  $scSplt1.Panel2.Controls.Add($lstView)
+  $scSplt1.Size = New-Object Drawing.Size(790, 500)
+  $scSplt1.SplitterDistance = 410
+  $scSplt1.SplitterWidth = 1
+  #
+  #scSplt2
+  #
+  $scSplt2.Dock = &quot;Fill&quot;
+  $scSplt2.Panel1.Controls.Add($txtEdit)
+  $scSplt2.Panel2.Controls.Add($gboMake)
+  $scSplt2.SplitterDistance = 510
+  $scSplt2.SplitterWidth = 1
+  #
+  #lstView
+  #
+  $lstView.Columns.AddRange(@($chPoint, $chError, $chCause))
+  $lstView.Dock = &quot;Fill&quot;
+  $lstView.FullRowSelect = $true
+  $lstView.GridLines = $true
+  $lstView.MultiSelect = $false
+  $lstView.ShowItemToolTips = $true
+  $lstView.SmallImageList = $imgList
+  $lstView.View = &quot;Details&quot;
+  #
+  #chPoint
+  #
+  $chPoint.Text = &quot;Line&quot;
+  $chPoint.Width = 50
+  #
+  #chError
+  #
+  $chError.Text = &quot;Error&quot;
+  $chError.TextAlign = &quot;Right&quot;
+  $chError.Width = 65
+  #
+  #chCause
+  #
+  $chCause.Text = &quot;Description&quot;
+  $chCause.Width = 650
+  #
+  #txtEdit
+  #
+  $txtEdit.AcceptsTab = $true
+  $txtEdit.Dock = &quot;Fill&quot;
+  $txtEdit.Font = New-Object Drawing.Font(&quot;Courier New&quot;, 10)
+  $txtEdit.ScrollBars = &quot;Both&quot;
+  $txtEdit.Add_Click({Write-CursorPoint})
+  $txtEdit.Add_KeyUp({Write-CursorPoint})
+  $txtEdit.Add_TextChanged({Write-CursorPoint})
+  #
+  #gboMake
+  #
+  $gboMake.Controls.AddRange(@($lblLab1, $cboPlat, $chkExec, $chkWApp, $chkIDbg, `
+    $chkIMem, $lblLab2, $txtIOut, $lblLab3, $lboRefs))
+  $gboMake.Dock = &quot;Fill&quot;
+  $gboMake.Text = &quot;Building Parameters&quot;
+  #
+  #lblLab1
+  #
+  $lblLab1.Location = New-Object Drawing.Point(21, 33)
+  $lblLab1.Text = &quot;Platform:&quot;
+  $lblLab1.Width = 50
+  #
+  #cboPlat
+  #
+  $cboPlat.Anchor = &quot;Left, Top, Right&quot;
+  $cboPlat.Items.AddRange(@(&quot;.NET Framework 2.0&quot;, &quot;.NET Framework 3.5&quot;))
+  $cboPlat.Location = New-Object Drawing.Point(71, 30)
+  $cboPlat.SelectedItem = &quot;.NET Framework 2.0&quot;
+  $cboPlat.Width = 180
+  $cboPlat.Add_SelectedIndexChanged($cboPlat_SelectedIndexChanged)
+  #
+  #chkExec
+  #
+  $chkExec.Checked = $true
+  $chkExec.Location = New-Object Drawing.Point(23, 63)
+  $chkExec.Text = &quot;Create Executable&quot;
+  $chkExec.Width = 120
+  $chkExec.Add_Click($chkExec_Click)
+  #
+  #chkWApp
+  #
+  $chkWApp.Location = New-Object Drawing.Point(43, 83)
+  $chkWApp.Text = &quot;Windows Application&quot;
+  $chkWApp.Width = 130
+  $chkWApp.Add_Click($chkWApp_Click)
+  #
+  #chkIDbg
+  #
+  $chkIDbg.Checked = $true
+  $chkIDbg.Location = New-Object Drawing.Point(23, 103)
+  $chkIDbg.Text = &quot;Include Debug Information&quot;
+  $chkIDbg.Width = 157
+  #
+  #chkIMem
+  #
+  $chkIMem.Enabled = $false
+  $chkIMem.Location = New-Object Drawing.Point(23, 123)
+  $chkIMem.Text = &quot;Building In Memory&quot;
+  $chkIMem.Width = 130
+  #
+  #lblLab2
+  #
+  $lblLab2.Location = New-Object Drawing.Point(23, 163)
+  $lblLab2.Text = &quot;Output:&quot;
+  $lblLab2.Width = 45
+  #
+  #txtIOut
+  #
+  $txtIOut.Anchor = &quot;Left, Top, Right&quot;
+  $txtIOut.Location = New-Object Drawing.Point(71, 160)
+  $txtIOut.Width = 180
+  #
+  #lblLab3
+  #
+  $lblLab3.Location = New-Object Drawing.Point(23, 203)
+  $lblLab3.Size = New-Object Drawing.Size(70, 17)
+  $lblLab3.Text = &quot;References:&quot;
+  #
+  #lboRefs
+  #
+  $lboRefs.Anchor = &quot;Left, Top, Right, Bottom&quot;
+  $lboRefs.ContextMenu = $mnuRefs
+  $lboRefs.Location = New-Object Drawing.Point(23, 223)
+  $lboRefs.SelectionMode = &quot;One&quot;
+  $lboRefs.Size = New-Object Drawing.Size(229, 157)
+  #
+  #sbPanle
+  #
+  $sbPanel.Panels.AddRange(@($sbPnl_1, $sbPnl_2))
+  $sbPanel.ShowPanels = $true
+  $sbPanel.SizingGrip = $false
+  #
+  #sbPnl_1
+  #
+  $sbPnl_1.AutoSize = &quot;Spring&quot;
+  #
+  #sbPnl_2
+  #
+  $sbPnl_2.Alignment = &quot;Center&quot;
+  $sbPnl_2.AutoSize = &quot;Contents&quot;
+  #
+  #imgList
+  #
+  $i_1, $i_2, $i_3, $i_4, $i_5, $i_6, $i_7, $i_8 | % { $imgList.Images.Add((Get-Image $_)) }
+  #
+  #mnuRefs
+  #
+  $mnuRefs.MenuItems.AddRange(@($mnuIMov, $mnuICnM, $mnuIBuf, $mnuIIns))
+  #
+  #mnuIMov
+  #
+  $mnuIMov.Shortcut = &quot;Del&quot;
+  $mnuIMov.Text = &quot;Remove Item&quot;
+  $mnuIMov.Add_Click({$lboRefs.Items.Remove($lboRefs.SelectedItem)})
+  #
+  #mnuICnM
+  #
+  $mnuICnM.Shortcut = &quot;CtrlM&quot;
+  $mnuICnM.Text = &quot;Copy And Remove&quot;
+  $mnuICnM.Add_Click($mnuICnM_Click)
+  #
+  #mnuIBuf
+  #
+  $mnuIBuf.Text = &quot;Insert Copied...&quot;
+  $mnuIBuf.Add_Click({if ($script:buff -ne $null) {$lboRefs.Items.Add($script:buff)}})
+  #
+  #mnuIIns
+  #
+  $mnuIIns.Shortcut = &quot;CtrlR&quot;
+  $mnuIIns.Text = &quot;Add Reference&quot;
+  $mnuIIns.Add_Click($mnuIIns_Click)
+  #
+  #frmMain
+  #
+  $frmMain.ClientSize = New-Object Drawing.Size(790, 550)
+  $frmMain.Controls.AddRange(@($tbTools, $scSplt1, $sbPanel))
+  $frmMain.FormBorderStyle = &quot;FixedSingle&quot;
+  $frmMain.Icon = $ico
+  $frmMain.Menu = $mnuMain
+  $frmMain.StartPosition = &quot;CenterScreen&quot;
+  $frmMain.Text = &quot;Snippet Compiler&quot;
+  $frmMain.Add_Load($frmMain_Load)
+
+  [void]$frmMain.ShowDialog()
+}
+
+##################################################################################################
+
+function frmInfo_Show {
+  $frmInfo = New-Object Windows.Forms.Form
+  $pbImage = New-Object Windows.Forms.PictureBox
+  $lblName = New-Object Windows.Forms.Label
+  $lblCopy = New-Object Windows.Forms.Label
+  $btnExit = New-Object Windows.Forms.Button
+  #
+  #pbImage
+  #
+  $pbImage.Location = New-Object Drawing.Point(16, 16)
+  $pbImage.Size = New-Object Drawing.Size(32, 32)
+  $pbImage.SizeMode = &quot;StretchImage&quot;
+  #
+  #lblName
+  #
+  $lblName.Font = New-Object Drawing.Font(&quot;Microsoft Sans Serif&quot;, 8, [Drawing.FontStyle]::Bold)
+  $lblName.Location = New-Object Drawing.Point(53, 19)
+  $lblName.Size = New-Object Drawing.Size(360, 18)
+  $lblName.Text = &quot;Snippet Compiler v2.53&quot;
+  #
+  #lblCopy
+  #
+  $lblCopy.Location = New-Object Drawing.Point(67, 37)
+  $lblCopy.Size = New-Object Drawing.Size(360, 23)
+  $lblCopy.Text = &quot;(C) 2012-2013 greg zakharov gregzakh@gmail.com&quot;
+  #
+  #btnExit
+  #
+  $btnExit.Location = New-Object Drawing.Point(135, 67)
+  $btnExit.Text = &quot;OK&quot;
+  #
+  #frmInfo
+  #
+  $frmInfo.AcceptButton = $btnExit
+  $frmInfo.CancelButton = $btnExit
+  $frmInfo.ClientSize = New-Object Drawing.Size(350, 110)
+  $frmInfo.ControlBox = $false
+  $frmInfo.Controls.AddRange(@($pbImage, $lblName, $lblCopy, $btnExit))
+  $frmInfo.ShowInTaskBar = $false
+  $frmInfo.StartPosition = &quot;CenterScreen&quot;
+  $frmInfo.Text = &quot;About...&quot;
+  $frmInfo.Add_Load({$pbImage.Image = $ico.ToBitmap()})
+
+  [void]$frmInfo.ShowDialog()
+}
+
+##################################################################################################
+
+function Invoke-Atom {
+  if ($txtEdit.Text -ne &quot;&quot;) {
+    $res = [Windows.Forms.MessageBox]::Show(&quot;Do you want to save data before?&quot;, `
+                 $frmMain.Text, [Windows.Forms.MessageBoxButtons]::YesNoCancel, `
+                                        [Windows.Forms.MessageBoxIcon]::Question)
+
+    switch ($res) {
+      'Yes'    {
+        (New-Object Windows.Forms.SaveFileDialog) | % {
+          $_.FileName = &quot;source&quot;
+          $_.Filter = &quot;C# (*.cs)|*.cs&quot;
+          $_.InitialDirectory = $def
+
+          if ($_.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+            Out-File $_.FileName -enc UTF8 -input $txtEdit.Text
+          }
+        }
+        break
+      }
+      'No'     { $txtEdit.Clear(); break }
+      'Cancel' { return }
+    }
+  }#if
+}
+
+function Set-Opacity($obj) {
+  $cur.Checked = $false
+  $frmMain.Opacity = [float]('.' + $($obj.Text)[0])
+  $obj.Checked = $true
+}
+
+function Show-Panel($obj1, $obj2) {
+  switch ($obj1.Checked) {
+    $true  {$obj1.Checked = $false; $obj2.Panel2Collapsed = $true; break }
+    $false {$obj1.Checked = $true; $obj2.Panel2Collapsed = $false; break }
+  }
+}
+
+function Get-CursorPoint {
+  $z = $txtEdit.SelectionStart
+  $y = $txtEdit.GetLineFromCharIndex($z) + 1
+  $x = $z - $txtEdit.GetFirstCharIndexOfCurrentLine()
+
+  return (New-Object Drawing.Point($x, $y))
+}
+
+function Write-CursorPoint {
+  $sbPnl_2.Text = 'Str: ' + (Get-CursorPoint).Y.ToString() + ', Col: ' + `
+                                            (Get-CursorPoint).X.ToString()
+}
+
+function Invoke-Builder {
+  $lstView.Items.Clear()
+
+  if ($txtEdit.Text -ne &quot;&quot;) {
+    switch ($cboPlat.SelectedIndex) {
+      &quot;0&quot; { $cscp = New-Object Microsoft.CSharp.CSharpCodeProvider; break }
+      &quot;1&quot; { $cscp = New-Object Microsoft.CSharp.CSharpCodeProvider($dict); break}
+    }
+
+    $cdcp.GenerateExecutable = $chkExec.Checked
+
+    if ($chkWApp.Checked) { $cdcp.CompilerOptions = &quot;/t:winexe&quot; }
+
+    $cdcp.IncludeDebugInformation = $chkIDbg.Checked
+    $cdcp.GenerateInMemory = $chkIMem.Checked
+
+    if ($lboRefs.Items.Count -ne 0) {
+      for ($i = 0; $i -lt $lboRefs.Items.Count; $i++) {
+        $cdcp.ReferencedAssemblies.Add($lboRefs.Items[$i].ToString())
+      }
+    }
+
+    $cdcp.WarningLevel = 3
+    $cdcp.OutputAssembly = $txtIOut.Text
+
+    $script:make = $cscp.CompileAssemblyFromSource($cdcp, $txtEdit.Text)
+    $make.Errors | % {
+      if ($_.Line -ne 0 -and $_.Column -ne 0) {
+        $err = $_.Line.ToString() + ', ' + ($_.Column - 1).ToString()
+      }
+      elseif ($_.Line -ne 0 -and $_.Column -eq 0) {
+        $err = $_.Line.ToString() + ', 0'
+      }
+      elseif ($_.Line -eq 0 -and $_.Column -eq 0) {
+        $err = '*'
+      }
+
+      if (!($_.IsWarning)) {
+        $lstView.ForeColor = [Drawing.Color]::Crimson
+        $itm = $lstView.Items.Add($err, 6)
+      }
+      else {
+        $lstView.ForeColor = [Drawing.Color]::Gray
+        $itm = $lstView.Items.Add($err, 7)
+      }
+
+      $itm.SubItems.Add($_.ErrorNumber)
+      $itm.SubItems.Add($_.ErrorText)
+    }
+  }#if
+}
+
+function Start-AfterBuilding {
+  Invoke-Builder
+  if ($script:make.Errors.Count -eq 0) { Invoke-Item $txtIOut.Text }
+}
+
+function Get-Image($img) {
+  [Drawing.Image]::FromStream((New-Object IO.MemoryStream(($$ = `
+              [Convert]::FromBase64String($img)), 0, $$.Length)))
+}
+
+##################################################################################################
+
+#
+#do not modify or remove this because these are images for toolbar and lower panel
+#
+$i_1 = &quot;iVBORw0KGgoAAAANSUhEUgAAAA8AAAARCAIAAACNaGH2AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAA&quot; + `
+       &quot;AAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAVFJREFUOE91kTGOgzAQRc2ZOA&quot; + `
+       &quot;s9lU+Uxj1lak7hMtJKVCjalSIZkpiEVbSN980Y2GijjEaDgTff3+PiNs/GmJQKKk+txuhboR9TsX7kCd22rXP&quot; + `
+       &quot;eeU/d7/eydr5pGuput6NO8yx5n810/4Z7vMT1kUjrCJod9G2h3XvaOp8ScqW1St8iTt5qW1dVVV3XpXXxHoVm&quot; + `
+       &quot;r3+0ejCDhveiTYPQcYqcbKN/wof+ddCkXyLhJE5XodFGjAaffIaeE21aVjqODCvTWYzd+75nXcqroATu4zSaG&quot; + `
+       &quot;Ee0IWjw3mbHzEE75UtusJwS+hIHxgkkB1KIPBwOyHddt/aIk8s1LDQc9KtpvWIJJij0+XzievOkqHi11ujdO7&quot; + `
+       &quot;Q336J9PgnNfW2j5ffz4NYJim+hx/EL7U0Dx8veG7hOcBw+heaU2GIvar7kvNYqiTATFDqE418Ox6A55AySz8A&quot; + `
+       &quot;v1EEhBG84RKcAAAAASUVORK5CYII=&quot;
+
+$i_2 = &quot;iVBORw0KGgoAAAANSUhEUgAAABIAAAARCAIAAABfOGuuAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAA&quot; + `
+       &quot;AAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAOVJREFUOE+VkUEOgyAQRfFMnM&quot; + `
+       &quot;NrzJ3Yu3TtKTiEaVOTFgICXXQ3nQG1xjapkOEzII8vQ5OeSQiB1IVoysBZGZY5Yp4vi7QNBWFKoVJ6U8g5Kaw&quot; + `
+       &quot;qQUuFrMCaUlwxjeoQfBbBHFtCZxEWV0wDMd8mbMj71iiGGYvRE/A63SRAiI6xYRiIwnNNyoxRL27nKPpPCCFj&quot; + `
+       &quot;1W6MzabOTcIcDGN93+dX+h9aa7obY94/6iopwfs7Y13XVZRkwdxUdzcA527Cu6nWjTFrr3VuEqy9MEZuVB96R&quot; + `
+       &quot;9ZfSdu2n3XImDHjFtaM+9h/OuRvranSBDuoeeYAAAAASUVORK5CYII=&quot;
+
+$i_3 = &quot;iVBORw0KGgoAAAANSUhEUgAAABIAAAAQCAIAAACUZLgLAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAA&quot; + `
+       &quot;AAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAWJJREFUOE+FkTFywjAQRcUROI&quot; + `
+       &quot;sqWnpKeirVHIFD0OwdqDnFnsANZiZFEguwncad8tYCm2Bmovksa3nffq08a38aN13psTXLyeM5/7MJ9kdtoyK&quot; + `
+       &quot;qBFbY7/fE3W4nIRyPR1EJGsxpiqUk2+02pWDSe1QNEjwtIA1r2muvS1ZZljQGoGJgLFGP2PTiKTPMOgiFmg9H&quot; + `
+       &quot;UWYWi0UPBFWv4pO4EaubyCyiSTUxTeL0wXOkzWaD53K5BOjlcPJIPIjjhw8M09MYhi5E8tVqxcG8d/P5nLher&quot; + `
+       &quot;/vXhri6/sKk67oYIzdBJKcNRZgAYEtBXX8iEh8MGTGqn9fhcOBURVHQCNuMAWS52816vDA81l0C0GQz40zZs0&quot; + `
+       &quot;bMvqYoQE6Yl0gO7EN4xa7Xj6lbtjI3bjglDkmZ6XKXG7DBLZsMhpBvsBjPb93G2Xq3SzyjGEtTdXZg3DsvmJv&quot; + `
+       &quot;4nOTHvF6xqjr9r+9TlfUo/gXNq15sSG6qYQAAAABJRU5ErkJggg==&quot;
+
+$i_4 = &quot;iVBORw0KGgoAAAANSUhEUgAAABQAAAARCAIAAABSJhvpAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAA&quot; + `
+       &quot;AAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAARRJREFUOE9tklFuxCAMROH+J9&quot; + `
+       &quot;jTNU1VabUQAmT/qc3AwNJYoyQEPzwYbH5fthRTo1iLN4a26LD0oYyRhFkNga8rQ/JdlR8PUzSMfEA1M6kkrUt&quot; + `
+       &quot;+yaDRzKuw8sDmGJWuPGBWa1uoldXmPwvNpsL5zDmIWA01p2ezQF8pB2jAUmR2C8NYAlMIkgqndMQURFgY+8ST&quot; + `
+       &quot;/LLtqMghYINnz51p3eIW2PkBx+hifLFb7DDOic7nY0vpJRLKANavGkhiKrq92B7weT6p5WB6WWXZsI98Dmbny&quot; + `
+       &quot;zktV20UC+H3rGLP6B+GedXYf0EgQ1j4eW+8WMuGSSrs/c/h90W3Bb3fq7679ntY1loKyp8b2LltkXfbrGn2y7&quot; + `
+       &quot;lZ2x9XMW8UGH69+AAAAABJRU5ErkJggg==&quot;
+
+$i_5 = &quot;iVBORw0KGgoAAAANSUhEUgAAABIAAAAQCAIAAACUZLgLAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAA&quot; + `
+       &quot;AAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAhNJREFUOE9jfPPyBgMZAKgNju&quot; + `
+       &quot;o2nlWtXqVVtQpOAhnIKGDqbohiBmQ9fXuv77rzbsOdtxC08dY7NLTu0tvgaXtQtOk3rQcq7Tv5BEheePFx4rm&quot; + `
+       &quot;X7SefQ1DrcRC7+9TLxVdfuEzdiaIN6IAZpx/V7r0F1Pbr77/7H382HH9eeugpEBXvA6GmA89699/OX3ISRVve&quot; + `
+       &quot;irNAPambrhXvubPzwXugznOvvmYffJq0/SEQxa+/V7ntYeHasyh+q1x3unLzhYTV53wWnw1afSVpx929jz8Bd&quot; + `
+       &quot;a66+8Fu8W3TKZd0u85FzbvqO20fijagC4Ha3OccNZ9+zGTOOasll6P2PHjx9fenn39MZ1xTaTqjUnEideYls9&quot; + `
+       &quot;aNKNqAoQx0pFbHTo2+Q0BtufsfPv3yC+i92A13gfYA9egWHMxfchFdm23Xlri5B4DarOadAAYX0HnAgHFdegP&quot; + `
+       &quot;oPL3mM5oVx8zKjhStuARUg2Jb1Kx9QTP3WE/bBwx6oMMaD98LX3sdEmnAuAIit8ZjQOd0br+I0Na27ULB4iPu&quot; + `
+       &quot;E7YA42T5hYdBi0+Y9O/3n3fmwL13Jx992nH9HRAFdZ0On30YnjZAqQRodeXyg5b1yzTKFwERMHEBkXbtLuPmg&quot; + `
+       &quot;0BkUHkE6DFgeAA9gqINmF6m7blQtfJQ/sL9+YsPAW0GxikYXYSg0mVXJ+6+DQw2FG1ADlAnWqpF40KSIro2ZC&quot; + `
+       &quot;Fi2ACR3EDpQ7cspgAAAABJRU5ErkJggg==&quot;
+
+$i_6 = &quot;iVBORw0KGgoAAAANSUhEUgAAAA8AAAANCAIAAAD5fKMWAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAA&quot; + `
+       &quot;AAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAJxJREFUKFONjEEOwyAMBMn/P5&quot; + `
+       &quot;lD1FSCENt5QLpgcA1tpaI52LtjFrk42LvvMi59r9uwwn4jJOAqwAS2llAoMCegHUsq9LWFVVAG22odADm12hS&quot; + `
+       &quot;JGyb1s8ioICgcBxudP8A620RPz/T91IZPG4m/8UI4z92AVOcH8AeaoPppfzvYQ86bgs/ysQ3U0ED1l91+hJ3i&quot; + `
+       &quot;mlLjiCsoidJzG15Z2J4gUYDWoQAAAABJRU5ErkJggg==&quot;
+
+$i_7 = &quot;iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAA&quot; + `
+       &quot;AAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAsZJREFUOE9FkmtIk1EYx9/nvH&quot; + `
+       &quot;u3V+dUyltIIaI5DAsiyy5SlphmCprpirnp8MWaoEikXwzayrQgzTLtQ0hN0UIssyQv1AcnQnMaXlIzTDOsvG7&quot; + `
+       &quot;OnG7qTmdq+vBwLpzf/znP4fwBY0z9D6O+k6qpdlha5lOwsri4zDI2eSqz/4DQyWmLoYiAhNlg+JsQjzkOFxXh&quot; + `
+       &quot;ykpcUYELCnBGBo6Onj1xfH5iYgOzV9+gLafDcGoqVqlwYSHOzcUKBU5JsWd8PA4NnQvY211fty2Yi47CERE2i&quot; + `
+       &quot;eRDerotONjm7W1xdV11d1/192+NicFBQSaxWO/jM/Fz3H7DtE5nDgzEISHNKtXIzExTVtYUwC+A3wBPpFL96K&quot; + `
+       &quot;g2O9vg5TXg6VkadtIuGEpKMPj62vz8Rjhu1mIxLi015+aOATy7cvWP0UiIaaXyh0jU6eKicXXt7+ulevcFjnl&quot; + `
+       &quot;4kBqTLNsnkxms1sWVlX6t1mQ2E3qc477weH1CYZujY4ODw7VMJdW+c0ePs/N3F5dhgaAfoFuWvGyzEXQN428K&quot; + `
+       &quot;hQ5AzzA6gaCVz28QCKRxsVSrl6eWZT+zbA+f3wVQl5NjXSMwJqI2tbodoJ2mP/J4r2i6imEuno+img4famSYN&quot; + `
+       &quot;ob5hFCJXD41P0/oSY1mBeMFq/VldnYLQANCGoTu03RSQhzVVVJcw+O9BXisVE6uv7KP494BdHCcaXXVZLHU5+&quot; + `
+       &quot;VVkVOaTqbp/PyblMlorBYKNQCNEgmp2p2W9hrgDUJkbJHLib41MfEBwD2EgtzchgYH7D/dUV5WjlAZQK1Y/By&quot; + `
+       &quot;gmiRClQBPAaoCAu4C5CMUSdPy5Eub1iDTe7W6mHQJUAJQShoAeAhAtvkAKoBYhI4dPTK/3vCm+ciq/lHJDZHo&quot; + `
+       &quot;DkK3AW6tcyQzETrIspFnw41Gw7aXtpw4/HXwuuyyNFB8YZfXOU+PkD27w8+cqq19sbBg2mL+AY/qjcgixtNMA&quot; + `
+       &quot;AAAAElFTkSuQmCC&quot;
+
+$i_8 = &quot;iVBORw0KGgoAAAANSUhEUgAAAA8AAAAPCAIAAAC0tAIdAAAABGdBTUEAALGPC/xhBQAAAglJREFUKFN1jktoE&quot; + `
+       &quot;1EUhufMTCbJNNNFS01xZ9GFCCIYhBYUF1XR7nygSxvRVSS6kbQoEoklYggUiuJj300NkRpsXdqNZhHRpp1ETW&quot; + `
+       &quot;LSdJJ08piZmFGbx3EmDdoUvfxc/vvf/3wcArtPsXir2bBUq+bZ2Vc7vrQnsT1S1ZKYB0Rbq8F5vSM8n9wx0NU&quot; + `
+       &quot;uCK6axCCy2ByURMbhmPlvW1XLxQy5keu96aAWFqxYZ+65j6XT69sH/rILmQlVNLjdrBn2HRiyYbO/+M3k8wX+&quot; + `
+       &quot;0VZrlQ2exp/c00cMRx4ZGz6E2NeSmTuu0UpF+TPQYeeTt6spAypsOgZDg+efePejQuMPq7DM+v3BrrZak3IRQ&quot; + `
+       &quot;73QgwKJMowcvLwU6kcBUB1orFOuGyclqYPX2YWEW4pSKFowDViGC2eGy3FK9zlTq9SXCfdMT7/cwhP6xmFjY4&quot; + `
+       &quot;3DFI0JwAyEnlkxC7r/Cvh9dzNJTzpPyW08kefvKhEasxzGAD+DEqPck8Z3QbNejQOmTCjuyi6x/jaeyL811WM&quot; + `
+       &quot;s8hSuAPLwYIKxGPeeOHwa10BPooD5gUaUctrHZFkhsm/gV4Ta/EBqqn8kl+eNo7aj4cDVehQ64Se69p5afL5n&quot; + `
+       &quot;5vFr4st878ocuToHW4oHQFiERBBWX3QSLcyESNe142fPTRGKrDiv++zjnivj93XZNeNp35pvJ7o8Fy89LJWk3&quot; + `
+       &quot;9PM0i5eafwSAAAAAElFTkSuQmCC&quot;
+
+##################################################################################################
+
+frmMain_Show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="glnsize">
+    <title>Import-Asup - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Import-Asup</h1>
+<h3><a href="//scripts/1651.ps1">download</a></h3>
+<p>import a NetApp auto support into a PSObject</p>
+<pre><code class="language-posh">Function Import-ASUP 
+{
+    param(
+        [string]
+        $Path
+    )
+    Begin {
+        Function ConvertTo-Bool($bool) {
+            switch ($bool) {
+                &quot;yes&quot;      {return $true}
+                &quot;true&quot;     {return $true}
+                &quot;enabled&quot;  {return $true}
+                &quot;no&quot;       {return $False}
+                &quot;false&quot;    {return $False}
+                &quot;disabled&quot; {return $False}
+            }
+        }
+    }
+    Process {
+        $asup = Get-Content $Path
+        $Storage = New-Object PSObject -Property @{SysInfo=@{};HostAdapters=@{};Disks=@();Shelves=@();SES=@{}}
+        $process = 0 
+        $subprocess=0
+        $AggrHold = @{}
+        Foreach ($line in $asup) {
+            switch -regex ($line) 
+            {
+                &quot;=====&quot; 
+                {
+                    $Process = 0
+                }
+                &quot;===== SYSCONFIG-A =====&quot; 
+                {
+                    $process = 1 
+                    $subprocess = 0
+                }
+                &quot;===== ENVIRONMENT =====&quot;
+                {
+                    $process = 2 
+                    $subprocess = 0
+                }
+                &quot;===== SYSCONFIG-R =====&quot; 
+                {
+                    $process = 3 
+                    $subprocess = 0
+                }
+                &quot;===== STORAGE =====&quot;
+                {
+                    $process = 4 
+                    $subprocess = 0
+                }            
+            }
+            switch ($process) 
+            {
+                1
+                {
+                    switch -regex ($Line)
+                    {
+                        &quot;\s+System\sID\:\s(?&lt;SystemID&gt;\S+)\s\((?&lt;SystemName&gt;\S+)\)\;\spartner\sID\:\s(?&lt;PartnerID&gt;\S+)\s\((?&lt;PartnerName&gt;\S+)\)&quot;
+                        {
+                            $Storage.SysInfo.Add(&quot;SystemID&quot;,$Matches.SystemID)
+                            $Storage.SysInfo.Add(&quot;SystemName&quot;,$Matches.SystemName)
+                            $Storage.SysInfo.Add(&quot;PartnerID&quot;,$Matches.PartnerID)
+                            $Storage.SysInfo.Add(&quot;PartnerName&quot;,$Matches.PartnerName)
+                        }
+                        &quot;\s+System\sSerial\sNumber\:\s(?&lt;SN&gt;\S+)&quot;
+                        {
+                            $Storage.SysInfo.Add(&quot;SerialNumber&quot;,$Matches.SN)
+                        }
+                        &quot;\s+System\sRev\:\s(?&lt;Rev&gt;\S+)&quot;
+                        {
+                            $Storage.SysInfo.Add(&quot;Rev&quot;,$Matches.Rev)
+                        }
+                        &quot;\s+System\sStorage\sConfiguration\:\s(?&lt;config&gt;.+)&quot;
+                        {
+                            $Storage.SysInfo.Add(&quot;StorageConfiguration&quot;,$Matches.config)
+                        }
+                        &quot;System\sACP\sConnectivity\:\s(?&lt;ACP&gt;.+)&quot;
+                        {
+                            $Storage.SysInfo.Add(&quot;ACP&quot;,$Matches.ACP)
+                        }
+                        &quot;slot\s0\:\sSystem\sBoard\s(?&lt;board&gt;.+)&quot;
+                        {
+                            $subProcess=1
+                            $Slot = New-Object PSObject -Property @{
+                                &quot;Board&quot;=$Matches.board
+                                &quot;ModelName&quot;=&quot;&quot;
+                                &quot;PartNumber&quot;=&quot;&quot;
+                                &quot;Revision&quot;=&quot;&quot;
+                                &quot;SerialNumber&quot;=&quot;&quot;
+                                &quot;BIOSversion&quot;=&quot;&quot;
+                                &quot;LoaderVersion&quot;=&quot;&quot;
+                                &quot;AgentFWversion&quot;=&quot;&quot;
+                                &quot;Processors&quot;=&quot;&quot;
+                                &quot;ProcessorID&quot;=&quot;&quot;
+                                &quot;MicrocodeVersion&quot;=&quot;&quot;
+                                &quot;MemorySize&quot;=&quot;&quot;
+                                &quot;CMOSRAMStatus&quot;=&quot;&quot;
+                                &quot;Controller&quot;=&quot;&quot;
+                            }
+                        }
+                    }
+                    switch ($subProcess) 
+                    {
+                        1
+                        {
+                            switch -regex ($Line)
+                            {
+                                &quot;\s+Model\sName\:\s+(?&lt;Model&gt;.+)&quot;
+                                {
+                                    $Slot.ModelName = $Matches.Model
+                                }
+                                &quot;\s+Part\sNumber\:\s+(?&lt;Part&gt;.+)&quot;
+                                {
+                                    $Slot.PartNumber = $Matches.Part
+                                }
+                                &quot;\s+Revision\:\s+(?&lt;REV&gt;.+)&quot;
+                                {
+                                    $Slot.Revision = $Matches.REV
+                                }
+                                &quot;\s+Serial\sNumber\:\s+(?&lt;SN&gt;.+)&quot;
+                                {
+                                    $Slot.SerialNumber = $Matches.SN
+                                }
+                                &quot;\s+BIOS\sversion\:\s+(?&lt;BIOS&gt;.+)&quot;
+                                {
+                                    $Slot.BIOSversion = $Matches.BIOS
+                                }
+                                &quot;\s+Loader\sversion\:\s+(?&lt;LV&gt;.+)&quot;
+                                {
+                                    $Slot.LoaderVersion = $Matches.LV
+                                }
+                                &quot;\s+Agent\sFW\sversion\:\s+(?&lt;FW&gt;.+)&quot;
+                                {
+                                    $Slot.AgentFWversion = $Matches.FW
+                                }
+                                &quot;\s+Processors\:\s+(?&lt;proc&gt;.+)&quot;
+                                {
+                                    $Slot.Processors = $Matches.proc
+                                }
+                                &quot;\s+Processor\sID\:\s+(?&lt;procID&gt;.+)&quot;
+                                {
+                                    $Slot.ProcessorID = $matches.procId
+                                }
+                                &quot;\s+Microcode\sVersion\:\s+(?&lt;microcode&gt;.+)&quot;
+                                {
+                                    $Slot.MicrocodeVersion = $Matches.microcode
+                                }
+                                &quot;\s+Memory\sSize\:\s+(?&lt;memory&gt;.+)&quot;
+                                {
+                                    $Slot.MemorySize = $Matches.memory
+                                }
+                                &quot;\s+CMOS\sRAM\sStatus\:\s+(?&lt;CMOS&gt;.+)&quot;
+                                {
+                                    $Slot.CMOSRAMStatus = $Matches.CMOS
+                                }
+                                &quot;\s+Controller\:\s+(?&lt;Controller&gt;.+)&quot;
+                                {
+                                    $Slot.Controller = $Matches.Controller
+                                    $Storage.SysInfo.Add(&quot;SystemBoard&quot;,$slot)
+                                    $subprocess = 0
+                                }
+                                
+                            }
+                        }
+                    }
+                }
+                2
+                {
+                    switch -regex ($Line)
+                    {
+                        &quot;^Channel\:\s+(?&lt;Channel&gt;\d\w)\sShelf\:\s+(?&lt;Shelf&gt;\d)\sShelf\sSerial\sNumber:\s+(?&lt;ShelfSN&gt;.+)&quot;
+                        {
+                            $Shelf = New-Object PSObject -Property @{
+                                &quot;Channel&quot;=$Matches.Channel
+                                &quot;Shelf&quot;=$Matches.Shelf
+                                &quot;SerialNumber&quot;=$Matches.ShelfSN
+                                &quot;ShelfVendor&quot;=&quot;&quot;
+                                &quot;ShelfModel&quot;=&quot;&quot;
+                                &quot;ShelfRevisionLevel&quot;=&quot;&quot;
+                                &quot;ModelName&quot;=&quot;&quot;
+                                &quot;ModuleASerialNumber&quot;=&quot;&quot;
+                                &quot;ModuleAFirmware&quot;=&quot;&quot;
+                                &quot;ModuleBSerialNumber&quot;=&quot;&quot;
+                                &quot;ModuleBFirmware&quot;=&quot;&quot;
+                                &quot;LocalAcessID&quot;=&quot;&quot;
+                            }
+                        }
+                        &quot;^Shelf\sproduct\sid\:\s(?&lt;model&gt;.+)&quot;
+                        {
+                            $Shelf.ModelName = $Matches.model
+                        }
+                        &quot;Module\sA\sSerial\sNumber\:\s(?&lt;SN&gt;\S+)\s+Firmware\srev\:\s(?&lt;Rev&gt;\S+)&quot;
+                        {
+                            $Shelf.ModuleASerialNumber = $Matches.SN
+                            $Shelf.ModuleAFirmware = $Matches.Rev
+                        }
+                        &quot;Module\sB\sSerial\sNumber\:\s(?&lt;SN&gt;\S+)\s+Firmware\srev\:\s(?&lt;Rev&gt;\S+)&quot;
+                        {
+                            $Shelf.ModuleBSerialNumber = $Matches.SN
+                            $Shelf.ModuleBFirmware = $Matches.Rev
+                            if (!$Storage.SES.Contains($Shelf.Channel)) 
+                            {
+                                $Storage.SES.Add($Shelf.Channel,@{})
+                            }
+                            ($Storage.SES[$Shelf.Channel]).add($shelf.Shelf, $shelf)
+                        }
+                        &quot;\s+Channel\:\s+(?&lt;channel&gt;\d\w)&quot;
+                        {
+                            $_channel = $matches.channel
+                        }
+                        &quot;\s+shelf\:\s+(?&lt;channel&gt;\d)$&quot;
+                        {
+                            $_Shelf = $matches.channel
+                            $subprocess = 1
+                        }
+                    }
+                    switch ($subProcess) 
+                    {
+                        1
+                        {
+                            switch -regex ($Line)
+                            {
+                                &quot;local\saccess\:\s(?&lt;Port&gt;\d\w\.\d{2,3})$&quot;
+                                {
+                                    $Storage.SES[$_channel][$_Shelf].LocalAcessID = $Matches.Port
+                                }
+                                &quot;^\s+Module\stype\:\s(?&lt;Module&gt;\S+)\;&quot;
+                                {
+                                    $Storage.SES[$_channel][$_Shelf].ModelName = $Matches.Module
+                                }
+                                &quot;SES\sConfiguration&quot;
+                                {
+                                    $subProcess = 2
+                                }
+                            }
+                        }
+                        2
+                        {
+                            switch -regex ($Line)
+                            {
+                                &quot;\s+vendor\sidentification\=(?&lt;Vendor&gt;.+)&quot;
+                                {
+                                    $Storage.SES[$_channel][$_Shelf].ShelfVendor=$Matches.Vendor
+                                }
+                                &quot;\s+product\sidentification\=(?&lt;ShelfModel&gt;.+)&quot;
+                                {
+                                    $Storage.SES[$_channel][$_Shelf].ShelfModel = $Matches.ShelfModel
+                                }
+                                &quot;\s+product\srevision\slevel\=(?&lt;ShelfRevisionLevel&gt;.+)&quot;
+                                {
+                                    $Storage.SES[$_channel][$_Shelf].ShelfRevisionLevel = $Matches.ShelfRevisionLevel
+                                    $subprocess = 0
+                                }
+                            }
+                        }
+                    }
+                }
+                3 
+                {
+                    Switch -regex ($line) 
+                    {
+                        &quot;^Aggregate\s(?&lt;aggr&gt;\S+)\s&quot;
+                        {
+                            $subprocess =1
+                            $aggr=$matches.aggr
+                        }
+                        &quot;^Spare\sdisks$|^Partner\sdisks$&quot;
+                        {
+                            $subprocess =1
+                            $aggr=$null
+                        }
+                    }
+                    switch -regex ($line)
+                    {
+                        &quot;^\s{6}(?&lt;R&gt;\S+)\s+(?&lt;D&gt;\S+)(\s+\S+){5}\s+(?&lt;T&gt;\S+)\s+\S+\s+(?&lt;UMB&gt;\d+)\/(?&lt;UB&gt;\d+)\s+(?&lt;PMB&gt;\d+)\/(?&lt;PB&gt;\d+)&quot;
+                        {
+                            $aggrHold.Add($Matches.D, @{
+                                Aggregate=$aggr
+                                RaidType=$Matches.R
+                                DiskType=$Matches.T
+                                UsedMB=$Matches.UMB
+                                UsedBlocks=$Matches.UB
+                                PhysicalMB=$Matches.PMB
+                                PhysicalBlocks=$Matches.PB
+                            })
+                        }
+                        &quot;^(?&lt;R&gt;\S+)\s+(?&lt;D&gt;\S+)(\s+\S+){5}\s+(?&lt;T&gt;\S+)\s+\S+\s+(?&lt;UMB&gt;\d+)\/(?&lt;UB&gt;\d+)\s+(?&lt;PMB&gt;\d+)\/(?&lt;PB&gt;\d+)&quot;
+                        {
+                            $aggrHold.Add($Matches.D, @{
+                                Aggregate=&quot;&quot;
+                                RaidType=$Matches.R
+                                DiskType=$Matches.T
+                                UsedMB=$Matches.UMB
+                                UsedBlocks=$Matches.UB
+                                PhysicalMB=$Matches.PMB
+                                PhysicalBlocks=$Matches.PB
+                            })
+                        }
+                        
+                    }
+                }
+                4 
+                {
+                    switch -regex ($line) 
+                    {
+                        &quot;^Slot\:\s+(?&lt;slot&gt;\d\w)$&quot; 
+                        { 
+                            $subprocess = 1
+                            $Adapter = New-Object PSObject -Property @{
+                                Name=&quot;&quot;
+                                Description=&quot;&quot;
+                                FirmwareRev=&quot;&quot;
+                                FCNodeName=&quot;&quot;
+                                FCPacketSize=&quot;&quot;
+                                LinkDataRate=&quot;&quot;
+                                SRAMParity=$false
+                                ExternalGBIC=$false
+                                State=&quot;&quot;
+                                InUse=$false
+                                Redundant=$false
+                            }
+                        }
+                        &quot;^Shelf\sname\:\s+(?&lt;Shelf&gt;.+)&quot; 
+                        {
+                            $subprocess = 2
+                            $shelf = New-Object PSObject -Property @{
+                                Name=&quot;&quot;
+                                Channel=&quot;&quot;
+                                Module=&quot;&quot;
+                                ShelfID=0
+                                ShelfUID=&quot;&quot;
+                                ShelfSN=&quot;&quot;
+                                TermSwitch=&quot;&quot;
+                                ShelfState=&quot;&quot;
+                                ModuleState=&quot;&quot;
+                                SerialNumber=&quot;&quot;
+                                ShelfVendor=&quot;&quot;
+                                ShelfModel=&quot;&quot;
+                                ShelfRevisionLevel=&quot;&quot;
+                                ModelName=&quot;&quot;
+                                ModuleASerialNumber=&quot;&quot;
+                                ModuleAFirmware=&quot;&quot;
+                                ModuleBSerialNumber=&quot;&quot;
+                                ModuleBFirmware=&quot;&quot;
+                                LocalAcessID=&quot;&quot;
+                            }
+                        }
+                        &quot;^Disk\:\s+(?&lt;Shelf&gt;.+)&quot; 
+                        {   
+                            $subprocess = 3
+                            $disk = New-Object PSObject -Property @{
+                                &quot;Name&quot;=&quot;&quot;
+                                &quot;shelf&quot;=0
+                                &quot;Bay&quot;=0
+                                &quot;RaidType&quot;=&quot;&quot;
+                                &quot;Aggregate&quot;=&quot;&quot;
+                                &quot;DiskType&quot;=&quot;&quot;
+                                &quot;SN&quot;=&quot;&quot;
+                                &quot;Vendor&quot;=&quot;&quot;
+                                &quot;Model&quot;=&quot;&quot;
+                                &quot;Firmware&quot;=&quot;&quot;
+                                &quot;RPM&quot;=0
+                                &quot;WWN&quot;=&quot;&quot;
+                                &quot;UID&quot;=&quot;&quot;
+                                &quot;DownRev&quot;=&quot;&quot;
+                                &quot;PrimaryPort&quot;=&quot;&quot;
+                                &quot;Secondaryname&quot;=&quot;&quot;               
+                                &quot;SecondaryPort&quot;=&quot;&quot;
+                                &quot;PowerOnHours&quot;=0
+                                &quot;UsedMB&quot;=&quot;&quot;
+                                &quot;UsedBlocks&quot;=&quot;&quot;
+                                &quot;PhysicalMB&quot;=&quot;&quot;
+                                &quot;PhysicalBlocks&quot;=&quot;&quot;
+                                &quot;BlocksRead&quot;=[int64]0
+                                &quot;BlocksWritten&quot;=[int64]0
+                                &quot;TimeInterval&quot;=&quot;&quot;
+                                &quot;GlistCount&quot;=0
+                                &quot;ScrubLastDone&quot;=&quot;&quot;
+                                &quot;ScrubCount&quot;=0
+                                &quot;LipCount&quot;=0
+                                &quot;DynamicallyQualified&quot;=$false
+                                &quot;PowerCycleCount&quot;=0
+                                &quot;PowerCycleError&quot;=0
+                                &quot;CurrentOwner&quot;=&quot;&quot;
+                                &quot;HomeOwner&quot;=&quot;&quot;
+                                &quot;ReservationOwner&quot;=&quot;&quot;
+                            }
+                        }
+                        &quot;SHARED\sSTORAGE\sHOSTNAME\s+SYSTEM\sID&quot;
+                        {
+                            $subprocess = 4
+                        }
+                    }
+                    switch ($subprocess) 
+                    {
+                        1 
+                        {
+                            
+                            switch -regex ($line) 
+                            {
+                                &quot;^Slot\:\s+(?&lt;name&gt;\d\w)$&quot;                  
+                                {
+                                    $Adapter.name = $matches.name
+                                    break
+                                }
+                                &quot;^Description\:\s+(?&lt;Description&gt;.+)&quot;
+                                {
+                                    $Adapter.Description = $matches.Description;
+                                    break
+                                }
+                                &quot;^Firmware\sRev\:\s+(?&lt;FirmwareRev&gt;.+)&quot;
+                                {
+                                    $Adapter.FirmwareRev = $matches.FirmwareRev
+                                    break
+                                }
+                                &quot;^FC\sNode\sName\:\s+(?&lt;FCNodeName&gt;.+)&quot;
+                                {
+                                    $Adapter.FCNodeName = $matches.FCNodeName
+                                    break
+                                }
+                                &quot;^FC\sPacket\sSize\:\s+(?&lt;FCPacketSize&gt;.+)&quot;
+                                {
+                                    $Adapter.FCPacketSize = $matches.FCPacketSize
+                                    break
+                                }
+                                &quot;^Link\sData\sRate\:\s+(?&lt;LinkDataRate&gt;.+)&quot;
+                                {
+                                    $Adapter.LinkDataRate = $matches.LinkDataRate
+                                    break
+                                }
+                                &quot;^SRAM\sParity\:\s+(?&lt;SRAMParity&gt;.+)&quot;
+                                {
+                                    $Adapter.SRAMParity = ConvertTo-Bool $matches.SRAMParity
+                                    break
+                                }
+                                &quot;^External\sGBIC\:\s+(?&lt;ExternalGBIC&gt;.+)&quot;
+                                {
+                                    $Adapter.ExternalGBIC = ConvertTo-Bool $matches.ExternalGBIC
+                                    break
+                                }
+                                &quot;^State\:\s+(?&lt;State&gt;.+)&quot;
+                                {
+                                    $Adapter.State = $matches.State
+                                    break
+                                }
+                                &quot;^In\sUse\:\s+(?&lt;InUse&gt;.+)&quot;
+                                {
+                                    $Adapter.InUse = ConvertTo-Bool $matches.InUse
+                                    break
+                                }
+                                &quot;^Redundant\:\s+(?&lt;Redundant&gt;.+)&quot;
+                                {
+                                    $Adapter.Redundant = ConvertTo-Bool $matches.Redundant
+                                    break
+                                }
+                                Default 
+                                {
+                                    if ($Adapter) 
+                                    {
+                                        $Storage.HostAdapters.Add($Adapter.Name,$Adapter)
+                                    }
+                                }
+                            }
+                        }
+                        2
+                        {
+                            switch -regex ($line) 
+                            {
+                                &quot;^Shelf\sname\:\s+(?&lt;name&gt;.+)&quot;                  
+                                {
+                                    $Shelf.Name = $matches.name
+                                    break
+                                }
+                                &quot;^Channel\:\s+(?&lt;Channel&gt;.+)&quot;
+                                {
+                                    $Shelf.Channel = $matches.Channel
+                                    break
+                                }
+                                &quot;^Module\:\s+(?&lt;Module&gt;.+)&quot;
+                                {
+                                    $Shelf.Module = $matches.Module
+                                    break
+                                }
+                                &quot;Shelf\sid\:\s+(?&lt;ShelfID&gt;.+)&quot;
+                                {
+                                    $Shelf.ShelfID = $matches.ShelfID
+                                    break
+                                }
+                                &quot;Shelf\sUID\:\s+(?&lt;ShelfUID&gt;.+)&quot;
+                                {
+                                    $shelf.ShelfUID = $Matches.ShelfUID
+                                    break
+                                }
+                                &quot;Shelf\sS\/N\:\s+(?&lt;ShelfSN&gt;.+)&quot;
+                                {
+                                    $shelf.ShelfSN = $Matches.ShelfSN
+                                    break
+                                }
+                                &quot;Term\sswitch\:\s+(?&lt;TermSwitch&gt;.+)&quot;
+                                {
+                                    $Shelf.TermSwitch = $Matches.TermSwitch
+                                    break
+                                }
+                                &quot;Shelf\sstate\:\s+(?&lt;ShelfState&gt;.+)&quot;
+                                {
+                                    $shelf.ShelfState = $Matches.ShelfState
+                                    break
+                                }
+                                &quot;Module\sstate\:\s+(?&lt;ModuleState&gt;.+)&quot;
+                                {
+                                    $shelf.ModuleState = $matches.ModuleState
+                                    $Storage.shelves += $shelf
+                                    break
+                                }
+                            }  
+                        }
+                        3
+                        {
+                            switch -regex ($line) 
+                            {
+                                &quot;^Disk\:\s+(?&lt;Name&gt;.+)&quot;
+                                {
+                                    $Disk.name = $matches.name
+                                    break
+                                }
+                                &quot;^Shelf\:\s+(?&lt;shelf&gt;.+)&quot;
+                                {
+                                    $Disk.shelf = $matches.shelf
+                                    break
+                                }
+                                &quot;^Bay\:\s+(?&lt;Bay&gt;.+)&quot;
+                                {
+                                    $Disk.Bay = $matches.Bay
+                                    break
+                                }
+                                &quot;^Serial\:\s+(?&lt;SN&gt;.+)&quot;
+                                {
+                                    $Disk.SN = $matches.SN
+                                    break
+                                }
+                                &quot;^Vendor\:\s+(?&lt;Vendor&gt;.+)&quot;
+                                {
+                                    $Disk.Vendor = $matches.Vendor
+                                    break
+                                }
+                                &quot;^Model\:\s+(?&lt;Model&gt;.+)&quot;
+                                {
+                                    $Disk.Model = $matches.Model
+                                    break
+                                }
+                                &quot;^Rev\:\s+(?&lt;Firmware&gt;.+)&quot;
+                                {
+                                    $Disk.Firmware = $matches.Firmware
+                                    break
+                                }
+                                &quot;^RPM\:\s+(?&lt;RPM&gt;.+)&quot;
+                                {
+                                    $Disk.RPM = $matches.RPM
+                                    break
+                                }
+                                &quot;^WWN\:\s+(?&lt;WWN&gt;.+)&quot;
+                                {
+                                    $Disk.WWN = $matches.WWN
+                                    break
+                                }
+                                &quot;^UID\:\s+(?&lt;UID&gt;.+)&quot;
+                                {
+                                    $Disk.UID = $matches.UID
+                                    break
+                                }
+                                &quot;^Downrev\:\s+(?&lt;DownRev&gt;.+)&quot;
+                                {
+                                    $Disk.DownRev = $matches.DownRev
+                                    break
+                                }
+                                &quot;^Pri\sPort\:\s+(?&lt;PrimaryPort&gt;.+)&quot;
+                                {
+                                    $Disk.PrimaryPort = $matches.PrimaryPort
+                                    break
+                                }
+                                &quot;^Sec\sName\:\s+(?&lt;Secondaryname&gt;.+)&quot;
+                                {
+                                    $Disk.Secondaryname = $matches.Secondaryname
+                                    break
+                                }
+                                &quot;^Sec Port\:\s+(?&lt;SecondaryPort&gt;.+)&quot;
+                                {
+                                    $Disk.SecondaryPort = $matches.SecondaryPort
+                                    break
+                                }
+                                &quot;^Power-on Hours\:\s+(?&lt;PowerOnHours&gt;.+)&quot;
+                                {
+                                    $Disk.PowerOnHours = $matches.PowerOnHours
+                                    break
+                                }
+                                &quot;^Blocks read\:\s+(?&lt;BlocksRead&gt;.+)&quot;
+                                {
+                                    $Disk.BlocksRead = $matches.BlocksRead
+                                    break
+                                }
+                                &quot;^Blocks written\:\s+(?&lt;BlocksWritten&gt;.+)&quot;
+                                {
+                                    $Disk.BlocksWritten = $matches.BlocksWritten
+                                    break
+                                }
+                                &quot;^Time interval\:\s+(?&lt;TimeInterval&gt;.+)&quot;
+                                {
+                                    $Disk.TimeInterval = $matches.TimeInterval
+                                    break
+                                }
+                                &quot;^Glist count\:\s+(?&lt;GlistCount&gt;.+)&quot;
+                                {
+                                    $Disk.GlistCount = $matches.GlistCount
+                                    break
+                                }
+                                &quot;^Scrub last done\:\s+(?&lt;ScrubLastDone&gt;.+)&quot;
+                                {
+                                    $Disk.ScrubLastDone = $matches.ScrubLastDone
+                                    break
+                                }
+                                &quot;^Scrub count\:\s+(?&lt;ScrubCount&gt;.+)&quot;
+                                {
+                                    $Disk.ScrubCount = $matches.ScrubCount
+                                    break
+                                }
+                                &quot;^LIP count\:\s+(?&lt;LipCount&gt;.+)&quot;
+                                {
+                                    $Disk.LipCount = $matches.LipCount
+                                    break
+                                }
+                                &quot;^Dynamically qualified\:\s+(?&lt;DynamicallyQualified&gt;.+)&quot;
+                                {
+                                    $Disk.DynamicallyQualified = $matches.DynamicallyQualified
+                                    break                        
+                                }
+                                &quot;^Power\scycle\scount\:\s+(?&lt;PowerCycleCount&gt;.+)&quot;
+                                {
+                                    $Disk.PowerCycleCount = $matches.PowerCycleCount
+                                    break
+                                }
+                                &quot;^Power\scycle\son\serror\:\s+(?&lt;PowerCycleError&gt;.+)&quot;
+                                {
+                                    $Disk.PowerCycleError = $matches.PowerCycleError
+                                    break
+                                }
+                                &quot;^Current owner\:\s+(?&lt;CurrentOwner&gt;.+)&quot;
+                                {
+                                    $Disk.CurrentOwner = $matches.CurrentOwner
+                                    break
+                                }
+                                &quot;^Home owner\:\s+(?&lt;HomeOwner&gt;.+)&quot;
+                                {
+                                    $Disk.HomeOwner = $matches.HomeOwner
+                                    break
+                                }
+                                &quot;^Reservation owner\:\s+(?&lt;ReservationOwner&gt;.+)&quot;
+                                {
+                                    $Disk.ReservationOwner = $matches.ReservationOwner
+                                    break
+                                }
+                                Default
+                                {
+                                    if ($Disk) 
+                                    {
+                                        #merge this data with what we scrapped from sysconfig-r
+                                        $Disk.RaidType = $aggrHold[$Disk.Name].RaidType
+                                        $Disk.Aggregate = $aggrHold[$Disk.Name].Aggregate
+                                        $Disk.DiskType = $aggrHold[$Disk.Name].DiskType
+                                        $Disk.UsedMB = $aggrHold[$Disk.Name].UsedMB
+                                        $Disk.UsedBlocks = $aggrHold[$Disk.Name].UsedBlocks
+                                        $Disk.PhysicalMB = $aggrHold[$Disk.Name].PhysicalMB
+                                        $Disk.PhysicalBlocks = $aggrHold[$Disk.Name].PhysicalBlocks
+                                        
+                                        $Storage.Disks +=$Disk
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Write-output $Storage
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

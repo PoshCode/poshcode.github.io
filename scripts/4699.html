@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>4 ways to open CDRom - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>4 ways to open CDRom</h1>
+<h3><a href="//scripts/4699.ps1">download</a></h3>
+<pre><code class="language-posh">#first way
+[xml]$res = @'
+&lt;?xml version=&quot;1.0&quot;?&gt;
+&lt;Drives&gt;
+  &lt;Type en=&quot;CD Drive&quot; ru=&quot;CD-&amp;#1076;&amp;#1080;&amp;#1089;&amp;#1082;&amp;#1086;&amp;#1074;&amp;#1086;&amp;#1076;&quot; /&gt;
+  &lt;Verb en=&quot;E&amp;amp;ject&quot; ru=&quot;&amp;amp;&amp;#1048;&amp;#1079;&amp;#1074;&amp;#1083;&amp;#1077;&amp;#1095;&amp;#1100;&quot; /&gt;
+&lt;/Drives&gt;
+'@
+
+$iso = (Get-Culture).TwoLetterISOLanguageName
+
+(New-Object -com Shell.Application).NameSpace(0x11).Items() | ? {
+  $_.Type -eq $res.Drives.Type.$iso
+} | % {$_.InvokeVerb($res.Drives.Verb.$iso)}
+
+#second way
+$col = (New-Object -com WMPlayer.OCX).cdromCollection
+for ($i = 0; $i -lt @($col).Length; $i++) {$col.Item($i).eject()}
+
+#third way
+$code = @'
+[DllImport(&quot;winmm.dll&quot;)]
+public static extern int mciSendString(
+  String lpszCommand,
+  String lpszReturnString,
+  UInt32 cchReturn,
+  IntPtr hwndCallback
+);
+'@
+
+$asm = Add-Type -mem $code -name EjectClose -names CDRom -pass
+[void]$asm::mciSendString(&quot;set cdaudio door open&quot;, $null, 0, [IntPtr]::Zero)
+sleep -m 1500
+[void]$asm::mciSendString(&quot;sed cdaudio door closed&quot;, $null, 0, [IntPtr]::Zero)
+
+#fourth way
+$code = @'
+using System;
+using System.Reflection;
+using System.Globalization;
+using System.Runtime.InteropServices;
+
+[assembly: AssemblyVersion(&quot;2.0.0.0&quot;)]
+[assembly: CLSCompliant(true)]
+[assembly: ComVisible(false)]
+
+namespace CDRom {
+  internal static class NativeMethods {
+    [DllImport(&quot;kernel32.dll&quot;, CharSet = CharSet.Unicode)]
+    internal static extern IntPtr CreateFile(String lpFileName, UInt32 dwDesiredAccess,
+        UInt32 dwSharedMode, IntPtr lpSecurityAttributes, UInt32 dwCreationDisposition,
+                                    UInt32 dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+    [DllImport(&quot;kernel32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool CloseHandle(IntPtr hObject);
+    
+    [DllImport(&quot;kernel32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DeviceIoControl(IntPtr hDevice, UInt32 dwIoControlCode,
+                           IntPtr lpInBuffer, UInt32 nInBufferSize, IntPtr lpOutBuffer,
+               UInt32 nOutBufferSize, out UInt32 lpBytesReturned, IntPtr lpOverlapped);
+  }
+  
+  public sealed class Holder {
+    private Holder() {}
+    
+    const UInt32 GENERIC_READ              = 0x80000000;
+    const UInt32 IOCTL_STORAGE_EJECT_MEDIA = 0x002D4808;
+    const UInt32 IOCTL_STORAGE_LOAD_MEDIA  = 0x002D480C;
+    const UInt32 OPEN_EXISTING             = 3;
+    const  Int32 InvalidHandle             = -1;
+    
+    static IntPtr hndl;
+    static UInt32 retBytes;
+    
+    public static void OpenClose(String drvLetter, bool curStatus) {
+      try {
+        hndl = NativeMethods.CreateFile(drvLetter, GENERIC_READ, 0, IntPtr.Zero,
+                                                        OPEN_EXISTING, 0, IntPtr.Zero);
+        
+        if ((Int32)hndl != InvalidHandle) {
+          if (curStatus)
+            NativeMethods.DeviceIoControl(hndl, IOCTL_STORAGE_EJECT_MEDIA, IntPtr.Zero,
+                                         0, IntPtr.Zero, 0, out retBytes, IntPtr.Zero);
+          else
+            NativeMethods.DeviceIoControl(hndl, IOCTL_STORAGE_LOAD_MEDIA, IntPtr.Zero,
+                                         0, IntPtr.Zero, 0, out retBytes, IntPtr.Zero);
+        }
+      }
+      finally {
+        NativeMethods.CloseHandle(hndl);
+      }
+    }
+  }
+}
+'@
+
+Add-Type $code
+[IO.DriveInfo]::GetDrives() | ? {$_.DriveType -eq 'CDRom'} | % {$arr = @()}{
+   $arr += ('\\.\\' + ($_.Name[0..1] -join ''))
+}
+$arr | % {[CDRom.Holder]::OpenClose($_, $true)}
+sleep -m 1500
+$arr | % {[CDRom.Holder]::OpenClose($_, $false)}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Dmitry Sotnikov">
+    <title>Set-PowerGUIWelcomePage - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-PowerGUIWelcomePage</h1>
+<h3><a href="//scripts/1129.ps1">download</a> - <a href="//scripts/984.md">parent</a></h3>
+<p>This script customizes the welcome screen which PowerGUI admin console displays on start-up or when a folder is selected in the left-hand tree.
+You can use it to introduce branding to the PowerGUI consoles used in your company or to provide your employees with additional information.
+Create the MHT file by saving it from Internet Explorer, Microsoft Word or another editor, then run this script to set a reference to the file from PowerGUI configuration.</p>
+<p>Version 1.3 makes the script compatible with PowerGUI 1.8</p>
+<p>See http://dmitrysotnikov.wordpress.com/2009/02/11/rebranding-powergui-console/ for details</p>
+<pre><code class="language-posh">########################################################
+# Modifies the default PowerGUI admin console
+# welcome screen to the mht file you supply
+# Details available at:
+# http://dmitrysotnikov.wordpress.com/2009/02/11/rebranding-powergui-console/ 
+########################################################
+# Usage:
+# To change the homepage:
+#   &amp; .\Set-PowerGUIWelcomePage.ps1 \\server\share\my.mht
+# To rollback the change:
+#   &amp; .\Set-PowerGUIWelcomePage.ps1 -ResetToDefault $true
+########################################################
+# (c) Dmitry Sotnikov, Oleg Shevnin
+#  1.3 - May 27: made it compatible with PowerGUI 1.8
+#  1.2 - Mar 30:
+#   added parameter to reset home page to default
+#   fixed the issue which aroused when path was supplied interactively
+#  1.1 - Mar 17: added exception if PowerGUI Admin Console is running
+#  v1, Feb 11, 2009
+#
+########################################################
+
+param ([string] $mhtpath, [bool] $ResetToDefault = $false)
+# this should be path (local or UNC) to the new welcome page
+
+# make sure that the admin console is closed
+if (( get-process Quest.PowerGUI -ErrorAction SilentlyContinue ) -ne $null) { 
+	throw &quot;Please close the PowerGUI administrative console before running this script&quot; 
+}
+
+# Locate PowerGUI configuration for current user on this computer
+$cfgpath = &quot;$($env:APPDATA)\Quest Software\PowerGUI\quest.powergui.xml&quot;
+
+# If quest.powergui.xml not found - try new name of the file (PowerGUI 1.8 and later)
+if ( -not (Test-Path $cfgpath) ) {  
+	$cfgpath = &quot;$($env:APPDATA)\Quest Software\PowerGUI\config.xml&quot;
+
+	if ( -not (Test-Path $cfgpath) ) {  
+		throw &quot;ERROR: PowerGUI configuration file not found&quot;
+	}
+}
+
+
+
+# Create backup
+Copy-Item $cfgpath &quot;$cfgpath.backupconfig&quot;
+
+# Read the file
+$xml = [xml]$(Get-Content $cfgpath)
+
+
+# check if this is run to roll back the changes or to introduced them
+if ( $ResetToDefault ) {
+
+	# Locate the custom homepage section
+	$node = $xml.SelectSingleNode(&quot;//container[@id='4b510268-a4eb-42e0-9276-06223660291d']&quot;)
+	if ($node -eq $null) {
+		&quot;Configuration is already using default homepage. No rollback required.&quot;
+	} else {
+		$xml.SelectSingleNode(&quot;/configuration/items&quot;).RemoveChild($node) | Out-Null 
+		$xml.Save($cfgpath)
+		&quot;SUCCESS: Successfully rolled PowerGUI back to default welcome page.&quot;
+	}
+		
+} else {
+
+	# change the welcome screen to the mht supplied as parameter
+	
+	# verify that the new file exists and is mht
+	if ( $mhtpath -eq $null ) {
+		$mhtpath = Read-Host &quot;Please provide path to the MHT file&quot;
+	}
+	$mhtfile = Get-ChildItem $mhtpath
+	if ( $mhtfile -eq $null) { 
+		throw &quot;MHT file $mhtpath not found. Please verify the script parameter.&quot; 
+	}
+	if ( $mhtfile.Extension -ne &quot;.mht&quot; ) {
+		throw &quot;File $mhtpath is not an MHT file. Only MHT files are supported.&quot; 
+	}
+	
+	
+	# If the section for custom welcome page does not exist - create it
+	$node = $xml.SelectSingleNode(&quot;//container[@id='4b510268-a4eb-42e0-9276-06223660291d']&quot;)
+	if ($node -eq $null) {
+		$node = $xml.CreateElement(&quot;container&quot;)
+		
+		$node.SetAttribute(&quot;id&quot;, &quot;4b510268-a4eb-42e0-9276-06223660291d&quot;)
+		$node.SetAttribute(&quot;name&quot;, &quot;Home Page&quot;)
+		
+		$node.AppendChild($xml.CreateElement(&quot;value&quot;)) | Out-Null 
+		$xml.SelectSingleNode(&quot;/configuration/items&quot;).AppendChild($node) | Out-Null 
+	}
+	
+	# Set the new value and save the file
+	$node.Value = [String] $mhtpath
+	$xml.Save($cfgpath)
+	&quot;SUCCESS: $mhtpath is now set as your custom welcome screen.&quot;
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Victor">
+    <title>Sybase Error Log Check - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Sybase Error Log Check</h1>
+<h3><a href="//scripts/3076.ps1">download</a></h3>
+<p>Description</p>
+<h1>===========</h1>
+<h1>This script is to check the Sybase ASE Server errorlog for certain strings indicating errors and other issues</h1>
+<h1>a DBA should know about, and mails the results to a list of recipients. When the server is running, the</h1>
+<h1>script will figure out the errorlog filename itself, though you can also specify the file name explicitly.</h1>
+<h1>This script can be run as a daily 'Scheduled Task' job, so that the DBA receives a list of all new suspect errorlog</h1>
+<h1>messages by email every day. By default, an email will always be sent after each run of this script, even</h1>
+<h1>when no error messages have been found.</h1>
+<pre><code class="language-posh">
+# Description                                                                                                          
+# ===========                                                                                                          
+# This script is to check the Sybase ASE Server errorlog for certain strings indicating errors and other issues        
+# a DBA should know about, and mails the results to a list of recipients. When the server is running, the               
+# script will figure out the errorlog filename itself, though you can also specify the file name explicitly.           
+# This script can be run as a daily 'Scheduled Task' job, so that the DBA receives a list of all new suspect errorlog  
+# messages by email every day. By default, an email will always be sent after each run of this script, even             
+# when no error messages have been found.                                                                                                                                                                                                     #
+#                                                                                                                      
+# The script will look for the following strings in the Sybase error log:                                              
+#                                                                                                                       
+# String Pattern To Search: &quot;error&quot;,&quot;warning&quot;,&quot;severity&quot;,&quot;fail&quot;,&quot;full&quot;, &quot;couldn&quot;,&quot;not found&quot;,&quot;not valid&quot;,&quot;invalid&quot;,    
+#                           &quot;threshold&quot;,&quot;unmirror&quot;,&quot;mirror&quot;,&quot;deadlock&quot;, &quot;allow&quot;,&quot;NO_LOG&quot;,&quot;logsegment&quot;,&quot;syslogs         
+#                                                                                                                      
+# Alternate String Pattern To Search: &quot;error&quot;,&quot;warning&quot;                                                                
+#                                                                                                                      
+#   Usage:      Job Should Be Scheduled Hourly                                                                         
+#                                                                                                                      
+#   powershell -command  G:\YourScriptDirectory\SybaseErrorLogCheck.ps1 &gt;G:\SCRIPTDirectory\Scripts\SybErrLog.Err      
+#                                                                                                                       
+#     Note: Enter Command string above when creating a Scheduled Task                                                  
+#                                                                                                                      
+
+#   Author:         Victor Flores                                                                                      
+#   Date Written:   05/01/2011                                                                                          
+#   Date Revised:                                                                                                      
+#   Program:        SybaseErrorLogCheck.ps1                                                                            
+#   Email:          rattler69@gmail.com                                                                                 
+#   Language:       Powershell V2                                                                                      
+# Copyright Note and Disclaimer                                                                                        
+
+# This software is provided &quot;as is&quot;; there is no warranty of any kind.  While this software is believed to work              
+# accurately, it may not work  correctly and/or reliably in a production environment. In no event shall                
+# Victor Flores be liable for any damages resulting from the use of this software.                                     
+#                                                                                                                   
+#                                                                                                                      
+#  Change Log:                                                                                                         
+#               Date             Programmer                  Change(s)                                                 
+#                                                                                                                       
+#                                                                                                                      
+#                                                                                                                       
+#                                                                                                                      
+#                                                                                                                      
+#
+
+
+###################  This program is written in Windows Powershell Version 2                         
+###################  Install Powershell V2 and configure powershell to allow you to run scripts      
+
+
+
+###################       Log Files used in the execution of the SybaseErrorLogCheck.ps1 program     
+###################                   Change to your script directory                                
+
+del G:\YourScriptDirectory\ErrorsFound.log
+del G:\YourScriptDirectory\errlogfile.txt
+
+
+
+################### Email Function to Email Error Log  Results to The Sybase DBA's                   
+################### Usage: Change Recieving Account in $mailmesssage.To.Add                          
+###################        Change $SMTPClient. To reference your sending SMTP Server                 
+###################        Change $SMTPClient.Credentials to reference your sending email acct       
+###################        Change $SMTPClient.Credentials to reference your sending email password   
+#
+function EmailResults 
+{
+$mailmessage = New-Object system.net.mail.mailmessage 
+$mailmessage.from       = (&quot;YourDBASendingAccount@YourCompanyEmailServer,com&quot;) 
+$mailmessage.To.add(&quot;DBA1@your.company.com,DBA2@your.company.com&quot;)
+$mailmessage.Subject     = $Subject
+$mailmessage.Body        = $EmailBody
+$mailmessage.IsBodyHTML  = $true
+$SMTPClient             = New-Object Net.Mail.SmtpClient(&quot;YourCompanySMTPServer.com&quot;, 25) 
+$SMTPClient.Credentials = New-Object System.Net.NetworkCredential(&quot;YourDBASendingAccount@YourCompanyEmailServer.com&quot;, &quot;password&quot;)
+$SMTPClient.Send($mailmessage)
+}
+
+###################         Sybase Error Log Filtering. Logs can be filetered by Days or Hours       
+
+###################                         Alternate Log Filter in Days                             
+#####$today = Get-Date
+#####$daysback = New-Timespan -days 17
+#####$cutoff = $today - $daysback
+
+
+
+###################                         Alternate Log Filter in Hours                            
+$hoursback = New-Timespan -hours 12
+$cutoff = $today - $hoursback
+
+
+
+
+###################           Parsing Thru Sybase Error Log For Errors                               
+################### Sybase Error Log Location:  E:\sybase\ASE-15_0\install\cbstest.log               
+
+ 
+$LogFileByDate = Get-Content E:\sybase\ASE-15_0\install\cbstest.log | Foreach-Object { $elements = $_.Split(&quot;`t&quot;);`
+$rv = 1 | Select-Object date, message;$rv.date = if($elements[0] -notmatch &quot;^\d\d:\d{5}:\d{5}:\d{4}/\d\d/\d\d\s\d\d:\d\d:\d\d\.\d\d&quot;){$elements &gt;&gt; G:\YourScriptDirectory\errlogfile.txt;&quot;UNKNOWN&quot;}else{ [DateTime]($elements[0].SubString(15,10))}`
+#$rv.Date = [DateTime]($elements[0].SubString(15,10));`
+$rv.Message = $elements[1]; $elements } | Where-Object { $rv.Date -gt $cutoff } 
+
+
+###################    Errors Encountered in Sybase Error Log Output file based on date filter       
+###################                File Created in your script directory                              
+
+$LogFileByDate| out-file G:\YourScriptDirectory\LogFileByDate.txt
+
+
+$ErrorsFound= Select-String -Path G:\YourScriptDirectory\LogFileByDate.txt  -pattern &quot;error&quot;,&quot;warning&quot;,&quot;severity&quot;,`
+              &quot;fail&quot;,&quot;full&quot;, &quot;couldn&quot;,&quot;not found&quot;,&quot;not valid&quot;,&quot;invalid&quot;, &quot;threshold&quot;,&quot;unmirror&quot;,`
+              &quot;mirror&quot;,&quot;deadlock&quot;, &quot;allow&quot;,&quot;NO_LOG&quot;,&quot;logsegment&quot;,&quot;syslogs&quot;  
+
+
+
+
+
+###################                         Errors Found in Your Sybase Error Log                    
+$ErrorsFound | out-file G:\YourScriptDirectory\ErrorsFound.log
+
+
+
+###################         Errors Found in Your Sybase Error Log  Emailed to DBA                    
+###################         Change Subject Line to Something of your liking                          
+
+$EmailBody = (gc G:\YourScriptDirectory\ErrorsFound.log | out-string)
+$Subject = 'Sybase Error Log Report for YourSybaseServerName - Sybase Errors Have Been Encountered on YourSybaseServerName'
+
+
+if ($emailbody.Length -gt 0)
+{
+EmailResults $Subject $Body
+}
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

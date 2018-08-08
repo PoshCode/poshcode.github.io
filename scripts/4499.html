@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Clint Jones">
+    <title>Fix-VMPortGroups - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Fix-VMPortGroups</h1>
+<h3><a href="//scripts/4499.ps1">download</a></h3>
+<p>This script will help you replace old VMware portgroups with new ones and switch all VMs over to these new port groups with no downtown or network traffic loss. Originally written to take an environment with nonsensical, non-standardized port group naming to a proper standard. This required supporting files as are listed in the script description. There are portions that need to be filled out with relevant info to your environment, these are also outlined in the comments.</p>
+<pre><code class="language-posh">#========================================================================
+# Created by:   Clint Jones
+# Organization: Virtually-Genius
+# Filename:     Fix-VMPortGroups
+#========================================================================
+
+#NOTES: For each run, you will be prompted to make selections for the $vcenter and $cluster variables
+# 		$vSwitch names are pulled from a pre-populated table on line 30, based on cluster selection
+# 		COMPARISON LISTS BEGINNING ON LINE 74 compares old groups to corresponding new group based on cluster selection (should match those in &quot;portgroups.csv&quot; and &quot;oldgroups.txt&quot;)
+#     	        Fill out &quot;portgroups.csv&quot; with the names and vLANs of all new portgroups that need to be created
+# 		Fill out &quot;oldgroups.txt&quot; with the names of all the defunct portgroup names that need to be changed (these lists will be used later to delete empty portgroups)
+# 		&quot;vm_portgroup_log.txt&quot; contains all information regarding VMs that failed ping tests after portgroup changes
+# 		&quot;vm_portgroup_previousconfig.txt&quot; lists all VM's previous portgroup configs before changes are made for rollback 
+
+#Select the correct cluster, vCenter server, and vSwitch
+$vcenteranswer = Read-Host &quot;What vCenter server do you want to connect to (Prod, Dev, or PCI)?&quot;
+switch ($vcenteranswer)
+	{
+	  Prod {$vcenter = &quot;vCenter01.your.domain&quot;}
+	  Dev  {$vcenter = &quot;vCenter02.your.domain&quot;}
+	  PCI  {$vcenter = &quot;vCenter03.your.domain&quot;}
+	}
+$cluster = Read-Host &quot;What cluster do you want to connect to?&quot; 		#(i.e. &quot;Cluster1&quot;)
+#Switch statement reflects which vSwitches are being modified for each cluster
+#For this section enter each cluster name and list the vSw
+$vSwitches = @()
+switch ($cluster)
+	{
+	   Cluster1 {$vSwitches = &quot;vSwitch1&quot;,&quot;vSwitch2&quot;}
+	   Cluster2 {$vSwitches = &quot;vSwitch1&quot;,&quot;vSwitch2&quot;,&quot;vSwitch3&quot;}
+	   Cluster3 {$vSwitches = &quot;vSwitch1&quot;}
+	}
+
+#Call all snap-ins and connections
+Import-Module ActiveDirectory
+Add-PSSnapin VMware.VimAutomation.Core
+Connect-VIServer -Server $vcenter -Credential (Get-Credential)
+
+#Remove old log files and create new ones
+New-Item -Path c:\scripts\logs\$cluster\vm_portgroup_log_failed_after.txt -Type File -Force
+New-Item -Path c:\scripts\logs\vm_portgroup_previousconfig.txt -Type File -Force
+
+foreach ($vSwitch in $vSwitches)
+	{
+	  # Create a list of all portgroups and associated vLANs
+	  # This csv will have two fields (&quot;Name&quot; and &quot;vLAN&quot;) and will contain all new portgroups that need to be created - create one for each vSwitch in each cluster (i.e. &quot;C:\VMware_PortGroups\Cluster1\vSwitch1\portgroups(Cluster1 - vSwitch1).csv&quot;)
+	  $portgroups = Import-Csv -Path &quot;C:\VMware_PortGroups\$cluster\$vSwitch\portgroups($cluster - $vSwitch).csv&quot;
+	  foreach ($portgroup in $portgroups)
+		  {
+		    #Create new port groups on each of the ESX hosts
+		   $hosts =  Get-Cluster $cluster | Get-VMHost
+		    foreach ($line in $hosts)
+		  	  {
+			    $vswitchName = Get-VirtualSwitch -VMHost $line -Name $vSwitch
+			    New-VirtualPortGroup -VirtualSwitch $vswitchName -Name $portgroup.Name -VLanId $portgroup.vLAN
+			  }	
+		  }
+	}
+#Change VMs over to the new port groups
+#Create a txt file listing all old portgroups that need to be evacuated and replaced (i.e. &quot;C:\VMware_PortGroups\Cluster1\oldgroups(Cluster1).txt&quot;)
+$oldportgroups = @()
+$oldportgroups = Get-Content &quot;C:\VMware_PortGroups\$cluster\oldgroups($cluster).txt&quot;
+$allvms = Get-Cluster $cluster | Get-VM
+
+foreach ($vm in $allvms)
+	{
+	  #By maintaining this variable as an array (regardless of the number of inputs) we can account for VMs with single or multiple existing portgroups	
+	  $existinggroups = @()
+	  $existinggroups += Get-VirtualPortGroup -VM $vm 
+	  foreach ($existinggroup in $existinggroups)
+		{
+		  if ($oldportgroups -contains $existinggroup.Name)
+		  	{
+				    if ($cluster -eq &quot;Cluster1&quot;)
+						{
+						 #Switch function to match old names to new corresponding groups (by cluster)
+						 switch ($existinggroup.Name)
+							{
+						 	  	&quot;OldGroup1&quot; {$newgroup = &quot;10.2.30.x 30&quot;}
+								&quot;OldGroup2&quot; {$newgroup = &quot;10.4.19.x 19&quot;}
+								&quot;OldGroup3&quot; {$newgroup = &quot;10.6.52.x 52&quot;}
+							}
+						}
+			         if ($cluster -eq &quot;Cluster2&quot;)
+						{
+						 #Switch function to match old names to new corresponding groups
+						 switch ($existinggroup.Name)
+							{
+						 	  	&quot;OldGroup1&quot; {$newgroup = &quot;10.2.42.x 42&quot;}
+								&quot;OldGroup2&quot; {$newgroup = &quot;10.4.81.x 81&quot;}
+								&quot;OldGroup3&quot; {$newgroup = &quot;10.6.74.x 74&quot;}
+							}
+						}
+					 if ($cluster -eq &quot;Cluster3&quot;)
+						{
+						 #Switch function to match old names to new corresponding groups
+						 switch ($existinggroup.Name)
+							{
+						 	  	&quot;OldGroup1&quot; {$newgroup = &quot;10.2.12.x 12&quot;}
+								&quot;OldGroup2&quot; {$newgroup = &quot;10.4.31.x 31&quot;}
+								&quot;OldGroup3&quot; {$newgroup = &quot;10.6.43.x 43&quot;}
+							}
+						}
+					
+				#Change the port group based on the match made from the list above
+				$networkadapter = Get-VM $vm | Get-NetworkAdapter | Where-Object{$_.NetworkName -eq $existinggroup.Name}
+			 	Set-NetworkAdapter -NetworkAdapter $networkadapter -NetworkName $newgroup -Confirm:$false
+			}
+			    #Test connections
+				Add-Content -Path c:\scripts\logs\vm_portgroup_previousconfig.txt &quot;$vm is from the $existinggroup network.&quot;
+				Start-Sleep -Seconds 5
+				if ((Test-Connection $vm.Name -Count 2 -Quiet) -eq $false)
+				{Add-Content -Path c:\scripts\logs\$cluster\vm_portgroup_log_failed_after.txt $vm}
+		}
+	}
+
+#Check the differences between pre-script and post-script ping fail logs
+New-Item -Path c:\scripts\logs\temp($cluster).txt -Type file
+Get-Content -Path c:\scripts\logs\$cluster\failed_connections_prior_to_script.txt | Add-Content c:\scripts\logs\temp($cluster).txt
+Get-Content -Path c:\scripts\logs\$luster\vm_portgroup_log_failed_after.txt | Add-Content c:\scripts\logs\temp($cluster).txt
+Get-Content -Path c:\scripts\logs\temp.txt | Sort-Object | Get-Unique | Out-File c:\scripts\logs\$cluster\FAILED_VM_PINGS.txt
+Remove-Item c:\scripts\logs\temp($cluster).txt -Force
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DexterPOSH">
+    <title>Set-RemoteService - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-RemoteService</h1>
+<h3><a href="//scripts/5049.ps1">download</a> - <a href="//scripts/5045.md">parent</a></h3>
+<p>The Function Set-RemoteService will set the State and StartMode for the Service on the Remote Machine.
+It will also interpret the WMI return codes if any and display a warning (Other than Return Code 0 for success)
+Note - Can pass alternate credentials too</p>
+<pre><code class="language-posh">Function Set-RemoteService
+{
+&lt;#
+	.SYNOPSIS
+		Sets the state and Start Mode for a Service on Remote Machine
+
+	.DESCRIPTION
+		Uses Win32_Service to set the state and Start Mode of the Service on Remote Machine.
+        Correctly traps all the WMI Return Values and logs them in an Error File
+
+	.PARAMETER  ComputerName
+	    Enter a ComputerName accepts multiple ComputerNames 
+
+	.PARAMETER  Name
+		Enter the name of the Service (Will accept WQL Keywords)
+	
+	.PARAMETER  DisplayName
+		Enter the DisplayName of the target Service (Will accept WQL wildacard)
+	
+	.PARAMETER  State
+		Specify the State, the state of the service on the Targetmachine will be changed to this
+        Valid Values Are: Running, Stopped
+	
+	.PARAMETER  startupType
+		Specify Service Startmode, the service on the target machine will have it's startmode changed to this. 
+        Valid Values are: Auto, Disabled, and Manual
+	
+	.PARAMETER  ErrorFile
+		Logs Error in the file specified. 
+        Default ErrorFile is ServiceError.txt at the Desktop of the User running Script.
+	
+    .EXAMPLE
+        On the local machine set the 
+        
+        PS C:\&gt; Set-RemoteService -Name bits -state Running -startupType Auto
+
+        ComputerName          ServiceName           StartMode             State                
+        ------------          -----------           ---------             -----                
+        DexterPC2143          BITS                  Auto                  Running              
+
+
+	.EXAMPLE
+        In the below example the WMI Return Code 21 (Device is not ready) is returned and that comes up as a warning 
+		
+        PS C:\&gt; Set-RemoteService -Name ccmexec -state Running -startupType Auto
+        WARNING: DexterPC couldn't change state to Running
+        WMI Call Returned : The device is not ready&quot; 
+        
+        ComputerName                          ServiceName                          StartMode                            State                               
+        ------------                          -----------                          ---------                            -----                               
+        DexClient1                            BITS                                 Auto                                 Stopped                             
+
+    .EXAMPLE
+        Set the bits service state &amp; startmode on the remote machine , verbose swicth turned on
+
+        PS C:\&gt; Set-RemoteService -ComputerName DexClient1 -Name bits -state Running -startupType Automatic -Verbose
+        VERBOSE: Starting the Function...Checking if ErrorFile exists- C:\Users\ddha002\Desktop\ServiceError.txt
+        VERBOSE:  ErrorFile exists &amp; logging time to it - C:\Users\ddha002\Desktop\ServiceError.txt
+        VERBOSE: Checking if sdwvpctcs2420 is online
+        VERBOSE: sdwvpctcs2420 is online
+
+        ComputerName                          ServiceName                          StartMode                            State                               
+        ------------                          -----------                          ---------                            -----                               
+        DexClient1                            BITS                                 Auto                                 Running                             
+        VERBOSE: Stopping the Function
+
+    .INPUTS
+        System.String[]
+
+	.OUTPUTS
+		Selected.System.Management.ManagementObject[]
+
+	.NOTES
+		
+        Reused Code from : 
+                
+        Author - Jason Morgan
+        Script - Set-ServiceStartMode [http://gallery.technet.microsoft.com/Set-ServiceStartMode-18a6e13d]
+        Used the DisplayName parameter after seeing this Script 
+
+        Author - Sitaram Pamarthi
+        URL - http://techibee.com/powershell/powershell-find-services-that-failed-to-start-after-server-reboot/2036
+        Used Net helpmsg to interpret WMI Return codes after this article
+
+        Written by - DexterPOSH
+        Blog Url - http://dexterposgh.blogspot.com
+#&gt;
+
+[CmdletBinding(DefaultParameterSetName='Name')]
+[OutputType([PSObject])]
+param(
+	[Parameter(Position=0, Mandatory=$false,
+				helpmessage=&quot;Enter the ComputerNames to Chec &amp; Fix Services on&quot;,
+				ValueFromPipeline=$true,
+				ValueFromPipelineByPropertyName=$true
+				)]
+	#[ValidateScript({try{[system.net.dns]::Resolve(&quot;$_&quot;)|out-null; return $true} catch { throw &quot;could not resolve the machine name&quot;}})]
+	[String[]]
+	$ComputerName=$env:COMPUTERNAME,
+
+    [Parameter(Mandatory=$true,
+                ParameterSetName=&quot;Name&quot;,
+                helpmessage=&quot;Enter the Service Name (Accepts WQL wildacard)&quot;)]
+    [string]$Name,
+
+    [Parameter(Mandatory=$True, 
+                ParameterSetName=&quot;DisplayName&quot;, 
+                HelpMessage=&quot;Enter the DisplayName of the target Service(Accepts WQL wildacard)&quot; )] 
+    [String]$DisplayName, 
+
+    [Parameter(Mandatory=$true,helpmessage=&quot;Enter the state of the Service to be set&quot;)]
+    [ValidateSet(&quot;Running&quot;,&quot;Stopped&quot;)]
+    [string]$state,
+
+    [Parameter(Mandatory=$true,helpmessage=&quot;Enter the Startup Type of the Service to be set&quot;)]
+    [ValidateSet(&quot;Automatic&quot;,&quot;Manual&quot;,&quot;Disabled&quot;)]
+    [string]$startupType,
+
+
+    [Parameter(Mandatory=$false,helpmessage=&quot;Enter the Startup Type of the Service to be set&quot;)]
+    [string]$ErrorFile=&quot;$([System.Environment]::GetFolderPath(&quot;Desktop&quot;))\ServiceError.txt&quot;,
+
+    [Parameter(Mandatory=$false,helpmessage=&quot;Enter the Credentials to Use&quot;)]
+    [System.Management.Automation.PSCredential]$Credentials = [System.Management.Automation.PSCredential]::Empty
+	)
+        BEGIN
+        {
+            Write-Verbose -Message &quot;Starting the Function...Checking if ErrorFile exists- $ErrorFile&quot;
+            #CReate the Errofile ...it will log Offline machines, Machines with issues
+            if (!(Test-Path -Path $ErrorFile -PathType Leaf))
+            {
+                Write-Verbose -Message &quot;Creating ErrorFile &amp; logging time to it - $ErrorFile&quot;
+                New-Item -Path $ErrorFile -ItemType file 
+                Add-Content -Value &quot;$(&quot;#&quot;*40)$(Get-Date)$(&quot;#&quot;*40)&quot; -Path $ErrorFile
+    
+            }
+            else
+            {
+                    Write-Verbose -Message &quot; ErrorFile exists &amp; logging time to it - $ErrorFile&quot;
+                Add-Content -Value &quot;$(&quot;#&quot;*40)$(Get-Date)$(&quot;#&quot;*40)&quot; -Path $ErrorFile
+            }
+            
+            
+                                                      
+        }
+		PROCESS 
+		{
+			foreach ($computer in $computername )
+			{
+               
+				Write-Verbose -Message &quot;Checking if $Computer is online&quot;
+				if (Test-Connection -ComputerName $Computer -Count 2 -Quiet)
+                {
+                    Write-Verbose -message &quot;$Computer is online&quot;
+                    
+                    #Create the WMI Hash here        
+                    $WMIHash = @{
+                        ComputerName = $Computer
+                        ErrorAction = 'Stop'
+                        ClassName = 'Win32_Service'
+                        NameSpace='Root\CimV2'
+                    }
+
+                    if ($Computer -ne $env:COMPUTERNAME)
+                    {
+                        $WMIHash.Credential = $Credentials
+                    }
+
+                    #region try to set the required state and StartupType of the Service
+                    try
+                    {
+                        #based on the Parameter Set used create the Filter
+                        Switch -Exact ($PSCmdlet.ParameterSetName)
+                        {
+	                        &quot;Name&quot; { $WMIHash.Filter = &quot;Name LIKE '$Name'&quot; ; break}
+                            &quot;DisplayName&quot;{ $WMIHash.Filter = &quot;Name LIKE '$DisplayName'&quot;}
+
+                        }
+
+                        $Service = Get-WmiObject @WMIHash
+                       
+                        #Check the State and set it
+                        if ( $service.State -ne &quot;$state&quot;)
+                        {
+                            #Set the State of the Remtoe Service
+                            switch -exact ($state)
+                            {
+                                'Running' 
+                                {
+                                    $changestateaction = $service.startService()
+                                    Start-Sleep -Seconds 2 #it will require some time to process action
+                                    if ($changestateaction.ReturnValue -ne 0 )
+                                    {
+                                        $err = Invoke-Expression  &quot;net helpmsg $($changestateaction.ReturnValue)&quot; 
+                                         Write-Warning -message  &quot;$Computer couldn't change state to $state `nWMI Call Returned :$err&quot; 
+                                         
+                                    }
+                                    break
+                                     
+                                }
+                                    
+                                'Stopped' 
+                                {
+                                    $changestateaction = $service.stopService()
+                                    Start-Sleep -Seconds 2 
+                                    if ($changestateaction.ReturnValue -ne 0 )
+                                    {
+                                        $err = Invoke-Expression  &quot;net helpmsg $($changestateaction.ReturnValue)&quot; 
+                                        Write-Warning -message  &quot;$Computer couldn't change state to $state `nWMI Call Returned :$err&quot; 
+                                    }
+                                    break
+                                }
+                                    
+                            } #end switch
+                        } #end if
+
+                        #Check the StartMode and set it
+                        if ($service.startMode -ne $startupType)
+                        {
+                            
+                            #set the Start Mode of the Remote Service
+                            $changemodeaction = $service.ChangeStartMode(&quot;$startupType&quot;)
+                            Start-Sleep -Seconds 2
+                            if ($changemodeaction.ReturnValue -ne 0 )
+                            {
+                                $err = Invoke-Expression  &quot;net helpmsg $($changemodeaction.ReturnValue)&quot; 
+                                Write-Warning -message  &quot;$Computer couldn't change startmode to $startupType `nWMI Call Returned :$err&quot; 
+                            }
+                                
+                        } #end if
+                        
+                             
+                        #Write the Object to the Pipeline
+                        Get-WmiObject @WMIHash | Select-Object -Property @{Label=&quot;ComputerName&quot;;Expression={&quot;$($_.__SERVER)&quot;}},@{Label=&quot;ServiceName&quot;;Expression={$_.Name}},StartMode,State       
+            
+                    }#end try
+                    catch
+                    {
+                            
+                        Write-Warning -Message &quot;$Computer :: $_.exception...logging&quot;
+                        Add-Content -Value &quot;$computer :: $_.exception&quot; -Path $ErrorFile
+                    } #end catch
+
+                    #endregion try to set the required state and StartupType of the Service	
+                                                				
+											
+			}
+            else
+            {
+                Write-Verbose -Message &quot;$Computer is Offline..Logging&quot;
+                Add-Content -Value &quot;$computer :: Offline&quot; -Path $ErrorFile
+            }
+						
+		} #end foreach ($computer in $Computername)
+	}#end PROCESS
+    END
+    {
+        Write-Verbose -Message &quot;Stopping the Function&quot;
+         $ErrorActionPreference = 'Continue' #Setting it back, Just in case someone is running this from ISE
+    }
+
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

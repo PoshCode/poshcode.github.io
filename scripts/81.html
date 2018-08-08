@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Select-Random v2.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Select-Random v2.0</h1>
+<h3><a href="//scripts/81.ps1">download</a> - <a href="//scripts/60.md">parent</a></h3>
+<p>Select a user-defined number of random elements from the collection ... which can be passed as a parameter or input via the pipeline. An improvement over http://www.powershellcentral.com/scripts/60 which allows you to select more than one item, and doesn't copy the full collection into RAM.</p>
+<pre><code class="language-posh"># ---------------------------------------------------------------------------
+### &lt;Script&gt;
+### &lt;Author&gt;
+### Joel &quot;Jaykul&quot; Bennett
+### &lt;/Author&gt;
+### &lt;Description&gt;
+### Selects a random element from the collection either passed as a parameter or input via the pipeline.
+### If the collection is passed in as an argument, we simply pick a random number between 0 and count-1
+### for each element you want to return, but when processing pipeline input we want to keep memory use 
+### to a minimum, so we use a &quot;reservoir sampling&quot; algorithm[1].
+###
+### [1] http://gregable.com/2007/10/reservoir-sampling.html
+###
+### The script stores $count elements (the eventual result) at all times. It continues processing 
+### elements until it reaches the end of the input. For each input element $n (the count of the inputs 
+### so far) there is a $count/$n chance that it becomes part of the result.
+### * For each previously selected element, there is a $count/($n-1) chance of it being selected 
+### * For the ones selected, there's a ($count/$n * 1/$count = 1/$n) chance of it being replaced, so a 
+###   ($n-1)/$n chance of it remaining ... thus, it's cumulative probability of being among the selected
+###   elements after the nth input is processed is $count/($n-1) * ($n-1)/$n = $count/$n, as it should be.
+###
+### &lt;/Description&gt;
+### &lt;Usage&gt;
+### $arr = 1..5; Select-Random $arr
+### 1..10 | Select-Random -Count 2
+### &lt;/Usage&gt;
+### &lt;Version&gt;2.0.0.0&lt;/Version&gt;
+### &lt;/Script&gt;
+param([int]$count=1, [array]$inputObject=$null) 
+
+BEGIN {
+   if ($args -eq '-?') {
+@&quot;
+Usage: Select-Random [[-Count] &lt;int&gt;] [-inputObject] &lt;array&gt; (from pipeline) [-?]
+
+Parameters:
+ -Count      : The number of elements to select.
+ -Collection : The collection from which to select a random element.
+ -?          : Display this usage information and exit
+
+Examples:
+ PS&gt; $arr = 1..5; Select-Random $arr
+ PS&gt; 1..10 | Select-Random -Count 2
+
+&quot;@
+exit
+   } 
+   elseif ($inputObject) 
+   {
+      ### If you're accepting $args, you need to pass those in...
+      # Write-Output $io | &amp;($MyInvocation.InvocationName) $args;
+      Write-Output $inputObject | &amp;($MyInvocation.InvocationName) -Count $count
+      break;
+   }
+   else
+   {
+      $seen = 0
+      $selected = new-object object[] $count
+      $rand = new-object Random
+   }
+}
+PROCESS {
+   if($_) {
+      $seen++
+      if($seen -lt $count) {
+         $selected[$seen-1] = $_
+      } ## For each input element $n there is a $count/$n chance that it becomes part of the result.
+      elseif($rand.NextDouble() -gt $count/$seen)
+      {
+         ## For the ones previously selected, there's a 1/$n chance of it being replaced
+         $selected[$rand.Next(0,$count)] = $_
+      }
+   }
+}
+END {
+   if (-not $inputObject)
+   {  ## DO ONCE: (only on the re-invoke, not when using -inputObject)
+      Write-Verbose &quot;Selected $count of $seen elements&quot;
+      Write-Output $selected
+      # foreach($el in $selected) { Write-Output $el }
+   }
+}
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="P Sczepanski">
+    <title>Search-AD - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Search-AD</h1>
+<h3><a href="//scripts/3788.ps1">download</a></h3>
+<p>Search-AD without need to install Quest Active Role commandlets or install Active Directory Management Gateway.
+You need to &quot;load&quot; the function using . sourcing.
+ie. Safe it as Search-AD.ps1 and load the functions into global using &quot;. .\Search-Search-AD.ps1&quot;. Then use get-help Search-AD for help</p>
+<pre><code class="language-posh">
+# add enumerations and types required for functions
+Add-Type @'
+using System;
+
+namespace redtoo {
+    namespace AD {
+        public enum Provider : int {
+            LDAP,
+            GC,
+        }
+    }
+    public class ADsPathPart {
+            public string Provider;
+            public string Server;
+            public string BaseDN;
+            public string RDN;
+            public string DCComponent;
+            public string Parent;
+            public string DistinguishedName;
+    }
+}
+'@
+
+function Test-ObjectPath {
+&lt;#
+    .SYNOPSIS
+        Tests if an Object in AD exists.
+
+    .DESCRIPTION
+        Tests if an Object in AD exists. Valid inputs are a DN or a DirectoryEntry object.
+        With parameter you can force an imput type. Without a parameter the script figures out if an input was a string or directoryEntry object.
+
+    .PARAMETER  DistinguishedName
+        The distinguished name of the object to be tested. The DN may be specified using aDSPath or distinguished name.
+        If an incorrect DN syntax is supplied, it will return $false
+
+    .PARAMETER  DirectoryEntry
+        A DirectoryEntry object to be tested. 
+        If a string value is passed, it will be casted to a DirectoryEntry.
+
+    .PARAMETER  isValid
+        Verifies that the syntax of the DN is correct. 
+        Returns $true if valid and otherwise $false
+
+    .PARAMETER  PassThru
+        Returns the [DirectoryServices.DirectoryEntry] object if object exists, otherwise returns false
+    
+    .PARAMETER  AsDN
+        Use together with -PassThru. Returns distinguished path as String
+
+    .PARAMETER  AsADsPath
+        Use together with -PassThru. Returns ADsPath as String
+
+    .PARAMETER  $SplitParts
+        Returns a PowerShell object with the different LDAP URI parts
+
+    .EXAMPLE
+        PS C:\&gt; Test-ObjectPath  &quot;CN=myOU,DC=test,DC=intra&quot;
+        
+        -------------------------------------------------------
+        
+        Test if an object with the DN CN=myOU,DC=test,DC=intra exists.
+
+    .EXAMPLE
+        PS C:\&gt; Test-ObjectPath  &quot;CN=myOU,DC=test,DC=intra&quot; -isValid
+        
+        -------------------------------------------------------
+        
+        Test if the DN CN=myOU,DC=test,DC=intra is correct.
+
+    .EXAMPLE
+        PS C:\&gt; Test-ObjectPath -DirectoryEntry ([DirectoryServices.DirectoryEntry]&quot;LDAP://CN=myOU,DC=test,DC=intra&quot;
+    
+        -------------------------------------------------------
+        
+        Test if an object represented by the directoryEntry of CN=myOU,DC=test,DC=intra exists
+
+    .EXAMPLE
+        PS C:\&gt; Test-ObjectPath &quot;LDAP://CN=myOU,DC=test,DC=intra&quot;
+        
+        -------------------------------------------------------
+        
+        Test if an object with the DN CN=myOU,DC=test,DC=intra exists.
+
+    .EXAMPLE
+        PS C:\&gt; Test-ObjectPath ([DirectoryServices.DirectoryEntry]&quot;LDAP://CN=myOU,DC=test,DC=intra&quot;
+    
+        -------------------------------------------------------
+        
+        Test if an object represented by the directoryEntry of CN=myOU,DC=test,DC=intra exists
+
+    .INPUTS
+        System.String,DirectoryServices.DirectoryEntry
+
+    .OUTPUTS
+        System.Bool
+
+    .Notes
+        NAME:      Test-ObjectPath
+        AUTHOR:    Patrick Sczepanski (patrick@sczepanski.com)
+        Version:   20120716
+        #Requires -Version 2.0
+
+#&gt;
+    
+    [Cmdletbinding(DefaultParameterSetName=&quot;String&quot;)]
+
+    Param(
+        [Alias('dn')]
+        [Parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,Mandatory=$True,Position=0,ParameterSetName=&quot;String&quot;)]
+        [string]$DistinguishedName,
+        
+        [Parameter(ParameterSetName=&quot;String&quot;)]
+        [switch]$isValid,
+        
+        [Parameter(ValueFromPipelineByPropertyName=$true,Mandatory=$True,Position=0,ParameterSetName=&quot;DirectoryEntry&quot;)]
+        [System.DirectoryServices.DirectoryEntry]
+        $DirectoryEntry,
+
+        # A System.DirectoryServices.SearchResult object representing the group to list the members from
+        # You may use Search-AD to find the group to be listed
+        [Parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,Mandatory=$True,Position=0,ParameterSetName=&quot;SearchResult&quot;)]
+        [AllowNull()]
+        [DirectoryServices.SearchResult]
+        $SearchResult,
+        
+        [Parameter(ParameterSetName=&quot;String&quot;)]
+        [string]
+        $connection,
+        
+        [Parameter()]
+        [switch]
+        $Passthru,
+
+        [Parameter()]
+        [switch]
+        $AsDN,
+
+        [Parameter()]
+        [switch]
+        $AsADsPath,
+        
+        [Parameter()]
+        [switch]
+        $SplitParts
+    )
+    Begin {
+        $ThisFunctionName = $MyInvocation.MyCommand.Name
+        # the function uses different return points due to multiple decissions taken
+        # it seemed easier to do it this way than try to collect all variations and evaluate again at the end
+        if( ( $PSBoundParameters.ContainsKey(&quot;AsDN&quot;) -or $PSBoundParameters.ContainsKey(&quot;AsADsPath&quot;) -or $PSBoundParameters.ContainsKey(&quot;SplitParts&quot;) ) -and (-not $PSBoundParameters.ContainsKey(&quot;Passthru&quot;) ) ) {
+            Write-Warning &quot;[$ThisFunctionName] :: You need to specify -Passthru if you want to use -AsDN and -AsADsPath&quot;
+        }
+        function Split-ADSPath ( $ADSPath ) {
+            if ( $ADSPath -match '^(?:(?:(?&lt;Provider&gt;LDAP|GC)://)(?:(?&lt;DC&gt;(?:[\w\.-])+)/)*)+(?&lt;Base&gt;(?:(?:URI|CN|OU)=.*?,)*)(?&lt;DCComponent&gt;(?:DC=.*)+)$' ) {
+                # Removed &quot; else { $null }&quot;
+                New-Object redtoo.ADsPathPart -Property @{
+                    &quot;Provider&quot;    = if ($Matches.Contains(&quot;Provider&quot;) )    { $Matches.Provider };
+                    &quot;Server&quot;      = if ($Matches.Contains(&quot;DC&quot;) )          { $Matches.DC };
+                    &quot;BaseDN&quot;      = if ($Matches.Contains(&quot;Base&quot;) )        { $Matches.base -replace &quot;,$&quot;,&quot;&quot; };
+                    &quot;RDN&quot;         = if ($Matches.Contains(&quot;Base&quot;) )        { ($Matches.base.split(&quot;,&quot;))[0] };
+                    &quot;DCComponent&quot; = if ($Matches.Contains(&quot;DCComponent&quot;) ) { $Matches.DCComponent };
+                    &quot;Parent&quot;      = if ($Matches.Contains(&quot;Provider&quot;) )    { ($Matches.base.split(&quot;,&quot;, [StringSplitOptions]::RemoveEmptyEntries) | select -Skip 1) -join &quot;,&quot; };
+                    &quot;DistinguishedName&quot; = if ($Matches.Contains(&quot;Base&quot;) -and `
+                                        $Matches.Contains(&quot;DCComponent&quot;) ) { &quot;{0}{1}&quot; -f $Matches.base, $Matches.DCComponent  };
+                }
+            } else {
+                Write-Warning &quot;[$ThisFunctionName] :: Failed to match LDAP Path: '$LDAPPath'&quot;
+            }
+        }
+    }
+    Process {
+        switch ($pscmdlet.ParameterSetName) {
+            &quot;String&quot;    {
+                if ( $connection ) {
+                      $connection = $connection + &quot;/&quot;
+                } else {
+                    $connection = &quot;&quot;
+                }
+                switch  -regex ( $DistinguishedName ) { 
+                    #'^((?&lt;Provider&gt;(LDAP|GC)://)(?&lt;DC&gt;([\w\.-])+/)*)+(?&lt;Base&gt;((URI|CN|OU)=.*?,)*)(?&lt;DCComponent&gt;(DC=.*)+)$'
+                    '^(((LDAP|GC)://)(([\w\.-])+/)*)+((UID|CN|OU)=.*?,)*(DC=.*)+$' {
+                        $LDAPpath = $DistinguishedName
+                        break
+                    }
+                    '^(([\w\.-])+/)*((UID|CN|OU)=.*?,)*(DC=.*)+$' {
+                        # matching dn without machine or domain. 
+                        # Allows adding a machine name using -connection which is otherwise ignored
+                        $LDAPpath = &quot;LDAP://$connection$DistinguishedName&quot;
+                        break 
+                    }
+                    '^WinNT://(?&lt;Computer&gt;\w.*|\.)/(?&lt;Account&gt;\w.*)$' {
+                        # match WinNT provider such as &quot;WinNT://mycomputer/jdoe,user&quot;
+                        $LDAPpath = $DistinguishedName
+                        break
+                    }
+                    Default { return $false }
+                }
+                if ( $isValid ) { 
+                    # only verified syntax
+                    return $true 
+                }
+                $exists = try { [DirectoryServices.DirectoryEntry]::exists(&quot;$LDAPpath&quot;) } catch { $false }
+                if ( $exists ) {
+                    if ( $Passthru ) {
+                        if ( $AsDN ) {
+                            return ([regex]::Match($LDAPpath,&quot;.*/(.*)&quot;)).Groups[1].Value
+                        } elseif ( $AsADsPath ) {
+                            return $LDAPpath 
+                        } elseif ( $SplitParts ) {
+                            Split-ADSPath $LDAPpath 
+                        } else {
+                            return  [DirectoryServices.DirectoryEntry]&quot;$LDAPpath&quot;
+                        }
+                    } else {
+                        return $true
+                    }
+                } else {
+                    return $false
+                }
+                break 
+            }
+            &quot;DirectoryEntry&quot; {
+                if ( [string]::IsNullOrEmpty( ( $DirectoryEntry | Get-Member -MemberType Property ) ) ) {
+                    return $false
+                } else {
+                    if ( $Passthru ) {
+                        if ( $AsDN ) {
+                            return ([regex]::Match($DirectoryEntry.adspath,&quot;.*/(.*)&quot;)).Groups[1].Value 
+                        } elseif ( $AsADsPath ) {
+                            return $DirectoryEntry.adspath 
+                        } elseif ( $SplitParts ) {
+                            Split-ADSPath $DirectoryEntry.adspath
+                        } else {
+                            return $DirectoryEntry
+                        }
+                    } else {
+                        return $true
+                    }
+                }
+                break
+            }
+            &quot;SearchResult&quot; {
+                if ( [string]::IsNullOrEmpty( $SearchResult ) ) {
+                    return $false
+                } else {
+                    $DN = $SearchResult.Properties.adspath
+                    if ( $Passthru ) {
+                        if ( $AsDN ) {
+                            return ([regex]::Match($SearchResult.Properties.adspath[0],&quot;.*/(.*)&quot;)).Groups[1].Value 
+                        } elseif ( $AsADsPath ) {
+                            return $SearchResult.Properties.adspath[0] 
+                        } elseif ( $SplitParts ) {
+                            Split-ADSPath ( $SearchResult.Properties.adspath[0] )
+                        } else {
+                            return  [DirectoryServices.DirectoryEntry]$SearchResult.Properties.adspath
+                        }
+                    } else {
+                        return $true
+                    }
+                break
+                }
+            }
+        }
+    }
+    End {
+    
+    }
+}
+
+function Search-AD  {
+    &lt;#
+        .Synopsis 
+            Searching Active Directory
+            
+        .Description
+            Searching Active Directory
+
+        .Parameter Provider
+            Provider to use to connect. Allowed are GC and LDAP
+            Default: LDAP
+            
+        .Parameter Connection
+            Optional domain controller name used to connect to execute the search
+            Default: Any (closest)
+        
+        .Parameter Forest
+            Use forest root DN as default searchbase, GC as default provider 
+            and set the default scope to subtree
+        
+        .Parameter Domain
+            Use current domain root DN as default searchbase 
+            and set the default scope to subtree
+        
+        .Parameter Searchbase
+            Distinguished name of the searchbase to start the search from
+            Default: Current Domain
+        
+        .Parameter Filter
+            LDAP filter
+            Default: (objectclass=*)
+        
+        .Parameter Attributes
+            Attributes to be returned
+            Default distinguishedname
+        
+        .Parameter Scope
+            Search scope. Allowed scopes are base, onelevel, subtree
+            Default: base
+        
+        .Parameter PageSize
+            Number of objects returned per page. In standard AD user a number below 1000 which is the default maximum object returned in one step
+            Default: 1000
+        
+        .Parameter SizeLimit
+            Maximum number of objects returned. Enter 0 for unlimited numer
+            Default: 1000
+        
+        .Parameter ChooseItem 
+            Allows to choose a single item out of multiple items returned by the search
+        
+        .Parameter PropertyNamesOnly 
+            Returns only the property names without values
+        
+        .Parameter FindOne 
+            Returns the first object matching
+        
+        .Example
+            $Group = Search-AD -connection &quot;DC1.mydomain.com&quot; -filter &quot;(&amp;(objectcategory=group)(samaccountname=group51)))&quot; -searchbase &quot;DC=mydomain,DC=com&quot; -scope &quot;subtree&quot;
+        
+        .OUTPUTS
+            [System.DirectoryServices.SearchResultCollection]
+            
+        .INPUTS
+            NA
+            
+        .Link
+            Search-AD
+        
+        .Notes
+            NAME:      Search-AD
+            AUTHOR:    Patrick Sczepanski (patrick@sczepanski.com)
+            Version:   20120709
+            #Requires -Version 2.0
+    #&gt;
+    [Cmdletbinding(DefaultParameterSetName=&quot;DN&quot;)]
+    Param (
+        [Parameter(ValueFromPipelineByPropertyName=$true,Position=0)]
+        [redtoo.AD.Provider]$Provider   = [redtoo.AD.Provider]::LDAP, 
+
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [string]
+        $Connection,
+
+        [Alias('base','b')]
+        [Parameter(ValueFromPipelineByPropertyName=$true,Position=0,ParameterSetName=&quot;DN&quot;)]
+        [ValidateScript( {Test-ObjectPath $_ -IsValid} )]
+        [string]
+        $Searchbase = ([DirectoryServices.DirectoryEntry]&quot;LDAP://RootDSE&quot;).DefaultNamingContext,
+
+        [Parameter(ValueFromPipelineByPropertyName=$true,ParameterSetName=&quot;Domain&quot;)]
+        [switch]
+        $DomainBase,
+        
+        [Parameter(ValueFromPipelineByPropertyName=$true,ParameterSetName=&quot;Forest&quot;)]
+        [switch]
+        $ForestBase,
+        
+        [Alias('f')]
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [string]
+        $Filter        = &quot;(objectclass=*)&quot;,
+
+        [Alias('a','attribute','attrib')]
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [string[]]
+        $Attributes,
+        
+        [Alias('s')]
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [DirectoryServices.SearchScope]
+        $Scope         = &quot;base&quot;, 
+
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [int32]$PageSize = 1000,
+        
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [int32]$SizeLimit = 1000,
+        
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [switch]$PropertyNamesOnly,
+
+        [Alias('choose','select','c')]
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [switch]
+        $ChooseItem,
+        
+        [Alias('One')]
+        [switch]
+        $FindOne,
+        
+        [switch]
+        $CountOnly,
+        
+        [Alias('Chasing')]
+        [Parameter(ValueFromPipelineByPropertyName=$true)]
+        [DirectoryServices.ReferralChasingOption]
+        $ReferralChasing = [DirectoryServices.ReferralChasingOption]::None,
+        
+        [DirectoryServices.SecurityMasks]
+        $SecurityMasks = [DirectoryServices.SecurityMasks]::Dacl
+        
+    ) 
+    Begin {
+        $ThisFunctionName = $MyInvocation.MyCommand.Name
+        $RootDSE = [DirectoryServices.DirectoryEntry]&quot;LDAP://RootDSE&quot;
+        if ( ! $RootDSE ) {
+            Write-Warning &quot;[$ThisFunctionName] :: You are not connected to AD. This function can only be used within an AD Forest.&quot;
+            Return $null
+        }
+    }
+    Process {
+        switch ( $psCmdlet.ParameterSetName ) {
+            &quot;Forest&quot; {  
+                $SearchBase = $RootDSE.rootDomainNamingContext
+                if ( ! $PSBoundParameters.ContainsKey(&quot;Provider&quot;) ) {
+                    $Provider = [redtoo.AD.Provider]::GC; 
+                } 
+                if ( ! $PSBoundParameters.ContainsKey(&quot;Scope&quot;) ) {
+                    $Scope = [DirectoryServices.SearchScope]::Subtree
+                }
+             }
+            &quot;Domain&quot; { 
+                $SearchBase = $RootDSE.defaultNamingContext
+                if ( ! $PSBoundParameters.ContainsKey(&quot;Scope&quot;) ) {
+                    $Scope = [DirectoryServices.SearchScope]::Subtree
+                }            
+            }
+        }
+        # Normalize the searchbase
+        # 1. Split it apart
+        $SearchBaseParts = Test-ObjectPath $SearchBase -passthru -SplitParts
+        # 2. Get the DC which could resolve the name to allow cross domain searches
+        if ( $Connection ) {
+            $SearchBaseParts.Server = $Connection
+        } else {
+            # get a DC of the domain on which the object is located
+            # Taking the DN of the object, getting its parent domain, replacing DC= to make a DNS name which is then used to get the domain context
+            
+            $DomainDNS = ( $SearchBaseParts.DCComponent ) -replace &quot;DC=&quot;,&quot;&quot; -replace &quot;,&quot;,&quot;.&quot;
+            $SearchBaseParts.Server =  ( [adsi]&quot;LDAP://$DomainDNS/RootDSE&quot; ).dnsHostName
+        }
+        
+        if ( $Provider ) {
+            $SearchBaseParts.Provider = $Provider
+        }
+        # Finally merge information again
+        $SearchBase = &quot;{0}://{1}/{2}&quot; -f $SearchBaseParts.Provider, $SearchBaseParts.Server, $SearchBaseParts.DistinguishedName
+        
+        if ( $attributes -notcontains &quot;distinguishedname&quot; ) {
+            $attributes +=  &quot;distinguishedname&quot;
+        }
+        
+        if ( $CountOnly ) {
+            $PropertyNamesOnly = $true
+            $cacheResults = $false
+        } else {
+            $cacheResults = $true
+        }
+        [DirectoryServices.DirectoryEntry]$searchbaseURI = $SearchBase
+        [DirectoryServices.DirectorySearcher]$Searcher = new-object DirectoryServices.DirectorySearcher($searchbaseURI)
+        if ( $attributes -match &quot;NTSecurityDescriptor&quot; ) {
+            $Searcher.SecurityMasks = $SecurityMasks
+        }
+        $Searcher.filter = $filter
+        $Searcher.CacheResults = $cacheResults
+        $Searcher.SearchScope = $scope
+        $Searcher.PageSize = $PageSize
+        $Searcher.PropertyNamesOnly = $PropertyNamesOnly
+        $Searcher.PropertiesToLoad.AddRange($attributes)
+        $Searcher.ReferralChasing = $ReferralChasing
+        try {
+            if ( $FindOne ) {
+                [System.DirectoryServices.SearchResult]$result = $searcher.FindOne()
+            } else {
+                [System.DirectoryServices.SearchResultCollection]$result = $searcher.FindAll()
+            }
+        } 
+        catch {
+            Write-Warning &quot;[$ThisFunctionName] :: $_`nBase:       $SearchBase`nFilter:      $filter`nSearchScope: $scope`nAttributes:  $Attributes &quot; 
+            return $null
+        }
+        switch ( @(,$result) ) {
+            { ($_ -is [System.DirectoryServices.SearchResultCollection]) -and ($_.count -lt 1) } { Write-Debug &quot;[Search-AD] :: Cannot find an object in $searchbase using filter $filter&quot;
+                if (  $CountOnly ) {
+                    return 0
+                } else {
+                    return $null
+                }
+                break }
+            { ($_ -is [System.DirectoryServices.SearchResult] -or ($_.count -eq 1)) } { Write-Debug &quot;[Search-AD] :: Found 1 Object&quot;
+                if (  $CountOnly ) {
+                    return 1
+                } else {
+                    return $result
+                }
+                break }
+            { ($_ -is [System.DirectoryServices.SearchResultCollection]) -and ($_.count -gt 1) } {
+                if (  $CountOnly ) {
+                    return $_.count
+                } else {
+                    if ( $chooseitem ) {
+                        [int]$count = -1
+                        foreach($object in $result) {
+                            $count = $count + 1
+                            Write-Host &quot;[$count]: &quot; $object.Properties.distinguishedname
+                        }
+                        $selection = Read-Host &quot;Please select object&quot;
+                        if ( $($selection -lt 0) -or $($selection -gt $count) -or $($count -isnot [int])  ) { Write-Error &quot;Selection '$selection' out of scope.`r`nPlease enter an integer value between 0 and $count.&quot;; exit(0)  }
+                        return $result[$selection]
+                    } else {
+                        return $result
+                    }
+                }
+                break }
+            default { Write-Error -message &quot;[$ThisFunctionName] :: Issue with switch statement. Please check code. Unexpected Error.&quot;; }
+        }
+    }
+    End {
+
+    }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

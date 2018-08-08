@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="thomas torggler">
+    <title>Import-GalPhoto - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Import-GalPhoto</h1>
+<h3><a href="//scripts/3570.ps1">download</a></h3>
+<p>a function to batch import Exchange 2010 GAL photos... find the related post on ntsystems.it: http://www.ntsystems.it/post.aspx?id=e28854e0-e628-4fc7-850b-83d0458d9ab7</p>
+<pre><code class="language-posh">&lt;#
+.Synopsis
+   Import Exchange 2010 Gal photo for one or more users. 
+.DESCRIPTION
+   This function invokes the Import-RecipientDataProperty cmdldet to import a picture into the thumbnailPhoto attribute of an Exchange mailbox.
+   It assumes you have a directory containing all images to import, with the file names corresponding to the usernames of the mailboxes.
+   
+   PS X:\&gt; dir *.jpg
+
+
+        Directory: c:\temp\pics
+
+
+    Mode                LastWriteTime     Length Name
+    ----                -------------     ------ ----
+    -a---        07.08.2012     19:29       5984 user1.name.jpg
+    -a---        16.05.2012     11:58       5984 user2.jpg
+    -a---        23.07.2012     15:55       5984 user3.name.jpg
+    ...
+
+.EXAMPLE
+   PS C:\&gt; Import-GalPhoto -FilePath 'c:\temp\pics'
+   This example gets all .jpg pictures from c:\temp\pics and tries to find corresponding Exchange Users. If a user is found, the picture is imported using Import-RecipientDataProperty.
+.EXAMPLE
+   PS C:\&gt; dir 'c:\temp\pics' | Select-Object -First 2 | Import-GalPhoto
+   This example shows how you can use Get-ChildItem (dir) and do some custom filtering (Where-Object, Select-Object) to get pictures. 
+   Then it makes use of pipeline input to import pictures.
+#&gt;
+function Import-GalPhoto
+{
+    [CmdletBinding(SupportsShouldProcess=$true, 
+                  ConfirmImpact='High')]
+    Param
+    (
+        # Set the FilePath where pictures are located
+        [Parameter(Mandatory=$true, 
+                   ValueFromPipelineByPropertyName=$true,
+                   Position=0)]
+        [ValidateNotNull()]
+        [ValidateNotNullOrEmpty()]
+        [Alias('FullName')]
+        [IO.FileInfo]
+        $FilePath,
+
+        # LogFile set the destination for LogFile, defaults to &quot;.\Import-GalPhoto.txt&quot; 
+        [Parameter(Mandatory=$false,
+                   ParameterSetName='Parameter Set 1')]
+        $LogFile=&quot;.\Import-GalPhoto.txt&quot;
+    )
+
+    Begin
+    {
+        Write-Verbose 'Execute Begin Block'
+        # delete LogFile
+        Remove-Item $LogFile -ErrorAction SilentlyContinue
+        
+        # load assembly, used to get Image Properties
+        [void][System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Drawing&quot;)
+
+        # logging
+        &quot;$(Get-Date) Function begin&quot; | Add-Content -Path $LogFile -WhatIf:$false
+    }
+    Process
+    {
+        Write-Verbose 'Execute Process Block'
+
+        # create an array that contains all files
+        [array]$arrPics = Get-ChildItem -Path $FilePath -File -Filter '*.jpg'
+        &quot;$(Get-Date) arrPics is $($arrPics)&quot; | Add-Content -Path $LogFile -WhatIf:$false
+
+        $arrPics | ForEach-Object {
+            # objPicture contains full path to the picture
+            [IO.FileInfo]$objPicture = $_.FullName
+            
+            # assume file BaseName equals UserName
+            [string]$strUserName = $_.BaseName
+            
+            # logging
+            Write-Verbose &quot;`$objPicture is $objPicture&quot;
+            Write-Verbose &quot;`$strUserName is $strUserName&quot;
+            &quot;$(Get-Date) objPicture is $($objPicture)&quot; | Add-Content -Path $LogFile -WhatIf:$false
+            &quot;$(Get-Date) strUserName is $($strUserName)&quot; | Add-Content -Path $LogFile -WhatIf:$false
+    
+            # some verification before manipulating stuff
+            try {
+                Write-Verbose &quot;Try to find User $strUserName&quot;
+                Start-Sleep -Seconds 1
+                $exchangeUser = Get-User -Identity $strUserName -ErrorAction Stop
+                $Continue = $true
+
+                # get Image Properties
+                $objImage = [System.Drawing.Image]::FromFile($objPicture)
+
+                # get content from image file, used with Import-RecipientDataProperty
+                $objFileData = ([Byte[]]$(Get-Content -Path $objPicture -Encoding Byte -ReadCount 0 -ErrorAction Stop))
+                    
+                # logging
+                Write-Verbose &quot;`$exchangeUser is $($exchangeUser.SamAccountName)&quot;
+                Write-Verbose &quot;`$objImage PhysicalDimensionis is $($objImage.PhysicalDimension)&quot;
+                Write-Verbose &quot;`$objPicture filesize(KB) is $($objPicture.Length / 1kb)&quot;
+                &quot;$(Get-Date) exchangeUser is $($exchangeUser.SamAccountName)&quot; | Add-Content -Path $LogFile -WhatIf:$false
+                &quot;$(Get-Date) Image PhysicalDimension is $($objImage.PhysicalDimension)&quot; | Add-Content -Path $LogFile -WhatIf:$false
+                &quot;$(Get-Date) Image filesize(KB) is $($objPicture.Length / 1kb)&quot; | Add-Content -Path $LogFile -WhatIf:$false
+
+            } catch {
+                $Continue = $false
+
+                # logging
+                Write-Warning &quot;Could not find User $strUserName&quot;
+                &quot;$(Get-Date) Could not find $($strUserName)&quot; | Add-Content -Path $LogFile -WhatIf:$false
+            }
+            
+            # use objImage to check if image size is ok, max 96x96 pixels, max 10K
+            if ($Continue -and (($objImage.Height -le 96) -and ($objImage.Width -le 96) -and ($objPicture.Length -le 10kb))){
+                $Continue = $true
+
+                # get rid of objImage
+                $objImage.Dispose()                
+
+                # logging
+                Write-Verbose &quot;Picture $($objPicture) is ok&quot;
+            } else {
+                $Continue = $false
+                
+                # logging
+                Write-Verbose &quot;Picture $($objPicture) is not ok&quot;
+                &quot;$(Get-Date) Skipped $($objPicture) size not ok&quot; | Add-Content -Path $LogFile -WhatIf:$false
+            }
+                    
+            # if verification is ok, go ahead and import images
+            if ($Continue -and ($pscmdlet.ShouldProcess(&quot;$($exchangeUser.SamAccountName)&quot;, &quot;Importing Recipient Data Property from file $objPicture&quot;))) {
+                
+                # invoke Import-RecipientDataProperty to import data into active directory
+                Import-RecipientDataProperty -Identity $exchangeUser.Identity -Picture -FileData $objFileData    
+            }
+        }
+    }
+    End
+    {
+        Write-Verbose 'Execute End Block'
+        
+        # logging
+        &quot;$(Get-Date) Function end&quot; | Add-Content -Path $LogFile -WhatIf:$false
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

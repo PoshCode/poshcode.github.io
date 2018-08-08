@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>JSON - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>JSON</h1>
+<h3><a href="//scripts/1514.ps1">download</a> - <a href="//scripts/1513.md">parent</a></h3>
+<p>Version 1.0 of my JSON module. I has a full set of tools for exporting, importing, and converting Json objects (including arbitrary objects). See comments in script header for usage examples, but basically, you can do things like:</p>
+<p>@ ls | ConvertTo-Json -Depth 2 @
+@ ls | Select FullName, Length | ConvertTo-JSon -NoType @</p>
+<p>You can do full round-trips, even with partial data, as long as you specify the <em>Type</em> when converting back from JSON:</p>
+<p>@PS | Select PM, WS, CPU, ID, ProcessName | ConvertTo-json -NoType | ConvertFrom-json -Type System.Diagnostics.Process@</p>
+<pre><code class="language-posh">#requires -version 2.0
+# Version History:
+# v 0.5 - First Public version
+# v 1.0 - Made ConvertFrom-Json work with arbitrary JSON 
+#       - switched to xsl style sheets for ConvertTo-JSON
+
+#  There is no help (yet) because I'm still changing and renaming everything every time I mess with this code
+#  Full RoundTrip capability:
+#
+#  &gt; ls | ConvertTo-Json | ConvertFrom-Json
+#  &gt; ps | ConvertTo-Json | Convert-JsonToXml | Convert-XmlToJson | convertFrom-Json
+#
+#  You may frequently want to use the DEPTH or NoTypeInformation parameters:
+#
+#  &gt; ConvertTo-Json -Depth 2 -NoTypeInformation
+#
+#  But then you have to specify the type when you reimport (and you can't do that for deep objects).  
+#  This problem also occurs if you convert the result of a SELECT statement (ie: PSCustomObject).
+#  For Example:
+#
+#  &gt;  PS | Select PM, WS, CPU, ID, ProcessName |
+#  &gt;&gt; ConvertTo-json -NoType |
+#  &gt;&gt; ConvertFrom-json -Type System.Diagnostics.Process
+
+
+Add-Type -AssemblyName System.ServiceModel.Web, System.Runtime.Serialization
+$utf8 = [System.Text.Encoding]::UTF8
+
+function Write-String {
+PARAM(
+   [Parameter()]$stream,
+   [Parameter(ValueFromPipeline=$true)]$string
+)
+PROCESS {
+  $bytes = $utf8.GetBytes($string)
+  $stream.Write( $bytes, 0, $bytes.Length )
+}  
+}
+
+function Convert-JsonToXml {
+PARAM([Parameter(ValueFromPipeline=$true)][string[]]$json)
+BEGIN { 
+   $mStream = New-Object System.IO.MemoryStream 
+}
+PROCESS {
+   $json | Write-String -stream $mStream
+}
+END {
+   $mStream.Position = 0
+   $jsonReader = [System.Runtime.Serialization.Json.JsonReaderWriterFactory]::CreateJsonReader($mStream,[System.Xml.XmlDictionaryReaderQuotas]::Max)
+   try
+   {
+      $xml = New-Object Xml.XmlDocument
+      $xml.Load($jsonReader)
+      $xml
+   }
+   finally
+   {
+      $jsonReader.Close()
+      $mStream.Dispose()
+   }
+}
+}
+ 
+function Convert-XmlToJson {
+PARAM([Parameter(ValueFromPipeline=$true)][Xml]$xml)
+PROCESS {
+   $mStream = New-Object System.IO.MemoryStream
+   $jsonWriter = [System.Runtime.Serialization.Json.JsonReaderWriterFactory]::CreateJsonWriter($mStream)
+   try
+   {
+     $xml.Save($jsonWriter)
+     $bytes = $mStream.ToArray()
+     [System.Text.Encoding]::UTF8.GetString($bytes,0,$bytes.Length)
+   }
+   finally
+   {
+     $jsonWriter.Close()
+     $mStream.Dispose()
+   }
+}
+}
+
+## Rather than rewriting ConvertTo-Xml ...
+Function ConvertTo-Json {
+[CmdletBinding()]
+Param(
+   [Parameter(Mandatory=$true,Position=1,ValueFromPipeline=$true)]$InputObject
+,
+   [Parameter(Mandatory=$false)][Int]$Depth=1
+,
+   [Switch]$NoTypeInformation
+)
+END { 
+   ## You must output ALL the input at once 
+   ## ConvertTo-Xml outputs differently if you just have one, so your results would be different
+   $input | ConvertTo-Xml -Depth:$Depth -NoTypeInformation:$NoTypeInformation -As Document | Convert-CliXmlToJson
+}
+}
+
+Function Convert-CliXmlToJson {
+PARAM(
+   [Parameter(ValueFromPipeline=$true)][Xml.XmlNode]$xml
+)
+BEGIN {
+   $xmlToJsonXsl = @'
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;xsl:stylesheet version=&quot;1.0&quot; xmlns:xsl=&quot;http://www.w3.org/1999/XSL/Transform&quot;&gt;
+&lt;!--
+  CliXmlToJson.xsl
+
+  Copyright (c) 2006,2008 Doeke Zanstra
+  Copyright (c) 2009 Joel Bennett
+  All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without modification, 
+  are permitted provided that the following conditions are met:
+
+  Redistributions of source code must retain the above copyright notice, this 
+  list of conditions and the following disclaimer. Redistributions in binary 
+  form must reproduce the above copyright notice, this list of conditions and the 
+  following disclaimer in the documentation and/or other materials provided with 
+  the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; AND 
+  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
+  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, 
+  INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, 
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
+  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
+  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+  THE POSSIBILITY OF SUCH DAMAGE.
+--&gt;
+
+  &lt;xsl:output indent=&quot;no&quot; omit-xml-declaration=&quot;yes&quot; method=&quot;text&quot; encoding=&quot;UTF-8&quot; media-type=&quot;text/x-json&quot;/&gt;
+	&lt;xsl:strip-space elements=&quot;*&quot;/&gt;
+  &lt;!--contant--&gt;
+  &lt;xsl:variable name=&quot;d&quot;&gt;0123456789&lt;/xsl:variable&gt;
+
+  &lt;!-- ignore document text --&gt;
+  &lt;xsl:template match=&quot;text()[preceding-sibling::node() or following-sibling::node()]&quot;/&gt;
+
+  &lt;!-- string --&gt;
+  &lt;xsl:template match=&quot;text()&quot;&gt;
+    &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+      &lt;xsl:with-param name=&quot;s&quot; select=&quot;.&quot;/&gt;
+    &lt;/xsl:call-template&gt;
+  &lt;/xsl:template&gt;
+  
+  &lt;!-- Main template for escaping strings; used by above template and for object-properties 
+       Responsibilities: placed quotes around string, and chain up to next filter, escape-bs-string --&gt;
+  &lt;xsl:template name=&quot;escape-string&quot;&gt;
+    &lt;xsl:param name=&quot;s&quot;/&gt;
+    &lt;xsl:text&gt;&quot;&lt;/xsl:text&gt;
+    &lt;xsl:call-template name=&quot;escape-bs-string&quot;&gt;
+      &lt;xsl:with-param name=&quot;s&quot; select=&quot;$s&quot;/&gt;
+    &lt;/xsl:call-template&gt;
+    &lt;xsl:text&gt;&quot;&lt;/xsl:text&gt;
+  &lt;/xsl:template&gt;
+  
+  &lt;!-- Escape the backslash (\) before everything else. --&gt;
+  &lt;xsl:template name=&quot;escape-bs-string&quot;&gt;
+    &lt;xsl:param name=&quot;s&quot;/&gt;
+    &lt;xsl:choose&gt;
+      &lt;xsl:when test=&quot;contains($s,'\')&quot;&gt;
+        &lt;xsl:call-template name=&quot;escape-quot-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'\'),'\\')&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:call-template name=&quot;escape-bs-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;substring-after($s,'\')&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;xsl:otherwise&gt;
+        &lt;xsl:call-template name=&quot;escape-quot-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;$s&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+  &lt;/xsl:template&gt;
+  
+  &lt;!-- Escape the double quote (&quot;). --&gt;
+  &lt;xsl:template name=&quot;escape-quot-string&quot;&gt;
+    &lt;xsl:param name=&quot;s&quot;/&gt;
+    &lt;xsl:choose&gt;
+      &lt;xsl:when test=&quot;contains($s,'&amp;quot;')&quot;&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'&amp;quot;'),'\&amp;quot;')&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:call-template name=&quot;escape-quot-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;substring-after($s,'&amp;quot;')&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;xsl:otherwise&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;$s&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+  &lt;/xsl:template&gt;
+  
+  &lt;!-- Replace tab, line feed and/or carriage return by its matching escape code. Can't escape backslash
+       or double quote here, because they don't replace characters (&amp;#x0; becomes \t), but they prefix 
+       characters (\ becomes \\). Besides, backslash should be seperate anyway, because it should be 
+       processed first. This function can't do that. --&gt;
+  &lt;xsl:template name=&quot;encode-string&quot;&gt;
+    &lt;xsl:param name=&quot;s&quot;/&gt;
+    &lt;xsl:choose&gt;
+      &lt;!-- tab --&gt;
+      &lt;xsl:when test=&quot;contains($s,'&amp;#x9;')&quot;&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'&amp;#x9;'),'\t',substring-after($s,'&amp;#x9;'))&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;!-- line feed --&gt;
+      &lt;xsl:when test=&quot;contains($s,'&amp;#xA;')&quot;&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'&amp;#xA;'),'\n',substring-after($s,'&amp;#xA;'))&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;!-- carriage return --&gt;
+      &lt;xsl:when test=&quot;contains($s,'&amp;#xD;')&quot;&gt;
+        &lt;xsl:call-template name=&quot;encode-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;concat(substring-before($s,'&amp;#xD;'),'\r',substring-after($s,'&amp;#xD;'))&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+      &lt;/xsl:when&gt;
+      &lt;xsl:otherwise&gt;&lt;xsl:value-of select=&quot;$s&quot;/&gt;&lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+  &lt;/xsl:template&gt;
+
+  &lt;!-- number (no support for javascript mantise) --&gt;
+  &lt;xsl:template match=&quot;text()[not(string(number())='NaN' or
+                       (starts-with(.,'0' ) and . != '0'))]&quot;&gt;
+    &lt;xsl:value-of select=&quot;.&quot;/&gt;
+  &lt;/xsl:template&gt;
+
+  &lt;!-- boolean, case-insensitive --&gt;
+  &lt;xsl:template match=&quot;text()[translate(.,'TRUE','true')='true']&quot;&gt;true&lt;/xsl:template&gt;
+  &lt;xsl:template match=&quot;text()[translate(.,'FALSE','false')='false']&quot;&gt;false&lt;/xsl:template&gt;
+
+  &lt;!-- root object(s) --&gt;
+  &lt;xsl:template match=&quot;*&quot; name=&quot;base&quot;&gt;
+    &lt;xsl:if test=&quot;not(preceding-sibling::*)&quot;&gt;
+      &lt;xsl:choose&gt;
+        &lt;xsl:when test=&quot;count(../*)&gt;1&quot;&gt;&lt;xsl:text&gt;[&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+        &lt;xsl:otherwise&gt;&lt;xsl:text&gt;{&lt;/xsl:text&gt;&lt;/xsl:otherwise&gt;
+      &lt;/xsl:choose&gt;
+    &lt;/xsl:if&gt;
+    &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+      &lt;xsl:with-param name=&quot;s&quot; select=&quot;name()&quot;/&gt;
+    &lt;/xsl:call-template&gt;
+    &lt;xsl:text&gt;:&lt;/xsl:text&gt;
+    &lt;!-- check type of node --&gt;
+    &lt;xsl:choose&gt;
+      &lt;!-- null nodes --&gt;
+      &lt;xsl:when test=&quot;count(child::node())=0&quot;&gt;null&lt;/xsl:when&gt;
+      &lt;!-- other nodes --&gt;
+      &lt;xsl:otherwise&gt;
+      	&lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+    &lt;!-- end of type check --&gt;
+    &lt;xsl:if test=&quot;following-sibling::*&quot;&gt;,&lt;/xsl:if&gt;
+    &lt;xsl:if test=&quot;not(following-sibling::*)&quot;&gt;
+      &lt;xsl:choose&gt;
+        &lt;xsl:when test=&quot;count(../*)&gt;1&quot;&gt;&lt;xsl:text&gt;]&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+        &lt;xsl:otherwise&gt;&lt;xsl:text&gt;}&lt;/xsl:text&gt;&lt;/xsl:otherwise&gt;
+      &lt;/xsl:choose&gt;
+    &lt;/xsl:if&gt;
+  &lt;/xsl:template&gt;
+
+  &lt;!-- properties of objects --&gt;
+  &lt;xsl:template match=&quot;*[count(../*[name(../*)=name(.)])=count(../*) and count(../*)&amp;gt;1]&quot;&gt;
+    &lt;xsl:variable name=&quot;inArray&quot; select=&quot;translate(local-name(),'OBJECT','object')='object' or ../@Type[starts-with(.,'System.Collections') or contains(.,'[]') or (contains(.,'[') and contains(.,']'))]&quot;/&gt;
+    &lt;xsl:if test=&quot;not(preceding-sibling::*)&quot;&gt;
+       &lt;xsl:choose&gt;
+         &lt;xsl:when test=&quot;$inArray&quot;&gt;&lt;xsl:text&gt;[&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+         &lt;xsl:otherwise&gt;
+            &lt;xsl:text&gt;{&lt;/xsl:text&gt;
+            &lt;xsl:if test=&quot;../@Type&quot;&gt;
+               &lt;xsl:text&gt;&quot;__type&quot;:&lt;/xsl:text&gt;      
+               &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+                 &lt;xsl:with-param name=&quot;s&quot; select=&quot;../@Type&quot;/&gt;
+               &lt;/xsl:call-template&gt;
+               &lt;xsl:text&gt;,&lt;/xsl:text&gt;      
+             &lt;/xsl:if&gt;
+         &lt;/xsl:otherwise&gt;
+       &lt;/xsl:choose&gt;
+    &lt;/xsl:if&gt;
+    &lt;xsl:choose&gt;
+      &lt;xsl:when test=&quot;not(child::node())&quot;&gt;
+        &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;@Name&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:text&gt;:null&lt;/xsl:text&gt;
+      &lt;/xsl:when&gt;
+      &lt;xsl:when test=&quot;$inArray&quot;&gt;
+        &lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:when&gt;
+      &lt;!--
+      &lt;xsl:when test=&quot;not(@Name) and not(@Type)&quot;&gt;
+        &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;local-name()&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:text&gt;:&lt;/xsl:text&gt;      
+        &lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:when&gt;
+      --&gt;
+      &lt;xsl:when test=&quot;not(@Name)&quot;&gt;
+        &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;local-name()&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:text&gt;:&lt;/xsl:text&gt;      
+        &lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:when&gt; 
+      &lt;xsl:otherwise&gt;
+        &lt;xsl:call-template name=&quot;escape-string&quot;&gt;
+          &lt;xsl:with-param name=&quot;s&quot; select=&quot;@Name&quot;/&gt;
+        &lt;/xsl:call-template&gt;
+        &lt;xsl:text&gt;:&lt;/xsl:text&gt;
+        &lt;xsl:apply-templates select=&quot;child::node()&quot;/&gt;
+      &lt;/xsl:otherwise&gt;
+    &lt;/xsl:choose&gt;
+    &lt;xsl:if test=&quot;following-sibling::*&quot;&gt;,&lt;/xsl:if&gt;
+    &lt;xsl:if test=&quot;not(following-sibling::*)&quot;&gt;       
+      &lt;xsl:choose&gt;
+        &lt;xsl:when test=&quot;$inArray&quot;&gt;&lt;xsl:text&gt;]&lt;/xsl:text&gt;&lt;/xsl:when&gt;
+        &lt;xsl:otherwise&gt;&lt;xsl:text&gt;}&lt;/xsl:text&gt;&lt;/xsl:otherwise&gt;
+      &lt;/xsl:choose&gt;
+    &lt;/xsl:if&gt;
+  &lt;/xsl:template&gt;
+  
+  
+  &lt;!-- convert root element to an anonymous container --&gt;
+  &lt;xsl:template match=&quot;/&quot;&gt;
+    &lt;xsl:apply-templates select=&quot;node()&quot;/&gt;
+  &lt;/xsl:template&gt;    
+&lt;/xsl:stylesheet&gt;
+'@
+}
+PROCESS {
+   if(Get-Member -InputObject $xml -Name root) {
+      Write-Verbose &quot;Ripping to Objects&quot;
+      $xml = $xml.root.Objects
+   } else {
+      Write-Verbose &quot;Was already Objects&quot;
+   }
+   Convert-Xml -Xml $xml -Xsl $xmlToJsonXsl
+}
+}
+
+Function ConvertFrom-Xml {
+   [CmdletBinding(DefaultParameterSetName=&quot;AutoType&quot;)]
+   PARAM(
+      [Parameter(ValueFromPipeline=$true,Mandatory=$true,Position=1)]
+      [Xml.XmlNode]
+      $xml
+      ,
+      [Parameter(Mandatory=$true,ParameterSetName=&quot;ManualType&quot;)]
+      [Type]$Type
+      ,
+      [Switch]$ForceType
+   )
+   PROCESS{ 
+      if(Get-Member -InputObject $xml -Name root) {
+         return $xml.root.Objects | 
+      } elseif(Get-Member -InputObject $xml -Name Objects) {
+         return $xml.Objects | 
+      }
+      $propbag = @{}
+      foreach($name in Get-Member -InputObject $xml -MemberType Property | Where-Object{$_.Name -notmatch &quot;^__|type&quot;} | Select-Object -ExpandProperty name) {
+         Write-Verbose &quot;$Name Type: $($xml.&quot;$Name&quot;.type)&quot;
+         switch( $xml.&quot;$Name&quot;.type ) {
+            &quot;object&quot; {
+               $propbag.&quot;$Name&quot; = ConvertFrom-Xml -Xml $xml.&quot;$Name&quot;
+               break
+            } 
+            &quot;string&quot; {
+               $propbag.&quot;$Name&quot; = $xml.&quot;$Name&quot;.get_InnerText()
+               $MightBeADate = $xml.&quot;$Name&quot;.get_InnerText() -as [DateTime]
+               ## Strings that are actually dates (*grumble* JSON is crap)               
+               if($MightBeADate -and $propbag.&quot;$Name&quot; -eq $MightBeADate.ToString(&quot;G&quot;)) {
+                  $propbag.&quot;$Name&quot; = $MightBeADate
+               }
+               break
+            }
+            &quot;number&quot; {
+               $number = $xml.&quot;$Name&quot;.get_InnerText()
+               if($number -eq ($number -as [int])) {
+                  $propbag.&quot;$Name&quot; = $number -as [int]
+               } elseif($number -eq ($number -as [double])) {
+                  $propbag.&quot;$Name&quot; = $number -as [double]
+               } else {
+                  $propbag.&quot;$Name&quot; = $number -as [decimal]
+               }
+               break
+            }
+            &quot;boolean&quot; {
+               $propbag.&quot;$Name&quot; = [bool]::parse($xml.&quot;$Name&quot;.get_InnerText())
+            }
+            &quot;null&quot; {
+               $propbag.&quot;$Name&quot; = $null
+            }
+            default {
+               $propbag.&quot;$Name&quot; = $xml.&quot;$Name&quot;
+               break
+            }
+         }
+      }
+      if(!$Type -and $xml.HasAttribute(&quot;__type&quot;)) { $Type = $xml.__Type }
+      if($ForceType -and $Type) {
+         try {
+            $output = New-Object $Type -Property $propbag
+         } catch {
+            $output = New-Object PSObject -Property $propbag
+            $output.PsTypeNames.Insert(0, $xml.__type)
+         }
+      } else {
+         $output = New-Object PSObject -Property $propbag
+         if($Type) {
+            $output.PsTypeNames.Insert(0, $Type)
+         }
+      }
+      Write-Output $output
+   }
+}
+
+Function ConvertFrom-Json {
+   [CmdletBinding(DefaultParameterSetName=&quot;AutoType&quot;)]
+PARAM(
+   [Parameter(ValueFromPipeline=$true,Mandatory=$true,Position=1)][string]$InputObject
+   ,
+   [Parameter(Mandatory=$true,ParameterSetName=&quot;ManualType&quot;)][Type]$Type
+   ,
+   [Switch]$ForceType
+)
+PROCESS {
+   $null = $PSBoundParameters.Remove(&quot;InputObject&quot;)
+   (Convert-JsonToXml $InputObject).Root.Objects.Item.GetEnumerator() | ConvertFrom-Xml @PSBoundParameters
+}
+}
+
+#########
+### The JSON library is dependent on Convert-Xml from my Xml script module
+
+function Convert-Node {
+param(
+[Parameter(Mandatory=$true,ValueFromPipeline=$true)]
+[System.Xml.XmlReader]$XmlReader,
+[Parameter(Position=1,Mandatory=$true,ValueFromPipeline=$false)]
+[System.Xml.Xsl.XslCompiledTransform]$StyleSheet
+) 
+PROCESS {
+   $output = New-Object IO.StringWriter
+   $StyleSheet.Transform( $XmlReader, $null, $output )
+   Write-Output $output.ToString()
+}
+}
+   
+function Convert-Xml {
+#.Synopsis
+#  The Convert-XML function lets you use Xslt to transform XML strings and documents.
+#.Description
+#.Parameter Content
+#  Specifies a string that contains the XML to search. You can also pipe strings to Select-XML.
+#.Parameter Namespace
+#   Specifies a hash table of the namespaces used in the XML. Use the format @{&lt;namespaceName&gt; = &lt;namespaceUri&gt;}.
+#.Parameter Path
+#   Specifies the path and file names of the XML files to search.  Wildcards are permitted.
+#.Parameter Xml
+#  Specifies one or more XML nodes to search.
+#.Parameter Xsl
+#  Specifies an Xml StyleSheet to transform with...
+[CmdletBinding(DefaultParameterSetName=&quot;Xml&quot;)]
+PARAM(
+   [Parameter(Position=1,ParameterSetName=&quot;Path&quot;,Mandatory=$true,ValueFromPipelineByPropertyName=$true)]
+   [ValidateNotNullOrEmpty()]
+   [Alias(&quot;PSPath&quot;)]
+   [String[]]$Path
+,
+   [Parameter(Position=1,ParameterSetName=&quot;Xml&quot;,Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+   [ValidateNotNullOrEmpty()]
+   [Alias(&quot;Node&quot;)]
+   [System.Xml.XmlNode[]]$Xml
+,
+   [Parameter(ParameterSetName=&quot;Content&quot;,Mandatory=$true,ValueFromPipeline=$true)]
+   [ValidateNotNullOrEmpty()]
+   [String[]]$Content
+,
+   [Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false)]
+   [ValidateNotNullOrEmpty()]
+   [Alias(&quot;StyleSheet&quot;)]
+   [String[]]$Xslt
+)
+BEGIN { 
+   $StyleSheet = New-Object System.Xml.Xsl.XslCompiledTransform
+   if(Test-Path @($Xslt)[0] -ErrorAction 0) { 
+      Write-Verbose &quot;Loading Stylesheet from $(Resolve-Path @($Xslt)[0])&quot;
+      $StyleSheet.Load( (Resolve-Path @($Xslt)[0]) )
+   } else {
+      Write-Verbose &quot;$Xslt&quot;
+      $StyleSheet.Load(([System.Xml.XmlReader]::Create((New-Object System.IO.StringReader ($Xslt -join &quot;`n&quot;)))))
+   }
+   [Text.StringBuilder]$XmlContent = [String]::Empty 
+}
+PROCESS {
+   switch($PSCmdlet.ParameterSetName) {
+      &quot;Content&quot; {
+         $null = $XmlContent.AppendLine( $Content -Join &quot;`n&quot; )
+      }
+      &quot;Path&quot; {
+         foreach($file in Get-ChildItem $Path) {
+            Convert-Node -Xml ([System.Xml.XmlReader]::Create((Resolve-Path $file))) $StyleSheet
+         }
+      }
+      &quot;Xml&quot; {
+         foreach($node in $Xml) {
+            Convert-Node -Xml (New-Object Xml.XmlNodeReader $node) $StyleSheet
+         }
+      }
+   }
+}
+END {
+   if($PSCmdlet.ParameterSetName -eq &quot;Content&quot;) {
+      [Xml]$Xml = $XmlContent.ToString()
+      Convert-Node -Xml $Xml $StyleSheet
+   }
+}
+}
+
+
+New-Alias fromjson ConvertFrom-Json
+New-Alias tojson ConvertTo-Json
+
+#New-Alias ipjs Import-Json
+#New-Alias epjs Export-Json
+#Import-Json, Export-Json, 
+
+Export-ModuleMember -Function ConvertFrom-Json, ConvertTo-Json, Convert-JsonToXml, Convert-XmlToJson, Convert-CliXmlToJson -Alias *
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

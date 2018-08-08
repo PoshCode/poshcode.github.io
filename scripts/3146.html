@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-Struct 3 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-Struct 3</h1>
+<h3><a href="//scripts/3146.ps1">download</a> - <a href="//scripts/143.md">parent</a></h3>
+<p>A code-generating and emitting magic function for creating type-safe struct classes for use in PowerShell!</p>
+<p>Now supports PowerShell 3, and can generate related struct types (where types are properties of one another).</p>
+<pre><code class="language-posh">function New-Struct {
+#.Synopsis
+#   Creates Struct types from a list of types and properties
+#.Description
+#   A wrapper for Add-Type to create struct types.
+#.Example
+#   New-Struct Song { 
+#   [string]$Artist
+#   [string]$Album
+#   [string]$Name
+#   [TimeSpan]$Length
+#   } -CreateConstructorFunction
+#
+#   Description
+#   -----------
+#   Creates a &quot;Song&quot; type with strongly typed Artist, Album, Name, and Length properties, with a simple constructor and a constructor function
+#.Example
+#   New-Struct @{
+#   &gt;&gt; Product  = { [string]$Name; [double]$Price; }
+#   &gt;&gt; Order    = { [Guid]$Id; [Product]$Product; [int]$Quantity }
+#   &gt;&gt; Customer = { 
+#   &gt;&gt;   [string]$FirstName
+#   &gt;&gt;   [string]$LastName
+#   &gt;&gt;   [int]$Age
+#   &gt;&gt;   [Order[]]$OrderHistory
+#   &gt;&gt; }
+#   &gt;&gt; }
+#   &gt;&gt;
+#
+#   Description
+#   -----------
+#   To create a series of related struct types (where one type is a property of another type), you need to use the -Types hashtable parameter set.  That way, all of the types will compiled together at once, so the compiler will be able to find them all.
+#
+[CmdletBinding(DefaultParameterSetName=&quot;Multiple&quot;)]
+param(
+    # The name of the TYPE you are creating. Must be unique per PowerShell session.
+    [ValidateScript({
+        if($_ -notmatch '^[a-z][a-z1-9_]*$') {
+            throw &quot;'$_' is invalid. A valid name identifier must start with a letter, and contain only alpha-numeric or the underscore (_).&quot;
+        }
+        return $true             
+    })]
+    [Parameter(Position=0, Mandatory=$true, ValueFromPipelineByPropertyName=$true, ParameterSetName = &quot;Single&quot;)]
+    [string]$Name
+,
+    # A Scriptblock full of &quot;[Type]$Name&quot; definitions to show what properties you want on your Struct type
+    [Parameter(Position=1, Mandatory=$true, ValueFromPipelineByPropertyName=$true, ParameterSetName = &quot;Single&quot;)]
+    [ScriptBlock]$Property
+,
+    # A Hashtable in the form @{Name={Properties}} with multiple Names and Property Scriptblocks to define related structs (see example 2).
+    [Parameter(Position=0, Mandatory=$true, ParameterSetName = &quot;Multiple&quot;)]
+    [HashTable]$Types
+,
+    # Generate a New-StructName shortcut function for each New-Object StructName
+    [Alias(&quot;CTorFunction&quot;,&quot;ConstructorFunction&quot;)]
+    [Switch]$CreateConstructorFunction
+,
+    # Output the defined type(s)
+    [Switch]$PassThru
+)
+begin {
+    if($PSCmdlet.ParameterSetName -eq &quot;Multiple&quot;) {
+        $Structs = foreach($key in $Types.Keys) {
+            New-Object PSObject -Property @{Name=$key;Property=$Types.$key}
+        }
+        Write-Verbose ($Structs | Out-String)
+        $Structs | New-Struct -Passthru:$Passthru -CreateConstructorFunction:$CreateConstructorFunction
+    } else {
+        $code = &quot;using System;`nusing System.Collections;`nusing System.Management.Automation;`n&quot;
+        $function = &quot;&quot;
+    }
+}
+process {
+if($PSCmdlet.ParameterSetName -ne &quot;Multiple&quot;) {
+$parserrors = $null
+$tokens = [System.Management.Automation.PSParser]::Tokenize( $Property, [ref]$parserrors ) | Where-Object { &quot;Newline&quot;,&quot;StatementSeparator&quot; -notcontains $_.Type }
+
+# CODE GENERATION MAGIKS!
+$Name = $Name.ToUpper()[0] + $Name.SubString(1)
+$ctor = @()
+$setr = @()
+$prop = @()
+$parm = @()
+$cast = @()
+$hash = @()
+$2Str = @()
+
+$(while($tokens.Count -gt 0) {
+    $typeToken,$varToken,$tokens = $tokens
+    if($typeToken.Type -ne &quot;Type&quot;) {
+        throw &quot;Syntax error on line $($typeToken.StartLine) Column $($typeToken.Start). Missing Type. The Struct Properties block must contain only statements of the form: [Type]`$Name, see Get-Help New-Struct -Parameter Properties.`n$($typeToken | Out-String)&quot;
+    } elseif($varToken.Type -ne &quot;Variable&quot;) {
+        throw &quot;Syntax error on line $($varToken.StartLine) Column $($varToken.Start). Missing Name. The Struct Properties block must contain only statements of the form: [Type]`$Name, see Get-Help New-Struct -Parameter Properties.`n$($typeToken | Out-String)&quot;
+    }
+
+    $varName = $varToken.Content.ToUpper()[0] + $varToken.Content.SubString(1)
+    $varNameLower = $varName.ToLower()[0] + $varName.SubString(1)
+    try {
+        Write-Verbose &quot;TypeToken: $($typeToken.Content) $varName&quot;
+        if($PSVersionTable.PSVersion.Major -lt 3) {
+            $typeName = Invoke-Expression &quot;[$($typeToken.Content)].FullName&quot;
+        } else {
+            $typeName = Invoke-Expression &quot;$($typeToken.Content).FullName&quot;
+        }            
+    } catch {
+        ## It's probably a reference to another struct, so just put the name in
+        if($PSVersionTable.PSVersion.Major -lt 3) {
+            $typeName = $typeToken.Content
+        } else {
+            $typeName = $typeToken.Content -replace '\[(.*)\]','$1'
+        }
+    }
+    Write-Verbose &quot;Type Name: $typeName $varName&quot;
+    
+    $prop += '   public {0} {1};' -f $typeName,$varName
+    $setr += '      {0} = {1};' -f $varName,$varNameLower
+    $ctor += '{0} {1}' -f $typeName,$varNameLower
+    $cast += '      if(input.Properties[&quot;{0}&quot;] != null){{ output.{0} = ({1})input.Properties[&quot;{0}&quot;].Value; }}' -f $varName,$typeName
+    $hash += '      if(hash.ContainsKey(&quot;{0}&quot;)){{ output.{0} = ({1})hash[&quot;{0}&quot;]; }}' -f $varName,$typeName
+    $2Str += '&quot;{0} = [{1}]\&quot;&quot; + {0}.ToString() + &quot;\&quot;&quot;' -f $varName, $typeName
+    if($CreateConstructorFunction) {
+        $parm += '[{0}]${1}' -f $typeName,$varName
+    }
+})
+
+$code += @&quot;
+public struct $Name {
+$($prop -join &quot;`n&quot;)
+   public $Name ($( $ctor -join &quot;,&quot;))
+   {
+$($setr -join &quot;`n&quot;)
+   }
+   public static implicit operator $Name(Hashtable hash)
+   {
+      $Name output = new $Name();
+$($hash -join &quot;`n&quot;)
+      return output;
+   }
+   public static implicit operator $Name(PSObject input)
+   {
+      $Name output = new $Name();
+$($cast -join &quot;`n&quot;)
+      return output;
+   }
+   
+   public override string ToString()
+   {
+      return &quot;@{&quot; + $($2Str -join ' + &quot;; &quot; + ') + &quot;}&quot;;
+   }
+}
+
+&quot;@
+
+if($CreateConstructorFunction) {
+$function += @&quot;
+Function global:New-$Name {
+[CmdletBinding()]
+param(
+$( $parm -join &quot;,`n&quot; )
+)
+New-Object $Name -Property `$PSBoundParameters
+}
+
+&quot;@
+}
+
+}}
+end {
+if($PSCmdlet.ParameterSetName -ne &quot;Multiple&quot;) {
+    Write-Verbose &quot;C# Code:`n$code&quot;
+    Write-Verbose &quot;PowerShell Code:`n$function&quot;
+
+    Add-Type -TypeDefinition $code -PassThru:$Passthru -ErrorAction Stop
+    if($CreateConstructorFunction) {
+        Invoke-Expression $function
+    }
+}}}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Andy Schneider">
+    <title>Set-ScreenResolution.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-ScreenResolution.ps1</h1>
+<h3><a href="//scripts/2001.ps1">download</a></h3>
+<p>Set's the screen resolution on the primary monitor using Win32 API
+Andy Schneider
+http://get-powershell.com
+http://blogs.technet.com/b/heyscriptingguy/archive/2010/07/07/hey-scripting-guy-how-can-i-change-my-desktop-monitor-resolution-via-windows-powershell.aspx</p>
+<pre><code class="language-posh">Function Set-ScreenResolution {
+
+&lt;#
+    .Synopsis
+        Sets the Screen Resolution of the primary monitor
+    .Description
+        Uses Pinvoke and ChangeDisplaySettings Win32API to make the change
+    .Example
+        Set-ScreenResolution -Width 1024 -Height 768        
+    #&gt;
+param (
+[Parameter(Mandatory=$true,
+           Position = 0)]
+[int]
+$Width,
+
+[Parameter(Mandatory=$true,
+           Position = 1)]
+[int]
+$Height
+)
+
+$pinvokeCode = @&quot;
+
+using System;
+using System.Runtime.InteropServices;
+
+namespace Resolution
+{
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DEVMODE1
+    {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string dmDeviceName;
+        public short dmSpecVersion;
+        public short dmDriverVersion;
+        public short dmSize;
+        public short dmDriverExtra;
+        public int dmFields;
+
+        public short dmOrientation;
+        public short dmPaperSize;
+        public short dmPaperLength;
+        public short dmPaperWidth;
+
+        public short dmScale;
+        public short dmCopies;
+        public short dmDefaultSource;
+        public short dmPrintQuality;
+        public short dmColor;
+        public short dmDuplex;
+        public short dmYResolution;
+        public short dmTTOption;
+        public short dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string dmFormName;
+        public short dmLogPixels;
+        public short dmBitsPerPel;
+        public int dmPelsWidth;
+        public int dmPelsHeight;
+
+        public int dmDisplayFlags;
+        public int dmDisplayFrequency;
+
+        public int dmICMMethod;
+        public int dmICMIntent;
+        public int dmMediaType;
+        public int dmDitherType;
+        public int dmReserved1;
+        public int dmReserved2;
+
+        public int dmPanningWidth;
+        public int dmPanningHeight;
+    };
+
+
+
+    class User_32
+    {
+        [DllImport(&quot;user32.dll&quot;)]
+        public static extern int EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE1 devMode);
+        [DllImport(&quot;user32.dll&quot;)]
+        public static extern int ChangeDisplaySettings(ref DEVMODE1 devMode, int flags);
+
+        public const int ENUM_CURRENT_SETTINGS = -1;
+        public const int CDS_UPDATEREGISTRY = 0x01;
+        public const int CDS_TEST = 0x02;
+        public const int DISP_CHANGE_SUCCESSFUL = 0;
+        public const int DISP_CHANGE_RESTART = 1;
+        public const int DISP_CHANGE_FAILED = -1;
+    }
+
+
+
+    public class PrmaryScreenResolution
+    {
+        static public string ChangeResolution(int width, int height)
+        {
+
+            DEVMODE1 dm = GetDevMode1();
+
+            if (0 != User_32.EnumDisplaySettings(null, User_32.ENUM_CURRENT_SETTINGS, ref dm))
+            {
+
+                dm.dmPelsWidth = width;
+                dm.dmPelsHeight = height;
+
+                int iRet = User_32.ChangeDisplaySettings(ref dm, User_32.CDS_TEST);
+
+                if (iRet == User_32.DISP_CHANGE_FAILED)
+                {
+                    return &quot;Unable To Process Your Request. Sorry For This Inconvenience.&quot;;
+                }
+                else
+                {
+                    iRet = User_32.ChangeDisplaySettings(ref dm, User_32.CDS_UPDATEREGISTRY);
+                    switch (iRet)
+                    {
+                        case User_32.DISP_CHANGE_SUCCESSFUL:
+                            {
+                                return &quot;Success&quot;;
+                            }
+                        case User_32.DISP_CHANGE_RESTART:
+                            {
+                                return &quot;You Need To Reboot For The Change To Happen.\n If You Feel Any Problem After Rebooting Your Machine\nThen Try To Change Resolution In Safe Mode.&quot;;
+                            }
+                        default:
+                            {
+                                return &quot;Failed To Change The Resolution&quot;;
+                            }
+                    }
+
+                }
+
+
+            }
+            else
+            {
+                return &quot;Failed To Change The Resolution.&quot;;
+            }
+        }
+
+        private static DEVMODE1 GetDevMode1()
+        {
+            DEVMODE1 dm = new DEVMODE1();
+            dm.dmDeviceName = new String(new char[32]);
+            dm.dmFormName = new String(new char[32]);
+            dm.dmSize = (short)Marshal.SizeOf(dm);
+            return dm;
+        }
+    }
+}
+
+&quot;@
+
+Add-Type $pinvokeCode -ErrorAction SilentlyContinue
+[Resolution.PrmaryScreenResolution]::ChangeResolution($width,$height)
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

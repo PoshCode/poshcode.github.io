@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="David Summers">
+    <title>Deploy Multiple VMs v1.1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Deploy Multiple VMs v1.1</h1>
+<h3><a href="//scripts/2884.ps1">download</a> - <a href="//scripts/2883.md">parent</a></h3>
+<p>Use this script to deploy multiple vmware VMs using template(s).  It uses a CSV to gather all the configuration info.  Only thing left is to add any required data/application vdisks.  In my environment, I use several custom attributes to track VMs, so you will need to comment out or adjust the lines as needed.  The VM will be moved to a VMs/Templates Blue folder specified in the csv.</p>
+<pre><code class="language-posh">#############################################################
+# Deploy-VM.ps1 v1.1
+# David Summers 2011/8/2
+# Script to deploy VM(s) from Template(s) and set appropriate
+# IP config for Windows VMs.  Also sets # of CPUs, MemoryMB,
+# port group, and several custom attributes.
+# Moves deployed VM to specific VMs/Template blue folder.
+# Assumptions:
+# not connected to viserver before running
+# Customization spec and templates in place and tested
+#############################################################
+
+# Syntax and sample for CSV File:
+# template,datastore,diskformat,vmhost,custspec,vmname,ipaddress,subnet,gateway,pdns,sdns,pwins,swins,datacenter,folder,dvpg,memsize,cpucount,appgroup,owner,techcontact,vmdescription,createdate,reviewdate,creator
+# template.2008ent64R2sp1,DS1,thick,host1.domain.com,2008r2CustSpec,Guest1,10.50.35.10,255.255.255.0,10.50.35.1,10.10.0.50,10.10.0.51,10.10.0.50,10.10.0.51,DCName,FldrNm,dvpg.10.APP1,2048,1,Monitoring,Road Runner,WE Coyote,App1 Prod Web,2011.07.28,2014.07.28,Elmer Fudd
+
+# 
+$vmlist = Import-CSV &quot;H:\Flats\Scripts\Input\deployVMserverinfo.csv&quot;
+
+
+# Load PowerCLI
+$psSnapInName = &quot;VMware.VimAutomation.Core&quot;
+if (-not (Get-PSSnapin -Name $psSnapInName -ErrorAction SilentlyContinue))
+{
+     # Exit if the PowerCLI snapin can't be loaded
+     Add-PSSnapin -Name $psSnapInName -ErrorAction Stop
+}
+
+connect-viserver virtualcenter.yourdom.com
+
+foreach ($item in $vmlist) {
+
+	# Map variables
+	$template = $item.template
+	$datastore = $item.datastore
+	$diskformat = $item.diskformat
+	$vmhost = $item.vmhost
+	$custspec = $item.custspec
+	$vmname = $item.vmname
+	$ipaddr = $item.ipaddress
+	$subnet = $item.subnet
+	$gateway = $item.gateway
+	$pdns = $item.pdns
+	$pwins = $item.pwins
+	$sdns = $item.sdns
+	$swins = $item.swins
+	$datacenter = $item.datacenter
+	$destfolder = $item.folder
+	$dvpg = $item.dvpg
+	$memsize = $item.memsize
+	$cpucount = $item.cpucount
+	$appgroup = $item.appgroup
+	$owner = $item.owner
+	$technicalcontact = $item.techcontact
+	$description = $item.vmdescription
+	$createdate = $item.createdate
+	$reviewdate = $item.reviewdate
+	$creator = $item.creator
+
+
+	#Configure the Customization Spec info
+	Get-OSCustomizationSpec $custspec | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping -IpMode UseStaticIp -IpAddress $ipaddr -SubnetMask $subnet -DefaultGateway $gateway -Dns $pdns,$sdns -Wins $pwins,$swins
+
+	#Deploy the VM based on the template with the adjusted Customization Specification
+	New-VM -Name $vmname -Template $template -Datastore $datastore -DiskStorageFormat $diskformat -VMHost $vmhost | Set-VM -OSCustomizationSpec $custspec -Confirm:$false
+
+	#Move VM to Application Group's folder
+	Get-vm -Name $vmname | move-vm -Destination $(Get-Folder -Name $DestFolder -Location $(Get-Datacenter $Datacenter))
+
+	#Set the Port Group Network Name (Match PortGroup names with the VLAN name)
+	Get-VM -Name $vmname | Get-NetworkAdapter | Set-NetworkAdapter -NetworkName $dvpg -Confirm:$false
+
+	#Set the number of CPUs and MB of RAM
+	Get-VM -Name $vmname | Set-VM -MemoryMB $memsize -NumCpu $cpucount -Confirm:$false
+
+	#Set the Custom Attribute Annotations
+	#Comment out or adjust to fit your environment
+	Set-annotation -Entity $vmname -CustomAttribute &quot;App Group&quot; -Value $AppGroup -Confirm:$false
+	Set-annotation -Entity $vmname -CustomAttribute &quot;Owner&quot; -Value $Owner -Confirm:$false
+	Set-annotation -Entity $vmname -CustomAttribute &quot;Technical Contact&quot; -Value $TechnicalContact -Confirm:$false
+	Set-annotation -Entity $vmname -CustomAttribute &quot;Description&quot; -Value $Description -Confirm:$false
+	Set-annotation -Entity $vmname -CustomAttribute &quot;Create Date&quot; -Value $CreateDate -Confirm:$false
+	Set-annotation -Entity $vmname -CustomAttribute &quot;Review Date&quot; -Value $ReviewDate -Confirm:$false
+	Set-annotation -Entity $vmname -CustomAttribute &quot;Creator&quot; -Value $Creator -Confirm:$false
+	Set-annotation -Entity $vmname -CustomAttribute &quot;Timeline&quot; -Value &quot;New&quot; -Confirm:$false
+	Set-annotation -Entity $vmname -CustomAttribute &quot;Datacenter&quot; -Value $item.datacenter -Confirm:$false
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

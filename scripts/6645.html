@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>[ResolvePaths()] - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>[ResolvePaths()]</h1>
+<h3><a href="//scripts/6645.ps1">download</a></h3>
+<p>A long time ago, I wrote a ResolvePaths attribute which I never really published.
+This is a dump of the last copy of it that I can find, in case I never finish it.</p>
+<pre><code class="language-posh">Add-Type -ErrorAction Stop &lt;# -path $PSScriptRoot\FileSystemPath.cs #&gt; @'
+using System;
+using System.ComponentModel;
+using System.Management.Automation;
+using System.Collections.ObjectModel;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+public class ResolvePathsAttribute : ArgumentTransformationAttribute {
+
+   public enum PathType { Simple, Provider, Drive, Relative }
+
+   public PathType ResolveAs { get; set; }
+
+   public override string ToString() {
+      return &quot;[ResolvePaths(&quot; + ((ResolveAs != PathType.Simple) ? &quot;ResolveAs=\&quot;&quot; + ResolveAs + &quot;\&quot;)]&quot; : &quot;)]&quot;);
+   }
+
+   public override Object Transform( EngineIntrinsics engine, Object inputData) {
+      // standard workaround for the initial bind when pipeline data hasn't arrived
+      if(inputData == null) {  return null; }
+
+      ProviderInfo provider = null;
+      PSDriveInfo drive = null;
+      Collection&lt;string&gt; results = new Collection&lt;string&gt;();
+      Collection&lt;string&gt; providerPaths = new Collection&lt;string&gt;();
+      var PSPath = engine.SessionState.Path;
+      var inputPaths = new Collection&lt;string&gt;();
+
+      try {
+         // in order to not duplicate code, always treat it as an object array
+         var inputArray = inputData as object[];
+         if(inputArray == null) { inputArray = new object[]{inputData}; }
+
+
+         foreach(var input in inputArray) {
+            // work around ToString() problem in FileSystemInfo
+            var fsi = input as System.IO.FileSystemInfo;
+            if(fsi != null) {
+               inputPaths.Add(fsi.FullName);
+            } else {
+               // work around FileSystemInfo actually being a PSObject
+               var psO = input as System.Management.Automation.PSObject;
+               if(psO != null) {
+                  fsi = psO.BaseObject as System.IO.FileSystemInfo;
+                  if(fsi != null) {
+                     inputPaths.Add(fsi.FullName);
+                  } else {
+                     inputPaths.Add(psO.BaseObject.ToString());
+                  }
+               } else {
+                  inputPaths.Add(input.ToString());
+               }
+            }
+         }
+
+         foreach(string inputPath in inputPaths) {
+
+            if(WildcardPattern.ContainsWildcardCharacters(inputPath)) {
+               providerPaths = PSPath.GetResolvedProviderPathFromPSPath(inputPath, out provider);
+            } else {
+               providerPaths.Add(PSPath.GetUnresolvedProviderPathFromPSPath(inputPath, out provider, out drive));
+            }
+
+            foreach(string path in providerPaths) {
+               var newPath = path;
+
+               if(ResolveAs == PathType.Provider &amp;&amp; !PSPath.IsProviderQualified(newPath)) {
+                  newPath = provider.Name + &quot;::&quot; + newPath;
+               } 
+               else if(ResolveAs != PathType.Provider &amp;&amp; PSPath.IsProviderQualified(newPath)) 
+               {
+                  newPath = Regex.Replace( newPath, Regex.Escape( provider.Name + &quot;::&quot; ), &quot;&quot;);
+               }
+
+               if(ResolveAs == PathType.Drive) 
+               {
+                  string driveName;
+                  if(!PSPath.IsPSAbsolute(newPath, out driveName)) {
+                     if(drive == null) {
+                        newPath = PSPath.GetUnresolvedProviderPathFromPSPath(newPath, out provider, out drive);
+                     }
+                     if(!PSPath.IsPSAbsolute(newPath, out driveName)) {
+                        newPath = drive.Name + &quot;:\\&quot; + PSPath.NormalizeRelativePath( newPath, drive.Root );
+                     }
+                  }
+               } else if(ResolveAs == PathType.Relative) {
+                  var currentPath = PSPath.CurrentProviderLocation(provider.Name).ProviderPath.TrimEnd(new[]{'\\','/'});
+                  var relativePath = Regex.Replace(newPath, &quot;^&quot; + Regex.Escape(currentPath), &quot;&quot;, RegexOptions.IgnoreCase);
+                  // Console.WriteLine(&quot;currentPath: &quot; + currentPath + &quot;  || relativePath: &quot; + relativePath);
+                  if(relativePath != newPath) {
+                     newPath = &quot;.\\&quot; + relativePath.TrimStart(new[]{'\\'});
+                  } else {
+                     try {
+                        newPath = PSPath.NormalizeRelativePath(newPath, currentPath);
+                        // Console.WriteLine(&quot;currentPath: &quot; + currentPath + &quot;  || relativePath: &quot; + relativePath + &quot;  || newPath: &quot; + newPath);
+                     } catch {
+                        newPath = relativePath;
+                     }
+                  }
+               }
+
+               results.Add(newPath);
+            }
+         }
+      } catch (ArgumentTransformationMetadataException) {
+         throw;
+      } catch (Exception e) {
+         throw new ArgumentTransformationMetadataException(string.Format(&quot;Cannot determine path ('{0}'). See $Error[0].Exception.InnerException.InnerException for more details.&quot;,e.Message), e);
+      }
+      return results;
+   }
+}
+'@ 
+
+##############################
+#### How to use the attribute:
+#### Just decorate your parameter, and Powershell will resolve wildcards for you and everything!
+#### E.g.: try this:  cd hklm:\software; get-path M*
+
+   function Get-Path {
+      param(
+         [Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+         [Alias(&quot;PSPath&quot;)][String[]]
+         [ResolvePaths()]
+         $Path
+      )
+      process { $Path }
+   }
+
+   function Get-DrivePath {
+      param(
+         [Parameter(Mandatory=$true,ParameterSetName=&quot;Resolved&quot;,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+         [String[]][ResolvePaths(ResolveAs=&quot;Drive&quot;)]
+         [Alias(&quot;PSPath&quot;)]$Path
+      )
+      process { $Path }
+   }
+
+   function Get-ProviderPath {
+      param(
+         [Parameter(Mandatory=$true,ParameterSetName=&quot;Resolved&quot;,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+         [String[]][ResolvePaths(ResolveAs=&quot;Provider&quot;)]
+         [Alias(&quot;PSPath&quot;)]$Path
+      )
+      process { $Path }
+   }
+
+   function Get-RelativePath {
+      param(
+         [Parameter(Mandatory=$true,ParameterSetName=&quot;Resolved&quot;,Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+         [String[]][ResolvePaths(ResolveAs=&quot;Relative&quot;)]
+         [Alias(&quot;PSPath&quot;)]$Path
+      )
+      process { $Path }
+   }
+
+
+   function Copy-WhatIf {
+      param(
+         [Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true)]
+         [Alias(&quot;PSPath&quot;)][String[]]
+         [ResolvePaths()]
+         $Source,
+
+         [Parameter(Position=1,Mandatory=$true)]
+         [String]
+         [ResolvePaths()]
+         $Destination
+      )
+      process { 
+         if(!(Test-Path $Destination)) {
+            mkdir $Destination -whatif
+         }
+         Copy-Item $Source $Destination -whatif
+      }
+   }   
+
+
+#########################
+#### A TON OF TEST CASES
+
+   function Assert-Equal {
+      Param($expected,[scriptblock]$code,$errorMessage)
+      $output = &amp;$code
+      if( $expected -is [scriptblock]) {
+         $expected = &amp;$expected
+      }
+      if( $Expected -is [Array]) {
+         if( compare-object $expected $output ) {
+            Write-Warning (&quot;Expected '$expected', but got '$output'`n+`t&quot; + $MyInvocation.PositionMessage)
+         }
+      } else {
+         if( $expected -ne $output ) {
+            Write-Warning (&quot;Expected '$expected', but got '$output'`n+`t&quot; + $MyInvocation.PositionMessage)
+         }
+      }
+   }
+
+   Push-Location C:\users\ | out-null
+
+   ## Run the same tests using the attribute:
+
+   cd  C:\users\ | out-null
+
+   # Note: Get-Path doesn't require the path to actually EXIST!
+   # Paths without folders should be treated as relative, obviously
+   Assert-Equal &quot;C:\NotAUser&quot;       { get-path C:\NotAUser }
+   Assert-Equal &quot;C:\users\NotAUser&quot; { get-path C:\users\NotAUser }
+   Assert-Equal &quot;C:\users\NotAUser&quot; { get-path C:NotAUser }
+   Assert-Equal &quot;C:\users\NotAUser&quot; { get-path NotAUser }
+
+   Assert-Equal &quot;FileSystem::C:\NotAUser&quot;       { Get-ProviderPath C:\NotAUser }
+   Assert-Equal &quot;FileSystem::C:\users\NotAUser&quot; { Get-ProviderPath C:\users\NotAUser }
+   Assert-Equal &quot;FileSystem::C:\users\NotAUser&quot; { Get-ProviderPath C:NotAUser }
+   Assert-Equal &quot;FileSystem::C:\users\NotAUser&quot; { Get-ProviderPath NotAUser }
+
+   Assert-Equal &quot;..\NotAUser&quot;       { Get-RelativePath C:\NotAUser }
+   Assert-Equal &quot;.\NotAUser&quot; { Get-RelativePath C:\users\NotAUser }
+   Assert-Equal &quot;.\NotAUser&quot; { Get-RelativePath C:NotAUser }
+   Assert-Equal &quot;.\NotAUser&quot; { Get-RelativePath NotAUser }
+
+   # Convert-Path DOES require the path to exist
+   # Get-Path should behave the same as Convert-Path, as long as the paths exist
+   Assert-Equal { convert-path Public } { get-path Public }
+   Assert-Equal { convert-path C:\users\Public } { get-path C:\users\Public }
+   Assert-Equal { convert-path C:Public } { get-path C:Public }
+   # Including supporting wildcards:
+   Assert-Equal { convert-path Public\* } { get-path Public\* }
+   Assert-Equal { convert-path C:\*\Public } { get-path C:\*\Public }
+
+   Assert-Equal { Resolve-Path Public -Relative } { Get-RelativePath Public }
+   Assert-Equal { Resolve-Path C:\users\Public -Relative } { Get-RelativePath C:\users\Public }
+   Assert-Equal { Resolve-Path C:Public -Relative } { Get-RelativePath C:Public }
+   # Including supporting wildcards:
+   Assert-Equal { Resolve-Path Public\* -Relative } { Get-RelativePath Public\* }
+   Assert-Equal { Resolve-Path C:\*\Public -Relative } { Get-RelativePath C:\*\Public }
+
+   # The attribute will not work on paths that have wildcards and can't be resolved
+   # Since AppData is hidden, this doesn't work:
+   ## Assert-Equal { convert-path C:*\AppData } { get-path C:*\AppData }   
+   Assert-Equal { convert-path C:*\Documents } { get-path C:*\Documents }   
+   # Make sure collections work
+   Assert-Equal { convert-path C:\Users\*\Documents, C:\Users\*\Desktop } { get-path C:\Users\*\Documents, C:\Users\*\Desktop }
+
+
+   cd hklm:\software\microsoft | out-null
+
+   Assert-Equal &quot;FileSystem::C:\Test&quot;       { Get-ProviderPath C:\Test }
+   Assert-Equal &quot;FileSystem::C:\users\Test&quot; { Get-ProviderPath C:\users\Test }
+   Assert-Equal &quot;FileSystem::C:\users\Test&quot; { Get-ProviderPath C:Test }
+
+   ## Nothing will normally convince other providers to include a drive name
+   Assert-Equal &quot;HKEY_LOCAL_MACHINE\software\microsoft&quot; { get-path hklm:\software\microsoft }
+   Assert-Equal &quot;HKEY_LOCAL_MACHINE\software\microsoft\Windows&quot; { get-path Windows }
+   Assert-Equal &quot;HKEY_LOCAL_MACHINE\software\microsoft\Windows&quot; { get-path hklm:Windows }
+
+
+   Assert-Equal &quot;.\&quot; { Get-RelativePath hklm:\software\microsoft }
+   Assert-Equal &quot;.\Windows&quot; { Get-RelativePath Windows }
+   Assert-Equal &quot;.\Windows&quot; { Get-RelativePath hklm:Windows }
+   Assert-Equal &quot;..\Classes&quot; { Get-RelativePath hklm:\SOFTWARE\Classes }
+   Assert-Equal &quot;..\..\SYSTEM\CurrentControlSet&quot; { Get-RelativePath hklm:\SYSTEM\CurrentControlSet }
+   Assert-Equal &quot;HKEY_CURRENT_USER\Network&quot; { Get-RelativePath hkcu:\Network }
+
+   Assert-Equal { convert-path Windows } { get-path Windows }
+   Assert-Equal { convert-path hklm:\software\microsoft } { get-path hklm:\software\microsoft }
+   Assert-Equal { convert-path hklm:Windows } { get-path hklm:Windows }
+
+   Assert-Equal &quot;Registry::HKEY_LOCAL_MACHINE\software\microsoft\Test&quot; { Get-ProviderPath Test }
+
+   cd variable: | out-null
+   Assert-Equal &quot;Variable::Test&quot; { Get-ProviderPath Test }
+   Assert-Equal &quot;Environment::Test&quot; { Get-ProviderPath env:\Test }
+   cd env: | out-null
+   Assert-Equal &quot;Variable::Test&quot; { Get-ProviderPath variable:Test }
+   Assert-Equal &quot;Environment::Test&quot; { Get-ProviderPath Test }
+
+   ## But I worked out how:
+   cd hklm:\software\microsoft | out-null
+   Assert-Equal &quot;HKEY_LOCAL_MACHINE\software\microsoft\Test&quot; { get-path Test }
+   Assert-Equal &quot;hklm:\software\microsoft\Test&quot; { Get-DrivePath Test }
+   Assert-Equal &quot;Registry::HKEY_LOCAL_MACHINE\software\microsoft\Test&quot; { Get-ProviderPath Test}
+   cd variable: | out-null
+   Assert-Equal &quot;Variable:\Test&quot; { Get-DrivePath Test }
+   Assert-Equal &quot;Env:\Test&quot; { Get-DrivePath env:\Test }
+   cd env: | out-null
+   Assert-Equal &quot;Variable:\Test&quot; { Get-DrivePath variable:Test }
+   Assert-Equal &quot;Env:\Test&quot; { Get-DrivePath Test }
+
+   cd c:
+   if(test-path ~\Documents\WindowsPowerShell\TestData) {
+      cd ~\Documents\WindowsPowerShell\TestData | out-null
+
+      Assert-Equal {ls -s | convert-path } {ls -s | Get-Path}
+      Assert-Equal {ls -s | resolve-path -relative } {ls -s | Get-RelativePath}
+
+   }
+
+   Pop-Location
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

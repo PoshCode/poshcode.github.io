@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Tobias Weltner">
+    <title>MVP PowerShell - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>MVP PowerShell</h1>
+<h3><a href="//scripts/3654.ps1">download</a></h3>
+<p>Four functions for manipulating ISE settings (ISE 3.0, requires PowerShell v3):
+Get-ISESetting
+Set-ISESetting
+Get-ISEMRUList
+Set-ISEMRUList
+More details found here:
+http://www.powertheshell.com/iseconfig</p>
+<pre><code class="language-posh"># (C) 2012 Dr. Tobias Weltner, MVP PowerShell
+# www.powertheshell.com
+# you can freely use and distribute this code
+# we only ask you to keep this comment including copyright and url
+# as a sign of respect. 
+
+# more information and documentation found here:
+# http://www.powertheshell.com/iseconfig/
+
+
+&lt;#
+.SYNOPSIS
+reads one or more settings for the ISE editor
+.PARAMETER Name
+Name of setting to read. You can use wildcards.
+If you do not supply a name, all settings are retrieved.
+If you do not use wildcards, only the value will be returned.
+If you do use wildcards, the setting name will also be returned.
+.EXAMPLE
+Get-ISESetting MRUCount
+Reads the maximum number of files in your MRU list
+.EXAMPLE
+Get-ISESetting
+returns all settings
+.EXAMPLE
+Get-ISESetting *wind*
+returns all settings with &quot;wind&quot; in their name
+#&gt;
+Function Get-ISESetting
+{
+  param
+  (
+    $Name = '*'
+  )
+
+  $folder = (Resolve-Path -Path $env:localappdata\microsoft_corporation\powershell_ise*\3.0.0.0).Path
+  $filename = 'user.config'
+  $path = Join-Path -Path $folder -ChildPath $filename
+
+  [xml]$xml = Get-Content -Path $path -Raw
+
+  # wildcards used?
+  $wildCard = $Name -match '\*'
+
+  # find all settings available with their correct casing:
+  $settings = $xml.SelectNodes('//setting') | Where-Object serializeAs -EQ String | Select-Object -ExpandProperty Name
+  # translate the user-submitted setting into the correct casing:
+  $CorrectSettingName = @($settings -like $Name)
+
+  # if no setting is found, try with wildcards
+  if ($CorrectSettingName.Count -eq 0)
+  {
+    $CorrectSettingName = @($settings -like &quot;*$Name*&quot;)
+    $wildCard = $true
+  }
+
+  if ($CorrectSettingName.Count -gt 1 -or $wildCard)
+  {
+    $CorrectSettingName |
+    ForEach-Object {
+      $xml.SelectNodes(('//setting[@name=&quot;{0}&quot;]' -f $_)) |
+      Select-Object -Property Name, Value
+    }
+  }
+  elseif ($CorrectSettingName.Count -eq 1)
+  {
+    $xml.SelectNodes(('//setting[@name=&quot;{0}&quot;]' -f $CorrectSettingname[0])) |
+    Select-Object -ExpandProperty Value
+  }
+  else
+  {
+    Write-Warning &quot;The setting '$SettingName' does not exist. Try one of these valid settings:&quot;
+    Write-Warning ($settings -join ', ')
+  }
+}
+
+&lt;#
+.SYNOPSIS
+sets a settings for the ISE editor
+.PARAMETER Name
+Name of setting to change.
+.PARAMETER Value
+New value for setting. There is no validation. You are responsible for submitting valid values.
+.EXAMPLE
+Set-ISESetting MRUCount 12
+Sets the maximum number of files in your MRU list to 12
+#&gt;
+Function Set-ISESetting
+{
+  param
+  (
+    [Parameter(Mandatory,ValueFromPipelineByPropertyName)]
+    $Name,
+
+    [Parameter(Mandatory,ValueFromPipelineByPropertyName)]
+    $Value
+  )
+
+  Begin
+  {
+    $folder = (Resolve-Path -Path $env:localappdata\microsoft_corporation\powershell_ise*\3.0.0.0).Path
+    $filename = 'user.config'
+    $path = Join-Path -Path $folder -ChildPath $filename
+
+    [xml]$xml = Get-Content -Path $path -Raw
+
+    # find all settings available with their correct casing:
+    $settings = $xml.SelectNodes('//setting') | Where-Object serializeAs -EQ String | Select-Object -ExpandProperty Name
+  }
+
+  Process
+  {
+    # translate the user-submitted setting into the correct casing:
+    $CorrectSettingName = $settings -like $Name
+
+    if ($CorrectSettingName)
+    {
+      $xml.SelectNodes(('//setting[@name=&quot;{0}&quot;]' -f $CorrectSettingName))[0].Value = [String]$Value
+    }
+    else
+    {
+      Write-Warning &quot;The setting '$SettingName' does not exist. Try one of these valid settings:&quot;
+      Write-Warning ($settings -join ', ')
+    }
+  }
+
+  End
+  {
+    $xml.Save($Path)
+  }
+}
+
+
+&lt;#
+.SYNOPSIS
+adds a new file path to the MRU list or replaces the list with new files 
+.PARAMETER Path
+Path to add to the list. Can be an array, can be received from the pipeline.
+.PARAMETER Append
+Adds the path(s) to the existing list
+.EXAMPLE
+Set-ISEMRUList -Path c:\dummy -Append
+Adds a new path to the MRU list, keeping the old paths.
+.EXAMPLE
+dir $home *.ps1 -recurse -ea 0 | Select-Object -ExpandProperty Fullname | Set-ISEMRUList
+replaces existing MRU list with the paths to all powershell script files in your profile
+If the list exceeds the number of entries defined in the ISE setting MruCount, the remainder is truncated.
+#&gt;
+Function Set-ISEMRUList
+{
+  param
+  (
+    [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)]
+    [String[]]
+    $Path,
+
+    [Switch]
+    $Append
+  )
+
+  Begin
+  {
+    $folder = (Resolve-Path -Path $env:localappdata\microsoft_corporation\powershell_ise*\3.0.0.0).Path
+    $filename = 'user.config'
+    $configpath = Join-Path -Path $folder -ChildPath $filename
+
+    [xml]$xml = Get-Content -Path $configpath -Raw
+
+    $PathList = @()
+  }
+
+  Process
+  {
+    $Path | ForEach-Object { $PathList += $_ }
+  }
+
+  End
+  {
+    if ($Append)
+    {
+      $PathList += @($xml.SelectNodes('//setting[@name=&quot;MRU&quot;]').Value.ArrayOfString.string)
+    }
+
+    # is list too long?
+    $max = Get-ISESetting -Name MRUCount
+    $current = $PathList.Count
+
+    if ($current -gt $max)
+    {
+      if (!$Append)
+      {
+        Write-Warning &quot;Your MRU list is too long. It has $current elements but MRUCount is limited to $max elements.&quot;
+        Write-Warning &quot;Truncating the last $($current - $max) elements.&quot;
+        Write-Warning 'You can increase the size of your MRU list like this:'
+        Write-Warning &quot;Set-ISESetting -Name MRUCount -Value $current&quot;
+      }
+
+      $PathList = $PathList[0..$($max-1)]
+    }
+
+    $xml.SelectNodes('//setting[@name=&quot;MRU&quot;]').Value.ArrayOfString.InnerXML = $PathList |
+    ForEach-Object { &quot;&lt;string&gt;$_&lt;/string&gt;&quot; } |
+    Out-String
+    $xml.Save($configpath)
+  }
+}
+
+&lt;#
+.SYNOPSIS
+dumps the current path names in the ISE MRU list 
+.EXAMPLE
+Get-ISEMRUList
+dumps the paths to all recently used files in the ISE editor
+#&gt;
+Function Get-ISEMRUList
+{
+  $newfile = 'c:\somescript.ps1'
+
+  $folder = (Resolve-Path -Path $env:localappdata\microsoft_corporation\powershell_ise*\3.0.0.0).Path
+  $filename = 'user.config'
+  $path = Join-Path -Path $folder -ChildPath $filename
+
+  [xml]$xml = Get-Content -Path $path -Raw
+  $xml.SelectNodes('//setting[@name=&quot;MRU&quot;]').Value.ArrayOfString.string
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

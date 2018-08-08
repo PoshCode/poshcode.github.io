@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Dane Kantner">
+    <title>Get-DellWarranty by API - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-DellWarranty by API</h1>
+<h3><a href="//scripts/4121.ps1">download</a></h3>
+<p>Get-DellWarranty (Uses new Dell API; the old Get-DellWarranty scripts screen scrape their site and no longer work because they changed the formatting of the tables. This relies on their API service so in theory it should be maintained by Dell and remain working. The script itself has an array of computer names at the top and will cycle through each system and query that warranty information. Based off of all warranty lines, the highest warranty is tracked and outputted as well.  The Get-DellWarranty function itself is configured to accept a -servicetag or -serialnumber parameter or accept piped input, and outputs an object that contains objects of warranty entitlement lines.</p>
+<pre><code class="language-posh">## Dane Kantner 4/19/2013
+##
+
+$computers=&quot;localhost&quot;,&quot;Chiv5908-2009&quot;,&quot;anyothercomputers&quot;,&quot;NYSPC-JJAJ68YG6&quot;
+
+foreach ($computer in $computers) {
+
+$obj=get-wmiobject win32_systemenclosure -computername $computer -ErrorAction SilentlyContinue
+
+    if ($obj -eq $null) {  # unable to retrieve, system may be offline
+        write-output &quot;Computer $computer unavailable (offline or WMI inaccessible).`n&quot;
+    } else {
+        $WarrantyObject=Get-DellWarranty -ServiceTag $obj.SerialNumber | select @{name = &quot;ComputerName&quot;;expression = {$Computer}},ServiceLevelCode,ServiceLevelDescription,Provider,StartDate,EndDate,DaysLeft,EntitlementType   
+
+        #each computer itself will have a $warrantyobject returned that can have multiple warranty lines attached.
+        #based off of this you can do various output scenarios. 
+        $DaysLeft=0
+        $HighestServiceDesc=&quot;&quot;
+        foreach ($line in $WarrantyObject) {
+            if ($line.ServiceLevelCode -ne $Null) { #The last line is a null line from the dell service, discard with an if neq null check
+                if ($DaysLeft -lt $line.DaysLeft) { #this warranty lasts longer than the prior line item for this computer.
+                $DaysLeft=$line.DaysLeft
+                $HighestServiceDesc=$line.ServiceLevelDescription
+                }
+            write-output $line
+            #you could output it to a file here instead -- or instead when calling script do scripts.ps1 &gt; filenametosave.txt
+            }
+        } #end foreach $warrantyobject
+        
+        # in this coding scenario, an HP computer would just return a null object.
+        if ($warrantyObject -ne $null) { 
+            write-output &quot;Maximum warranty for computer $Computer has $DaysLeft days remaining. $HighestServiceDesc`n&quot;
+        } else {
+            write-output &quot;Dell returned no warranty information for $Computer. Is it a Dell?&quot;   
+        } #end if WarrantyObject is not null
+       
+      
+    } #end if obj null because WMI failed to retrieve serial
+} #end foreach computer
+
+
+Function Get-DellWarranty {
+## This function was created based off of modifying code from http://itx-solutions.nl/2013/01/dell-powershell-script-to-get-dell-warranty-information/
+    [CmdletBinding()]
+        param(
+            [Parameter(Mandatory=$False,Position=0,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+            [alias(&quot;serialnumber&quot;)]
+            [string[]]$ServiceTag
+        )
+    $WebProxy=New-WebServiceProxy -Uri http://xserv.dell.com/services/assetservice.asmx
+    $WarrantyInformation=$WebProxy.GetAssetInformation(([guid]::NewGuid()).Guid,&quot;Dell warranty&quot;,$serviceTag)
+    $WarrantyInformation | Select-Object -ExpandProperty Entitlements
+    return $WarrantyInformation
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

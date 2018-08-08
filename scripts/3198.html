@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Set-Prompt - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-Prompt</h1>
+<h3><a href="//scripts/3198.ps1">download</a> - <a href="//scripts/2095.md">parent</a></h3>
+<p>My command prompt, as always. I leave this in <em>a separate script file</em> and invoke it from my profile. That way I can RE-invoke it to reset my prompt if I have to mess with it for some reason.</p>
+<p>I recently embedded my <em>persistent history</em> functionality directly into this prompt function (I used to have that in a per-host profile, as a wrapper around this prompt, but I can't remember why, and I didn't like loosing it when I had to re-invoke this script).</p>
+<pre><code class="language-posh">#.Synopsis
+#  Sets my favorite prompt function
+#.Notes
+#  I put the id in my prompt because it's very, very useful.
+#
+#  Invoke-History and my Expand-Alias and Get-PerformanceHistory all take command history IDs
+#  Also, you can tab-complete with &quot;#&lt;id&gt;[Tab]&quot; so .
+#  For example, the following commands:
+#  r 4
+#  ## r is an alias for invoke-history, so this reruns your 4th command
+#
+#  #6[Tab]
+#  ## will tab-complete whatever you typed in your 6th command (now you can edit it)
+#
+#  Expand-Alias -History 6,8,10 &gt; MyScript.ps1
+#  ## generates a script from those history items
+#
+#  GPH -id 6, 8
+#  ## compares the performance of those two commands ...
+#
+param(
+   # Controls how much history we keep in the command log
+   [Int]$PersistentHistoryCount = 30,
+   # If set, we use a pasteable prompt with &lt;# #&gt; around the prompt info
+   [Alias(&quot;copy&quot;,&quot;demo&quot;)][Switch]$Pasteable, 
+   [Int]$global:MaximumHistoryCount = 2048,
+   [ConsoleColor]$global:PromptForeground = &quot;Yellow&quot;, 
+   [ConsoleColor]$global:ErrorForeground = &quot;Red&quot;
+)
+
+# Some stuff goes OUTSIDE the prompt function because it doesn't need re-evaluation
+
+# I set the title in my prompt every time, because I want the current PATH location there,
+# rather than in my prompt where it takes up too much space.
+
+# But I want other stuff too. I  calculate an initial prefix for the window title
+# The title will show the PowerShell version, user, current path, and whether it's elevated or not
+# E.g.:&quot;PoSh3 Jaykul@HuddledMasses (ADMIN) - C:\Your\Path\Here (FileSystem)&quot; 
+if(!$global:WindowTitlePrefix) {
+   $global:WindowTitlePrefix = &quot;PoSh$($PSVersionTable.PSVersion.Major) ${Env:UserName}@${Env:UserDomain}&quot;
+   
+   # if you're running &quot;elevated&quot; we want to show that:
+   $ENV:PROCESS_ELEVATED = ([System.Environment]::OSVersion.Version.Major -gt 5) -and ( # Vista and ...
+                              new-object Security.Principal.WindowsPrincipal (
+                              [Security.Principal.WindowsIdentity]::GetCurrent()) # current user is admin
+                           ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+   
+   if($ENV:PROCESS_ELEVATED) {
+      $global:WindowTitlePrefix += &quot; (ADMIN)&quot;
+   }
+}
+
+## Global first-run (profile or first prompt)
+if($MyInvocation.HistoryId -eq 1) {
+   $ProfileDir = Split-Path $Profile.CurrentUserAllHosts
+   ## Import my history
+   Import-CSV $ProfileDir\.poshhistory | Add-History
+}
+
+
+if($Pasteable) {
+   # The pasteable prompt starts with &quot;&lt;#PS &quot; and ends with &quot; #&gt;&quot;
+   #   so that you can copy-paste with the prompt and it will still run
+   function global:prompt {
+      # FIRST, make a note if there was an error in the previous command
+      $err = !$?
+      Write-host &quot;&lt;#PS &quot; -NoNewLine -fore gray
+
+      # Make sure Windows and .Net know where we are (they can only handle the FileSystem)
+      [Environment]::CurrentDirectory = (Get-Location -PSProvider FileSystem).ProviderPath
+      
+      try {
+         # Also, put the path in the title ... (don't restrict this to the FileSystem)
+         $Host.UI.RawUI.WindowTitle = &quot;{0} - {1} ({2})&quot; -f $global:WindowTitlePrefix,$pwd.Path,$pwd.Provider.Name
+      } catch {}
+      
+      # Determine what nesting level we are at (if any)
+      $Nesting = &quot;$([char]0xB7)&quot; * $NestedPromptLevel
+
+      # Generate PUSHD(push-location) Stack level string
+      $Stack = &quot;+&quot; * (Get-Location -Stack).count
+      
+      # I used to use Export-CliXml, but Export-CSV is a lot faster
+      $null = Get-History -Count 30 | Export-CSV $ProfileDir\.poshhistory
+      # Output prompt string
+      # If there's an error, set the prompt foreground to the error color...
+      if($err) { $fg = $global:ErrorForeground } else { $fg = $global:PromptForeground }
+      # Notice: no angle brackets, makes it easy to paste my buffer to the web
+      Write-Host &quot;[${Nesting}$($myinvocation.historyID)${Stack}]&quot; -NoNewLine -Foreground $fg
+      Write-host &quot; #&gt;&quot; -NoNewLine -fore gray
+      # Hack PowerShell ISE CTP2 (requires 4 characters of output)
+      if($Host.Name -match &quot;ISE&quot; -and $PSVersionTable.BuildVersion -eq &quot;6.2.8158.0&quot;) {
+         return &quot;$(&quot;$([char]8288)&quot;*3) &quot; 
+      } else {
+         return &quot; &quot;
+      }
+   }
+} else {
+   function global:prompt {
+      # FIRST, make a note if there was an error in the previous command
+      $err = !$?
+
+      # Make sure Windows and .Net know where we are (they can only handle the FileSystem)
+      [Environment]::CurrentDirectory = (Get-Location -PSProvider FileSystem).ProviderPath
+      
+      try {
+         # Also, put the path in the title ... (don't restrict this to the FileSystem)
+         $Host.UI.RawUI.WindowTitle = &quot;{0} - {1} ({2})&quot; -f $global:WindowTitlePrefix,$pwd.Path,$pwd.Provider.Name
+      } catch {}
+      
+      # Determine what nesting level we are at (if any)
+      $Nesting = &quot;$([char]0xB7)&quot; * $NestedPromptLevel
+
+      # Generate PUSHD(push-location) Stack level string
+      $Stack = &quot;+&quot; * (Get-Location -Stack).count
+      
+      # I used to use Export-CliXml, but Export-CSV is a lot faster
+      $null = Get-History -Count 30 | Export-CSV $ProfileDir\.poshhistory
+
+      # Output prompt string
+      # If there's an error, set the prompt foreground to &quot;Red&quot;, otherwise, &quot;Yellow&quot;
+      if($err) { $fg = $global:ErrorForeground } else { $fg = $global:PromptForeground }
+      # Notice: no angle brackets, makes it easy to paste my buffer to the web
+      Write-Host &quot;[${Nesting}$($myinvocation.historyID)${Stack}]:&quot; -NoNewLine -Fore $fg   
+      # Hack PowerShell ISE CTP2 (requires 4 characters of output)
+      if($Host.Name -match &quot;ISE&quot; -and $PSVersionTable.BuildVersion -eq &quot;6.2.8158.0&quot;) {
+         return &quot;$(&quot;$([char]8288)&quot;*3) &quot; 
+      } else {
+         return &quot; &quot;
+      }
+   }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

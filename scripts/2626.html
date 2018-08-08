@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BartekB">
+    <title>Watch-SG2011LeaderBoard - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Watch-SG2011LeaderBoard</h1>
+<h3><a href="//scripts/2626.ps1">download</a></h3>
+<p>My variation for SG 2011 Leader Board watcher. :) Using regex + xml. Lets you specify -Top and -Name, so that you see person even if she/he is not (yet ;) ) in top. :D</p>
+<pre><code class="language-posh">#requires -Version 2.0
+
+&lt;#
+    .Synopsis
+      
+        Script that will produce table of leaders in a give category.
+
+    .Description
+
+        Just some fun with regex/ xml. :)
+        It will grab SG 2011 Leader Board for a given category.
+        Than parse the string, convert it into XML, create custom objects and in the end - produce nice table.
+        Not really best practices, but well... it's all about display this time.
+        Goes in loop, so it should keep leaderboard.
+        And if you miss you name in topX - add it using -Name parameter. :)
+
+    .Example
+
+        Watch-SG2011LeaderBoard
+        Starts using defaults: Advanced category, Top 10 users, 5 seconds delay, and 2011 SG url.
+        
+    .Example
+
+        Watch-SG2011LeaderBoard -Categeroy Beg -Name ScriptingWife
+        Show Beginner category, and include ScriptingWife regardless her current position. :)
+
+    #&gt;
+
+[CmdletBinding()]
+param (
+    # Leader Board category that you want to look up.
+    [ValidateSet('Adv','Advanced','Beg','Beginner')]
+    [string]$Category = 'Adv',
+    
+    # Name of the person that you want to be included no matter what position it holds.
+    [string]$Name,
+    
+    # Total number of TOP you would like to include (mind you window size...)
+    [int]$Top = 10,
+    
+    # Delay between list will be refreshed for you.
+    [int]$Delay = 5,
+    
+    # URL to main site, may be handy for next year... ;)
+    [string]$URL = 'https://2011sg.poshcode.org/Reports/TopUsers'
+)
+
+$WebClient = New-Object Net.WebClient
+switch -regex ($Category) {
+    &quot;^A.*&quot; {
+        $URL = $URL + '?filter=Advanced'
+    }
+    &quot;^B.*&quot; {
+        $URL = $URL + '?filter=Beginner'
+    }
+    default {
+        Write-Verbose &quot;Why would I handle alien's/ divine intervention? Isn't parameter validation enough? ;)&quot;
+    }
+}
+
+$Title = &quot;$Category Scripting Games Leaderboard&quot;
+
+if ($Name) {
+    $Filter = { ($TopDisplayed++ -lt $Top) -or ($_.Name -match $Name) }
+} else {
+    $Filter = { $TopDisplayed++ -lt $Top }
+}
+while ($True) {
+    
+    $WebClient.DownloadString($URL) | Select-String -Pattern '(&lt;table&gt;[\s\S]*?&lt;/table&gt;)' | Select -ExpandProperty Matches |
+        ForEach-Object {
+            # Probably should have some replacement table for &amp;specials; -&gt; not know them well enough so just remove them for now...
+            # XML will try to abuse those, so we need to 'strip' them... :(
+            # Also remove &lt;a ... &gt; &lt;/a&gt; to take names 'up' in XML schema.
+            # And last but not least - remove all whitespaces except for those between words... :)
+            
+            $Table = $_.Groups[0].Value -replace '&amp;\w+?;' -replace '&lt;/?a.*?&gt;' -replace '\s*(?!\w)' -replace '(?&lt;!\w)\s*'
+        }
+    try {
+        $XML = [xml]$Table
+    } catch {
+        Write-Host &quot;Sorry, could not change to XML. Take a look at error below for more details...&quot;
+        Write-Error $_
+        exit
+    }
+        
+    # Got here so we should have $XML with nice struct. Let's parse it and show some results... :)
+    # Parsing first to create object. Than sort/ where to show all top + named if not in top...
+    
+    $TopDisplayed = 0
+    
+    Clear-Host
+    Write-Host $Title
+    &quot;=&quot; * $Title.Length | Out-Default
+    &quot;Last update: $(Get-Date -DisplayHint Time)&quot;
+    $XML.table.tr | Select-Object -Skip 1 | ForEach-Object { 
+        New-Object PSObject -Property @{ 
+            Name = $_.td[0]
+            Total = [double]($_.td[1])
+            Rated = [int]($_.td[2])
+            Notes = [int]($_.td[3])
+        }
+    } | Sort-Object -Property Total -Descending | Where-Object $Filter |
+        Format-Table Name, Total, Rated, Notes -AutoSize
+    Start-Sleep -Seconds $Delay
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

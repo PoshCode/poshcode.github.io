@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="cassibr13">
+    <title>Audit Script - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Audit Script</h1>
+<h3><a href="//scripts/794.ps1">download</a> - <a href="//scripts/791.md">parent</a></h3>
+<p>507 Change $colShares to $colApps
+525 Change $objShare to $objApp and $colShares to $colApps</p>
+<pre><code class="language-posh">#####################################################
+#													#
+#    Audit script by Alan Renouf - Virtu-Al         #
+#    Blog: http://teckinfo.blogspot.com/            #
+#													#
+#    Usage: Audit.ps1 'pathtolistofservers'         #
+#													#
+#    The file is optional and needs to be a 		#
+#	 plain text list of computers to be audited 	#
+#	 one on each line.								#
+#                                                   #
+#####################################################
+
+param( [string] $auditlist)
+
+if ($auditlist -eq &quot;&quot;){
+	Write-Host &quot;No list specified, using $env:computername&quot;
+	$targets = $env:computername
+}
+else
+{
+	if ((Test-Path $auditlist) -eq $false)
+	{
+		Write-Host &quot;Invalid audit path specified: $auditlist&quot;
+		exit
+	}
+	else
+	{
+		Write-Host &quot;Using Audit list: $auditlist&quot;
+		$Targets = Get-Content $auditlist
+	}
+}
+
+$Date = Get-Date
+Foreach ($Target in $Targets){
+	Write-Output &quot;Collating Detail for $Target&quot;
+	$ComputerSystem = Get-WmiObject -computername $Target Win32_ComputerSystem
+	switch ($ComputerSystem.DomainRole){
+		0 { $ComputerRole = &quot;Standalone Workstation&quot; }
+		1 { $ComputerRole = &quot;Member Workstation&quot; }
+		2 { $ComputerRole = &quot;Standalone Server&quot; }
+		3 { $ComputerRole = &quot;Member Server&quot; }
+		4 { $ComputerRole = &quot;Domain Controller&quot; }
+		5 { $ComputerRole = &quot;Domain Controller&quot; }
+		default { $ComputerRole = &quot;Information not available&quot; }
+	}
+	
+	$OperatingSystems = Get-WmiObject -computername $Target Win32_OperatingSystem
+	$TimeZone = Get-WmiObject -computername $Target Win32_Timezone
+	$Keyboards = Get-WmiObject -computername $Target Win32_Keyboard
+	$SchedTasks = Get-WmiObject -computername $Target Win32_ScheduledJob
+	$BootINI = $OperatingSystems.SystemDrive + &quot;boot.ini&quot;
+	$RecoveryOptions = Get-WmiObject -computername $Target Win32_OSRecoveryConfiguration
+	
+	switch ($ComputerRole){
+		&quot;Member Workstation&quot; { $CompType = &quot;Computer Domain&quot;; break }
+		&quot;Domain Controller&quot; { $CompType = &quot;Computer Domain&quot;; break }
+		&quot;Member Server&quot; { $CompType = &quot;Computer Domain&quot;; break }
+		default { $CompType = &quot;Computer Workgroup&quot;; break }
+	}
+
+	$LBTime=$OperatingSystems.ConvertToDateTime($OperatingSystems.Lastbootuptime)
+	Write-Output &quot;..Hotfix Information&quot;
+	$colQuickFixes = Get-WmiObject Win32_QuickFixEngineering
+	Write-Output &quot;..Logical Disks&quot;
+	$colDisks = Get-WmiObject -ComputerName $Target Win32_LogicalDisk
+	Write-Output &quot;..Network Configuration&quot;
+	$NICCount = 0
+	$colAdapters = Get-WmiObject -ComputerName $Target Win32_NetworkAdapterConfiguration
+	Write-Output &quot;..Local Shares&quot;
+	$colShares = Get-wmiobject -ComputerName $Target Win32_Share
+	Write-Output &quot;..Printers&quot;
+	$colInstalledPrinters =  Get-WmiObject -ComputerName $Target Win32_Printer
+	Write-Output &quot;..Services&quot;
+	$colListOfServices = Get-WmiObject -ComputerName $Target Win32_Service
+	Write-Output &quot;..Regional Options&quot;
+	$ObjKeyboards = Get-WmiObject -ComputerName $Target Win32_Keyboard
+	$keyboardmap = @{
+	&quot;00000402&quot; = &quot;BG&quot; 
+	&quot;00000404&quot; = &quot;CH&quot; 
+	&quot;00000405&quot; = &quot;CZ&quot; 
+	&quot;00000406&quot; = &quot;DK&quot; 
+	&quot;00000407&quot; = &quot;GR&quot; 
+	&quot;00000408&quot; = &quot;GK&quot; 
+	&quot;00000409&quot; = &quot;US&quot; 
+	&quot;0000040A&quot; = &quot;SP&quot; 
+	&quot;0000040B&quot; = &quot;SU&quot; 
+	&quot;0000040C&quot; = &quot;FR&quot; 
+	&quot;0000040E&quot; = &quot;HU&quot; 
+	&quot;0000040F&quot; = &quot;IS&quot; 
+	&quot;00000410&quot; = &quot;IT&quot; 
+	&quot;00000411&quot; = &quot;JP&quot; 
+	&quot;00000412&quot; = &quot;KO&quot; 
+	&quot;00000413&quot; = &quot;NL&quot; 
+	&quot;00000414&quot; = &quot;NO&quot; 
+	&quot;00000415&quot; = &quot;PL&quot; 
+	&quot;00000416&quot; = &quot;BR&quot; 
+	&quot;00000418&quot; = &quot;RO&quot; 
+	&quot;00000419&quot; = &quot;RU&quot; 
+	&quot;0000041A&quot; = &quot;YU&quot; 
+	&quot;0000041B&quot; = &quot;SL&quot; 
+	&quot;0000041C&quot; = &quot;US&quot; 
+	&quot;0000041D&quot; = &quot;SV&quot; 
+	&quot;0000041F&quot; = &quot;TR&quot; 
+	&quot;00000422&quot; = &quot;US&quot; 
+	&quot;00000423&quot; = &quot;US&quot; 
+	&quot;00000424&quot; = &quot;YU&quot; 
+	&quot;00000425&quot; = &quot;ET&quot; 
+	&quot;00000426&quot; = &quot;US&quot; 
+	&quot;00000427&quot; = &quot;US&quot; 
+	&quot;00000804&quot; = &quot;CH&quot; 
+	&quot;00000809&quot; = &quot;UK&quot; 
+	&quot;0000080A&quot; = &quot;LA&quot; 
+	&quot;0000080C&quot; = &quot;BE&quot; 
+	&quot;00000813&quot; = &quot;BE&quot; 
+	&quot;00000816&quot; = &quot;PO&quot; 
+	&quot;00000C0C&quot; = &quot;CF&quot; 
+	&quot;00000C1A&quot; = &quot;US&quot; 
+	&quot;00001009&quot; = &quot;US&quot; 
+	&quot;0000100C&quot; = &quot;SF&quot; 
+	&quot;00001809&quot; = &quot;US&quot; 
+	&quot;00010402&quot; = &quot;US&quot; 
+	&quot;00010405&quot; = &quot;CZ&quot; 
+	&quot;00010407&quot; = &quot;GR&quot; 
+	&quot;00010408&quot; = &quot;GK&quot; 
+	&quot;00010409&quot; = &quot;DV&quot; 
+	&quot;0001040A&quot; = &quot;SP&quot; 
+	&quot;0001040E&quot; = &quot;HU&quot; 
+	&quot;00010410&quot; = &quot;IT&quot; 
+	&quot;00010415&quot; = &quot;PL&quot; 
+	&quot;00010419&quot; = &quot;RU&quot; 
+	&quot;0001041B&quot; = &quot;SL&quot; 
+	&quot;0001041F&quot; = &quot;TR&quot; 
+	&quot;00010426&quot; = &quot;US&quot; 
+	&quot;00010C0C&quot; = &quot;CF&quot; 
+	&quot;00010C1A&quot; = &quot;US&quot; 
+	&quot;00020408&quot; = &quot;GK&quot; 
+	&quot;00020409&quot; = &quot;US&quot; 
+	&quot;00030409&quot; = &quot;USL&quot; 
+	&quot;00040409&quot; = &quot;USR&quot; 
+	&quot;00050408&quot; = &quot;GK&quot; 
+	}
+	$keyb = $keyboardmap.$($ObjKeyboards.Layout)
+	if (!$keyb)
+	{ $keyb = &quot;Unknown&quot;
+	}
+	Write-Output &quot;..Event Log Settings&quot;
+	$colLogFiles = Get-WmiObject -ComputerName $Target Win32_NTEventLogFile
+	Write-Output &quot;..Event Log Errors&quot;
+	$WmidtQueryDT = [System.Management.ManagementDateTimeConverter]::ToDmtfDateTime([DateTime]::Now.AddDays(-14))
+	$colLoggedEvents = Get-WmiObject -computer $Target -query (&quot;Select * from Win32_NTLogEvent Where Type='Error' and TimeWritten &gt;='&quot; + $WmidtQueryDT + &quot;'&quot;)
+	Write-Output &quot;..Event Log Warnings&quot;
+	$WmidtQueryDT = [System.Management.ManagementDateTimeConverter]::ToDmtfDateTime([DateTime]::Now.AddDays(-14))
+	$colLoggedEvents = Get-WmiObject -computer $Target -query (&quot;Select * from Win32_NTLogEvent Where Type='Warning' and TimeWritten &gt;='&quot; + $WmidtQueryDT + &quot;'&quot;)
+
+	$Filename = &quot;.\&quot; + $Target + &quot;_&quot; + $date.Hour + $date.Minute + &quot;_&quot; + $Date.Day + &quot;-&quot; + $Date.Month + &quot;-&quot; + $Date.Year + &quot;.htm&quot;
+
+	$Report = @&quot;
+	&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0 Transitional//EN&quot;&gt;
+	&lt;html ES_auditInitialized='false'&gt;&lt;head&gt;&lt;title&gt;Audit&lt;/title&gt;
+	&lt;META http-equiv=Content-Type content='text/html; charset=windows-1252'&gt;
+	&lt;STYLE type=text/css&gt;	
+		DIV .expando {DISPLAY: block; FONT-WEIGHT: normal; FONT-SIZE: 8pt; RIGHT: 10px; COLOR: #ffffff; FONT-FAMILY: Tahoma; POSITION: absolute; TEXT-DECORATION: underline}
+		TABLE {TABLE-LAYOUT: fixed; FONT-SIZE: 100%; WIDTH: 100%}
+		#objshowhide {PADDING-RIGHT: 10px; FONT-WEIGHT: bold; FONT-SIZE: 8pt; Z-INDEX: 2; CURSOR: hand; COLOR: #000000; MARGIN-RIGHT: 0px; FONT-FAMILY: Tahoma; TEXT-ALIGN: right; TEXT-DECORATION: underline; WORD-WRAP: normal}
+		.heading0_expanded {BORDER-RIGHT: #bbbbbb 1px solid; PADDING-RIGHT: 5em; BORDER-TOP: #bbbbbb 1px solid; DISPLAY: block; PADDING-LEFT: 8px; FONT-WEIGHT: bold; FONT-SIZE: 8pt; MARGIN-BOTTOM: -1px; MARGIN-LEFT: 0px; BORDER-LEFT: #bbbbbb 1px solid; WIDTH: 100%; CURSOR: hand; COLOR: #FFFFFF; MARGIN-RIGHT: 0px; PADDING-TOP: 4px; BORDER-BOTTOM: #bbbbbb 1px solid; FONT-FAMILY: Tahoma; POSITION: relative; HEIGHT: 2.25em; BACKGROUND-COLOR: #cc0000}
+		.heading1 {BORDER-RIGHT: #bbbbbb 1px solid; PADDING-RIGHT: 5em; BORDER-TOP: #bbbbbb 1px solid; DISPLAY: block; PADDING-LEFT: 16px; FONT-WEIGHT: bold; FONT-SIZE: 8pt; MARGIN-BOTTOM: -1px; MARGIN-LEFT: 5px; BORDER-LEFT: #bbbbbb 1px solid; WIDTH: 100%; CURSOR: hand; COLOR: #ffffff; MARGIN-RIGHT: 0px; PADDING-TOP: 4px; BORDER-BOTTOM: #bbbbbb 1px solid; FONT-FAMILY: Tahoma; POSITION: relative; HEIGHT: 2.25em; BACKGROUND-COLOR: #7BA7C7}
+		.heading2 {BORDER-RIGHT: #bbbbbb 1px solid; PADDING-RIGHT: 5em; BORDER-TOP: #bbbbbb 1px solid; DISPLAY: block; PADDING-LEFT: 16px; FONT-WEIGHT: bold; FONT-SIZE: 8pt; MARGIN-BOTTOM: -1px; MARGIN-LEFT: 5px; BORDER-LEFT: #bbbbbb 1px solid; WIDTH: 100%; CURSOR: hand; COLOR: #ffffff; MARGIN-RIGHT: 0px; PADDING-TOP: 4px; BORDER-BOTTOM: #bbbbbb 1px solid; FONT-FAMILY: Tahoma; POSITION: relative; HEIGHT: 2.25em; BACKGROUND-COLOR: #A5A5A5}
+		.tableDetail {BORDER-RIGHT: #bbbbbb 1px solid; BORDER-TOP: #bbbbbb 1px solid; DISPLAY: block; PADDING-LEFT: 16px; FONT-SIZE: 8pt;MARGIN-BOTTOM: -1px; PADDING-BOTTOM: 5px; MARGIN-LEFT: 5px; BORDER-LEFT: #bbbbbb 1px solid; WIDTH: 100%; COLOR: #000000; MARGIN-RIGHT: 0px; PADDING-TOP: 4px; BORDER-BOTTOM: #bbbbbb 1px solid; FONT-FAMILY: Tahoma; POSITION: relative; BACKGROUND-COLOR: #f9f9f9}
+		.filler {BORDER-RIGHT: medium none; BORDER-TOP: medium none; DISPLAY: block; BACKGROUND: none transparent scroll repeat 0% 0%; MARGIN-BOTTOM: -1px; FONT: 100%/8px Tahoma; MARGIN-LEFT: 43px; BORDER-LEFT: medium none; COLOR: #ffffff; MARGIN-RIGHT: 0px; PADDING-TOP: 4px; BORDER-BOTTOM: medium none; POSITION: relative}
+		.Solidfiller {BORDER-RIGHT: medium none; BORDER-TOP: medium none; DISPLAY: block; BACKGROUND: none transparent scroll repeat 0% 0%; MARGIN-BOTTOM: -1px; FONT: 100%/8px Tahoma; MARGIN-LEFT: 0px; BORDER-LEFT: medium none; COLOR: #000000; MARGIN-RIGHT: 0px; PADDING-TOP: 4px; BORDER-BOTTOM: medium none; POSITION: relative; BACKGROUND-COLOR: #000000}
+		td {VERTICAL-ALIGN: TOP; FONT-FAMILY: Tahoma}
+		th {VERTICAL-ALIGN: TOP; COLOR: #cc0000; TEXT-ALIGN: left}
+	&lt;/STYLE&gt;
+	&lt;SCRIPT language=vbscript&gt;
+		strShowHide = 1
+		strShow = &quot;show&quot;
+		strHide = &quot;hide&quot;
+		strShowAll = &quot;show all&quot;
+		strHideAll = &quot;hide all&quot;
+	
+	Function window_onload()
+		If UCase(document.documentElement.getAttribute(&quot;ES_auditInitialized&quot;)) &lt;&gt; &quot;TRUE&quot; Then
+			Set objBody = document.body.all
+			For Each obji in objBody
+				If IsSectionHeader(obji) Then
+					If IsSectionExpandedByDefault(obji) Then
+						ShowSection obji
+					Else
+						HideSection obji
+					End If
+				End If
+			Next
+			objshowhide.innerText = strShowAll
+			document.documentElement.setAttribute &quot;ES_auditInitialized&quot;, &quot;true&quot;
+		End If
+	End Function
+	
+	Function IsSectionExpandedByDefault(objHeader)
+		IsSectionExpandedByDefault = (Right(objHeader.className, Len(&quot;_expanded&quot;)) = &quot;_expanded&quot;)
+	End Function
+	
+	Function document_onclick()
+		Set strsrc = window.event.srcElement
+		While (strsrc.className = &quot;sectionTitle&quot; or strsrc.className = &quot;expando&quot;)
+			Set strsrc = strsrc.parentElement
+		Wend
+		If Not IsSectionHeader(strsrc) Then Exit Function
+		ToggleSection strsrc
+		window.event.returnValue = False
+	End Function
+	
+	Sub ToggleSection(objHeader)
+		SetSectionState objHeader, &quot;toggle&quot;
+	End Sub
+	
+	Sub SetSectionState(objHeader, strState)
+		i = objHeader.sourceIndex
+		Set all = objHeader.parentElement.document.all
+		While (all(i).className &lt;&gt; &quot;container&quot;)
+			i = i + 1
+		Wend
+		Set objContainer = all(i)
+		If strState = &quot;toggle&quot; Then
+			If objContainer.style.display = &quot;none&quot; Then
+				SetSectionState objHeader, &quot;show&quot; 
+			Else
+				SetSectionState objHeader, &quot;hide&quot; 
+			End If
+		Else
+			Set objExpando = objHeader.children.item(1)
+			If strState = &quot;show&quot; Then
+				objContainer.style.display = &quot;block&quot; 
+				objExpando.innerText = strHide
+	
+			ElseIf strState = &quot;hide&quot; Then
+				objContainer.style.display = &quot;none&quot; 
+				objExpando.innerText = strShow
+			End If
+		End If
+	End Sub
+	
+	Function objshowhide_onClick()
+		Set objBody = document.body.all
+		Select Case strShowHide
+			Case 0
+				strShowHide = 1
+				objshowhide.innerText = strShowAll
+				For Each obji In objBody
+					If IsSectionHeader(obji) Then
+						HideSection obji
+					End If
+				Next
+			Case 1
+				strShowHide = 0
+				objshowhide.innerText = strHideAll
+				For Each obji In objBody
+					If IsSectionHeader(obji) Then
+						ShowSection obji
+					End If
+				Next
+		End Select
+	End Function
+	
+	Function IsSectionHeader(obj) : IsSectionHeader = (obj.className = &quot;heading0_expanded&quot;) Or (obj.className = &quot;heading1_expanded&quot;) Or (obj.className = &quot;heading1&quot;) Or (obj.className = &quot;heading2&quot;): End Function
+	Sub HideSection(objHeader) : SetSectionState objHeader, &quot;hide&quot; : End Sub
+	Sub ShowSection(objHeader) : SetSectionState objHeader, &quot;show&quot;: End Sub
+	&lt;/SCRIPT&gt;
+	&lt;/HEAD&gt;
+	&lt;BODY&gt;
+	&lt;p&gt;&lt;b&gt;&lt;font face=&quot;Arial&quot; size=&quot;5&quot;&gt;$Target Audit&lt;hr size=&quot;8&quot; color=&quot;#CC0000&quot;&gt;&lt;/font&gt;&lt;/b&gt;
+	&lt;font face=&quot;Arial&quot; size=&quot;1&quot;&gt;&lt;b&gt;&lt;i&gt;Version 1.1 by Alan Renouf (Virtu-Al)&lt;/i&gt;&lt;/b&gt;&lt;/font&gt;&lt;br&gt;
+	&lt;font face=&quot;Arial&quot; size=&quot;1&quot;&gt;Report generated on $Date &lt;/font&gt;&lt;/p&gt;
+	
+	&lt;TABLE cellSpacing=0 cellPadding=0&gt;
+		&lt;TBODY&gt;
+			&lt;TR&gt;
+				&lt;TD&gt;
+					&lt;DIV id=objshowhide tabIndex=0&gt;&lt;FONT face=Arial&gt;&lt;/FONT&gt;&lt;/DIV&gt;
+				&lt;/TD&gt;
+			&lt;/TR&gt;
+		&lt;/TBODY&gt;
+	&lt;/TABLE&gt;
+	&lt;DIV class=heading0_expanded&gt;
+		&lt;SPAN class=sectionTitle tabIndex=0&gt;$target Details&lt;/SPAN&gt;
+		&lt;A class=expando href='#'&gt;&lt;/A&gt;
+	&lt;/DIV&gt;
+	&lt;DIV class=filler&gt;&lt;/DIV&gt;
+	&lt;DIV class=container&gt;
+	&lt;DIV class=heading1&gt;
+	&lt;SPAN class=sectionTitle tabIndex=0&gt;General&lt;/SPAN&gt;
+	&lt;A class=expando href='#'&gt;&lt;/A&gt;
+	&lt;/DIV&gt;
+	&lt;DIV class=container&gt;
+	&lt;DIV class=tableDetail&gt;
+	&lt;TABLE&gt;
+	&lt;tr&gt;
+	&lt;th width='25%'&gt;&lt;b&gt;Computer Name&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	&lt;td width='75%'&gt;$($ComputerSystem.Name)&lt;/font&gt;&lt;/td&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+	&lt;th width='25%'&gt;&lt;b&gt;Computer Role&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	&lt;td width='75%'&gt; $ComputerRole &lt;/font&gt;&lt;/td&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+	&lt;th width='25%'&gt;&lt;b&gt;$CompType&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;	
+	&lt;td width='75%'&gt;$($ComputerSystem.Domain)&lt;/font&gt;&lt;/td&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+	&lt;th width='25%'&gt;&lt;b&gt;Operating System&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	&lt;td width='75%'&gt;$($OperatingSystems.Caption)&lt;/font&gt;&lt;/td&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+	&lt;th width='25%'&gt;&lt;b&gt;Service Pack&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	&lt;td width='75%'&gt;$($OperatingSystems.CSDVersion)&lt;/font&gt;&lt;/td&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;th width='25%'&gt;&lt;b&gt;System Root&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		&lt;td width='75%'&gt;$($OperatingSystems.SystemDrive)&lt;/font&gt;&lt;/td&gt;
+	&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;th width='25%'&gt;&lt;b&gt;Manufacturer&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		&lt;td width='75%'&gt;$($ComputerSystem.Manufacturer)&lt;/font&gt;&lt;/td&gt;
+	 				&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;th width='25%'&gt;&lt;b&gt;Model&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		&lt;td width='75%'&gt;$($ComputerSystem.Model)&lt;/font&gt;&lt;/td&gt;
+	 				&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;th width='25%'&gt;&lt;b&gt;Number of Processors&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		&lt;td width='75%'&gt;$($ComputerSystem.NumberOfProcessors)&lt;/font&gt;&lt;/td&gt;
+	 				&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;th width='25%'&gt;&lt;b&gt;Memory&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		&lt;td width='75%'&gt;$($ComputerSystem.TotalPhysicalMemory)&lt;/font&gt;&lt;/td&gt;
+	 				&lt;/tr&gt;
+	&lt;tr&gt;
+		&lt;th width='25%'&gt;&lt;b&gt;Registered User&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		&lt;td width='75%'&gt;$($ComputerSystem.PrimaryOwnerName)&lt;/font&gt;&lt;/td&gt;
+	 				&lt;/tr&gt;
+	 				&lt;tr&gt;
+		&lt;th width='25%'&gt;&lt;b&gt;Registered Organisation&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		&lt;td width='75%'&gt;$($OperatingSystems.Organization)&lt;/font&gt;&lt;/td&gt;
+	&lt;/tr&gt;
+	  				&lt;tr&gt;
+	   				&lt;th width='25%'&gt;&lt;b&gt;Last System Boot&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		&lt;td width='75%'&gt;$LBTime&lt;/font&gt;&lt;/td&gt;
+	&lt;/tr&gt;
+				&lt;/TABLE&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+	&lt;DIV class=container&gt;
+	&lt;DIV class=heading1&gt;
+	&lt;SPAN class=sectionTitle tabIndex=0&gt;HotFixes&lt;/SPAN&gt;
+	&lt;A class=expando href='#'&gt;&lt;/A&gt;
+	&lt;/DIV&gt;
+	&lt;DIV class=container&gt;
+	&lt;DIV class=tableDetail&gt;
+	&lt;TABLE&gt;
+	&lt;tr&gt;
+	&lt;th width='25%'&gt;&lt;b&gt;HotFix Number&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	&lt;th width='75%'&gt;&lt;b&gt;Description&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	&lt;/tr&gt;
+&quot;@
+
+	ForEach ($objQuickFix in $colQuickFixes)
+	{
+		if ($objQuickFix.HotFixID -ne &quot;File 1&quot;)
+		{
+			$Report+= &quot;				&lt;tr&gt;&quot;
+			$Report+= &quot;					&lt;td width='25%'&gt;$($objQuickFix.HotFixID)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+= &quot;					&lt;td width='75%'&gt;$($objQuickFix.Description)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+= &quot;				&lt;/tr&gt;&quot;
+		}
+	}
+$Report+= @&quot;
+	&lt;/TABLE&gt;
+	&lt;/DIV&gt;
+	&lt;/DIV&gt;
+	&lt;/DIV&gt;
+	&lt;DIV class=filler&gt;&lt;/DIV&gt;
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading1&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;Logical Disk Configuration&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+						&lt;tr&gt;
+	  						&lt;th width='15%'&gt;&lt;b&gt;Drive Letter&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  						&lt;th width='20%'&gt;&lt;b&gt;Label&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  						&lt;th width='20%'&gt;&lt;b&gt;File System&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  						&lt;th width='15%'&gt;&lt;b&gt;Disk Size&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  						&lt;th width='15%'&gt;&lt;b&gt;Disk Free Space&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  						&lt;th width='15%'&gt;&lt;b&gt;% Free Space&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  					&lt;/tr&gt;
+&quot;@
+
+	Foreach ($objDisk in $colDisks)
+	{
+		if ($objDisk.DriveType -eq 3)
+		{
+			$Report+=  &quot;					&lt;tr&gt;&quot;
+			$Report+=  &quot;						&lt;td width='15%'&gt;$($objDisk.DeviceID)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot; 						&lt;td width='20%'&gt;$($objDisk.VolumeName)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot; 						&lt;td width='20%'&gt;$($objDisk.FileSystem)&lt;/font&gt;&lt;/td&gt;&quot;
+			$disksize = [math]::round(($objDisk.size / 1048576))
+			$Report+=  &quot; 						&lt;td width='15%'&gt;$disksize MB&lt;/font&gt;&lt;/td&gt;&quot;
+			$freespace = [math]::round(($objDisk.FreeSpace / 1048576))
+			$Report+=  &quot; 						&lt;td width='15%'&gt;$Freespace MB&lt;/font&gt;&lt;/td&gt;&quot;
+			$percFreespace=[math]::round(((($objDisk.FreeSpace / 1048576)/($objDisk.Size / 1048676)) * 100),0)
+			$Report+=  &quot; 						&lt;td width='15%'&gt;$percFreespace%&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;					&lt;/tr&gt;&quot;
+		}
+	}
+$Report+= @&quot;
+	&lt;/TABLE&gt;
+	&lt;/DIV&gt;
+	&lt;/DIV&gt;
+	&lt;/DIV&gt;
+	&lt;DIV class=filler&gt;&lt;/DIV&gt;
+
+	
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading1&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;NIC Configuration&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+&quot;@
+	Foreach ($objAdapter in $colAdapters)
+	{
+		if ($objAdapter.IPEnabled -eq &quot;True&quot;)
+		{
+			$NICCount = $NICCount + 1
+			If ($NICCount -gt 1)
+			{
+				$Report+=  &quot;			&lt;/TABLE&gt;&quot;
+				$Report+=  &quot;				&lt;DIV class=Solidfiller&gt;&lt;/DIV&gt;&quot;
+				$Report+=  &quot;			&lt;TABLE&gt;&quot;
+			}
+		$Report+=  &quot;  					&lt;tr&gt;&quot;
+		$Report+=  &quot;	 					&lt;th width='25%'&gt;&lt;b&gt;Description&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;&quot;
+		$Report+=  &quot;    					&lt;td width='75%'&gt;$($objAdapter.Description)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;  					&lt;/tr&gt;&quot;
+		$Report+=  &quot;  					&lt;tr&gt;&quot;
+		$Report+=  &quot;						&lt;th width='25%'&gt;&lt;b&gt;Physical address&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;&quot;
+		$Report+=  &quot;						&lt;td width='75%'&gt;$($objAdapter.MACaddress)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot; 					&lt;/tr&gt;&quot;
+		If ($objAdapter.IPAddress -ne $Null)
+		{
+			$Report+=  &quot;					&lt;tr&gt;&quot;
+			$Report+=  &quot;						&lt;th width='25%'&gt;&lt;b&gt;IP Address / Subnet Mask&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;&quot;
+			$Report+=  &quot;						&lt;td width='75%'&gt;$($objAdapter.IPAddress)/$($objAdapter.IPSubnet)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;					&lt;/tr&gt;&quot;
+			$Report+=  &quot;					&lt;/tr&gt;&quot;
+			$Report+=  &quot;					&lt;tr&gt;&quot;
+			$Report+=  &quot;						&lt;th width='25%'&gt;&lt;b&gt;Default Gateway&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;&quot;
+			$Report+=  &quot;						&lt;td width='75%'&gt;$($objAdapter.DefaultIPGateway)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;					&lt;/tr&gt;&quot;
+		
+		}
+		$Report+=  &quot;					&lt;tr&gt;&quot;
+		$Report+=  &quot;						&lt;th width='25%'&gt;&lt;b&gt;DHCP enabled&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;&quot;
+		If ($objAdapter.DHCPEnabled -eq &quot;True&quot;)
+		{
+			$Report+=  &quot;						&lt;td width='75%'&gt;Yes&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		Else
+		{
+			$Report+=  &quot;						&lt;td width='75%'&gt;No&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		$Report+=  &quot;					&lt;/tr&gt;&quot;
+		$Report+=  &quot;					&lt;tr&gt;&quot;
+		$Report+=  &quot;							&lt;th width='25%'&gt;&lt;b&gt;DNS Servers&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;&quot;
+		$Report+=  &quot;							&lt;td width='75%'&gt;&quot;
+		If ($objAdapter.DNSServerSearchOrder -ne $Null)
+		{
+			$Report+=  &quot; $($objAdapter.DNSServerSearchOrder) &quot;
+		}
+		$Report+=  &quot;					&lt;/tr&gt;&quot;
+		$Report+=  &quot;					&lt;tr&gt;&quot;
+		$Report+=  &quot;						&lt;th width='25%'&gt;&lt;b&gt;Primary WINS Server&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;&quot;
+		$Report+=  &quot;						&lt;td width='75%'&gt;$($objAdapter.WINSPrimaryServer)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;					&lt;/tr&gt;&quot;
+		$Report+=  &quot;					&lt;tr&gt;&quot;
+		$Report+=  &quot;						&lt;th width='25%'&gt;&lt;b&gt;Secondary WINS Server&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;&quot;
+		$Report+=  &quot;						&lt;td width='75%'&gt;$($objAdapter.WINSSecondaryServer)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;					&lt;/tr&gt;&quot;
+		$NICCount = $NICCount + 1
+		}
+	}
+$Report+= @&quot;
+					&lt;/TABLE&gt;
+				&lt;/DIV&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+&quot;@	
+	if ((get-wmiobject -namespace &quot;root/cimv2&quot; -list) | ? {$_.name -match &quot;Win32_Product&quot;})
+	{
+		Write-Output &quot;..Installed Software&quot;
+		$colShares = get-wmiobject -ComputerName $Target Win32_Product | select Name,Version,Vendor,InstallDate
+		
+$Report+= @&quot;
+	&lt;DIV class=container&gt;
+				&lt;DIV class=heading1&gt;
+					&lt;SPAN class=sectionTitle tabIndex=0&gt;Software&lt;/SPAN&gt;
+					&lt;A class=expando href='#'&gt;&lt;/A&gt;
+				&lt;/DIV&gt;
+				&lt;DIV class=container&gt;
+					&lt;DIV class=tableDetail&gt;
+						&lt;TABLE&gt;
+							&lt;tr&gt;
+		  						&lt;th width='25%'&gt;&lt;b&gt;Name&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		  						&lt;th width='25%'&gt;&lt;b&gt;Version&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		  						&lt;th width='25%'&gt;&lt;b&gt;Vendor&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		  						&lt;th width='25%'&gt;&lt;b&gt;Install Date&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+							&lt;/tr&gt;
+&quot;@
+		Foreach ($objShare in $colShares)
+		{
+			$Report+=  &quot;					&lt;tr&gt;&quot;
+			$Report+=  &quot;						&lt;td width='50%'&gt;$($objShare.Name)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;						&lt;td width='20%'&gt;$($objShare.Version)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;						&lt;td width='15%'&gt;$($objShare.Vendor)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;						&lt;td width='15%'&gt;$($objShare.InstallDate)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;					&lt;/tr&gt;&quot;
+		}
+		$Report+=  &quot;				&lt;/TABLE&gt;&quot;
+		$Report+=  &quot;			&lt;/DIV&gt;&quot;
+		$Report+=  &quot;		&lt;/DIV&gt;&quot;
+		$Report+=  &quot;	&lt;/DIV&gt;&quot;
+		$Report+=  &quot;	&lt;DIV class=filler&gt;&lt;/DIV&gt;&quot;		
+	}
+$Report+= @&quot;
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading1&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;Local Shares&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+						&lt;tr&gt;
+	  						&lt;th width='25%'&gt;&lt;b&gt;Share&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  						&lt;th width='25%'&gt;&lt;b&gt;Path&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  						&lt;th width='50%'&gt;&lt;b&gt;Comment&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+						&lt;/tr&gt;
+&quot;@
+Foreach ($objShare in $colShares)
+	{
+		$Report+=  &quot;					&lt;tr&gt;&quot;
+		$Report+=  &quot;						&lt;td width='25%'&gt;$($objShare.Name)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;						&lt;td width='25%'&gt;$($objShare.Path)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;						&lt;td width='50%'&gt;$($objShare.Caption)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;					&lt;/tr&gt;&quot;
+	}	
+$Report+= @&quot;
+					&lt;/TABLE&gt;
+				&lt;/DIV&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+	
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading1&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;Printers&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+						&lt;tr&gt;
+							&lt;th width='25%'&gt;&lt;b&gt;Printer&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+							&lt;th width='25%'&gt;&lt;b&gt;Location&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+							&lt;th width='25%'&gt;&lt;b&gt;Default Printer&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+							&lt;th width='25%'&gt;&lt;b&gt;Portname&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+						&lt;/tr&gt;
+&quot;@
+	Foreach ($objPrinter in $colInstalledPrinters)
+	{
+		If ($objPrinter.Name -eq &quot;&quot;)
+		{
+			$Report+=  &quot;					&lt;tr&gt;&quot;
+			$Report+=  &quot;						&lt;td width='100%'&gt;No Printers Installed&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		Else
+		{
+			$Report+=  &quot;					&lt;tr&gt;&quot;
+			$Report+=  &quot;						&lt;td width='25%'&gt;$($objPrinter.Name)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;						&lt;td width='25%'&gt;$($objPrinter.Location)&lt;/font&gt;&lt;/td&gt;&quot;
+			if ($objPrinter.Default -eq &quot;True&quot;)
+			{
+				$Report+=  &quot;						&lt;td width='25%'&gt;Yes&lt;/font&gt;&lt;/td&gt;&quot;
+			}
+			Else
+			{
+				$Report+=  &quot;						&lt;td width='25%'&gt;No&lt;/font&gt;&lt;/td&gt;&quot;
+			}
+			$Report+=  &quot;						&lt;td width='25%'&gt;$($objPrinter.Portname)&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		$Report+=  &quot;					&lt;/tr&gt;&quot;
+	}
+$Report+= @&quot;
+				&lt;/TABLE&gt;
+				&lt;/DIV&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading1&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;Services&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+	  					&lt;tr&gt;
+		 					&lt;th width='20%'&gt;&lt;b&gt;Name&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		 					&lt;th width='20%'&gt;&lt;b&gt;Account&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		 					&lt;th width='20%'&gt;&lt;b&gt;Start Mode&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		 					&lt;th width='20%'&gt;&lt;b&gt;State&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		 					&lt;th width='20%'&gt;&lt;b&gt;Expected State&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  					&lt;/tr&gt;
+&quot;@
+
+	Foreach ($objService in $colListOfServices)
+	{
+		$Report+=  &quot; 					&lt;tr&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='20%'&gt;$($objService.Caption)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='20%'&gt;$($objService.Startname)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='20%'&gt;$($objService.StartMode)&lt;/font&gt;&lt;/td&gt;&quot;
+		If ($objService.StartMode -eq &quot;Auto&quot;)
+		{
+			if ($objService.State -eq &quot;Stopped&quot;)
+			{
+				$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font color='#FF0000'&gt;$($objService.State)&lt;/font&gt;&lt;/td&gt;&quot;
+				$Report+=  &quot;						&lt;td width='25%'&gt;&lt;font face='Wingdings'color='#FF0000'&gt;Ã»&lt;/font&gt;&lt;/td&gt;&quot;
+			}
+		}
+		If ($objService.StartMode -eq &quot;Auto&quot;)
+		{
+			if ($objService.State -eq &quot;Running&quot;)
+			{
+				$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font color='#009900'&gt;$($objService.State)&lt;/font&gt;&lt;/td&gt;&quot;
+				$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font face='Wingdings'color='#009900'&gt;Ã¼&lt;/font&gt;&lt;/td&gt;&quot;
+			}
+		}
+		If ($objService.StartMode -eq &quot;Disabled&quot;)
+		{
+			If ($objService.State -eq &quot;Running&quot;)
+			{
+				$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font color='#FF0000'&gt;$($objService.State)&lt;/font&gt;&lt;/td&gt;&quot;
+				$Report+=  &quot;						&lt;td width='25%'&gt;&lt;font face='Wingdings'color='#FF0000'&gt;Ã»&lt;/font&gt;&lt;/td&gt;&quot;
+			}
+		}
+		If ($objService.StartMode -eq &quot;Disabled&quot;)
+		{
+			if ($objService.State -eq &quot;Stopped&quot;)
+			{
+				$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font color='#009900'&gt;$($objService.State)&lt;/font&gt;&lt;/td&gt;&quot;
+				$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font face='Wingdings'color='#009900'&gt;Ã¼&lt;/font&gt;&lt;/td&gt;&quot;
+			}
+		}
+		If ($objService.StartMode -eq &quot;Manual&quot;)
+		{
+			$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font color='#009900'&gt;$($objService.State)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font face='Wingdings'color='#009900'&gt;Ã¼&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		If ($objService.State -eq &quot;Paused&quot;)
+		{
+			$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font color='#FF9933'&gt;$($objService.State)&lt;/font&gt;&lt;/td&gt;&quot;
+			$Report+=  &quot;						&lt;td width='20%'&gt;&lt;font face='Wingdings'color='#009900'&gt;Ã¼&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		$Report+=  &quot;  					&lt;/tr&gt;&quot;
+	}	
+$Report+= @&quot;
+					&lt;/TABLE&gt;
+				&lt;/DIV&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading1&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;Regional Settings&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+	 					&lt;tr&gt;
+		 					&lt;th width='25%'&gt;&lt;b&gt;Time Zone&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		 					&lt;td width='75%'&gt;$($TimeZone.Description)&lt;/font&gt;&lt;/td&gt;
+	 					&lt;/tr&gt;
+	 					&lt;tr&gt;
+		 					&lt;th width='25%'&gt;&lt;b&gt;Country Code&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+		 					&lt;td width='75%'&gt;$($OperatingSystems.Countrycode)&lt;/font&gt;&lt;/td&gt;
+	 					&lt;/tr&gt;
+	 					&lt;tr&gt;
+			 				&lt;th width='25%'&gt;&lt;b&gt;Locale&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+			 				&lt;td width='75%'&gt;$($OperatingSystems.Locale)&lt;/font&gt;&lt;/td&gt;
+	 					&lt;/tr&gt;
+	 					&lt;tr&gt;
+			 				&lt;th width='25%'&gt;&lt;b&gt;Operating System Language&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+			 				&lt;td width='75%'&gt;$($OperatingSystems.OSLanguage)&lt;/font&gt;&lt;/td&gt;
+	 					&lt;/tr&gt;
+	 					&lt;tr&gt;
+		 				&lt;th width='25%'&gt;&lt;b&gt;Keyboard Layout&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+			 				&lt;td width='75%'&gt;$keyb&lt;/font&gt;&lt;/td&gt;
+	 					&lt;/tr&gt;
+					&lt;/TABLE&gt;
+				&lt;/div&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading1&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;Event Logs&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading2&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;Event Log Settings&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+	  					&lt;tr&gt;
+	    					&lt;th width='25%'&gt;&lt;b&gt;Log Name&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	    					&lt;th width='25%'&gt;&lt;b&gt;Overwrite Outdated Records&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  					  	&lt;th width='25%'&gt;&lt;b&gt;Maximum Size&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	 					   	&lt;th width='25%'&gt;&lt;b&gt;Current Size&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	 					&lt;/tr&gt;
+&quot;@
+	ForEach ($objLogFile in $colLogfiles)
+	{
+		$Report+=  &quot; 					&lt;tr&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='25%'&gt;$($objLogFile.LogFileName)&lt;/font&gt;&lt;/td&gt;&quot;
+		If ($objLogfile.OverWriteOutdated -lt 0)
+		{
+			$Report+=  &quot;	 					&lt;td width='25%'&gt;Never&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		if ($objLogFile.OverWriteOutdated -eq 0)
+		{
+			$Report+=  &quot;	 					&lt;td width='25%'&gt;As needed&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		Else
+		{
+			$Report+=  &quot;	 					&lt;td width='25%'&gt;After $($objLogFile.OverWriteOutdated) days&lt;/font&gt;&lt;/td&gt;&quot;
+		}
+		$MaxFileSize = ($objLogfile.MaxFileSize) / 1024
+		$FileSize = ($objLogfile.FileSize) / 1024
+		
+		$Report+=  &quot;	 					&lt;td width='25%'&gt;$MaxFileSize KB&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='25%'&gt;$FileSize KB&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;  					&lt;/tr&gt;&quot;
+	}
+$Report+= @&quot;
+					&lt;/TABLE&gt;
+				&lt;/DIV&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading2&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;ERROR Entries&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+	  					&lt;tr&gt;
+	    					&lt;th width='10%'&gt;&lt;b&gt;Event Code&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	   					&lt;th width='10%'&gt;&lt;b&gt;Source Name&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	    					&lt;th width='15%'&gt;&lt;b&gt;Time&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	    					&lt;th width='10%'&gt;&lt;b&gt;Log&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	    					&lt;th width='55%'&gt;&lt;b&gt;Message&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  					&lt;/tr&gt;
+&quot;@
+	ForEach ($objEvent in $colLoggedEvents)
+	{
+		$dtmEventDate = $ObjEvent.ConvertToDateTime($objEvent.TimeWritten)
+		$Report+=  &quot; 					&lt;tr&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='10%'&gt;$($objEvent.EventCode)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='10%'&gt;$($objEvent.SourceName)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='15%'&gt;$dtmEventDate&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='10%'&gt;$($objEvent.LogFile)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='55%'&gt;$($objEvent.Message)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;  					&lt;/tr&gt;&quot;
+	}
+$Report+= @&quot;
+					&lt;/TABLE&gt;
+				&lt;/DIV&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+		&lt;DIV class=container&gt;
+			&lt;DIV class=heading2&gt;
+				&lt;SPAN class=sectionTitle tabIndex=0&gt;WARNING Entries&lt;/SPAN&gt;
+				&lt;A class=expando href='#'&gt;&lt;/A&gt;
+			&lt;/DIV&gt;
+			&lt;DIV class=container&gt;
+				&lt;DIV class=tableDetail&gt;
+					&lt;TABLE&gt;
+	  					&lt;tr&gt;
+	    					&lt;th width='10%'&gt;&lt;b&gt;Event Code&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	   					&lt;th width='10%'&gt;&lt;b&gt;Source Name&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	    					&lt;th width='15%'&gt;&lt;b&gt;Time&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	    					&lt;th width='10%'&gt;&lt;b&gt;Log&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	    					&lt;th width='55%'&gt;&lt;b&gt;Message&lt;/b&gt;&lt;/font&gt;&lt;/th&gt;
+	  					&lt;/tr&gt;
+&quot;@
+	ForEach ($objEvent in $colLoggedEvents)
+	{
+		$StrWMIDate = $ObjEvent.ConvertToDateTime($objEvent.TimeWritten)
+		$Report+=  &quot; 					&lt;tr&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='10%'&gt;$($objEvent.EventCode)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='10%'&gt;$($objEvent.SourceName)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='15%'&gt;$($dtmEventDate)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='10%'&gt;$($objEvent.LogFile)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;	 					&lt;td width='55%'&gt;$($objEvent.Message)&lt;/font&gt;&lt;/td&gt;&quot;
+		$Report+=  &quot;  					&lt;/tr&gt;&quot;
+	}
+$Report+= @&quot;
+					&lt;/TABLE&gt;
+				&lt;/DIV&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+				&lt;/DIV&gt;
+			&lt;/DIV&gt;
+		&lt;/DIV&gt;
+	
+		&lt;DIV class=filler&gt;&lt;/DIV&gt;
+	&lt;/body&gt;
+	&lt;/html&gt;
+&quot;@
+$Report | out-file -encoding ASCII -filepath $Filename
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

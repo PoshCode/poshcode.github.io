@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BattleChicken">
+    <title>IE11 Install - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>IE11 Install</h1>
+<h3><a href="//scripts/6186.ps1">download</a></h3>
+<p>I wrote this to install IE11 through Altiris.  Though the install method works fine without using Altiris.  The script installs all of the KB prerequisite and recommended updates for IE 11, which are specified in $updateMSUs for the x86 and x64 blocks of code.  It then installs IE 11 without forcing a reboot.</p>
+<pre><code class="language-posh">
+&lt;#
+Requisite updates for IE11 installation on Microsoft Windows 7 x86 and x64 (Please see http://support.microsoft.com/kb/2847882)
+
+    1. KB2729094 (http://support.microsoft.com/kb/2729094)
+    2. KB2731771 (http://support.microsoft.com/kb/2731771)
+    3. KB2533623 (http://support.microsoft.com/kb/2533623)
+    4. KB2670838 (http://support.microsoft.com/kb/2670838)
+    5. KB2786081 (http://support.microsoft.com/kb/2786081)
+    6. KB2834140 (http://support.microsoft.com/kb/2834140)
+
+Optional updates for IE11 installation on Microsoft Windows 7 x86 and x64
+
+    1. KB2639308 (http://support.microsoft.com/kb/2639308)
+    2. KB2888049 (http://support.microsoft.com/kb/2888049)
+    3. KB2882822 (http://support.microsoft.com/kb/2882822)
+#&gt;
+
+# Check if IE is already version 11.  If it is, do nothing.
+$targetIEVer = 11
+$x64IEPath = &quot;C:\Program Files\Internet Explorer\iexplore.exe&quot;
+$x86IEPath = &quot;C:\Program Files (x86)\Internet Explorer\iexplore.exe&quot;
+if (([int](get-item $x64IEPath).VersionInfo.productVersion.split('.')[0] -ge $targetIEVer) -or ([int](get-item $x86IEPath).VersionInfo.productVersion.split('.')[0] -ge $targetIEVer)){
+    Write-Host &quot;IE11 Already installed - no action taken&quot;
+}
+else{
+
+    $fileroot = split-path $script:MyInvocation.MyCommand.Path -parent # sets the target directory to where the .ps1 is.
+    $os = (Get-WmiObject Win32_OperatingSystem -computername localhost).OSArchitecture
+    try {
+        if ($os -eq &quot;32-Bit&quot; -and (Test-Path $fileroot) -eq $true)
+        {
+
+            Write-Host &quot;Found 32-Bit Architecture...Installing pre-requisite updates...&quot;
+
+            #Prerequisite Patches
+            $updateMSU = @(
+                &quot;Windows6.1-KB2533623-x86.msu&quot;,
+                &quot;Windows6.1-KB2888049-x86.msu&quot;,
+                &quot;Windows6.1-KB2670838-x86.msu&quot;,
+                &quot;Windows6.1-KB2729094-v2-x86.msu&quot;,
+                &quot;Windows6.1-KB2731771-x86.msu&quot;,
+                &quot;Windows6.1-KB2786081-x86.msu&quot;,
+                &quot;Windows6.1-KB2834140-v2-x86.msu&quot;,
+                &quot;Windows6.1-KB2882822-x86.msu&quot;,
+                &quot;Windows6.1-KB2639308-x86.msu&quot;
+            )
+            $ie32 =  &quot;EIE11_EN-US_MCM_WIN7.EXE&quot; #Installer 
+
+            foreach ($updateMSU in $updateMSUs){
+                Write-Host &quot;Installing Update $updateMSU...&quot;
+                Start-Process &quot;wusa.exe&quot; -ArgumentList @(&quot;&quot;&quot;$fileroot\$updateMSU&quot;&quot;&quot;,&quot;/quiet&quot;,&quot;/norestart&quot;) -Wait -Verbose
+            }
+
+            Write-Host &quot;Stopping any active IE processes...&quot;
+            get-process iexplore -ErrorAction silentlycontinue | Stop-Process -ErrorAction SilentlyContinue
+            Write-Host &quot;Installing Internet Explorer 11, 32-bit...Please Wait&quot;
+            Start-Process &quot;$fileroot\$ie32&quot; -ArgumentList @(&quot;/passive&quot;,&quot;/update-no&quot;,&quot;/norestart&quot;) -Wait -verbose
+
+            Exit 0
+
+        }
+    }
+    catch {
+        throw &quot;Error installing IE 11&quot;
+    }
+
+    #######################################################################################
+    #                                IE 64-bit Routine
+    #######################################################################################
+    try{
+        if ($os -eq &quot;64-Bit&quot; -and (Test-Path $fileroot) -eq $true)
+        {
+            Write-Host &quot;Found 64-Bit Architecture...Installing pre-requisite updates...&quot;
+
+            #prerequisite patches
+            $updateMSUs = @(
+                &quot;Windows6.1-KB2533623-x64.msu&quot;,
+                &quot;Windows6.1-KB2888049-x64.msu&quot;,
+                &quot;Windows6.1-KB2670838-x64.msu&quot;,
+                &quot;Windows6.1-KB2729094-v2-x64.msu&quot;,
+                &quot;Windows6.1-KB2786081-x64.msu&quot;,
+                &quot;Windows6.1-KB2834140-v2-x64.msu&quot;,
+                &quot;Windows6.1-KB2882822-x64.msu&quot;,
+                &quot;Windows6.1-KB2639308-x64.msu&quot;
+            )
+            $ie64 = &quot;IE11-Windows6.1-x64-en-us.exe&quot; #Installer
+
+            foreach ($updateMSU in $updateMSUs){
+                Write-Host &quot;Installing Update $updateMSU...&quot;
+                Start-Process &quot;wusa.exe&quot; -ArgumentList @(&quot;&quot;&quot;$fileroot\$updateMSU&quot;&quot;&quot;,&quot;/quiet&quot;,&quot;/norestart&quot;) -Wait -Verbose
+            }
+
+
+            Write-Host &quot;Stopping any active IE processes...&quot;
+            get-process iexplore -ErrorAction silentlycontinue | Stop-Process -ErrorAction SilentlyContinue
+            Write-Host &quot;Installing Internet Explorer 11, 64-Bit, Please wait...&quot;
+            Start-Process &quot;$fileroot\$ie64&quot; -ArgumentList @(&quot;/passive&quot;,&quot;/update-no&quot;,&quot;/norestart&quot;) -Wait -verbose
+            if ($?){Write-Host &quot;Install complete&quot;}
+            Exit 0
+        }
+    }
+    catch {
+            throw &quot;Error installing IE 11&quot;
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

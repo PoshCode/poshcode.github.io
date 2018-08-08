@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jacob">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/420.ps1">download</a></h3>
+<pre><code class="language-posh">#'***********************************************************************
+#'* File:				Check-Directory.ps1
+#'* Creation Date:		2008/05/30
+#'* Author: 			Jacob Hodges (Technology Effect)
+#'* Purpose:			Checks to see if an INF File is already in the MDT Workbench.
+#'* Usage:				.\Create-DistributionShare.ps1 D:\Drivers
+#'* Reference:       
+#'*
+#'* Revisions:			  0.1   JBH 	Initial Version
+#'***********************************************************************
+Param
+(
+    [string]$Location =$(throw &quot;You must specify a directory containing drivers&quot;)
+)
+$myDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+#Get some code Gens
+. &quot;$myDir\LibraryCodeGen.ps1&quot;
+
+#Initialize MDT
+[System.Reflection.Assembly]::LoadFile(&quot;C:\Program Files\Microsoft Deployment Toolkit\Bin\Microsoft.BDD.ConfigManager.dll&quot;) | Out-Null
+$manager = [Microsoft.BDD.ConfigManager.Manager]
+
+#Get driver manager
+$driverManager=$manager::DriverManager
+
+function Compile-Csharp ([string] $code, $FrameworkVersion=&quot;v2.0.50727&quot;,[Array]$References)
+{
+	## Obtains an ICodeCompiler from a CodeDomProvider class. 
+    $provider = New-Object Microsoft.CSharp.CSharpCodeProvider 
+
+    ## Get the location for System.Management.Automation DLL 
+    $dllName = [PsObject].Assembly.Location
+	
+	## Configure the compiler parameters 
+    $compilerParameters = New-Object System.CodeDom.Compiler.CompilerParameters 
+	
+	#Path to Framework Directory
+	$framework = Join-Path $env:windir &quot;Microsoft.NET\Framework\$FrameWorkVersion&quot;
+	
+	$assemblies  = new-object Collections.ArrayList
+	$assemblies.AddRange( @(&quot;${framework}\System.dll&quot;,
+	&quot;${framework}\system.windows.forms.dll&quot;,
+	&quot;${framework}\System.data.dll&quot;,
+	&quot;${framework}\System.Drawing.dll&quot;,
+	&quot;${framework}\System.Xml.dll&quot;, $dllName))
+		
+	if ($references.Count -ge 1)
+	{
+		$assemblies.AddRange($References)
+	}
+	$compilerParameters.ReferencedAssemblies.AddRange($assemblies) 
+    $compilerParameters.IncludeDebugInformation = $true 
+    $compilerParameters.GenerateInMemory = $true 
+ 
+    ## Invokes compilation.  
+    $compilerResults = $provider.CompileAssemblyFromSource($compilerParameters, $code) 
+ 
+    ## Write any errors if generated.         
+    if($compilerResults.Errors.Count -gt 0) 
+    { 
+        $errorLines = &quot;&quot; 
+        foreach($error in $compilerResults.Errors) 
+        { 
+            $errorLines += &quot;`n`t&quot; + $error.Line + &quot;:`t&quot; + $error.ErrorText 
+        } 
+        Write-Error $errorLines
+	} 
+}
+
+#Compile some C# to get .inf info
+$txtCode = @'
+//***************************************************************************
+// ***** Script Header *****
+//
+// Solution:  Solution Accelerator for Business Desktop Deployment
+// File:      InfInfo.cs
+//
+// Purpose:   Gets information from a driver INF file
+//
+// Usage:     (See constructor below)
+//
+// Microsoft Solution Version:  3.0.76
+// Microsoft Script Version:    3.0.76
+// Customer Build Version:      1.0.0
+// Customer Script Version:     1.0.0
+//
+// Microsoft History:
+// 3.0.76 MTN  09/22/2006  Added comment block.
+//
+// Customer History:
+//
+// ***** End Header *****
+//***************************************************************************
+
+using System;
+using System.Collections.Generic;
+using System.Text;
+using System.Runtime.InteropServices;
+
+namespace MDTCustom
+{
+    public class InfInfo
+    {
+        private const uint INF_STYLE_WIN4 = 2;
+        private const uint MAX_INF_STRING_LENGTH = 4096;
+        private const string INFSTR_SECT_VERSION = &quot;Version&quot;;
+        private const string INFSTR_SECT_MFG = &quot;Manufacturer&quot;;
+        private const string INFSTR_KEY_PROVIDER = &quot;Provider&quot;;
+        private const string INFSTR_KEY_HARDWARE_CLASS = &quot;Class&quot;;
+        private const string INFSTR_KEY_HARDWARE_CLASSGUID = &quot;ClassGUID&quot;;
+        private const string INFSTR_DRIVERVERSION_SECTION = &quot;DriverVer&quot;;
+
+        public String Provider;
+        public String ClassGUID;
+        public String ClassName;
+        public String Date;
+        public String Version;
+        public List&lt;String&gt; Platforms;
+        public List&lt;String&gt; OSVersions;
+        public List&lt;String&gt; PNPIds;
+
+        struct INFCONTEXT
+        {
+            IntPtr Inf;
+            IntPtr CurrentInf;
+            uint Section;
+            uint Line;
+        }
+
+        public InfInfo(String infPath)
+        {
+            IntPtr theInf;
+            uint errorLine;
+            INFCONTEXT context;
+            StringBuilder infData = new StringBuilder(Convert.ToInt16(MAX_INF_STRING_LENGTH));
+            uint requiredSize;
+            Guid theGuid;
+            Boolean found;
+            String deviceSection = &quot;&quot;;
+            List&lt;String&gt; suffixList = new List&lt;String&gt;();
+
+            Platforms = new List&lt;String&gt;();
+            OSVersions = new List&lt;String&gt;();
+            PNPIds = new List&lt;String&gt;();
+            
+            // Open the INF file
+
+            theInf = SetupOpenInfFile(infPath, 0, INF_STYLE_WIN4, out errorLine);
+
+
+            // Get the platform and OS version information
+
+            if (SetupFindFirstLine(theInf, INFSTR_SECT_VERSION, INFSTR_KEY_PROVIDER, out context))
+            {
+                SetupGetStringField(ref context, 1, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                Provider = infData.ToString();
+
+                if (SetupFindFirstLine(theInf, INFSTR_SECT_MFG, null, out context))
+                {
+                    // Get the name of the section that will have the PNP ID info in it
+
+                    SetupGetStringField(ref context, 1, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                    deviceSection = infData.ToString();
+
+
+                    // Get the platform and version information
+
+                    uint fieldCount = SetupGetFieldCount(ref context);
+                    if (fieldCount == 1)
+                    {
+                        Platforms.Add(&quot;x86&quot;);
+                    }
+                    else
+                    {
+                        for (uint i = 2; i &lt;= fieldCount; i++)
+                        {
+                            // Get the platform string and figure out what it is
+
+                            SetupGetStringField(ref context, i, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                            if (!suffixList.Contains(infData.ToString()))
+                                suffixList.Add(infData.ToString());
+                            if (infData.ToString().IndexOf(&quot;.&quot;) &gt; 0)
+                            {
+                                if (!suffixList.Contains(infData.ToString().Substring(0, infData.ToString().IndexOf(&quot;.&quot;))))
+                                    suffixList.Add(infData.ToString().Substring(0, infData.ToString().IndexOf(&quot;.&quot;)));
+                            }
+
+                            string platformToAdd = &quot;&quot;;
+                            if (infData.ToString().IndexOf(&quot;NTx86&quot;, StringComparison.OrdinalIgnoreCase) &gt;= 0)
+                                platformToAdd = &quot;x86&quot;;
+                            else if (infData.ToString().IndexOf(&quot;NTamd64&quot;, StringComparison.OrdinalIgnoreCase) &gt;= 0)
+                                platformToAdd = &quot;x64&quot;;
+                            else if (infData.ToString().IndexOf(&quot;NTia64&quot;, StringComparison.OrdinalIgnoreCase) &gt;= 0)
+                                platformToAdd = &quot;ia64&quot;;
+                            else if (infData.ToString().IndexOf(&quot;NT&quot;, StringComparison.OrdinalIgnoreCase) &gt;= 0)
+                                platformToAdd = &quot;x86&quot;;  // Since specifying just &quot;NT&quot; is valid
+
+
+                            // Make sure the platform isn't already in the list, then add it.
+
+                            found = false;
+                            foreach (String p in Platforms)
+                                if (p == platformToAdd)
+                                    found = true;
+                            if (!found)
+                                Platforms.Add(platformToAdd);
+
+
+                            // See if there is a version suffix
+
+                            if (infData.ToString().IndexOf(&quot;.&quot;) &gt; 0)
+                            {
+                                OSVersions.Add(infData.ToString().Substring(infData.ToString().IndexOf(&quot;.&quot;) + 1));
+                            }
+
+                        }
+
+                    }
+                }
+            }
+
+            // Get the class name
+
+            ClassName = null;
+            if (SetupFindFirstLine(theInf, INFSTR_SECT_VERSION, INFSTR_KEY_HARDWARE_CLASSGUID, out context))
+            {
+                SetupGetStringField(ref context, 1, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                ClassGUID = infData.ToString();
+
+                theGuid = new Guid(infData.ToString());
+                if (SetupDiClassNameFromGuid(ref theGuid, infData, MAX_INF_STRING_LENGTH, out requiredSize))
+                {
+                    ClassName = infData.ToString();
+                }
+            }
+            if (ClassName == null)
+            {
+                if (SetupFindFirstLine(theInf, INFSTR_SECT_VERSION, INFSTR_KEY_HARDWARE_CLASS, out context))
+                {
+                    SetupGetStringField(ref context, 1, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                    ClassName = infData.ToString();
+                }
+            }
+            if (ClassName == null)
+            {
+                if (ClassGUID != null)
+                    ClassName = ClassGUID;
+                else
+                    ClassName = &quot;Unknown&quot;;
+            }
+
+
+            // Get the date and version
+
+            if (SetupFindFirstLine(theInf, INFSTR_SECT_VERSION, INFSTR_DRIVERVERSION_SECTION, out context))
+            {
+                SetupGetStringField(ref context, 1, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                Date = infData.ToString();
+
+                SetupGetStringField(ref context, 2, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                Version = infData.ToString();
+            }
+            else
+            {
+                Date = &quot;01/01/1990&quot;;
+                Version = &quot;0.0&quot;;
+            }
+
+
+            // Get the PnP ID information, first for an undecorated section
+
+            if (SetupFindFirstLine(theInf, deviceSection, null, out context))
+            {
+                // If platforms doesn't include x86, add it since this section only would exist if x86 is supported.
+
+                found = false;
+                foreach (String p in Platforms)
+                    if (p == &quot;x86&quot;)
+                        found = true;
+                if (!found)
+                {
+                    Platforms.Add(&quot;x86&quot;);
+                }
+
+
+                // Get the PnP IDs
+
+                do
+                {
+                    uint fieldCount = SetupGetFieldCount(ref context);
+                    for (uint i = 2; i &lt;= fieldCount; i++)
+                    {
+                        SetupGetStringField(ref context, i, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                        if (!PNPIds.Contains(infData.ToString()))
+                            PNPIds.Add(infData.ToString());
+                    }
+                }
+                while (SetupFindNextLine(ref context, out context));
+            }
+
+            // Now try the suffixes
+
+            foreach (String suffix in suffixList)
+            {
+                if (SetupFindFirstLine(theInf, deviceSection + &quot;.&quot; + suffix, null, out context))
+                {
+                    // Get the PnP IDs
+
+                    do
+                    {
+                        uint fieldCount = SetupGetFieldCount(ref context);
+                        for (uint i = 2; i &lt;= fieldCount; i++)
+                        {
+                            SetupGetStringField(ref context, i, infData, MAX_INF_STRING_LENGTH, out requiredSize);
+                            if (!PNPIds.Contains(infData.ToString()))
+                                PNPIds.Add(infData.ToString());
+                        }
+                    }
+                    while (SetupFindNextLine(ref context, out context));
+                }
+            }
+
+            // Finished, clean up
+
+            SetupCloseInfFile(theInf);
+
+        }
+
+
+        [DllImport(&quot;setupapi.dll&quot;, EntryPoint = &quot;SetupOpenInfFileW&quot;, CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr SetupOpenInfFile(
+            string infFile, uint infClass, uint infStyle, out uint errorLine);
+
+        [DllImport(&quot;setupapi.dll&quot;, EntryPoint = &quot;SetupCloseInfFile&quot;, CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern void SetupCloseInfFile(
+            IntPtr hInf);
+
+        [DllImport(&quot;setupapi.dll&quot;, EntryPoint = &quot;SetupFindFirstLineW&quot;, CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool SetupFindFirstLine(
+            IntPtr hInf, string section, string key, out INFCONTEXT context);
+
+        [DllImport(&quot;setupapi.dll&quot;, EntryPoint = &quot;SetupFindNextLine&quot;, CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool SetupFindNextLine(
+            ref INFCONTEXT inContext, out INFCONTEXT outContext);
+
+        [DllImport(&quot;setupapi.dll&quot;, EntryPoint = &quot;SetupGetStringFieldW&quot;, CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool SetupGetStringField(
+            ref INFCONTEXT context, uint index, StringBuilder returnBuffer, uint returnBufferSize, out uint requiredSize);
+
+        [DllImport(&quot;setupapi.dll&quot;, EntryPoint = &quot;SetupDiClassNameFromGuidW&quot;, CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool SetupDiClassNameFromGuid(
+            ref Guid theGuid, StringBuilder returnBuffer, uint returnBufferSize, out uint requiredSize);
+
+        [DllImport(&quot;setupapi.dll&quot;, EntryPoint = &quot;SetupGetFieldCount&quot;, CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern uint SetupGetFieldCount(
+            ref INFCONTEXT context);
+
+    }
+}
+
+
+'@
+
+######################################################### 
+#  Here I leverage one of my favorite features (here-strings) to define 
+# the C# code I want to run.  Remember - if you use single quotes - the 
+# string is taken literally but if you use double-quotes, we'll do variable 
+# expansion.  This can be VERY useful. 
+######################################################### 
+$code = @'
+using System; 
+using System.Runtime.InteropServices; 
+
+namespace test 
+{ 
+    public class Testclass 
+    { 
+        [DllImport(&quot;msvcrt.dll&quot;)] 
+        public static extern int puts(string c); 
+        [DllImport(&quot;msvcrt.dll&quot;)] 
+        internal static extern int _flushall(); 
+
+
+        public static void Run(string message) 
+        { 
+            puts(message); 
+            _flushall(); 
+        } 
+    } 
+
+
+} 
+'@
+
+
+######################################################## 
+# So now we compile the code and use .NET object access to run it. 
+######################################################## 
+#Write-Host &quot;asfdaf&quot;
+#compile-CSharp $code
+#[Test.TestClass]::Run(&quot;Monad ROCKS!&quot;)
+
+
+
+##compile the code
+Compile-Csharp $txtCode
+
+$infInfo = [MDTCustom]::InfInfo(&quot;D:\Drivers\DC7100\Modem\LTDFNT.INF&quot;)
+
+$infInfo.PNPIds
+
+#Function CheckDirectory($directoryPath)
+#{
+#	#get all the inf files in this directory
+#	$files = Get-ChildItem $directoryPath *.inf
+#	
+#	#see if we already know about this one and if now create one
+#	foreach($currentFile in $files)
+#	{
+#		$newRow = $false
+#		$theItem = Find($currentFile)
+#	}
+#
+#}
+#
+#
+#Function FindInfFile($infFile)
+#{
+#	
+#}
+#
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

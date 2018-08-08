@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Egil Aspevik">
+    <title>xls2png - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>xls2png</h1>
+<h3><a href="//scripts/5183.ps1">download</a></h3>
+<p>Bulk converts XLS ranges to PNG by using the clipboard. Reads config from XML.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Bulk export Excel worksheet ranges to images (PNG)
+
+.DESCRIPTION
+This script exports a range (ex. A5:L20) in a worksheet (ex. Sheet1) in a workbook (ex. c:\temp\myfile.xlsx) to a PNG file by using the clipboard.
+Do NOT use the clipboard during the execution of this script.
+It relies on the Excel COM objects which again requires that Excel is installed.
+The script read its config from an XML file formatted like this:
+
+&lt;XLSPIC&gt;  
+     &lt;xlfile value=&quot;c:\xlsexport\file1.xls&quot;&gt;
+         &lt;sheet value=&quot;Sheet1&quot;&gt;
+             &lt;range value=&quot;B7:L55&quot; /&gt;
+             &lt;range value=&quot;P1:Q20&quot; /&gt;
+         &lt;/sheet&gt;
+         &lt;sheet value=&quot;Name-of-my-sheet2&quot;&gt;
+             &lt;range value=&quot;A3:S24&quot; /&gt;
+         &lt;/sheet&gt;
+     &lt;/xlfile&gt;
+     &lt;xlfile value=&quot;c:\xlsexport\file2.xlsx&quot;&gt;
+         &lt;sheet value=&quot;A very large sheet&quot;&gt;
+             &lt;range value=&quot;B7:B6300&quot; /&gt;
+         &lt;/sheet&gt;
+     &lt;/xlfile&gt;
+&lt;/XLSPIC&gt;
+
+
+The PNG files are saved like this: workbookfilename-sheetname-range.png
+
+This script will probably need some tuning on other languages and/or powershell versions. Tested with PS 3.0 and Excel 2010 on Win 7 64bit EN-US.
+
+If Excel is in another culture than powershell, you will most likely run into problems. A typical error is the &quot;Old format or invalid type library&quot; - see http://support.microsoft.com/kb/320369
+
+Author: Egil Aspevik (egilaspevikATgmail)
+
+.PARAMETER savetodir
+The directory to save the PNG files to
+
+.PARAMETER configfile
+The XML config file as explained in the description
+
+.PARAMETER forceexcelclose
+By default, the script do not force-close Excel before starting to parse. This parameter does just that to ensure that the COM object gets a clean start.
+
+.LINK 
+http://support.microsoft.com/kb/320369
+#&gt;
+
+
+
+
+Param([string]$savetodir=&quot;c:\xlsexport&quot;,[string]$configfile=&quot;c:\xlsexport\config.xml&quot;, [switch]$forceexcelclose=$false)
+
+$ErrorActionPreference=&quot;stop&quot;
+
+
+if (-not $donotforceexcelclose) { Get-Process EXCEL | Stop-Process -Force }
+
+if (-not (test-path $configfile)) {
+  write-error &quot;Configfile not found. Use -configfile&quot;
+  exit 1
+
+}
+
+if (-not (Test-Path $savetodir)) {
+  write-error &quot;Path not found. Create one and use -savetodir&quot;
+  exit 1
+}
+try {
+  $cfg=[xml] (cat $configfile)
+  }
+catch {
+  write-error &quot;Couldn't parse $configfile. Exception message: $_&quot;
+  exit 1
+
+}
+
+$cfg.XLSPIC.xlfile.value | % { if (-not (test-path $_)) { write-error &quot;Couldn't access file: $_. Check your XML&quot;; exit 1 } }
+
+
+  
+try {
+add-type -an system.windows.forms 
+} catch {
+  write-error &quot;Couldn't add system.windows.forms. You shouldn't see this. Ever. Exception msg: $_&quot;
+  exit 1
+}
+
+
+try {
+$xl=New-Object -ComObject Excel.Application
+$xl.visible=$false
+$xl.displayalerts=$false
+} catch {
+  write-error &quot;Couldn't open Excel. Excel MUST be installed on the executing computer. Exception message: $_&quot;
+  exit 1
+}
+
+try {
+# Enumererer xlfiles
+
+$cfg.XLSPIC.xlfile | % {
+
+    $excelfile=$_.value
+   
+    $wb=$xl.workbooks.open($excelfile)
+    
+    $_.sheet | % {
+        $sheet=$_.value
+        $sh=$wb.Worksheets.Item($sheet)
+        $_.range | % {
+            
+            $range=$_.value
+            $rng=$sh.range($range)
+             # Constants and API doc from MS is wrong! Therefore we use hardcoded constants... and hope for the best.
+             # Ref http://msdn.microsoft.com/en-us/library/microsoft.office.interop.excel.range.copypicture(v=office.15).aspx
+            $pic=$rng.CopyPicture(1,2)
+
+
+            if (-not ([System.Windows.Forms.Clipboard]::ContainsImage())) {
+              write-error &quot;Couldn't copy $excelfile - $sheet - $range as a picture.&quot; -ErrorAction Continue
+              
+            }
+            else {
+                $e=[System.Windows.Forms.Clipboard]::GetDataObject()
+                $img=$e.GetImage()
+                $basename=$excelfile -replace '.+\\(.+)','$1'
+                $rangename=$range -replace ':','TO'
+                $sheetname=$sheet -replace ':','_'
+                $savename=$savetodir+&quot;\&quot;+&quot;$basename-$sheetname-$rangename&quot;+&quot;.png&quot;
+                
+                rm $savename -Force -ErrorAction SilentlyContinue
+                $img.save($savename)
+                &quot;Processed $excelfile - $sheet - $range. Saved as $savename&quot;
+            }
+        }
+        
+    }
+    $wb.close()
+}
+
+$xl.Quit()
+if (([System.Runtime.Interopservices.Marshal]::ReleaseComObject($xl))) {  Write-Error &quot;Couldn't release COM object. Please kill excel process manually&quot; }
+} catch {
+
+ write-error &quot;Stopped processing during or after: $excelfile, $sheet, $range. Check XML and so on. Exception message: $_&quot;
+ exit 1
+}
+
+exit 0
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

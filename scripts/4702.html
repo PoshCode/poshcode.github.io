@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Image View - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Image View</h1>
+<h3><a href="//scripts/4702.ps1">download</a></h3>
+<p>Screenshot at http://savepic.org/4840504.jpg Note that style &quot;Negative&quot; works slowly because it parses each pixel.</p>
+<pre><code class="language-posh">#requires -version 2.0
+$mnuOpen_Click= {
+  (New-Object Windows.Forms.OpenFileDialog) | % {
+    $_.Filter = &quot;JPEG (*.jpg;*.jpeg)|*.jpg;*jpeg&quot;
+    $_.InitialDirectory = $pwd
+    
+    if ($_.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+      $img = [Drawing.Image]::FromFile($_.FileName)
+      $pbImage.Image = $img
+      $pbImage.SizeMode = [Windows.Forms.PictureBoxSizeMode]$tsCbo_1.SelectedItem
+      $tsCbo_2.Enabled = $true
+      $bmp = New-Object Drawing.Bitmap $img
+      set def -val ($bmp.Clone()) -opt Constant
+    }
+  }
+  $sbLabel.Text = ('Width: {0}{1}Height: {2}' -f $img.Width, (' ' * 3), $img.Height)
+}
+
+$tsCbo_2_SelectedIndexChanged= {
+  switch ($tsCbo_2.SelectedIndex) {
+    &quot;0&quot; {$pbImage.Image = $def}
+    &quot;1&quot; {
+      if ($ret -eq $null) {
+        $ia = New-Object Drawing.Imaging.ImageAttributes
+        $cm = New-Object Drawing.Imaging.ColorMatrix
+        
+        $cm.Matrix00 = $cm.Matrix01 = $cm.Matrix02 = $cm.Matrix10 = $cm.Matrix11 = `
+        $cm.Matrix12 = $cm.Matrix20 = $cm.Matrix21 = $cm.Matrix22 = 1/3
+        $ia.SetColorMatrix($cm)
+        
+        $gfx = [Drawing.Graphics]::FromImage($bmp)
+        $gfx.DrawImage($bmp, (New-Object Drawing.Rectangle 0, 0, $bmp.Width, $bmp.Height), `
+                          0, 0, $bmp.Width, $bmp.Height, [Drawing.GraphicsUnit]::Pixel, $ia)
+        $gfx.Flush()
+        
+        $ret = $bmp.Clone()
+        $pbImage.Image = $ret
+      }
+      else {$pbImage.Image = $ret}
+    }
+    &quot;2&quot; {
+      $bmp = $def.Clone()
+      if ($neg -eq $null) {
+        for ($x = 0; $x -lt $bmp.Width; $x++) {
+          for ($y = 0; $y -lt $bmp.Height; $y++) {
+            [Drawing.Color]$col = $bmp.GetPixel($x, $y)
+            $bmp.SetPixel($x, $y, [Drawing.Color]::FromArgb(
+              (255 - $col.R), (255 - $col.G), (255 - $col.B)
+            ))
+          }
+        }
+        $neg = $bmp.Clone()
+        $pbImage.Image = $neg
+      }
+      else {$pbImage.Image = $neg}
+    }
+  }
+}
+
+$tsBtn_1_Click= {
+  if ($pbImage.Image -ne $null) {
+    $pbImage.Image.RotateFlip([Drawing.RotateFlipType]::Rotate90FlipXY)
+    $pbImage.Refresh()
+  }
+}
+
+$tsBtn_2_Click= {
+  if ($pbImage.Image -ne $null) {
+    $pbImage.Image.RotateFlip([Drawing.RotateFlipType]::Rotate270FlipXY)
+    $pbImage.Refresh()
+  }
+}
+
+function frmMain_Show {
+  Add-Type -Assembly System.Windows.Forms
+  [Windows.Forms.Application]::EnableVisualStyles()
+  
+  $ico = [Drawing.Icon]::ExtractAssociatedIcon(($PSHome + '\powershell.exe'))
+  
+  $frmMain = New-Object Windows.Forms.Form
+  $mnuMain = New-Object Windows.Forms.MenuStrip
+  $mnuFile = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuOpen = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuExit = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuHelp = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuInfo = New-Object Windows.Forms.ToolStripMenuItem
+  $tsStrip = New-Object Windows.Forms.ToolStrip
+  $tsLbl_1 = New-Object Windows.Forms.ToolStripLabel
+  $tsLbl_2 = New-Object Windows.Forms.ToolStripLabel
+  $tsLbl_3 = New-Object Windows.Forms.ToolStripLabel
+  $tsCbo_1 = New-Object Windows.Forms.ToolStripComboBox
+  $tsCbo_2 = New-Object Windows.Forms.ToolStripComboBox
+  $tsBtn_1 = New-Object Windows.Forms.ToolStripButton
+  $tsBtn_2 = New-Object Windows.Forms.ToolStripButton
+  $pbImage = New-Object Windows.Forms.PictureBox
+  $sbStrip = New-Object Windows.Forms.StatusStrip
+  $sbLabel = New-Object Windows.Forms.ToolStripStatusLabel
+  #
+  #common
+  #
+  $mnuMain.Items.AddRange(@($mnuFile, $mnuHelp))
+  $tsStrip.Items.AddRange(@($tsLbl_1, $tsCbo_1, $tsLbl_2, $tsCbo_2, $tsLbl_3, $tsBtn_1, $tsBtn_2))
+  $tsLbl_1.Text = &quot;Mode:&quot;
+  $tsLbl_2.Text = &quot;Style:&quot;
+  $tsLbl_3.Text = &quot;Rotation:&quot;
+  $pbImage.Dock = &quot;Fill&quot;
+  $sbLabel.AutoSize = $true
+  #
+  #mnuFile
+  #
+  $mnuFile.DropDownItems.AddRange(@($mnuOpen, $mnuExit))
+  $mnuFile.Text = &quot;&amp;File&quot;
+  #
+  #mnuOpen
+  #
+  $mnuOpen.ShortcutKeys = &quot;Control&quot;, &quot;O&quot;
+  $mnuOpen.Text = &quot;&amp;Open...&quot;
+  $mnuOpen.Add_Click($mnuOpen_Click)
+  #
+  #mnuExit
+  #
+  $mnuExit.ShortcutKeys = &quot;Control&quot;, &quot;X&quot;
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click({$frmMain.Close()})
+  #
+  #mnuHelp
+  #
+  $mnuHelp.DropDownItems.AddRange(@($mnuInfo))
+  $mnuHelp.Text = &quot;&amp;Help&quot;
+  #
+  #mnuInfo
+  #
+  $mnuInfo.Text = &quot;About...&quot;
+  $mnuInfo.Add_Click({frmInfo_Show})
+  #
+  #tsCbo_1
+  #
+  [Enum]::GetValues([Windows.Forms.PictureBoxSizeMode]) | % {
+    [void]$tsCbo_1.Items.Add($_)
+  }
+  $tsCbo_1.SelectedIndex = 4
+  $tsCbo_1.Add_SelectedIndexChanged({$pbImage.SizeMode = [Windows.Forms.PictureBoxSizeMode]$tsCbo_1.SelectedItem})
+  #
+  #tsCbo_2
+  #
+  $tsCbo_2.Enabled = $false
+  $tsCbo_2.Items.AddRange(@('Normal', 'Retro', 'Negative'))
+  $tsCbo_2.SelectedIndex = 0
+  $tsCbo_2.Add_SelectedIndexChanged($tsCbo_2_SelectedIndexChanged)
+  #
+  #tsBtn_1
+  #
+  $tsBtn_1.Text = &quot;Left&quot;
+  $tsBtn_1.Add_Click($tsBtn_1_Click)
+  #
+  #tsBtn_2
+  #
+  $tsBtn_2.Text = &quot;Right&quot;
+  $tsBtn_2.Add_Click($tsBtn_2_Click)
+  #
+  #sbStrip
+  #
+  $sbStrip.Items.AddRange(@($sbLabel))
+  $sbStrip.SizingGrip = $false
+  #
+  #frmMain
+  #
+  $frmMain.ClientSize = New-Object Drawing.Size(800, 547)
+  $frmMain.Controls.AddRange(@($pbImage, $sbStrip, $tsStrip, $mnuMain))
+  $frmMain.FormBorderStyle = &quot;FixedSingle&quot;
+  $frmMain.Icon = $ico
+  $frmMain.MainMenuStrip = $mnuMain
+  $frmMain.StartPosition = &quot;CenterScreen&quot;
+  $frmMain.Text = &quot;ImageView&quot;
+  $frmMain.Add_Load({$sbLabel.Text = &quot;Ready&quot;})
+  
+  [void]$frmMain.ShowDialog()
+}
+
+function frmInfo_Show {
+  #Please donate if you like my scripts
+  #Yandex.Money - 410012070594869
+  $frmInfo = New-Object Windows.Forms.Form
+  $pbImage = New-Object Windows.Forms.PictureBox
+  $lblName = New-Object Windows.Forms.Label
+  $lblCopy = New-Object Windows.Forms.Label
+  $btnExit = New-Object Windows.Forms.Button
+  #
+  #pbImage
+  #
+  $pbImage.Image = $ico.ToBitmap()
+  $pbImage.Location = New-Object Drawing.Point(16, 16)
+  $pbImage.Size = New-Object Drawing.Size(32, 32)
+  $pbImage.SizeMode = &quot;StretchImage&quot;
+  #
+  #lblName
+  #
+  $lblName.Font = New-Object Drawing.Font(&quot;Microsoft Sans Serif&quot;, 9, [Drawing.FontStyle]::Bold)
+  $lblName.Location = New-Object Drawing.Point(53, 19)
+  $lblName.Size = New-Object Drawing.Size(360, 18)
+  $lblName.Text = &quot;Image View Demo&quot;
+  #
+  #lblCopy
+  #
+  $lblCopy.Location = New-Object Drawing.Point(67, 37)
+  $lblCopy.Size = New-Object Drawing.Size(360, 23)
+  $lblCopy.Text = &quot;(C) 2013 greg zakharov forum.script-coding.com&quot;
+  #
+  #btnExit
+  #
+  $btnExit.Location = New-Object Drawing.Point(135, 67)
+  $btnExit.Text = &quot;OK&quot;
+  #
+  #frmInfo
+  #
+  $frmInfo.AcceptButton = $btnExit
+  $frmInfo.CancelButton = $btnExit
+  $frmInfo.ClientSize = New-Object Drawing.Size(350, 110)
+  $frmInfo.ControlBox = $false
+  $frmInfo.Controls.AddRange(@($pbImage, $lblName, $lblCopy, $btnExit))
+  $frmInfo.FormBorderStyle = &quot;FixedSingle&quot;
+  $frmInfo.ShowInTaskBar = $false
+  $frmInfo.StartPosition = &quot;CenterParent&quot;
+  $frmInfo.Text = &quot;About...&quot;
+  $frmInfo.Add_Load($frmInfo_Load)
+
+  [void]$frmInfo.ShowDialog()
+}
+
+frmMain_Show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

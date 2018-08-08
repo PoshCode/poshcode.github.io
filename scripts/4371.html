@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DoNotNotTouch">
+    <title>EFT Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>EFT Module</h1>
+<h3><a href="//scripts/4371.ps1">download</a></h3>
+<p>The beginning of a Module for EFT server. PowerShell functions that use the SFTPCOMInterface.CIServer class to invoke methods and properties of the EFT server.</p>
+<pre><code class="language-posh">function Get-PermissionGroup{
+    &lt;#
+    .SYNOPSIS
+    Returns all permission groups from the server.
+    #&gt;
+    [cmdletbinding()]
+    param(
+        #The user name used to login to the EFT server.
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Username,
+
+        #The password that goes with the username.
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Password,
+
+        #Specifies an alternate admin port on the EFT server. Default is 1100.
+        [ValidateRange(0, 2147483647)]
+        [int]$AdminPort = 1100,
+
+        #The computer that is running the EFT server. Default is localhost.
+        [string]$ComputerName=$env:COMPUTERNAME,
+
+        #The site ID you want to connect to. Default is 0.
+        [int]$SiteID=0
+    )
+
+    try{
+        Write-Debug &quot;Create COM Object&quot;
+        $Server = New-Object -ComObject 'SFTPCOMInterface.CIServer' -ErrorAction Stop
+
+        Write-Debug &quot;Connect to $ComputerName&quot;
+        $Server.Connect($ComputerName, $AdminPort, $Username, $Password)
+
+        Write-Debug &quot;Connect to site where SiteID = $SiteID&quot;
+        $Sites = $Server.Sites()
+        $Site = $Sites.Item($SiteID)
+
+        Write-Debug &quot;Get current permission groups from $($Site.Name)&quot;
+        Write-Verbose &quot;Getting the permission groups from $($Site.name)&quot;
+        Write-Output $Site.GetPermissionGroups()
+
+        Write-Debug &quot;Close the connection&quot;
+        $Server.Close()
+    }
+    catch [System.Management.Automation.MethodInvocationException]{
+        Write-Error &quot;There was an error with either the UserName, Password, ComputerName, AdminPort, or the SiteID because $($Error[0].Exception.Message)&quot;
+        return $false
+    }
+    catch [System.Management.Automation.PSArgumentException]{
+        Write-Error &quot;Unable to create the SFTPCOMInterface.CIServer class because $($Error[0].Exception.Message)&quot;
+        return $false
+    }
+    catch{
+        Write-Error &quot;Unable to get groups because $($Error[0].Exception.Message)&quot;
+        return $false
+    }
+
+}
+
+function Create-PermissionsGroup{
+    &lt;#
+    .SYNOPSIS
+    Creates a new group on an EFT server.
+
+    .DESCRIPTION
+    The command the COM object SFTPCOMInterface.CIServer to apply it's methods and properties. The command returns true if it succesful and false if not.
+
+    .EXAMPLE
+    Create-PermissionsGroup -Username 'admin' -Password 'XxXxXxXxX' -GroupName 'client'
+
+    Creates the permission group 'client' using the default port and site id. This command would have to run on the eft server.
+
+    .LINK
+    http://help.globalscape.com/help/eft6-2/mergedProjects/gs_com_api/whnjs.htm
+    http://help.globalscape.com/help/gs_com_api/whnjs.htm
+    #&gt;
+    [cmdletbinding()]
+    param(
+        #The user name used to login to the EFT server.
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Username,
+
+        #The password that goes with the username.
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Password,
+
+        #Specifies an alternate admin port on the EFT server. Default is 1100.
+        [ValidateRange(0, 2147483647)]
+        [int]$AdminPort = 1100,
+
+        #The computer that is running the EFT server. Default is localhost.
+        [string]$ComputerName=$env:COMPUTERNAME,
+
+        #The site ID you want to connect to. Default is 0.
+        [int]$SiteID=0,
+
+        #The name of the group you want to create.
+        [Parameter(Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$GroupName
+    )
+
+    try{
+        Write-Debug &quot;Create COM Object&quot;
+        $Server = New-Object -ComObject 'SFTPCOMInterface.CIServer' -ErrorAction Stop
+
+        Write-Debug &quot;Connect to $ComputerName&quot;
+        $Server.Connect($ComputerName, $AdminPort, $Username, $Password)
+
+        Write-Debug &quot;Connect to site where SiteID = $SiteID&quot;
+        $Sites = $Server.Sites()
+        $Site = $Sites.Item($SiteID)
+
+        Write-Debug &quot;Get current permission groups from $($Site.Name)&quot;
+        $CurrentGroups = $Site.GetPermissionGroups()
+
+        Write-Debug &quot;Compare $GroupName to current groups&quot;
+        if($CurrentGroups -contains $GroupName){
+            Write-Warning &quot;$GroupName already exists&quot;
+            Write-Debug &quot;Close the connection&quot;
+            $Server.Close()
+            return $true
+        }
+
+        Write-Debug &quot;Create the permission group $GroupName&quot;
+        $site.CreatePermissionGroup($GroupName)
+
+        Write-Debug &quot;Close the connection&quot;
+        $Server.Close()
+
+        Write-Verbose &quot;Creating the permission group $GroupName on $($Site.name)&quot;
+        return $true
+    }
+    catch [System.Management.Automation.MethodInvocationException]{
+        Write-Error &quot;There was an error with either the UserName, Password, ComputerName, AdminPort, or the SiteID because $($Error[0].Exception.Message)&quot;
+        return $false
+    }
+    catch [System.Management.Automation.PSArgumentException]{
+        Write-Error &quot;Unable to create the SFTPCOMInterface.CIServer class because $($Error[0].Exception.Message)&quot;
+        return $false
+    }
+    catch{
+        Write-Error &quot;Unable to create group because $($Error[0].Exception.Message)&quot;
+        return $false
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

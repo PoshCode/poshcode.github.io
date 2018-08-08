@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="AlphaSun">
+    <title>Async Ping Sweep - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Async Ping Sweep</h1>
+<h3><a href="//scripts/6294.txt">download</a></h3>
+<p>This function lets you sends ICMP echo request packets (&quot;pings&quot;) to a range of IPv4 addresses using an asynchronous method.</p>
+<p>Therefore this technique is very fast but comes with a warning. Ping sweeping a large subnet or network with many switches may result in a peak of broadcast traffic. Use the -Interval parameter to adjust the time between each ping request. For example, an interval of 60 milliseconds is suitable for wireless networks. The RawOutput parameter switches the output to an unformated [System.Net.NetworkInformation.PingReply[]].</p>
+<p>Written by:	gaff-jakobs
+https://social.technet.microsoft.com/profile/gaff-jakobs/</p>
+<pre><code class="language-text">function Global:Ping-IPRange {
+    &lt;#
+    .SYNOPSIS
+        Sends ICMP echo request packets to a range of IPv4 addresses between two given addresses.
+ 
+    .DESCRIPTION
+        This function lets you sends ICMP echo request packets (&quot;pings&quot;) to 
+        a range of IPv4 addresses using an asynchronous method.
+
+        Therefore this technique is very fast but comes with a warning.
+        Ping sweeping a large subnet or network with many switches may result in 
+        a peak of broadcast traffic.
+        Use the -Interval parameter to adjust the time between each ping request.
+        For example, an interval of 60 milliseconds is suitable for wireless networks.
+        The RawOutput parameter switches the output to an unformated
+        [System.Net.NetworkInformation.PingReply[]].
+
+    .INPUTS
+        None
+        You cannot pipe input to this function.
+
+    .OUTPUTS
+        The function only returns output from successful pings.
+
+        Type: System.Net.NetworkInformation.PingReply
+
+        The RawOutput parameter switches the output to an unformated
+        [System.Net.NetworkInformation.PingReply[]].
+
+    .NOTES
+        Author  : G.A.F.F. Jakobs
+        Created : August 30, 2014
+        Version : 6
+
+    .EXAMPLE
+        Ping-IPRange -StartAddress 192.168.1.1 -EndAddress 192.168.1.254 -Interval 20
+
+        IPAddress                                 Bytes                     Ttl           ResponseTime
+        ---------                                 -----                     ---           ------------
+        192.168.1.41                                 32                      64                    371
+        192.168.1.57                                 32                     128                      0
+        192.168.1.64                                 32                     128                      1
+        192.168.1.63                                 32                      64                     88
+        192.168.1.254                                32                      64                      0
+
+        In this example all the ip addresses between 192.168.1.1 and 192.168.1.254 are pinged using 
+        a 20 millisecond interval between each request.
+        All the addresses that reply the ping request are listed.
+
+    .LINK
+        http://gallery.technet.microsoft.com/Fast-asynchronous-ping-IP-d0a5cf0e
+
+    #&gt;
+    [CmdletBinding(ConfirmImpact='Low')]
+    Param(
+        [parameter(Mandatory = $true, Position = 0)]
+        [System.Net.IPAddress]$StartAddress,
+        [parameter(Mandatory = $true, Position = 1)]
+        [System.Net.IPAddress]$EndAddress,
+        [int]$Interval = 30,
+        [Switch]$RawOutput = $false
+    )
+
+    $timeout = 2000
+
+    function New-Range ($start, $end) {
+
+        [byte[]]$BySt = $start.GetAddressBytes()
+        [Array]::Reverse($BySt)
+        [byte[]]$ByEn = $end.GetAddressBytes()
+        [Array]::Reverse($ByEn)
+        $i1 = [System.BitConverter]::ToUInt32($BySt,0)
+        $i2 = [System.BitConverter]::ToUInt32($ByEn,0)
+        for($x = $i1;$x -le $i2;$x++){
+            $ip = ([System.Net.IPAddress]$x).GetAddressBytes()
+            [Array]::Reverse($ip)
+            [System.Net.IPAddress]::Parse($($ip -join '.'))
+        }
+    }
+    
+    $IPrange = New-Range $StartAddress $EndAddress
+
+    $IpTotal = $IPrange.Count
+
+    Get-Event -SourceIdentifier &quot;ID-Ping*&quot; | Remove-Event
+    Get-EventSubscriber -SourceIdentifier &quot;ID-Ping*&quot; | Unregister-Event
+
+    $IPrange | foreach{
+
+        [string]$VarName = &quot;Ping_&quot; + $_.Address
+
+        New-Variable -Name $VarName -Value (New-Object System.Net.NetworkInformation.Ping)
+
+        Register-ObjectEvent -InputObject (Get-Variable $VarName -ValueOnly) -EventName PingCompleted -SourceIdentifier &quot;ID-$VarName&quot;
+
+        (Get-Variable $VarName -ValueOnly).SendAsync($_,$timeout,$VarName)
+
+        Remove-Variable $VarName
+
+        try{
+
+            $pending = (Get-Event -SourceIdentifier &quot;ID-Ping*&quot;).Count
+
+        }catch [System.InvalidOperationException]{}
+
+        $index = [array]::indexof($IPrange,$_)
+    
+        Write-Progress -Activity &quot;Sending ping to&quot; -Id 1 -status $_.IPAddressToString -PercentComplete (($index / $IpTotal)  * 100)
+
+        Write-Progress -Activity &quot;ICMP requests pending&quot; -Id 2 -ParentId 1 -Status ($index - $pending) -PercentComplete (($index - $pending)/$IpTotal * 100)
+
+        Start-Sleep -Milliseconds $Interval
+    }
+
+    Write-Progress -Activity &quot;Done sending ping requests&quot; -Id 1 -Status 'Waiting' -PercentComplete 100 
+
+    While($pending -lt $IpTotal){
+
+        Wait-Event -SourceIdentifier &quot;ID-Ping*&quot; | Out-Null
+
+        Start-Sleep -Milliseconds 10
+
+        $pending = (Get-Event -SourceIdentifier &quot;ID-Ping*&quot;).Count
+
+        Write-Progress -Activity &quot;ICMP requests pending&quot; -Id 2 -ParentId 1 -Status ($IpTotal - $pending) -PercentComplete (($IpTotal - $pending)/$IpTotal * 100)
+    }
+
+    if($RawOutput){
+        
+        $Reply = Get-Event -SourceIdentifier &quot;ID-Ping*&quot; | ForEach { 
+            If($_.SourceEventArgs.Reply.Status -eq &quot;Success&quot;){
+                $_.SourceEventArgs.Reply
+            }
+            Unregister-Event $_.SourceIdentifier
+            Remove-Event $_.SourceIdentifier
+        }
+    
+    }else{
+
+        $Reply = Get-Event -SourceIdentifier &quot;ID-Ping*&quot; | ForEach { 
+            If($_.SourceEventArgs.Reply.Status -eq &quot;Success&quot;){
+                $_.SourceEventArgs.Reply | select @{
+                      Name=&quot;IPAddress&quot;   ; Expression={$_.Address}},
+                    @{Name=&quot;Bytes&quot;       ; Expression={$_.Buffer.Length}},
+                    @{Name=&quot;Ttl&quot;         ; Expression={$_.Options.Ttl}},
+                    @{Name=&quot;ResponseTime&quot;; Expression={$_.RoundtripTime}}
+            }
+            Unregister-Event $_.SourceIdentifier
+            Remove-Event $_.SourceIdentifier
+        }
+    }
+    if($Reply -eq $Null){
+        Write-Verbose &quot;Ping-IPrange : No ip address responded&quot; -Verbose
+    }
+
+    return $Reply
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

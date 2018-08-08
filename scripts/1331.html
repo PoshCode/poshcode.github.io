@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Luc Dekens">
+    <title>Import-VCBImage - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Import-VCBImage</h1>
+<h3><a href="//scripts/1331.ps1">download</a></h3>
+<p>Script that will use the Converter to import a VCB created disk image into a datacenter</p>
+<pre><code class="language-posh">#
+# import-VCBImage.ps1    : use the Converter to import a VCB created disk image into a datacenter
+#
+# Author:       LucD
+#
+# History:
+#
+#       v1.0 20/09/09   first version
+#
+$I2VImageDir = &lt;directory where the VCB images are stored&gt;
+$I2VShare = &lt;Sharename of the $I2VImageDir directory&gt;
+$tgtDatacenter = &lt;Target-datacenter&gt;
+$I2Vuser = &lt;account with access to the image directory and to the datacenter&gt;
+$I2Vpassword = &lt;password of the $I2Vuser account&gt;
+$I2Vhost = &lt;hostname where the images are stored&gt;
+$ConvProgDir = &quot;$env:ProgramFiles (x86)\VMware\Infrastructure\Converter Enterprise&quot; 
+$ConvService = &quot;vmware-converter&quot; 
+$I2Vprog = &quot;converter-tool.exe&quot; 
+
+# Template XML file for Convertor job
+$p2v = [xml]@&quot;
+&lt;p2v version=&quot;2.2&quot; xmlns=&quot;http://www.vmware.com/v2/sysimage/p2v&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot; xsi:schemaLocation=&quot;http://www.vmware.com/v2/sysimage/p2v p2vJob.xsd&quot; xsi:type=&quot;P2VJob&quot;&gt;
+  &lt;source&gt;
+    &lt;hostedSpec networkPassword=&quot;&quot; networkUsername=&quot;&quot; path=&quot;&quot;/&gt;
+  &lt;/source&gt;
+  &lt;dest&gt;
+    &lt;managedSpec datastore=&quot;&quot; folder=&quot;&quot; host=&quot;&quot; resourcePool=&quot;&quot; vmName=&quot;&quot;&gt;
+      &lt;creds host=&quot;&quot; port=&quot;0&quot; type=&quot;sessionId&quot; username=&quot;&quot; password=&quot;&quot; /&gt;
+    &lt;/managedSpec&gt;
+  &lt;/dest&gt;
+  &lt;importParams diskType=&quot;VMFS&quot; preserveHWInfo=&quot;true&quot; removeSystemRestore=&quot;false&quot; targetProductVersion=&quot;PRODUCT_MANAGED&quot;&gt;
+    &lt;nicMappings/&gt;
+    &lt;diskLocations/&gt;
+  &lt;/importParams&gt;
+  &lt;postProcessingParams/&gt;
+&lt;/p2v&gt;
+&quot;@
+
+# Function will start a DOS commmand and wait for it to finish
+#
+function Invoke-Cmd{
+	param($cmd, $arguments)
+
+	$global:StdOut = &quot;&quot;
+	$global:StdErr = &quot;&quot;
+
+	$pStart = new-object System.Diagnostics.ProcessStartInfo
+	$pStart.Filename = $cmd
+	$pStart.Arguments = $arguments
+	$pStart.UseShellExecute = $false
+	$pStart.ErrorDialog = $false
+	$pStart.CreateNoWindow = $True
+	$pStart.RedirectStandardOutput = $true
+	$pStart.RedirectStandardError = $true
+	$myProcess = [System.Diagnostics.Process]::Start($pStart)
+
+	$myOutput = $myProcess.StandardOutput
+	$myErrOutput = $myProcess.StandardError
+	$global:StdOut = $myOutput.ReadToEnd()
+	$global:StdErr = $myErrOutput.ReadToEnd()
+
+	$myProcess.WaitForExit()
+
+	$myProcess.ExitCode
+}
+
+# Function that builds the Converter XML file and launches the job
+#
+function Import-VCBImage{
+	param($vmName, $portgroup) 
+# Check if directory exists 
+	if((Get-Item -path ($I2VImageDir + &quot;\*&quot;) | Where-Object {$_.Name -eq $vmName} | Measure-Object).Count -ne 1){
+		Write-Host &quot;Snapshot directory not found for &quot; $vmName 
+		return 
+	} 
+# Determine target VmHost and target Datastore based on largest free space on datastore 
+	$selectESX = &quot;&quot; 
+	$selectDS = &quot;&quot; 
+	$selectFree = 0 
+	Get-Datacenter $tgtDatacenter | Get-VMHost | % { 
+		$tmpESX = $_.Name 
+		$_ | Get-Datastore | % { 
+			if($_.FreeSpaceMb -gt $selectFree){ 
+				$selectESX = $tmpESX 
+				$selectDS = $_.Name 
+				$selectFree = $_.FreeSpaceMb 
+			} 
+		} 
+	} 
+# Check if sufficient free space on ESXi server 
+	if(((Get-Item -path ($I2VImageDir + &quot;\&quot; + $vmName + &quot;\*&quot;) | Measure-Object -property Length -sum).Sum / 1mb) -gt $selectFree){
+		Write-Host &quot;Not enough free disk space on&quot; $selectFree 
+		return 
+	} 
+# Find VMX file 
+	$vmxName = (Get-Item -path ($I2VImageDir + &quot;\&quot; + $vmName + &quot;\*&quot;) | Where-Object {$_.Name -like &quot;*.vmx&quot;}).Name
+# Update fields in XML tree 
+	$p2v.p2v.source.hostedSpec.path = &quot;\\&quot; + $I2Vhost + &quot;\&quot; + $I2VShare + &quot;\&quot; + $vmName + &quot;\&quot; + $vmxName
+	$p2v.p2v.source.hostedSpec.networkUsername = $I2Vuser
+	$p2v.p2v.source.hostedSpec.networkPassword = $I2Vpassword 
+	$p2v.p2v.dest.managedSpec.creds.username = $I2Vuser 
+	$p2v.p2v.dest.managedSpec.creds.password = $I2Vpassword 
+	$p2v.p2v.dest.managedSpec.datastore = $selectDS 
+	$p2v.p2v.dest.managedSpec.host = $selectESX 
+	$p2v.p2v.dest.managedSpec.folder = &quot;&quot; 
+	$p2v.p2v.dest.managedSpec.resourcePool = &quot;&quot; 
+	$V2VvmName = $vmName + &quot;-&quot; + $tgtDatacenter + &quot;-&quot; + (Get-Date -format yyyyMMdd-HHmmss)
+	$p2v.p2v.dest.managedSpec.vmName = $V2VvmName 
+	$p2v.p2v.dest.managedSpec.creds.host = $I2Vhost 
+	$p2v.p2v.dest.managedSpec.creds.username = $I2Vuser 
+	$p2v.p2v.dest.managedSpec.creds.password = $I2Vpassword 
+# As a security measure the RDM machines are connected to the isolated network 
+	$NIC = $p2v.CreateElement(&quot;nicMapping&quot;) 
+	$network = $p2v.CreateAttribute(&quot;network&quot;) 
+	$network.psbase.Value = $portgroup
+	$dummy = $NIC.SetAttributeNode($network) 
+	$p2v.p2v.importParams[&quot;nicMappings&quot;].AppendChild($NIC) 
+# Save the XML file 
+	$XMLfile = $I2VImageDir + &quot;\&quot; + &quot;I2V-&quot; + $vmName + &quot;.xml&quot; 
+	$p2v.Save($XMLfile) 
+# Start Convertor service if it is not running. 
+	if((Get-Service -name $ConvService).Status -eq &quot;Stopped&quot;){ 
+		Start-Service -name $ConvService 
+	} 
+# Start the import 
+# ! parameters are case-sensitive ! (--vchost is not accepted, must be --vcHost) ! 
+	$myarg = &quot;--vcHost &quot; + $I2Vhost + &quot; --jobExec &quot; + $XMLfile + &quot; --vcCred &quot; + $I2Vuser + &quot;:&quot; + $I2Vpassword 
+	$mycmd = $ConvProgDir + &quot;\&quot; + $I2Vprog 
+	$rc = Invoke-Cmd $mycmd $myarg 
+
+# Remove older DRM guest(s) (if present AND if V2V completed successfully) 
+	if($rc -eq 0){ 
+		foreach($vm in (Get-Datacenter $tgtDatacenter | Get-VM ($vmName + &quot;-&quot; + $tgtDatacenter + &quot;*&quot;) | where {$_.Name -ne $V2VvmName})){ 
+			$vm | Remove-VM - DeleteFromDisk:$true - Confirm:$false 
+		} 
+	} 
+} 
+
+# Sample call
+# Import-VCBImage &quot;PC1&quot; &quot;isolated&quot;
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

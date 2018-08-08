@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Tome Tanasovski">
+    <title>MetroApps Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>MetroApps Module</h1>
+<h3><a href="//scripts/3740.ps1">download</a></h3>
+<p>This module provides two functions:</p>
+<p>Get-MetroApp - This cmdlet reads the registry for the keys that have the launcher id and the entry point (interesting for xaml apps, but not so much for html5 apps)</p>
+<p>Start-MetroApp - This cmdlet uses one of the ids returned by Get-metroapp to launch an app in the win8 metro interface</p>
+<pre><code class="language-posh">&lt;#
+Created by: Tome Tanasovski
+Version: 1.0
+Date: 11/2/2012
+
+This module provides two functions:
+
+Get-MetroApp - This cmdlet reads the registry for the keys that have the launcher id and the entry point (interesting for xaml apps, but not so much for html5 apps)
+
+Start-MetroApp - This cmdlet uses one of the ids returned by Get-metroapp to launch an app in the win8 metro interface
+
+Apologies for the lack of get-help documentation, but I'll be doing a blog post about this shortly:
+http://powertoe.wordpress.com
+
+Original C# code modified slightly from here - also the registry info is on this page too:
+http://stackoverflow.com/questions/12925748/iapplicationactivationmanageractivateapplication-in-c
+#&gt;
+
+$code = @&quot;
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+namespace Win8 {
+    public enum ActivateOptions
+    {
+        None = 0x00000000,  // No flags set
+        DesignMode = 0x00000001,  // The application is being activated for design mode, and thus will not be able to
+        // to create an immersive window. Window creation must be done by design tools which
+        // load the necessary components by communicating with a designer-specified service on
+        // the site chain established on the activation manager.  The splash screen normally
+        // shown when an application is activated will also not appear.  Most activations
+        // will not use this flag.
+        NoErrorUI = 0x00000002,  // Do not show an error dialog if the app fails to activate.                                
+        NoSplashScreen = 0x00000004,  // Do not show the splash screen when activating the app.
+    }
+
+    [ComImport, Guid(&quot;2e941141-7f97-4756-ba1d-9decde894a3d&quot;), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IApplicationActivationManager
+    {
+        // Activates the specified immersive application for the &quot;Launch&quot; contract, passing the provided arguments
+        // string into the application.  Callers can obtain the process Id of the application instance fulfilling this contract.
+        IntPtr ActivateApplication([In] String appUserModelId, [In] String arguments, [In] ActivateOptions options, [Out] out UInt32 processId);
+        IntPtr ActivateForFile([In] String appUserModelId, [In] IntPtr /*IShellItemArray* */ itemArray, [In] String verb, [Out] out UInt32 processId);
+        IntPtr ActivateForProtocol([In] String appUserModelId, [In] IntPtr /* IShellItemArray* */itemArray, [Out] out UInt32 processId);
+    }
+
+    [ComImport, Guid(&quot;45BA127D-10A8-46EA-8AB7-56EA9078943C&quot;)]//Application Activation Manager
+    public class ApplicationActivationManager : IApplicationActivationManager
+    {
+        [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime)/*, PreserveSig*/]
+        public extern IntPtr ActivateApplication([In] String appUserModelId, [In] String arguments, [In] ActivateOptions options, [Out] out UInt32 processId);
+        [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime)]
+        public extern IntPtr ActivateForFile([In] String appUserModelId, [In] IntPtr /*IShellItemArray* */ itemArray, [In] String verb, [Out] out UInt32 processId);
+        [MethodImpl(MethodImplOptions.InternalCall, MethodCodeType = MethodCodeType.Runtime)]
+        public extern IntPtr ActivateForProtocol([In] String appUserModelId, [In] IntPtr /* IShellItemArray* */itemArray, [Out] out UInt32 processId);
+    }
+}
+&quot;@
+
+add-type -TypeDefinition $code
+$appman = new-object Win8.ApplicationActivationManager
+
+function Get-MetroApp {
+    $entry = 'HKCU:\Software\Classes\ActivatableClasses\Package'
+    foreach ($appkey in (dir $entry |select -ExpandProperty pspath)) {        
+        #$id = ((dir (join-path $appkey 'Server')) |Get-ItemProperty).appusermodelid
+        $id = (dir (Join-Path $appkey server) |?{$_.pspath -notmatch 'BackgroundTransferHost.1'} |Get-ItemProperty).appusermodelid
+        if ($id) {
+            $possibleclassidkeys = dir (join-path $appkey 'ActivatableClassID') |select -ExpandProperty pspath             
+            # we look for the app key first, then app.wwa, and then any other key if neither returns an entrypoint
+            $key = $possibleclassidkeys |?{$_ -match 'app$'}
+            $entrypoint=$null
+            if ($key) {
+                if (Test-Path (join-path $key CustomAttributes)) {
+                    $entrypoint = (Get-ItemProperty (join-path $key CustomAttributes)).('appobject.entrypoint')
+                }
+            }
+            if (!$entrypoint) {
+                $key = $possibleclassidkeys |?{$_ -match 'app.wwa$'}
+                if ($key) {
+                    if (Test-Path (join-path $key CustomAttributes)) {
+                        $entrypoint = (Get-ItemProperty (join-path $key CustomAttributes)).('appobject.entrypoint')
+                    }
+                }
+            }
+            if (!$entrypoint) {
+                foreach ($key in $possibleclassidkeys) {
+                    if (Test-Path (join-path $key CustomAttributes)) {
+                        $entrypoint = (Get-ItemProperty (join-path $key CustomAttributes)).('appobject.entrypoint')
+                        break
+                    }
+                }
+            }
+            new-object psobject -Property ([ordered] @{
+                EntryPoint = $entrypoint                
+                ID = $id
+            })
+         }
+    }
+}
+
+function Start-MetroApp {
+    param(
+        [Parameter(Mandatory=$true, Position=0, ValueFromPipelineByPropertyName=$true)]
+        [string] $ID
+    )
+    $appman.ActivateApplication($ID,$null,[Win8.ActivateOptions]::None,[ref]0)
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

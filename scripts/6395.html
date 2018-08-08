@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Tsvika N">
+    <title>Confirm-FreeSpace (help) - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Confirm-FreeSpace (help)</h1>
+<h3><a href="//scripts/6395.ps1">download</a></h3>
+<p>Note: The functions are the same like in the previous post, but the help had some mistakes but I could not find how to delete or edit an existing post.</p>
+<p>Confirm-DiskExists function check if a disk exists and returns true or false, possibly with more details with -Verbose switch</p>
+<p>Confirm-FreeSpace function verifies that a disk has enough amount (in GB) of free space available. It also returns a boolean and supports -Verbose for details.</p>
+<p>Both functions can accept the WMI/CIM LogicalDisk objects through the pipeline.</p>
+<p>Mind that the latter function uses the first, thus both must be loaded into memory even if you're going to use just Confirm-FreeSpace</p>
+<pre><code class="language-posh">Function Confirm-DiskExists
+{
+&lt;#
+.Synopsis
+   Checks if a specific disk exists.
+
+.DESCRIPTION
+   Checks if a specific disk, e.g., C: exists on the machine. It returns True or False plus optional verbose messages.
+
+.INPUTS
+    Disk letter (required), e.g., C:.
+
+.OUTPUTS
+   True or False. When the -Verbose switch is used it shows more details.
+    
+.EXAMPLE
+   Confirm-DiskExists -DiskLetter C: 
+        This checks disk C: exists
+
+.EXAMPLE
+   Confirm-DiskExists -DiskLetter E: -Verbose
+        This checks disk E: exists and write a verbose message:
+        &quot;Disk E: exists&quot; 
+        or 
+        &quot;Disk E: does not exist on this machine&quot;
+         
+.EXAMPLE
+   Confirm-DiskExists C:
+        This checks disk C: exists without specifying the parameter name, using its positional location at position 0.
+
+.EXAMPLE
+   Confirm-DiskExists E: -Verbose
+   This checks disk E: exists without specifying the parameter name, using its positional location at position 0.
+        It will also show a verbose message:
+        &quot;Disk E: exists&quot; 
+        or 
+        &quot;Disk E: does not exist on this machine&quot;       
+#&gt;
+
+[CmdletBinding(PositionalBinding=$true)]
+    [OutputType([bool])]
+    Param
+    (
+        # Param1 help description
+        [Parameter(Mandatory=$true,
+                   ValueFromPipeline=$true,
+                   ValueFromPipelineByPropertyName=$true,
+                   HelpMessage=&quot;Enter the drive letter followed by a colon, e.g., C:&quot;,
+                   Position=0)]
+        [ValidateNotNull()]
+        [ValidateNotNullOrEmpty()]
+        [ValidateLength(2,2)]
+        [ValidateSet(&quot;A:&quot;, &quot;B:&quot;, &quot;C:&quot;, &quot;D:&quot;, &quot;E:&quot;, &quot;F:&quot;, &quot;G:&quot;, &quot;H:&quot;, &quot;I:&quot;, &quot;J:&quot;, &quot;K:&quot;, &quot;L:&quot;, &quot;M:&quot;, &quot;N:&quot;, &quot;O:&quot;, &quot;P:&quot;, &quot;Q:&quot;, &quot;R:&quot;, &quot;S:&quot;, &quot;T:&quot;, &quot;U:&quot;, &quot;V:&quot;, &quot;W:&quot;, &quot;X:&quot;, &quot;Y:&quot;, &quot;Z&quot;)]
+        [Alias(&quot;DeviceID&quot;,&quot;disk&quot;, &quot;d&quot;)]
+        [string]
+        $DiskLetter
+    )
+
+    Process
+    {
+        $diskMeasure = Get-WmiObject -Class Win32_LogicalDisk -Filter &quot;DeviceID = '$DiskLetter'&quot; | Measure-Object
+        $diskCount = $diskMeasure.Count
+        if($diskCount -eq 1) { 
+            Write-Verbose &quot;Disk $DiskLetter exists&quot;
+            return $true 
+            } else { 
+            Write-Verbose &quot;Disk $DiskLetter does not exist on this machine&quot;
+            return $false 
+            } 
+    }
+}
+
+
+Function Confirm-FreeSpace
+{
+&lt;#
+.Synopsis
+   Checks enough free disk space.
+
+.DESCRIPTION
+   Checks that a disk has an amount (in GB) of free space. It returns True or False plus optional verbose messages.
+
+.INPUTS
+    Disk letter (required) and minimum free GB (if not specified it uses a default value of 10GB).
+
+.OUTPUTS
+   True or False. When the -Verbose switch is used it shows the the free space details.
+   
+.EXAMPLE
+   Confirm-FreeSpace -DiskLetter C: -MinGB 30
+        This checks disk C: for minimum free space of 30GB
+
+.EXAMPLE
+   Confirm-FreeSpace -DiskLetter C: -MinGB 30 -Verbose
+        This checks disk C: for minimum free space of 30GB and writes the amount of free space
+        
+.EXAMPLE
+   Confirm-FreeSpace -DiskLetter C:
+   This specifies just the disk letter, using the fact that MinGB parameter has a default value of 10GB
+        This checks disk C: for minimum free space of 10GB
+
+.EXAMPLE
+   Confirm-FreeSpace -DiskLetter E: -MinGB 500
+        This checks disk E for minimum free space of 500GB
+
+.EXAMPLE
+   Confirm-FreeSpace C: 10
+   This uses the positional parameters, disk name first then the min. free space.
+        It will check disk C: for minimum free space of 10GB
+
+.EXAMPLE
+   Confirm-FreeSpace -disk D: -min 20
+   This uses the alias -disk for -DiskLetter and -min for -MinGB
+        It will check disk D: for minimum free space of 20GB
+
+.EXAMPLE
+   Confirm-FreeSpace -d D: -m 20
+   This uses the alias -d for -DiskLetter and -m for -MinGB
+        It will check disk D: for minimum free space of 20GB
+
+.EXAMPLE
+   &quot;C:&quot;, &quot;D:&quot;, &quot;E:&quot; | Confirm-FreeSpacE -ErrorAction Stop
+   This passes an array of 3 disks to the pipe line to the command.
+        It will process 3 checks, one for each disk, using the default value of 10GB for the MinGB parameter
+
+.EXAMPLE
+   Get-WmiObject -Class Win32_LogicalDisk | Confirm-FreeSpacE -ErrorAction Stop -Verbose
+   This passes all the disks received from WMI command through the pipe line to the command.
+        For each disk it will do the check. The verbose output would look something like this:
+
+        VERBOSE: Disk C: exists
+        VERBOSE: Disk C: has 376 GB free
+        True
+        VERBOSE: Disk D: exists
+        VERBOSE: Disk D: has only 0 GB free. It is less than the the minimum of 10 GB
+        False
+        VERBOSE: Disk X: exists
+        VERBOSE: Disk X: has only 0 GB free. It is less than the the minimum of 10 GB
+        False
+        VERBOSE: Disk Y: exists
+        VERBOSE: Disk Y: has only 1 GB free. It is less than the the minimum of 10 GB
+        False
+
+.EXAMPLE
+   Get-WmiObject -Class Win32_LogicalDisk | Select-Object DeviceID, @{N=&quot;MinGB&quot;;E={ 30 }} | Confirm-FreeSpacE -ErrorAction Stop -Verbose
+   This takes all the disks from WMI command, adds a custom property MinGB set to 30 and passes to this command through the pipeline.
+        For each disk it will do the check like in the above example, but with 30GB as the minimim value.
+       
+#&gt;
+
+    [CmdletBinding(PositionalBinding=$true)]
+    [OutputType([bool])]
+    Param
+    (
+        # DiskLetter help description
+        [Parameter(Mandatory=$true,
+                   ValueFromPipeline=$true,
+                   ValueFromPipelineByPropertyName=$true,
+                   HelpMessage=&quot;Enter just the drive letter followed by a colon, e.g., C:&quot;,
+                   Position=0)]
+        [ValidateNotNull()]
+        [ValidateNotNullOrEmpty()]
+        [ValidateLength(2,2)]
+        [ValidateSet(&quot;A:&quot;, &quot;B:&quot;, &quot;C:&quot;, &quot;D:&quot;, &quot;E:&quot;, &quot;F:&quot;, &quot;G:&quot;, &quot;H:&quot;, &quot;I:&quot;, &quot;J:&quot;, &quot;K:&quot;, &quot;L:&quot;, &quot;M:&quot;, &quot;N:&quot;, &quot;O:&quot;, &quot;P:&quot;, &quot;Q:&quot;, &quot;R:&quot;, &quot;S:&quot;, &quot;T:&quot;, &quot;U:&quot;, &quot;V:&quot;, &quot;W:&quot;, &quot;X:&quot;, &quot;Y:&quot;, &quot;Z&quot;)]
+        [ValidateScript({ Confirm-DiskExists $_})]
+        [Alias(&quot;DeviceID&quot;,&quot;disk&quot;, &quot;d&quot;)] 
+        [string]
+        $DiskLetter,
+
+        # MinGB help description
+        [Parameter(Mandatory=$false,
+                   ValueFromPipeline=$true,
+                   ValueFromPipelineByPropertyName=$true,
+                   HelpMessage=&quot;Enter an integer for the minimum amount of hard-disk free GB space&quot;,
+                   Position=1)]
+        [ValidateNotNull()]
+        [ValidateNotNullOrEmpty()]
+        [Alias(&quot;min&quot;, &quot;m&quot;)] 
+        [int]
+        $MinGB = 10
+    )
+
+    Process
+    {
+        Get-WmiObject -Class Win32_LogicalDisk -Filter &quot;DeviceID = '$DiskLetter'&quot; |
+        Select-Object DeviceID, FreeSpace, 
+        @{Name=&quot;FreeGB&quot;; Expression={$_.FreeSpace/1GB -as [int]}} | 
+        ForEach-Object { 
+            if($_.FreeGB -lt $MinGB) {
+                    Write-Verbose &quot;Disk $DiskLetter has only $($_.FreeGB) GB free. It is less than the the minimum of $MinGB GB&quot;
+                    return $false
+                } else {
+                Write-Verbose &quot;Disk $DiskLetter has $($_.FreeGB) GB free&quot; 
+                return $true
+            } 
+        }
+    }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

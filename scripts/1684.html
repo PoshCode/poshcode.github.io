@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="pezhore">
+    <title>IP Scan/Local User admin - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>IP Scan/Local User admin</h1>
+<h3><a href="//scripts/1684.ps1">download</a> - <a href="//scripts/1683.md">parent</a></h3>
+<p>Where I work, we don't use AD for roughly 30-60 servers. There are multiple identical local windows accounts on various servers, and when a person leaves the company, those accounts need to be deleted by hand. This group of scripts performs the following tasks:</p>
+<ol>
+<li>Ping scans a range of IPs for responding hosts.</li>
+<li>Takes those hosts and attempts to find the specified user</li>
+<li>Optionally with the -delete flag, deletes the user</li>
+</ol>
+<p>There's three parts to this script. The trigger which is run from the console in the same directory as the finduser.ps1 and set-localaccount.ps1 files. Note that set-localaccount.ps1 is from powershell.nu, with some minor changes that allow the computername to passed as a parameter.</p>
+<pre><code class="language-posh"># The trigger
+$obj = New-Object system.Net.NetworkInformation.Ping
+100..200 | % { $ip = &quot;10.1.1.$_&quot;
+$ping = $obj.send($ip,100)
+write-host &quot;.&quot; -noNewLine
+if ($ping.status -eq &quot;Success&quot;){
+   C:\Powershell\Finduser.ps1 $ping.address.ipaddresstostring
+}}
+
+#--------------------------------
+
+# Finduser.ps1
+param (
+        [string]$strcomputer,
+        [switch]$delete)
+
+  $computer = [ADSI](&quot;WinNT://&quot; + $strComputer + &quot;,computer&quot;)
+ 
+  $Users = $computer.psbase.children |where{$_.psbase.schemaclassname -eq &quot;User&quot;}
+  foreach ($member in $Users.psbase.syncroot){
+    if ($member.name -eq &quot;username&quot;){
+      write-host Found user! $computer.name
+      if ($delete){
+        write-host Deleting...
+        .\set-localaccount.ps1 -UserName username -remove -computerName $computer.name
+      }
+    }
+  }
+
+#--------------------------------
+
+# set-localaccount.ps1
+##################################################################################
+#
+#  Script name: Set-LocalAccount.ps1
+#  Author:      niklas.goude@zipper.se
+#  Homepage:    www.powershell.nu
+#
+##################################################################################
+
+param([string]$UserName, [string]$Password, [switch]$Add, [switch]$Remove, [switch]$ResetPassword, [switch]$help, [string]$computername)
+
+function GetHelp() {
+$HelpText = @&quot;
+DESCRIPTION:
+
+NAME: Set-LocalAccount.ps1
+Adds or Removes a Local Account
+
+PARAMETERS:
+
+-UserName        Name of the User to Add or Remove (Required)
+-Password        Sets Users Password (optional)
+-Add             Adds Local User (Optional)
+-Remove          Removes Local User (Optional)
+-ResetPassword   Resets Local User Password (Optional)
+-help            Prints the HelpFile (Optional)
+
+SYNTAX:
+
+.\Set-LocalAccount.ps1 -UserName nika -Password Password1 -Add
+Adds Local User nika and sets Password to Password1
+
+.\Set-LocalAccount.ps1 -UserName nika -Remove
+Removes Local User nika
+
+.\Set-LocalAccount.ps1 -UserName nika -Password Password1 -ResetPassword
+Sets Local User nika's Password to Password1
+
+.\Set-LocalAdmin.ps1 -help
+Displays the helptext
+&quot;@
+$HelpText
+}
+
+function AddRemove-LocalAccount ([string]$UserName, [string]$Password, [switch]$Add, [switch]$Remove, [switch]$ResetPassword, [string]$computerName) {
+    if($Add) {
+        [string]$ConnectionString = &quot;WinNT://$computerName&quot;
+        $ADSI = [adsi]$ConnectionString
+        $User = $ADSI.Create(&quot;user&quot;,$UserName)
+        $User.SetPassword($Password)
+        $User.SetInfo()
+    }
+
+    if($Remove) {
+        [string]$ConnectionString = &quot;WinNT://$computerName&quot;
+        $ADSI = [adsi]$ConnectionString
+        $ADSI.Delete(&quot;user&quot;,$UserName)
+    }
+
+    if($ResetPassword) {
+        [string]$ConnectionString = &quot;WinNT://&quot; + $ComputerName + &quot;/&quot; + $UserName + &quot;,user&quot;
+        $Account = [adsi]$ConnectionString
+        $Account.psbase.invoke(&quot;SetPassword&quot;, $Password)
+    }
+}
+
+if($help) { GetHelp; Continue }
+if($UserName -AND $Password -AND $Add -AND !$ResetPassword) { AddRemove-LocalAccount -UserName $UserName -Password $Password -Add -computerName $computerName}
+if($UserName -AND $Password -AND $ResetPassword) { AddRemove-LocalAccount -UserName $UserName -Password $Password -ResetPassword -computerName $computerName}
+if($UserName -AND $Remove) { AddRemove-LocalAccount -UserName $UserName -Remove -computerName $computerName}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

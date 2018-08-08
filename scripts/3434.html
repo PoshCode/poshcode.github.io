@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Pivot-Object - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Pivot-Object</h1>
+<h3><a href="//scripts/3434.ps1">download</a> - <a href="//scripts/885.md">parent</a></h3>
+<p>Takes a series of objects (like the converted input from csv) where there are a <em>series of objects (rows) that actually define the same object</em>, and there is (at least) one property which is a unique identifier (and appears on each object), and there are <em>two properties which are a <em>name and value pair</em> defining additional properties</em> ... and outputs new objects which merge the objects and add the name-value pairs as new properties.</p>
+<pre><code class="language-posh">#.Synopsis
+#   Pivot multiple objects which are normalized with properties that are name, value pairs.
+#.Description
+#  Takes a series of objects where there are multiple rows to represent each object, with a pair of columns with the name and value of an additional property, and outputs new objects which have those new properties on them.
+#.Example
+#  Import-CSV data.csv | Pivot-Objects SamAccountName Attribute Value
+#
+#  Imports csv data containing multiple rows per-record such that a pair of columns named &quot;Attribute&quot; and &quot;Value&quot; are actually different in each row, and contain a name and value pair for attributes you want to add to the output objects.
+#.Example
+# @&quot;
+#   ID,    Attribute,     Value,       SamAccountName
+#     ,    HoursPerWeek,  40,          J8329029
+#     ,    LastDay,       20 Feb 2010, J8329029
+#   12276, Job,           Sw Eng,      J8329029
+#   2479,  HoursPerWeek,  35,          X5969731
+#   2479,  LastDay,       20 Feb 2009, X5969731
+#   2479,  Job,           Sr. SW Eng,  X5969731
+#   2479,  Rate,          40,          X5969731
+#   2479,  Bonus,         10000,       X5969731
+# &quot;@.Split(&quot;`n&quot;) | ConvertFrom-Csv | Pivot-Object -Group SamAccountName -Name Attribute -Value Value -Jagged
+#   
+#  This provides a full example, with data, and demonstrates how -Jagged works:
+#  * Without -Jagged, you get two objects which each have the same properties. 
+#  * With Jagged, only one one of the object output will have the Rate and Bonus properties, because there's values for the J8329029 user.
+#.Notes
+#  Author: Joel Bennett
+#  function Pivot-Object {
+[CmdletBinding()]
+param(
+   # The name of the property to merge on. Items with the same value in this column will be combined.
+   [Parameter(Mandatory=$true)]
+   [Alias(&quot;GroupBy&quot;)]
+   [string]$GroupOnColumn,
+   # The name of the property that has the names of the new properties to create.
+   [Parameter(Mandatory=$true)]
+   [string]$NameColumn,
+   # The name of the property that has the values of the new properties to create.
+   [string]$ValueColumn,
+   [Parameter(Mandatory=$true, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+   # The input objects.  These can be passed on the pipeline as well (or instead).
+   [object[]]$InputObject=@(),
+   # If set, the objects that return only have the properties which were defined for them.
+   # Otherwise, all properties that are defined for any object are assigned (even if that means they get null values) on all objects that are output.
+   # See the examples for more information
+   [switch]$Jagged
+)
+begin {
+   [string[]]$Extra = @()
+   [string[]]$NamedColumns = @()
+   $CollectedInput = New-Object 'System.Collections.Generic.List[PSObject]'
+}
+process{
+   $Extra += $InputObject | Get-Member -Type Properties | 
+                            Select-Object -Expand Name -Unique | 
+                            Where-Object {($Extra + @($GroupOnColumn,$NameColumn,$ValueColumn)) -NotContains $_}
+
+   foreach($Incoming in $InputObject) {
+      $NamedColumns += $Incoming.$NameColumn
+      $null = $CollectedInput.Add($Incoming)
+   }
+}
+end {
+   $Columns = $NamedColumns | Select-Object -Unique | Where-Object { $_ }
+   $Extra = $Extra | Select-Object -Unique | Where-Object { $_ -and ($Columns -NotContains $_) }
+   
+   ForEach($item in $CollectedInput | Group-Object $GroupOnColumn) {
+      $thing = New-Object PSObject |
+               Add-Member -Type NoteProperty -Name $GroupOnColumn -Value $Item.Name -passthru
+ 
+      Write-Verbose &quot;Group $($Item.Name)&quot;
+      foreach($c in $Extra) {
+         $Value = $item.Group | Select-Object -Expand $c -Unique | Where-Object { $_ } | Select-Object -First 1
+         Write-Verbose &quot;Value $($Value)&quot;
+         if($Value) {
+            Add-Member -input $thing -MemberType NoteProperty -Name $c -Value $Value
+         }
+      }
+ 
+      foreach($i in $item.Group) {
+         Add-Member -Input $thing -Type NoteProperty -Name $i.$NameColumn -Value $i.$ValueColumn
+      }
+      
+      if($Jagged) {
+         Write-Output $thing
+      } else {
+         # Note: I add the GroupOnColumn and Extra columns when -Jagged isn't specified ... I assume that's what you want.
+         Write-Output $thing | select ([string[]]@(@($GroupOnColumn) + $columns + $extra))
+      }
+   }
+}
+#}
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

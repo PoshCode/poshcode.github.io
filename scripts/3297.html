@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joakim">
+    <title>Find Installed .NET ver - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Find Installed .NET ver</h1>
+<h3><a href="//scripts/3297.ps1">download</a></h3>
+<p>A script for finding installed .NET versions on remote workstations or servers. See the full documentation at &quot;powershelladmin.com&quot;:http://www.powershelladmin.com/wiki/Script_for_finding_which_dot_net_versions_are_installed_on_remote_workstations ( http://www.powershelladmin.com/wiki/Script_for_finding_which_dot_net_versions_are_installed_on_remote_workstations ).</p>
+<pre><code class="language-posh"># Svendsen Tech's .Net version finding script.
+# See the full documentation at:
+# http://www.powershelladmin.com/wiki/Script_for_finding_which_dot_net_versions_are_installed_on_remote_workstations
+
+param([Parameter(Mandatory=$true)][string[]] $ComputerName,
+      [switch] $Clobber)
+
+##### START OF FUNCTIONS #####
+
+function ql { $args }
+
+function Quote-And-Comma-Join {
+    
+    param([Parameter(Mandatory=$true)][string[]] $Strings)
+    
+    # Replace all double quotes in the text with single quotes so the CSV isn't messed up,
+    # and remove the trailing newline (all newlines and carriage returns).
+    $Strings = $Strings | ForEach-Object { $_ -replace '[\r\n]', '' }
+    ($Strings | ForEach-Object { '&quot;' + ($_ -replace '&quot;', &quot;'&quot;) + '&quot;' }) -join ','
+    
+}
+
+##### END OF FUNCTIONS #####
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$StartTime = Get-Date
+&quot;Script start time: $StartTime&quot;
+
+$Date = (Get-Date).ToString('yyyy-MM-dd')
+$OutputOnlineFile  = &quot;.\DotNetOnline-${date}.txt&quot;
+$OutputOfflineFile = &quot;.\DotNetOffline-${date}.txt&quot;
+$CsvOutputFile = &quot;.\DotNet-Versions-${date}.csv&quot;
+
+if (-not $Clobber) {
+    
+    $FoundExistingLog = $false
+    
+    foreach ($File in $OutputOnlineFile, $OutputOfflineFile, $CsvOutputFile) {
+        
+        if (Test-Path -PathType Leaf -Path $File) {
+            
+            $FoundExistingLog = $true
+            &quot;$File already exists&quot;
+            
+        }
+    
+    }
+    
+    if ($FoundExistingLog -eq $true) {
+        
+        $Answer = Read-Host &quot;The above mentioned log file(s) exist. Overwrite? [yes]&quot;
+        
+        if ($Answer -imatch '^n') { 'Aborted'; exit 1 }
+        
+    }
+    
+}
+
+# Deleting existing log files if they exist (assume they can be deleted...)
+Remove-Item $OutputOnlineFile -ErrorAction SilentlyContinue
+Remove-Item $OutputOfflineFile -ErrorAction SilentlyContinue
+Remove-Item $CsvOutputFile -ErrorAction SilentlyContinue
+
+$Counter    = 0
+$DotNetData = @{}
+$DotNetVersionStrings = ql v4\Client v4\Full v3.5 v3.0 v2.0.50727 v1.1.4322
+$DotNetRegistryBase   = 'SOFTWARE\Microsoft\NET Framework Setup\NDP'
+
+foreach ($Computer in $ComputerName) {
+    
+    $Counter++
+    $DotNetData.$Computer = New-Object PSObject
+    
+    # Skip malformed lines (well, some of them)
+    if ($Computer -notmatch '^\S') {
+        
+        Write-Host -Fore Red &quot;Skipping malformed item/line ${Counter}: '$Computer'&quot;
+        Add-Member -Name Error -Value &quot;Malformed argument ${Counter}: '$Computer'&quot; -MemberType NoteProperty -InputObject $DotNetData.$Computer
+        continue
+        
+    }
+    
+    if (Test-Connection -Quiet -Count 1 $Computer) {
+        
+        Write-Host -Fore Green &quot;$Computer is online. Trying to read registry.&quot;
+        
+        $Computer | Add-Content $OutputOnlineFile
+        
+        # Suppress errors when trying to open the remote key
+        $ErrorActionPreference = 'SilentlyContinue'
+        $Registry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $Computer)
+        $RegSuccess = $?
+        $ErrorActionPreference = 'Stop'
+                
+        if ($RegSuccess) {
+            
+            Write-Host -Fore Green &quot;Successfully connected to registry of ${Computer}. Trying to open keys.&quot;
+            
+            foreach ($VerString in $DotNetVersionStrings) {
+                
+                if ($RegKey = $Registry.OpenSubKey(&quot;$DotNetRegistryBase\$VerString&quot;)) {
+                    
+                    #&quot;Successfully opened .NET registry key (SOFTWARE\Microsoft\NET Framework Setup\NDP\$verString).&quot;
+                    
+                    if ($RegKey.GetValue('Install') -eq '1') {
+                        
+                        #&quot;$computer has .NET $verString&quot;
+                        Add-Member -Name $VerString -Value 'Installed' -MemberType NoteProperty -InputObject $DotNetData.$Computer
+                        
+                    }
+                    
+                    else {
+                        
+                        Add-Member -Name $VerString -Value 'Not installed' -MemberType NoteProperty -InputObject $DotNetData.$Computer
+                        
+                    }
+                    
+                }
+                
+                else {
+                    
+                    Add-Member -Name $VerString -Value 'Not installed (no key)' -MemberType NoteProperty -InputObject $DotNetData.$Computer
+                    
+                }
+                
+            }
+            
+        }
+        
+        # Error opening remote registry
+        else {
+            
+            Write-Host -Fore Yellow &quot;${Computer}: Unable to open remote registry key.&quot;
+            Add-Member -Name Error -Value &quot;Unable to open remote registry: $($Error[0].ToString())&quot; -MemberType NoteProperty -InputObject $DotNetData.$Computer
+            
+        }
+        
+    }
+    
+    # Failed ping test
+    else {
+        
+        Write-Host -Fore Yellow &quot;${Computer} is offline.&quot;
+        Add-Member -Name Error -Value &quot;No ping reply&quot; -MemberType NoteProperty -InputObject $DotNetData.$Computer
+        $Computer | Add-Content $OutputOfflineFile
+        
+    }    
+    
+}
+
+$CsvHeaders = @('Computer') + @($DotNetVersionStrings) + @('Error')
+$HeaderLine = Quote-And-Comma-Join $CsvHeaders
+Add-Content -Path $CsvOutputFile -Value $HeaderLine
+
+# Process the data and output to manually crafted CSV.
+$DotNetData.GetEnumerator() | ForEach-Object {
+    
+    $Computer = $_.Name
+    
+    # I'm building a temporary hashtable with all $CsvHeaders
+    $TempData = @{}
+    $TempData.'Computer' = $Computer
+    
+    # This means there's an &quot;Error&quot; note property.
+    if (Get-Member -InputObject $DotNetData.$Computer -MemberType NoteProperty -Name Error) {
+        
+        # Add the error to the temp hash.
+        $TempData.'Error' = $DotNetData.$Computer.Error
+        
+        # Populate the .NET version strings with &quot;Unknown&quot;.
+        foreach ($VerString in $DotNetVersionStrings) {
+            
+            $TempData.$VerString = 'Unknown'
+            
+        }
+        
+        
+    }
+    
+    # No errors. Assume all .NET version fields are populated.
+    else {
+        
+        # Set the error key in the temp hash to &quot;-&quot;
+        $TempData.'Error' = '-'
+        
+        foreach ($VerString in $DotNetVersionStrings) {
+            
+            $TempData.$VerString = $DotNetData.$Computer.$VerString
+            
+        } 
+        
+    }
+    
+    # Now we should have &quot;complete&quot; $TempData hashes.
+    # Manually craft CSV data. Headers were added before the loop.
+    
+    # The array is for ordering the output predictably.
+    $TempArray = @()
+    
+    foreach ($Header in $CsvHeaders) {
+        
+        $TempArray += $TempData.$Header
+        
+    }
+    
+    $CsvLine = Quote-And-Comma-Join $TempArray
+    Add-Content -Path $CsvOutputFile -Value $CsvLine
+    
+}
+
+@&quot;
+Script start time: $StartTime
+Script end time:   $(Get-Date)
+Output files: $CsvOutputFile, $OutputOnlineFile, $OutputOfflineFile
+&quot;@
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

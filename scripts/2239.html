@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jerry George">
+    <title>ASP Security Flaw Detect - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ASP Security Flaw Detect</h1>
+<h3><a href="//scripts/2239.ps1">download</a></h3>
+<p>This script will help detect vulnerable configuration for the Padding Oracle
+ASP.Net vulnerability documented in MS advisory 2416728.</p>
+<p>As Explained in Scott's Blog</p>
+<p>http://weblogs.asp.net/scottgu/archive/2010/09/18/important-asp-net-security-vulnerability.aspx</p>
+<pre><code class="language-posh">#
+# This script will help detect vulnerable configuration for the Padding Oracle 
+# ASP.Net vulnerability documented in MS advisory 2416728.
+# 
+
+cls
+function List-WebServerPaths($server_instance) {
+	foreach($child in $server_instance.get_Children()) {
+		if($child.get_SchemaClassName() -eq &quot;IIsWebVirtualDir&quot;)
+		{
+			$out = $child | select SchemaClassName, Path
+			$parent = new-object System.DirectoryServices.DirectoryEntry($child.Parent)
+			if($root_path -ne $child.Path) {
+				Detect-OraclePaddingSecurityFlaw $child.Path $parent.Properties[&quot;ServerComment&quot;].ToString()
+			}
+		}
+		if($child.get_SchemaClassName() -eq &quot;IIsWebServer&quot;)
+		{
+			List-WebServerPaths $child
+		}
+	}
+}
+function Detect-OraclePaddingSecurityFlaw($virtual_directory_path, $server_comment) {
+ 	$out = New-Object psobject
+	
+	$count = (Get-ChildItem $virtual_directory_path -Recurse | ? { $_.Name -eq &quot;web.config&quot; }).count
+	Get-ChildItem $virtual_directory_path -Recurse | ? { $_.Name -eq &quot;web.config&quot; } | select FullName | %{
+		$root_web_config = $virtual_directory_path.ToString() +&quot;\&quot; +&quot;web.config&quot;
+		$CurrentPath = $_
+		if(Test-Path $CurrentPath.FullName) {
+			if($root_web_config -eq $CurrentPath.FullName) {
+				$resultant_obj = Check-WebConfig $server_comment $virtual_directory_path $CurrentPath.FullName $true 
+				$index = $list.Add($resultant_obj);
+			}
+			else {
+				$resultant_obj = Check-WebConfig $server_comment $virtual_directory_path $CurrentPath.FullName $false 
+				$index = $list.Add($resultant_obj);
+			}
+		}
+	}
+}
+# Check the web.config
+function Check-WebConfig($name, $server_comment, $webconfig_path, $is_root) {
+ 	$out = New-Object psobject
+	$out | add-member -MemberType NoteProperty -Name &quot;Path&quot; -Value $webconfig_path
+	$out | add-member -MemberType NoteProperty -Name &quot;Is Root&quot; -Value $is_root
+	$xml = [xml](Get-Content $webconfig_path);
+	$root = $xml.get_DocumentElement();
+	$custom_errors = $root.&quot;system.web&quot;.customErrors;
+	
+	if($is_root) {
+		$siteName = &quot;{&quot; +$name +&quot;}&quot;
+		$out | add-member -MemberType NoteProperty -Name &quot;Name&quot; -Value $siteName
+	}
+	else {
+		$dirName = (Get-Item $webconfig_path).DirectoryName
+		$dirName = $dirName.Substring($dirName.LastIndexOf(&quot;\&quot;) + 1)
+		$siteName = &quot;{&quot; +$name +&quot; - &quot; +$dirName +&quot;}&quot;
+		$out | add-member -MemberType NoteProperty -Name &quot;Name&quot; -Value $siteName
+	}
+	if($custom_errors -eq $null -and $is_root) {
+		$out | add-member -MemberType NoteProperty -Name &quot;Disabled&quot; -Value $true
+		$out | add-member -MemberType NoteProperty -Name &quot;Non Homogenous&quot; -Value $false
+	}
+	else {
+		$status = Check-CustomErrorsMode $custom_errors $is_root
+		$disabled_status = -not $status
+		$out | add-member -MemberType NoteProperty -Name &quot;Disabled&quot; -Value $disabled_status
+		
+		$HomogeneityStatus = Check-CustomErrorsHomogeneity $custom_errors
+		$out | add-member -MemberType NoteProperty -Name &quot;Non Homogenous&quot; -Value $HomogeneityStatus
+	}
+	return $out;
+}
+# Get the Page Url given the HTTP Error Code
+function Get-ErrorPages($error_nodes_list,$error_num)
+{
+	$pageUrl = &quot;&quot;
+	foreach($error_node in $error_nodes_list)
+	{
+		if($error_node.statusCode -ne $null)
+		{
+			if($error_node.statusCode -eq $error_num)
+			{
+				$pageUrl = $error_node.redirect
+			}
+		}
+	}
+	return $pageUrl;
+}
+# Check Error Homogeneity 
+# Comparing the Default Error Page, 404 &amp; 500 Error Pages
+function Check-CustomErrorsHomogeneity($custom_errors_list) {
+	$HomogeneityStatusResult = $false;
+	$error_nodes_list = ($custom_errors_list.error)
+	$count = $error_nodes_list.Count
+				
+	if($count -gt 0) {
+		$404Pages = Get-ErrorPages($error_nodes_list,404)
+		$500Pages = Get-ErrorPages($error_nodes_list,500)
+	}
+	else {
+		$404Pages = &quot;&quot;
+		$500Pages = &quot;&quot;
+	}
+	
+	$defaultRedirect = $custom_errors_list.defaultRedirect
+	if($404Pages -eq &quot;&quot; -and $500Pages -eq &quot;&quot;  -and $defaultRedirect -eq $null)
+	{
+		# Missing defaultRedirect in this case will cause config to be vulnerable
+
+		$HomogeneityStatusResult = $true
+	}
+	elseif($404Pages -eq &quot;&quot; -and $500Pages -ne &quot;&quot; -and $500Pages -notcontains $defaultRedirect)
+	{
+		# 500 and default error pages
+		$HomogeneityStatusResult = $true
+	}
+	elseif($500Pages -eq &quot;&quot; -and $404Pages -ne &quot;&quot; -and $404Pages -notcontains $defaultRedirect) 
+	{
+		# 404 and default error pages differ
+		$HomogeneityStatusResult = $true
+	}
+	elseif($500Pages -ne $404Pages) 
+	{
+		# 404 and 500 error pages differ
+		$HomogeneityStatusResult = $true
+	}
+	return $HomogeneityStatusResult;
+}
+function Get-ApplicationUsage($invalidInput, $userInput)
+{
+	
+	Write-Host -ForegroundColor Green &quot;Note the Configuration Items Numbers above and enter the items that you need to fix for which either Attribute is true.&quot;
+	Write-Host -ForegroundColor DarkGreen --------------------------------------------------------------
+	Write-Host -ForegroundColor Green - USAGE ********************************************************
+	Write-Host -ForegroundColor DarkGreen --------------------------------------------------------------
+	Write-Host -ForegroundColor Green &quot;**** Valid User Input Example: 1-2,3,4-5 &lt;&lt;VALID&gt;&gt; *******&quot;
+	Write-Host -ForegroundColor Red   &quot;**** InValid User Input Example: -2,-3,, &lt;&lt;INVALID&gt;&gt;*******&quot;
+	Write-Host 
+	Write-Host -ForegroundColor DarkGreen  &quot;Note: Enter 0(zero) or 'exit' to terminate the shell instance.&quot;
+	Write-Host 
+	Write-Host -ForegroundColor Blue &quot;* Disabled - Indicates that the customError Section of the Configuration is disabled and needs to be rearmed with defaultRedirect Attribute&quot;
+	Write-Host -ForegroundColor DarkBlue &quot;* Non Homogenous - Indicates that the customError Section of the Configuration is either disabled or has different Urls for different error types, it needs to be same so that the attacker does not do a differential analysis of the response.&quot;
+	Write-Host
+	if($invalidInput -ne $null -and $invalidInput) {
+		Write-Host 
+		Write-Host -ForegroundColor Red  $userInput &quot; is invalid User Input. Please refer USAGE details above.&quot;
+		Write-Host 
+	}
+	$userInput = Read-Host -Prompt &quot;Enter your items to fix: &quot;
+	return $userInput;
+}
+function Check-CustomErrorsMode($custom_errors_node, $is_root) {
+	$mode = $custom_errors_node.mode;
+	$defaultRedirect = $custom_errors_node.defaultRedirect
+	if($mode -eq &quot;off&quot;) {
+		return $false;
+	}
+	elseif($defaultRedirect -eq $null -and $is_root) {
+		return $false;
+	}
+	else {
+		return $true;
+	}
+}
+
+$root_path_obj = New-Object System.DirectoryServices.DirectoryEntry(&quot;IIS://localhost/W3SVC/1&quot;)
+foreach($child in $root_path_obj.get_Children()) {
+	if($child.get_SchemaClassName() -eq &quot;IIsWebVirtualDir&quot;)
+	{
+		$root_path = $child.Path
+	}
+}
+
+$list = new-Object system.Collections.ArrayList
+$fix_numbers = new-Object system.Collections.ArrayList
+$root = New-Object System.DirectoryServices.DirectoryEntry(&quot;IIS://localhost/W3SVC&quot;)
+List-WebServerPaths $root
+[int]$arrIndex = 1;
+$list | %{ $_ | add-member -MemberType NoteProperty -Name &quot;No&quot; -Value $arrIndex;$arrIndex++; 
+	};
+[string]$userInput = &quot;&quot;
+$list | select No, Name, &quot;Is Root&quot;,&quot;Disabled&quot;, &quot;Non Homogenous&quot;, Path | Format-Table -Wrap No, Name, &quot;Is Root&quot;,&quot;Disabled&quot;, &quot;Non Homogenous&quot;, Path 
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

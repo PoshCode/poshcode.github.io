@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Dan Dittenhafer">
+    <title>Scan Remote Event Logs - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Scan Remote Event Logs</h1>
+<h3><a href="//scripts/2711.ps1">download</a></h3>
+<p>This pair of PowerShell functions enables remote scanning/downloading of event logs using with the ability to exclude specific events. - Uses PowerShell Remoting with Invoke-Command along with Get-EventLog and the spattering technique to pass arguements to the remote script block.</p>
+<pre><code class="language-posh">#requires -version 2.0
+
+
+function Scan-EventLogs
+{
+    &lt;#
+        .SYNOPSIS
+        Scan event logs on specified computer(s) and return a sorted collection events to review.
+        
+        .Description
+        Uses PowerShell Remoting with Invoke-Command and Get-EventLog to fetch a list of enabled event logs from one or more computers and sort output.
+        
+        .PARAMETER ComputerName
+        Specifies one or more computers to scan and report event logs info from. The default is the local computer.
+        
+        .PARAMETER Sort
+        Specifies a property to sort by. The default is MachineName, but 
+        any property of EventLogConfiguration class could be used, including &quot;IsClassicLog&quot; and &quot;FileSize&quot;.
+        
+        .PARAMETER Descending
+        Indicates whether to be descending or ascending sort order. Default is descending = true.
+        
+        .PARAMETER Exclude
+        An array of psobjects created by the New-EventId cmdlet which will be excluded from the output.
+        
+        .PARAMETER Credential
+        The network credential to use when connecting to a remote compiuter.
+
+        .EXAMPLE
+        PS &gt; $Exclusions =   (New-EventId -Source &quot;W32Time&quot; -EventId 29), (New-EventId -Source &quot;Netlogon&quot; -EventId 5719)
+        PS &gt; Get-EnabledEvtLogs -CN &quot;ANY-SERVER&quot;, &quot;Localhost&quot; -Sort &quot;Source&quot; -Descending $true
+    #&gt;
+    
+    # Parameters
+    Param
+    ( 
+        [parameter(Mandatory=$false)]
+        [alias(&quot;CN&quot;)]
+        [String[]] $ComputerName = $ENV:COMPUTERNAME,
+
+        [parameter(Mandatory=$false)]
+        [String] $Sort = &quot;MachineName&quot;,
+        
+        [parameter(Mandatory=$false)]
+        [Boolean] $Descending = $true,
+        
+        [parameter(Mandatory=$false)]
+        [psobject[]] $Exclude,
+        
+        [parameter(Mandatory=$false)]
+        [PSobject] $Credential
+    )
+    
+    Process
+    { 
+        # Help enforcing coding rules...
+        Set-StrictMode -Version Latest
+        
+        # The logs we want to scan...
+        $LogNames = &quot;Security&quot;, &quot;System&quot;;
+        $EntryTypes = &quot;FailureAudit&quot;, &quot;Error&quot;;
+        $list = $null;
+
+        foreach($cn in $ComputerName)
+        {        
+            foreach($logName in $LogNames)
+            {
+                # Determine dates for last month
+                $LastMonth = (get-date).AddMonths(-1);
+                $LastMonthFirst = get-date -year $LastMonth.Year -month $LastMonth.Month -day 1
+                $ThisMonthFirst = get-date -year (get-date).Year -month (get-date).Month -day 1
+            
+            
+                $EventLogArgs = @{
+                                ComputerName = $cn
+                                LogName = $logName
+                                After = $LastMonthFirst
+                                Before = $ThisMonthFirst
+                                EntryType = $EntryTypes
+                                AsBaseObject = $true
+                }
+                                            
+                # Build args struct
+                $remoteScript = { param($elArgs) &amp; get-eventlog @elArgs }
+                
+                # get events...
+                $events = Invoke-Command -ScriptBlock $remoteScript -ComputerName $cn -Credential $Credential -ArgumentList $EventLogArgs;
+                
+                # Build the filter algorithm for the where object...
+                $filterScript = 
+                {
+                    # Loop through the exclusions...
+                    $bInc = $true; 
+                    foreach($ex in $Exclude) 
+                    { 
+                        # first check to make sure the incoming object has a Source property..
+                        $hasSource = get-member -name &quot;Source&quot; -InputObject $_
+                        
+                        # if not has Source 
+                        if($hasSource -eq $null)
+                        {
+                            $bInc = $false;
+                        }
+                        # in our exlucde list, then not include.
+                        else 
+                        {
+                            if($_.Source -eq $ex.Source -and $_.EventID -eq $ex.EventID)
+                            {
+                                $bInc = $false; 
+                            }
+                        } 
+                    } 
+                    
+                    $bInc; 
+                };
+                
+                # Do the actual filtering...
+                [psobject[]]$filtered = $null;
+                foreach($evt in $events)
+                {
+                    $filtered += where -FilterScript $filterScript -InputObject $evt;
+                }
+                
+                # prepare final list...
+                $list += ($filtered | select MachineName, EntryType, TimeGenerated, Source, EventId, Message, UserName);
+            }
+        }
+        
+        
+        # Sort the collection according to callers wishes and format for output...
+        $list | sort -property @{Expression=$Sort;Descending=$Descending}
+    }
+}
+
+function New-EventId
+{
+    Param
+    (
+        [ValidateNotNullOrEmpty()] 
+        [string] $Source,
+        
+        [ValidateNotNullOrEmpty()] 
+        [int] $EventId
+    )
+    
+    process
+    {
+        $EventIdItem = new-object psobject;
+        $EventIdItem | add-member -membertype noteproperty -name Source -value $Source;
+        $EventIdItem | add-member -membertype noteproperty -Name EventID -value $EventId;
+        $EventIdItem; 
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

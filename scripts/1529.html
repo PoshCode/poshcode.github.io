@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="halr9000">
+    <title>ProcuriosJSON.psm1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ProcuriosJSON.psm1</h1>
+<h3><a href="//scripts/1529.ps1">download</a></h3>
+<p>Convert from JSON string to a hashtable or PSObject. e.g.:
+$json | ConvertFrom-JSON -AsPSObject</p>
+<p>The CSharp class embedded after the PowerShell wrapper function has an Encode method as well, but I haven't played with it yet. All credit for the CSharp code goes to http://techblog.procurios.nl/k/618/news/view/14605/14863/How-do-I-write-my-own-parser-for-JSON.html.</p>
+<ul>
+<li>Note: this is intended to be saved as a PSM1 file and then imported using the Import-Module cmdlet. It's not much of a module yet though. :)</li>
+<li>TODO: Encoding, cmdlet help</li>
+</ul>
+<pre><code class="language-posh">function ConvertFrom-Json {
+	param (
+		[Parameter(	Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
+		[Alias(&quot;Json&quot;)]
+		[string[]]
+		$InputObject,
+		[switch]$AsPSObject = $false
+	)
+	Process {
+		$output = [procurios.Public.JSON]::JsonDecode( $InputObject )
+		if ( $AsPSObject ) {
+			$output | ForEach-Object { New-Object PSObject -Property $_ }
+		} 
+		else { Write-Output $output }
+	}
+}
+
+#REGION IMPORT CSHARP TYPES
+# Source from: http://techblog.procurios.nl/k/618/news/view/14605/14863/How-do-I-write-my-own-parser-for-JSON.html
+Add-Type @&quot;
+using System;
+//using System.Data;
+using System.Collections;
+using System.Globalization;
+using System.Text;
+
+namespace Procurios.Public
+{
+	/// &lt;summary&gt;
+	/// This class encodes and decodes JSON strings.
+	/// Spec. details, see http://www.json.org/
+	/// 
+	/// JSON uses Arrays and Objects. These correspond here to the datatypes ArrayList and Hashtable.
+	/// All numbers are parsed to doubles.
+	/// &lt;/summary&gt;
+	public class JSON
+	{
+		public const int TOKEN_NONE = 0; 
+		public const int TOKEN_CURLY_OPEN = 1;
+		public const int TOKEN_CURLY_CLOSE = 2;
+		public const int TOKEN_SQUARED_OPEN = 3;
+		public const int TOKEN_SQUARED_CLOSE = 4;
+		public const int TOKEN_COLON = 5;
+		public const int TOKEN_COMMA = 6;
+		public const int TOKEN_STRING = 7;
+		public const int TOKEN_NUMBER = 8;
+		public const int TOKEN_TRUE = 9;
+		public const int TOKEN_FALSE = 10;
+		public const int TOKEN_NULL = 11;
+
+		private const int BUILDER_CAPACITY = 2000;
+
+		protected static JSON instance = new JSON();
+
+		/// &lt;summary&gt;
+		/// On decoding, this value holds the position at which the parse failed (-1 = no error).
+		/// &lt;/summary&gt;
+		protected int lastErrorIndex = -1;
+		protected string lastDecode = &quot;&quot;;
+
+		/// &lt;summary&gt;
+		/// Parses the string json into a value
+		/// &lt;/summary&gt;
+		/// &lt;param name=&quot;json&quot;&gt;A JSON string.&lt;/param&gt;
+		/// &lt;returns&gt;An ArrayList, a Hashtable, a double, a string, null, true, or false&lt;/returns&gt;
+		public static object JsonDecode(string json)
+		{
+			// save the string for debug information
+			JSON.instance.lastDecode = json;
+
+			if (json != null) {
+                char[] charArray = json.ToCharArray();
+                int index = 0;
+				bool success = true;
+				object value = JSON.instance.ParseValue(charArray, ref index, ref success);
+				if (success) {
+					JSON.instance.lastErrorIndex = -1;
+				} else {
+					JSON.instance.lastErrorIndex = index;
+				}
+				return value;
+            } else {
+                return null;
+            }
+		}
+
+		/// &lt;summary&gt;
+		/// Converts a Hashtable / ArrayList object into a JSON string
+		/// &lt;/summary&gt;
+		/// &lt;param name=&quot;json&quot;&gt;A Hashtable / ArrayList&lt;/param&gt;
+		/// &lt;returns&gt;A JSON encoded string, or null if object 'json' is not serializable&lt;/returns&gt;
+		public static string JsonEncode(object json)
+		{
+			StringBuilder builder = new StringBuilder(BUILDER_CAPACITY);
+			bool success = JSON.instance.SerializeValue(json, builder);
+			return (success ? builder.ToString() : null);
+		}
+
+		/// &lt;summary&gt;
+		/// On decoding, this function returns the position at which the parse failed (-1 = no error).
+		/// &lt;/summary&gt;
+		/// &lt;returns&gt;&lt;/returns&gt;
+		public static bool LastDecodeSuccessful()
+		{
+			return (JSON.instance.lastErrorIndex == -1);
+		}
+
+		/// &lt;summary&gt;
+		/// On decoding, this function returns the position at which the parse failed (-1 = no error).
+		/// &lt;/summary&gt;
+		/// &lt;returns&gt;&lt;/returns&gt;
+		public static int GetLastErrorIndex()
+		{
+			return JSON.instance.lastErrorIndex;
+		}
+
+		/// &lt;summary&gt;
+		/// If a decoding error occurred, this function returns a piece of the JSON string 
+		/// at which the error took place. To ease debugging.
+		/// &lt;/summary&gt;
+		/// &lt;returns&gt;&lt;/returns&gt;
+		public static string GetLastErrorSnippet()
+		{
+			if (JSON.instance.lastErrorIndex == -1) {
+				return &quot;&quot;;
+			} else {
+				int startIndex = JSON.instance.lastErrorIndex - 5;
+				int endIndex = JSON.instance.lastErrorIndex + 15;
+				if (startIndex &lt; 0) {
+					startIndex = 0;
+				}
+				if (endIndex &gt;= JSON.instance.lastDecode.Length) {
+					endIndex = JSON.instance.lastDecode.Length - 1;
+				}
+
+				return JSON.instance.lastDecode.Substring(startIndex, endIndex - startIndex + 1);
+			}
+		}
+
+		protected Hashtable ParseObject(char[] json, ref int index)
+		{
+			Hashtable table = new Hashtable();
+			int token;
+
+			// {
+			NextToken(json, ref index);
+
+			bool done = false;
+			while (!done) {
+				token = LookAhead(json, index);
+				if (token == JSON.TOKEN_NONE) {
+					return null;
+				} else if (token == JSON.TOKEN_COMMA) {
+					NextToken(json, ref index);
+				} else if (token == JSON.TOKEN_CURLY_CLOSE) {
+					NextToken(json, ref index);
+					return table;
+				} else {
+
+					// name
+					string name = ParseString(json, ref index);
+					if (name == null) {
+						return null;
+					}
+
+					// :
+					token = NextToken(json, ref index);
+					if (token != JSON.TOKEN_COLON) {
+						return null;
+					}
+
+					// value
+					bool success = true;
+					object value = ParseValue(json, ref index, ref success);
+					if (!success) {
+						return null;
+					}
+
+					table[name] = value;
+				}
+			}
+
+			return table;
+		}
+
+		protected ArrayList ParseArray(char[] json, ref int index)
+		{
+			ArrayList array = new ArrayList();
+
+			// [
+			NextToken(json, ref index);
+
+			bool done = false;
+			while (!done) {
+				int token = LookAhead(json, index);
+				if (token == JSON.TOKEN_NONE) {
+					return null;
+				} else if (token == JSON.TOKEN_COMMA) {
+					NextToken(json, ref index);
+				} else if (token == JSON.TOKEN_SQUARED_CLOSE) {
+					NextToken(json, ref index);
+					break;
+				} else {
+					bool success = true;
+					object value = ParseValue(json, ref index, ref success);
+					if (!success) {
+						return null;
+					}
+
+					array.Add(value);
+				}
+			}
+
+			return array;
+		}
+
+		protected object ParseValue(char[] json, ref int index, ref bool success)
+		{
+			switch (LookAhead(json, index)) {
+				case JSON.TOKEN_STRING:
+					return ParseString(json, ref index);
+				case JSON.TOKEN_NUMBER:
+					return ParseNumber(json, ref index);
+				case JSON.TOKEN_CURLY_OPEN:
+					return ParseObject(json, ref index);
+				case JSON.TOKEN_SQUARED_OPEN:
+					return ParseArray(json, ref index);
+				case JSON.TOKEN_TRUE:
+					NextToken(json, ref index);
+					return Boolean.Parse(&quot;TRUE&quot;);
+				case JSON.TOKEN_FALSE:
+					NextToken(json, ref index);
+					return Boolean.Parse(&quot;FALSE&quot;);
+				case JSON.TOKEN_NULL:
+					NextToken(json, ref index);
+					return null;
+				case JSON.TOKEN_NONE:
+					break;
+			}
+
+			success = false;
+			return null;
+		}
+
+		protected string ParseString(char[] json, ref int index)
+		{
+			string s = &quot;&quot;;
+			char c;
+
+			EatWhitespace(json, ref index);
+			
+			// &quot;
+			c = json[index++];
+
+			bool complete = false;
+			while (!complete) {
+
+				if (index == json.Length) {
+					break;
+				}
+
+				c = json[index++];
+				if (c == '&quot;') {
+					complete = true;
+					break;
+				} else if (c == '\\') {
+
+					if (index == json.Length) {
+						break;
+					}
+					c = json[index++];
+					if (c == '&quot;') {
+						s += '&quot;';
+					} else if (c == '\\') {
+						s += '\\';
+					} else if (c == '/') {
+						s += '/';
+					} else if (c == 'b') {
+						s += '\b';
+					} else if (c == 'f') {
+						s += '\f';
+					} else if (c == 'n') {
+						s += '\n';
+					} else if (c == 'r') {
+						s += '\r';
+					} else if (c == 't') {
+						s += '\t';
+					} else if (c == 'u') {
+						int remainingLength = json.Length - index;
+						if (remainingLength &gt;= 4) {
+							// fetch the next 4 chars
+							char[] unicodeCharArray = new char[4];
+							Array.Copy(json, index, unicodeCharArray, 0, 4);
+							// parse the 32 bit hex into an integer codepoint
+							uint codePoint = UInt32.Parse(new string(unicodeCharArray), NumberStyles.HexNumber);
+							// convert the integer codepoint to a unicode char and add to string
+							s += Char.ConvertFromUtf32((int)codePoint);
+							// skip 4 chars
+							index += 4;
+						} else {
+							break;
+						}
+					}
+
+				} else {
+					s += c;
+				}
+
+			}
+
+			if (!complete) {
+				return null;
+			}
+
+			return s;
+		}
+
+		protected double ParseNumber(char[] json, ref int index)
+		{
+			EatWhitespace(json, ref index);
+
+			int lastIndex = GetLastIndexOfNumber(json, index);
+			int charLength = (lastIndex - index) + 1;
+			char[] numberCharArray = new char[charLength];
+
+			Array.Copy(json, index, numberCharArray, 0, charLength);
+			index = lastIndex + 1;
+			return Double.Parse(new string(numberCharArray), CultureInfo.InvariantCulture);
+		}
+
+		protected int GetLastIndexOfNumber(char[] json, int index)
+		{
+			int lastIndex;
+			for (lastIndex = index; lastIndex &lt; json.Length; lastIndex++) {
+				if (&quot;0123456789+-.eE&quot;.IndexOf(json[lastIndex]) == -1) {
+					break;
+				}
+			}
+			return lastIndex - 1;
+		}
+
+		protected void EatWhitespace(char[] json, ref int index)
+		{
+			for (; index &lt; json.Length; index++) {
+				if (&quot; \t\n\r&quot;.IndexOf(json[index]) == -1) {
+					break;
+				}
+			}
+		}
+
+		protected int LookAhead(char[] json, int index)
+		{
+			int saveIndex = index;
+			return NextToken(json, ref saveIndex);
+		}
+
+		protected int NextToken(char[] json, ref int index)
+		{
+			EatWhitespace(json, ref index);
+
+			if (index == json.Length) {
+				return JSON.TOKEN_NONE;
+			}
+			
+			char c = json[index];
+			index++;
+			switch (c) {
+				case '{':
+					return JSON.TOKEN_CURLY_OPEN;
+				case '}':
+					return JSON.TOKEN_CURLY_CLOSE;
+				case '[':
+					return JSON.TOKEN_SQUARED_OPEN;
+				case ']':
+					return JSON.TOKEN_SQUARED_CLOSE;
+				case ',':
+					return JSON.TOKEN_COMMA;
+				case '&quot;':
+					return JSON.TOKEN_STRING;
+				case '0': case '1': case '2': case '3': case '4': 
+				case '5': case '6': case '7': case '8': case '9':
+				case '-': 
+					return JSON.TOKEN_NUMBER;
+				case ':':
+					return JSON.TOKEN_COLON;
+			}
+			index--;
+
+			int remainingLength = json.Length - index;
+
+			// false
+			if (remainingLength &gt;= 5) {
+				if (json[index] == 'f' &amp;&amp;
+					json[index + 1] == 'a' &amp;&amp;
+					json[index + 2] == 'l' &amp;&amp;
+					json[index + 3] == 's' &amp;&amp;
+					json[index + 4] == 'e') {
+					index += 5;
+					return JSON.TOKEN_FALSE;
+				}
+			}
+
+			// true
+			if (remainingLength &gt;= 4) {
+				if (json[index] == 't' &amp;&amp;
+					json[index + 1] == 'r' &amp;&amp;
+					json[index + 2] == 'u' &amp;&amp;
+					json[index + 3] == 'e') {
+					index += 4;
+					return JSON.TOKEN_TRUE;
+				}
+			}
+
+			// null
+			if (remainingLength &gt;= 4) {
+				if (json[index] == 'n' &amp;&amp;
+					json[index + 1] == 'u' &amp;&amp;
+					json[index + 2] == 'l' &amp;&amp;
+					json[index + 3] == 'l') {
+					index += 4;
+					return JSON.TOKEN_NULL;
+				}
+			}
+
+			return JSON.TOKEN_NONE;
+		}
+
+		protected bool SerializeObjectOrArray(object objectOrArray, StringBuilder builder)
+		{
+			if (objectOrArray is Hashtable) {
+				return SerializeObject((Hashtable)objectOrArray, builder);
+			} else if (objectOrArray is ArrayList) {
+				return SerializeArray((ArrayList)objectOrArray, builder);
+			} else {
+				return false;
+			}
+		}
+
+		protected bool SerializeObject(Hashtable anObject, StringBuilder builder)
+		{
+			builder.Append(&quot;{&quot;);
+
+			IDictionaryEnumerator e = anObject.GetEnumerator();
+			bool first = true;
+			while (e.MoveNext()) {
+				string key = e.Key.ToString();
+				object value = e.Value;
+
+				if (!first) {
+					builder.Append(&quot;, &quot;);
+				}
+
+				SerializeString(key, builder);
+				builder.Append(&quot;:&quot;);
+				if (!SerializeValue(value, builder)) {
+					return false;
+				}
+
+				first = false;
+			}
+
+			builder.Append(&quot;}&quot;);
+			return true;
+		}
+
+		protected bool SerializeArray(ArrayList anArray, StringBuilder builder)
+		{
+			builder.Append(&quot;[&quot;);
+
+			bool first = true;
+			for (int i = 0; i &lt; anArray.Count; i++) {
+				object value = anArray[i];
+
+				if (!first) {
+					builder.Append(&quot;, &quot;);
+				}
+
+				if (!SerializeValue(value, builder)) {
+					return false;
+				}
+
+				first = false;
+			}
+
+			builder.Append(&quot;]&quot;);
+			return true;
+		}
+
+		protected bool SerializeValue(object value, StringBuilder builder)
+		{
+			if (value is string) {
+				SerializeString((string)value, builder);
+			} else if (value is Hashtable) {
+				SerializeObject((Hashtable)value, builder);
+			} else if (value is ArrayList) {
+				SerializeArray((ArrayList)value, builder);
+			} else if (IsNumeric(value)) {
+				SerializeNumber(Convert.ToDouble(value), builder);
+			} else if ((value is Boolean) &amp;&amp; ((Boolean)value == true)) {
+				builder.Append(&quot;true&quot;);
+			} else if ((value is Boolean) &amp;&amp; ((Boolean)value == false)) {
+				builder.Append(&quot;false&quot;);
+			} else if (value == null) {
+				builder.Append(&quot;null&quot;);
+			} else {
+				return false;
+			}
+			return true;
+		}
+
+		protected void SerializeString(string aString, StringBuilder builder)
+		{
+			builder.Append(&quot;\&quot;&quot;);
+
+			char[] charArray = aString.ToCharArray();
+			for (int i = 0; i &lt; charArray.Length; i++) {
+				char c = charArray[i];
+				if (c == '&quot;') {
+					builder.Append(&quot;\\\&quot;&quot;);
+				} else if (c == '\\') {
+					builder.Append(&quot;\\\\&quot;);
+				} else if (c == '\b') {
+					builder.Append(&quot;\\b&quot;);
+				} else if (c == '\f') {
+					builder.Append(&quot;\\f&quot;);
+				} else if (c == '\n') {
+					builder.Append(&quot;\\n&quot;);
+				} else if (c == '\r') {
+					builder.Append(&quot;\\r&quot;);
+				} else if (c == '\t') {
+					builder.Append(&quot;\\t&quot;);
+				} else {
+					int codepoint = Convert.ToInt32(c);
+					if ((codepoint &gt;= 32) &amp;&amp; (codepoint &lt;= 126)) {
+						builder.Append(c);
+					} else {
+						builder.Append(&quot;\\u&quot; + Convert.ToString(codepoint, 16).PadLeft(4, '0'));
+					}
+				}
+			}
+
+			builder.Append(&quot;\&quot;&quot;);
+		}
+
+		protected void SerializeNumber(double number, StringBuilder builder)
+		{
+			builder.Append(Convert.ToString(number, CultureInfo.InvariantCulture));
+		}
+
+		/// &lt;summary&gt;
+		/// Determines if a given object is numeric in any way
+		/// (can be integer, double, etc). C# has no pretty way to do this.
+		/// &lt;/summary&gt;
+		protected bool IsNumeric(object o)
+		{
+			try {
+				Double.Parse(o.ToString());
+			} catch (Exception) {
+				return false;
+			}
+			return true;
+		}
+	}
+}
+&quot;@
+
+#ENDREGION
+
+Export-ModuleMember ConvertFrom-Json 
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

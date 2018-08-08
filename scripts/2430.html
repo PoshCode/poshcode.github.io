@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Andy Arismendi">
+    <title>New-AdUser - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-AdUser</h1>
+<h3><a href="//scripts/2430.ps1">download</a></h3>
+<p>Here is a function to create an Active Directory user. This function doesn't do nearly everything that the Quest AD cmdlet can do, however it does provide user password configuration options such as setting the 'User cannot change password' and 'Password never expires' flags. The new AD account is enabled by default when created.</p>
+<pre><code class="language-posh">function New-AdUser {
+    param (
+        [string] $Username = $(throw &quot;Parameter -Username [System.String] is required.&quot;),
+        [string] $Password = $(throw &quot;Parameter -Password [System.String] is required.&quot;),
+        [string] $OrganizationalUnit = &quot;Users&quot;,
+        [string] $DisplayName,
+        [string] $FirstName,
+        [string] $LastName,
+        [string] $Initials,
+        [string] $Description,
+        [switch] $CannotChangePassword,
+        [switch] $PasswordNeverExpires,
+        [switch] $Disabled
+    )
+    
+    try {
+        $currentDomain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+        $dn = $currentDomain.GetDirectoryEntry().distinguishedName
+        $ou = [ADSI] &quot;LDAP://CN=$OrganizationalUnit,$dn&quot;
+        
+        $userAccount = $ou.Create(&quot;user&quot;, &quot;cn=$Username&quot;)
+        $userAccount.SetInfo()
+
+        $userAccount.userAccountControl = ($userAccount.userAccountControl.Item(0) -bxor 0x0002) #Enable the account
+        $userAccount.SetInfo()
+        
+        # Properties
+        $userAccount.sAMAccountName = $Username
+        $userAccount.SetInfo()
+        
+        $userAccount.userPrincipalName = (&quot;{0}@{1}&quot; -f $Username, $currentDomain.Name)
+        if ($DisplayName) {
+            $userAccount.displayName = $DisplayName
+        }
+        
+        if ($Description) {
+            $userAccount.description = $Description
+        }
+        
+        if ($FirstName) {
+            $userAccount.givenname = $FirstName
+        }
+        
+        if ($LastName) {
+            $userAccount.sn = $LastName
+        }
+        
+        if ($Initials) {
+            $userAccount.initials = $Initials
+        }
+        $userAccount.SetInfo()
+        
+        $userAccount.SetPassword($Password)
+        
+        # Password
+        if ($PasswordNeverExpires) {
+            $userAccount.userAccountControl = ($userAccount.userAccountControl.Item(0) -bxor 0x10000)
+        }
+        
+        if ($CannotChangePassword) {
+            $everyOne = [System.Security.Principal.SecurityIdentifier]'S-1-1-0' 
+            $EveryoneDeny = new-object System.DirectoryServices.ActiveDirectoryAccessRule ($Everyone,'ExtendedRight','Deny', [System.Guid]'ab721a53-1e2f-11d0-9819-00aa0040529b')
+             
+            $self = [System.Security.Principal.SecurityIdentifier]'S-1-5-10' 
+            $SelfDeny = new-object System.DirectoryServices.ActiveDirectoryAccessRule ($self,'ExtendedRight','Deny', [System.Guid]'ab721a53-1e2f-11d0-9819-00aa0040529b') 
+
+            $userAccount.get_ObjectSecurity().AddAccessRule($selfDeny) 
+            $userAccount.get_ObjectSecurity().AddAccessRule($EveryoneDeny) 
+
+            $userAccount.CommitChanges() 
+        }
+        $userAccount.SetInfo()
+        
+        if ($Disabled) {
+            $userAccount.userAccountControl = ($userAccount.userAccountControl.Item(0) -bxor 0x0002)
+        }
+        $userAccount.SetInfo()
+                
+    } catch {
+        Write-Error $_
+                
+        #$ou.Delete(&quot;user&quot;, &quot;cn=$Username&quot;)
+        
+        return $false
+        
+    }
+    return $true
+}
+
+New-AdUser -Username bob -Password 'B0bsP4$$W0rD!@#$%' -Description &quot;Bob's account&quot; -FirstName Bob -LastName Doe -DisplayName &quot;Bob Doe&quot; -Initials R -PasswordNeverExpires -CannotChangePassword -Disabled
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

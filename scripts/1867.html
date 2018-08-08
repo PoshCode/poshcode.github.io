@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Impersonation 1.1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Impersonation 1.1</h1>
+<h3><a href="//scripts/1867.ps1">download</a> - <a href="//scripts/1856.md">parent</a></h3>
+<p>A Module to solve fileshare permission issues once and for all. Allows you to impersonate other network credentials for windows network authentication.</p>
+<p>See my blog post about &quot;using alternate credentials with the FileSystem and UNC paths in PowerShell&quot;:http://HuddledMasses.org/using-alternate-credentials-with-the-filesystem-in-powershell for details.</p>
+<pre><code class="language-posh"># Version History
+# 1.1 - Added aliases, error handling, help, and cleanup
+
+$MyInvocation.MyCommand.ScriptBlock.Module.OnRemove = { 
+   while($script:ImpContextStack.Count) { Pop-ImpersonationContext } 
+}
+
+$script:UserToysClass = Add-Type -Namespace Huddled -Name UserToys -MemberDefinition @&quot;
+   // http://msdn.microsoft.com/en-us/library/aa378184.aspx
+   [DllImport(&quot;advapi32.dll&quot;, SetLastError = true)]
+   public static extern bool LogonUser(string lpszUsername, string lpszDomain, string lpszPassword, int dwLogonType, int dwLogonProvider, ref IntPtr phToken);
+
+   // http://msdn.microsoft.com/en-us/library/aa379317.aspx
+   [DllImport(&quot;advapi32.dll&quot;, SetLastError=true)]
+   public static extern bool RevertToSelf();
+&quot;@ -passthru
+
+$script:ImpContextStack = new-object System.Collections.Generic.Stack[System.Security.Principal.WindowsImpersonationContext]
+$script:IdStack = new-object System.Collections.Generic.Stack[System.Security.Principal.WindowsIdentity]
+
+function Push-ImpersonationContext {
+&lt;#
+.SYNOPSIS
+   Sets the network credentials for the current thread
+.Description
+   Stores an identity on the stack and impersonate it for network connections
+.Parameter Credential
+   Credentials for authenticating as a new identity.
+.Parameter Name
+   A user name for authenticating as a new identity.
+.Parameter Password
+   The password (as a String or SecureString) for authenticating as a new identity
+.Parameter Domain
+   The domain which goes with the user name for authentication. This is optional, as you can specify a domain or computer name as part of the name using domain\user or user@domain syntax.
+.Parameter Passthru
+   Causes Push-ImpersonationContext to output the WindowsIdentity that it's impersonating (not the impersonation context).
+.Example
+   Push-ImpersonationContext (Get-Credential)
+.Example
+   Push-ImpersonationContext username@domain (Read-Host &quot;Password&quot; -AsSecureString)
+.Example
+   $Domain1 = Get-Credential
+   $Id1 = PushIC $Domain1 -Passthru
+#&gt;
+[CmdletBinding(DefaultParameterSetName=&quot;Credential&quot;)]
+Param(
+   [Parameter(Position=0,Mandatory=$true,ParameterSetName=&quot;Credential&quot;)]
+   [System.Management.Automation.PSCredential]$Credential
+, 
+   [Parameter(Position=0,Mandatory=$true,ParameterSetName=&quot;Identity&quot;)]
+   [Security.Principal.WindowsIdentity]$Identity
+, 
+   [Parameter(Position=0,Mandatory=$true,ParameterSetName=&quot;Password&quot;)]
+   [string]$Name
+,
+   [Parameter(Position=1,Mandatory=$true,ParameterSetName=&quot;Password&quot;)]
+   [Alias(&quot;PW&quot;)]
+   $Password = (Read-Host &quot;Password&quot; -AsSecureString)
+,
+   [Parameter(Position=2,Mandatory=$false,ParameterSetName=&quot;Password&quot;)]
+   [string]$Domain
+,
+   [Alias(&quot;PT&quot;)] 
+   [switch]$Passthru
+)
+   if(!$Identity) {
+      if(!$Credential) {
+         if($password -is [string]) {
+            $secure = New-Object System.Security.SecureString
+            $password.GetEnumerator() | %{ $secure.AppendChar( $_ ) }
+            $password = $secure
+         }
+         if($domain) {
+            $user = &quot;${name}@${domain}&quot;
+         }
+         $Credential = new-object System.Management.Automation.PSCredential $user, $password
+      }
+
+      Write-Verbose ([Security.Principal.WindowsIdentity]::GetCurrent() | Format-Table Name, Token, User, Groups -Auto | Out-String)
+
+      [IntPtr]$userToken = [Security.Principal.WindowsIdentity]::GetCurrent().Token
+      if(!$UserToysClass::LogonUser( 
+            $Credential.GetNetworkCredential().UserName, 
+            $Credential.GetNetworkCredential().Domain, 
+            $Credential.GetNetworkCredential().Password, 9, 0, [ref]$userToken)
+      ) {
+         throw (new-object System.ComponentModel.Win32Exception( [System.Runtime.InteropServices.Marshal]::GetLastWin32Error() ) )
+      }
+
+      $Identity = New-Object Security.Principal.WindowsIdentity $userToken
+   }
+   $script:IdStack.Push( $Identity )
+   
+   $context = $Identity.Impersonate()
+   $null = $script:ImpContextStack.Push( $context )
+
+   Write-Verbose ([Security.Principal.WindowsIdentity]::GetCurrent() | Format-Table Name, Token, User, Groups -Auto | Out-String)
+   
+   if($Passthru) { $script:IdStack.Peek() }
+}
+
+function Pop-ImpersonationContext {
+&lt;#
+.Synopsis
+   Remove the current impersonation context from the stack and clean it up
+.Description
+   Pops the current impersonation context from the stack and undo and dispose it, leaving the former context in place.
+.Param Passthru
+   Output the old WindowsIdentity before popping it.
+#&gt;
+   param( [switch]$Passthru )
+   trap { 
+      Write-Error &quot;Impersonation Context Stack is Empty&quot;
+      while($script:ImpContextStack.Count -lt $script:IdStack.Count) { $null = $script:IdStack.Pop() }
+      return
+   }
+   if($Passthru) { $script:IdStack.Peek() }
+   $context = $script:ImpContextStack.Pop()
+   $null = $script:IdStack.Pop()
+   
+   $context.Undo();
+   $context.Dispose();
+}
+
+function Get-ImpersonationContext {
+&lt;#
+.Synopsis
+   Display the currently active WindowsIdentity
+#&gt;
+   trap { 
+      Write-Error &quot;Impersonation Context Stack is Empty&quot;
+      return
+   }
+   Write-Host &quot;There are $($script:ImpContextStack.Count) contexts on the stack&quot;
+   while($script:ImpContextStack.Count -lt $script:IdStack.Count) { $null = $script:IdStack.Pop() }
+   if($script:ImpContextStack.Count -eq $script:IdStack.Count) {
+      $script:IdStack.Peek()
+   }
+}
+
+New-Alias popic Pop-ImpersonationContext
+New-Alias pushic Push-ImpersonationContext
+New-Alias gic Get-ImpersonationContext
+Export-ModuleMember -Function * -Alias *
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

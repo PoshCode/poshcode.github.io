@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Fred Fulford">
+    <title>2nd Line Support - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>2nd Line Support</h1>
+<h3><a href="//scripts/3069.ps1">download</a></h3>
+<p>A script to ping servers (gets the servers from a text file) &amp; report whether they are online or offline, to check free disks space on all servers and to report on any services which are set to automatic startup but are in a stopped state. It puts all this on a nicely formatted excel sheet, then saves a copy as H:\dailychecks\checks_todaysdate.xls (so if I'm not in I can review it later). It also launches my web browser (my home page is set to my company's site) so that I can check the site is up, and it imports the exchange modules as I intend eventually to add another sheet to check Exchange services, when I can figure out how to do it.</p>
+<p>Not the neatest thing in the world, but it works OK.</p>
+<pre><code class="language-posh">##Creates variable for filename
+
+$date = (get-date).tostring(&quot;yyyy-MM-dd&quot;)
+$filename = &quot;H:\dailychecks\checks_$date.xls&quot;
+
+## Imports exchange modules
+
+Import-Module &quot;\\emailserver\c$\PS Modules\vamail.videoarts.info.psm1&quot;
+
+## Start Internet Explorer to check that Video Arts website is up
+
+Start-Process iexplore.exe
+
+## Creates new excel object
+$erroractionpreference = &quot;SilentlyContinue&quot;
+$a = New-Object -comobject Excel.Application
+$a.visible = $True 
+
+##creates workbook and three worksheets. Names three worksheets.
+$b = $a.Workbooks.Add()
+$c = $b.Worksheets.Item(1)
+$d = $b.Worksheets.Item(2)
+$e = $b.Worksheets.Item(3)
+
+$b.name = &quot;$title&quot;
+$c.name = &quot;Stopped Services&quot;
+$d.name = &quot;Free Disk Space&quot;
+$e.name = &quot;Server Connectivity&quot;
+
+##Populates cells with the titles
+
+$c.Cells.Item(1,1) = &quot;STOPPED SERVICES&quot;
+$c.Cells.Item(2,1) = &quot;Machine Name&quot;
+$c.Cells.Item(2,2) = &quot;Service Name&quot;
+$c.Cells.Item(2,3) = &quot;State&quot;
+
+$d.Cells.Item(1,1) = &quot;FREE DISK SPACE&quot;
+$d.Cells.Item(2,1) = &quot;Machine Name&quot;
+$d.Cells.Item(2,2) = &quot;Drive&quot;
+$d.Cells.Item(2,3) = &quot;Total size (MB)&quot;
+$d.Cells.Item(2,4) = &quot;Free Space (MB)&quot;
+$d.Cells.Item(2,5) = &quot;Free Space (%)&quot;
+
+$e.Cells.Item(1,1) = &quot;SERVER CONNECTIVITY&quot;
+$e.Cells.Item(2,1) = &quot;Server Name&quot;
+$e.Cells.Item(2,2) = &quot;Server Status&quot;
+
+
+##Changes colours and fonts for header sections populated above 
+$c = $c.UsedRange
+$c.Interior.ColorIndex = 19
+$c.Font.ColorIndex = 11
+$c.Font.Bold = $True
+
+$d = $d.UsedRange
+$d.Interior.ColorIndex = 19
+$d.Font.ColorIndex = 11
+$d.Font.Bold = $True
+
+$e = $e.UsedRange
+$e.Interior.ColorIndex = 19
+$e.Font.ColorIndex = 11
+$e.Font.Bold = $True
+$e.EntireColumn.AutoFit()
+
+
+##sets variables for the row in which data will start populating
+$servRow = 3
+$diskRow = 3
+$pingRow = 3
+
+###Create new variable to run connectivity check###
+
+$colservers = Get-Content &quot;C:\dailychecks\Servers.txt&quot;
+foreach ($strServer in $colservers)
+##Populate computer names in first column
+{
+$e.Cells.Item($pingRow, 1) = $strServer.ToUpper()
+
+## Create new object to ping computers, if they are succesful populate cells with green/success, if anything else then red/offline
+
+$ping = new-object System.Net.NetworkInformation.Ping
+$Reply = $ping.send($strServer)
+if ($Reply.status –eq “Success”)
+{
+$rightcolor = $e.Cells.Item($pingRow, 2)
+$e.Cells.Item($pingRow, 2) = “Online”
+$rightcolor.interior.colorindex = 10
+}
+else
+{
+
+$wrongcolor = $e.Cells.Item($pingRow, 2)
+$e.Cells.Item($pingRow, 2) = &quot;Offline&quot;
+$wrongcolor.interior.colorindex = 3
+
+}
+$Reply = &quot;&quot;
+
+##Set looping variable so that one cell after another populates rather than the same cell getting overwritten
+$pingRow = $pingRow + 1
+
+##Autofit collumnn
+$e.EntireColumn.AutoFit()
+}
+##gets each computer
+$colComputers = get-content &quot;C:\dailychecks\Servers.txt&quot;
+foreach ($strComputer in $colComputers)
+{
+##gets each service with startmode 'Auto' and state 'Stopped' for each computer
+$stoppedservices = get-wmiobject Win32_service -computername $strComputer | where{$_.StartMode -eq &quot;Auto&quot; -and $_.State -eq &quot;stopped&quot;} 
+foreach ($objservice in $stoppedservices)
+
+{
+##Populates cells
+ $c.Cells.Item($servRow, 1) = $strComputer.ToUpper()
+ $c.Cells.Item($servRow, 2) = $objService.Name
+ $c.Cells.Item($servRow, 3) = $objService.State
+$servRow = $servRow + 1
+$c.EntireColumn.AutoFit()
+}
+
+##Gets disk information for each computer
+$colDisks = get-wmiobject Win32_LogicalDisk -computername $strComputer -Filter &quot;DriveType = 3&quot; 
+foreach ($objdisk in $colDisks)
+
+{
+##Populates cells
+ $d.Cells.Item($diskRow, 1) = $strComputer.ToUpper()
+ $d.Cells.Item($diskRow, 2) = $objDisk.DeviceID
+ $d.Cells.Item($diskRow, 3) = &quot;{0:N0}&quot; -f ($objDisk.Size/1024/1024)
+ $d.Cells.Item($diskRow, 4) = &quot;{0:N0}&quot; -f ($objDisk.FreeSpace/1024/1024)
+ $d.Cells.Item($diskRow, 5) = &quot;{0:P0}&quot; -f ([double]$objDisk.FreeSpace/[double]$objDisk.Size)
+$diskRow = $diskRow + 1
+$d.EntireColumn.AutoFit()
+}
+
+
+}
+
+##Saves file using Filename variable set at the top of the document
+
+$b.SaveAs($filename, 1)
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

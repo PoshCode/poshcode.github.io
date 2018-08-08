@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>ConvertTo-PseudoType - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ConvertTo-PseudoType</h1>
+<h3><a href="//scripts/2639.ps1">download</a></h3>
+<p>Converts objects to custom PSObjects with robust type support. Allows converting data from Import-CSV etc into type-safe pseudo structs ...</p>
+<pre><code class="language-posh">function ConvertTo-PseudoType {
+&lt;#
+.Synopsis
+   Converts objects to custom PSObjects with robust type support
+.Parameter TypeName
+   The name(s) of the PseudoType(s) to be inserted into the objects for the sake of formatting
+.Parameter Mapping
+   A Hashtable of property names to types (or conversion scripts)
+.Parameter InputObject
+   An object to convert.
+.Example
+   Get-ChildItem | Where { !$_.PsIsContainer } | Export-CSV files.csv
+   ## Given that a CSV file of file information exists, 
+   ## And we want to rehydrate it and be able to compare things...
+   ## We need to create a mapping of properties to types
+   ## Optionally, we can provide scriptblocks to convert instances
+   $Mapping = @{ 
+      Attributes         = [System.IO.FileAttributes]
+      CreationTime       = [System.DateTime]
+      CreationTimeUtc    = [System.DateTime]
+      Directory          = [System.IO.DirectoryInfo]
+      DirectoryName      = [System.String]
+      Exists             = [System.Boolean]
+      Extension          = [System.String]
+      FullName           = [System.String]
+      IsReadOnly         = [System.Boolean]
+      LastAccessTime     = [System.DateTime]
+      LastAccessTimeUtc  = [System.DateTime]
+      LastWriteTime      = [System.DateTime]
+      LastWriteTimeUtc   = [System.DateTime]
+      Length             = [System.Int64]
+      Name               = [System.String]
+      PSChildName        = [System.String]
+      PSDrive            = [System.Management.Automation.PSDriveInfo]
+      PSIsContainer      = [System.Boolean]
+      PSParentPath       = [System.String]
+      PSPath             = [System.String]
+      PSProvider         = { Get-PSProvider $_ }
+      ReparsePoint       = [System.Management.Automation.PSCustomObject]
+      VersionInfo        = [System.Diagnostics.FileVersionInfo]
+   }
+   
+   ## When we import, we the Selected.System.IO.FileInfo, which is what you'd get from | Select *
+   Import-CSV | ConvertTo-PseudoType Selected.System.IO.FileInfo $Mapping
+   
+   ## That way, the output will look as though you had run:
+   Get-ChildItem | Where { !$_.PsIsContainer } | Select *
+   
+   NOTE: Not all types are rehydrateable from CSV output -- the &quot;VersionInfo&quot; will be hydrated as a string...
+#&gt;
+[CmdletBinding()]
+param(
+   [Parameter(Mandatory=$true, Position=0)]
+   [Alias(&quot;Name&quot;,&quot;Tn&quot;)]
+   [String]$TypeName
+,
+   [Parameter(Mandatory=$true, Position=1)]
+   [Hashtable]$Mapping
+,
+   [Parameter(Mandatory=$true, Position=99, ValueFromPipeline=$true)]
+   [PSObject[]]$InputObject
+)
+begin {
+   $MappingFunction = @{}
+   foreach($key in $($Mapping.Keys)) {
+      $MappingFunction.$Key = {$_.$Key -as $Mapping.$Key}
+   }
+}
+process {
+   foreach($IO in $InputObject) {
+      $Properties = @{}
+      foreach($key in $($Mapping.Keys)) {
+         if($Mapping.$Key -is [ScriptBlock]) {
+            $Properties.$Key = $IO.$Key | ForEach-Object $Mapping.$Key
+         } elseif($Mapping.$Key -is [Type]) {
+            if($Value = $IO.$Key -as $Mapping.$Key) {
+               $Properties.$Key = $Value
+            } else {
+               $Properties.$Key = $IO.$Key
+            }
+         } else {
+            $Properties.$Key = [PSObject]$IO.$Key
+         }
+      }
+      New-Object PSObject -Property $Properties | %{ $_.PSTypeNames.Insert(0, $TypeName); $_ }
+    }
+}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

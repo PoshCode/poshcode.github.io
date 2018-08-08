@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>PowerBot 2.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PowerBot 2.0</h1>
+<h3><a href="//scripts/1236.ps1">download</a> - <a href="//scripts/728.md">parent</a></h3>
+<p>PowerBot is my IRC bot written in PowerShell script using &quot;SmartIrc4Net&quot;:http://smartirc4net.meebey.net/  There's a bit more to it than this, but this is the basic script, and all you have to do is add your own commands!  Of course, you could also add your own additional message handlers and make a chatter-bot or whatever you like. Please share your mods back here!</p>
+<pre><code class="language-posh">## This script requires ...\WindowsPowerShell\Libraries\Meebey.SmartIrc4net.dll
+## You can get Meebey.SmartIrc4net.dll from 
+## http://voxel.dl.sourceforge.net/sourceforge/smartirc4net/SmartIrc4net-0.4.0.bin.tar.bz2
+## And the docs are at http://smartirc4net.meebey.net/docs/0.4.0/html/
+############################################################################################
+## Configure with a .psd1 file for the module, with Private data like:
+## FunctionsToExport = 'Start-PowerBot', 'Resume-PowerBot', 'Stop-PowerBot'
+## RequiredAssemblies = 'Meebey.SmartIrc4net.dll', 'Starksoft.Net.Proxy.dll'
+## PrivateData = @{
+##    Nick = @('ABot', 'PowershellBot')
+##    RealName = 'Jaykul''s PowerShell Bot'
+##    Pass = 'bot'
+##    Server = &quot;irc.freenode.net&quot;
+##    Port = 8001
+##    Channels = @('#PowerShell')
+## #  ProxyServer = &quot;www.proxy.com&quot;
+## #  ProxyPort = &quot;8000&quot;
+## }
+############################################################################################
+## Add-Type -path $ProfileDir\Libraries\Meebey.SmartIrc4net.dll
+## $null = [Reflection.Assembly]::LoadFrom(&quot;$ProfileDir\Libraries\Meebey.SmartIrc4net.dll&quot;)
+
+function Start-PowerBot {
+[CmdletBinding()]
+PARAM(
+  [Parameter(Position=0)]
+  [string[]]$channels = $ExecutionContext.SessionState.Module.PrivateData.Channels
+,
+  [Parameter(Position=1)]
+  [string[]]$nick     = $ExecutionContext.SessionState.Module.PrivateData.Nick
+,
+  [Parameter(Position=2)]
+  [string]$password   = $ExecutionContext.SessionState.Module.PrivateData.Password
+,
+  [Parameter(Position=5)]
+  [string]$server     = $ExecutionContext.SessionState.Module.PrivateData.Server
+,
+  [Parameter(Position=6)]
+  [int]$port          = $ExecutionContext.SessionState.Module.PrivateData.Port
+,
+  [Parameter(Position=10)]
+  [string]$realname   = $ExecutionContext.SessionState.Module.PrivateData.RealName
+,
+  [Parameter(Position=5)]
+  [string]$ProxyServer= $ExecutionContext.SessionState.Module.PrivateData.ProxyServer
+,
+  [Parameter(Position=6)]
+  [int]$ProxyPort     = $ExecutionContext.SessionState.Module.PrivateData.ProxyPort
+)
+
+   Write-Host &quot;Private Data:`n`n$( $ExecutionContext.SessionState.Module.PrivateData | Out-String )&quot; -Fore Cyan
+   Write-Host &quot;Proxy Server: $ProxyServer, $ProxyPort&quot; -Fore Yellow
+
+   if(!$global:irc) {  
+      $global:irc = New-Object Meebey.SmartIrc4net.IrcClient
+      
+      if($ProxyServer) {
+         $global:proxy = New-Object Starksoft.Net.Proxy.HttpProxyClient $ProxyServer, $ProxyPort
+         Write-Host &quot;Creating Proxy: ${global:proxy}&quot;
+         $global:irc.Proxy = $global:proxy
+      }
+      # $irc.Encoding = [Text.Encoding]::UTF8
+      # $irc will track channels for us
+      $irc.ActiveChannelSyncing = $true   
+      $irc.Add_OnError( {Write-Error $_.ErrorMessage} )
+      $irc.Add_OnQueryMessage( {OnQueryMessage_ProcessCommands} )
+      $irc.Add_OnChannelMessage( {OnChannelMessage_ProcessCommands} )
+      $irc.Add_OnChannelMessage( {OnChannelMessage_ResolveUrls} )
+   }
+   
+   $irc.Connect($server, $port)
+   $irc.SendDelay = 300
+   $irc.Login($nick, $realname, 0, $nick[0], $password)
+   ## $channels | % { $irc.RfcJoin( $_ ) }
+   foreach($channel in $channels) { $irc.RfcJoin( $channel ) }
+
+   $global:PBC = Get-BotCommands
+
+   Resume-PowerBot # Shortcut so starting this thing up only takes one command
+}
+
+## Note that PowerBot stops listening if you press a key ...
+## You'll have to re-run Resume-Powerbot to get him to listen again
+function Resume-PowerBot {
+   while(!$Host.UI.RawUI.KeyAvailable) { $irc.Listen($false) }
+}
+
+function Stop-PowerBot {
+[CmdletBinding()]
+PARAM(
+  [Parameter(Position=0)]
+  [string]$QuitMessage = &quot;If people listened to themselves more often, they would talk less.&quot;
+)
+   $irc.RfcQuit($QuitMessage)
+   sleep 2
+   $irc.Disconnect()
+}
+
+
+function Resolve-Parameters {
+Param($command)
+   $Tokens = [System.Management.Automation.PSParser]::Tokenize($command,[ref]$null)
+   for($t = $Tokens.Count; $t -ge 0; $t--) {
+      # DEBUG $token | fl * | out-host
+      if($Tokens[$t].Type -eq &quot;CommandParameter&quot;) {
+         $token = $Tokens[$t]
+         for($c = $t; $c -ge 0; $c--) {
+            if( $Tokens[$c].Type -eq &quot;Command&quot; ) {
+               $cmd = which $Tokens[$c].Content
+               # if($cmd.CommandType -eq &quot;Alias&quot;) {
+                  # $cmd = @(which $cmd.Definition)[0]
+               # }
+               $short = $token.Content -replace &quot;^-?&quot;,&quot;^&quot;
+               Write-Debug &quot;Parameter $short&quot;
+               $parameters = $cmd.ParameterSets | Select -expand Parameters
+               $param = @($parameters | Where-Object { $_.Name -match $short -or $_.Aliases -match $short} | Select -Expand Name -Unique)
+               if(&quot;Verbose&quot;,&quot;Debug&quot;,&quot;WarningAction&quot;,&quot;WarningVariable&quot;,&quot;ErrorAction&quot;,&quot;ErrorVariable&quot;,&quot;OutVariable&quot;,&quot;OutBuffer&quot;,&quot;WhatIf&quot;,&quot;Confirm&quot; -contains $param ) {
+                  $command = $command.Remove( $token.Start, $token.Length )
+               } elseif($param.Count -eq 1) {
+                  $command = $command.Remove( $token.Start, $token.Length ).Insert( $token.Start, &quot;-$($param[0])&quot; )
+               }
+               break
+            }
+         }
+      }
+   }
+   return $command
+}
+
+function Bind-Parameters {
+Param([string[]]$params)
+   $bound = @{}
+   $unbound = @()
+
+   while($params) {
+      Write-Host &quot;$params&quot;
+      [string]$name, [string]$value, $params = @($params)
+      if($name.StartsWith(&quot;-&quot;)) {
+         $name = $name.trim(&quot;-&quot;,&quot; &quot;)
+         if($value.StartsWith(&quot;-&quot;)) {
+            $bound[$name.trim(&quot;-&quot;,&quot; &quot;)] = New-Object System.Management.Automation.SwitchParameter $true
+            $params = @($value) + $params
+         } else {            
+            $bound[$name] = $value      
+         }
+      } else {
+         $unbound += &quot;$name&quot;
+         if($value) {
+            $params = @($value) + $params
+         }
+      }
+   }
+   $bound, $unbound
+}
+
+####################################################################################################
+## Event Handlers
+####################################################################################################
+## Event handlers in powershell have TWO automatic variables: $This and $_
+##   In the case of SmartIrc4Net:
+##   $This  - usually the connection, and such ...
+##   $_     - the IrcEventArgs, which just has the Data member:
+##
+
+function OnQueryMessage_ProcessCommands { 
+   $Data = $_.Data
+   Write-Verbose $Data.From
+   # Write-Verbose $Data.Message
+   Write-Debug $( $Data | Out-String )
+   # Write-Debug $( $Data | Get-Member | Out-String )
+   
+   $command, $params = $Data.MessageArray
+   Write-Verbose &quot;`nCommand: $command `nParams: $params&quot;
+   if($PBC.ContainsKey($command)) {
+      $Command, $Params = (Resolve-Parameters $((@($command) + @($Params)) -join &quot; &quot;)) -split &quot; +&quot;
+      $bound, $unbound = Bind-Parameters @($params)
+      trap { Write-Error &quot;Error in ProcessCommands:`n$($_|out-string)&quot;; Continue }
+      Write-Debug &quot;$Data | `&amp;$($PBC[$command]) $bound $unbound&quot;
+      $Data | &amp;$PBC[$command] @bound @unbound | 
+         Out-String -width (510 - $Data.From.Length - $nick.Length - 3) | 
+            % { $_.Trim().Split(&quot;`n&quot;) | %{ $irc.SendMessage(&quot;Message&quot;, $Data.Nick, $_.Trim() ) }}
+   }
+}
+
+function OnChannelMessage_ProcessCommands {
+   $Data = $_.Data
+   Write-Verbose $Data.From
+   # Write-Verbose $Data.Channel
+   # Write-Verbose $Data.Message   
+   Write-Debug $($Data | Out-String)
+   # Write-Debug $($Data | Get-Member | Out-String)
+   
+   [string]$command, [string[]]$params = $Data.MessageArray
+   if($PBC.ContainsKey($command)) {
+      $Command, $Params = (Resolve-Parameters $((@($command) + @($Params)) -join &quot; &quot;)) -split &quot; +&quot;
+      $bound, $unbound = Bind-Parameters @params
+      trap { Write-Error &quot;Error in ProcessCommands:`n$($_|out-string)&quot;; Continue }
+      Write-Debug &quot;$Data | `&amp;$($PBC[$command]) $bound $unbound&quot;
+      $Data | &amp;$PBC[$command] @bound @unbound |
+         Out-String -width (510 - $Data.Channel.Length - $nick.Length - 3) | 
+            % { $_.Trim().Split(&quot;`n&quot;) | %{ $irc.SendMessage(&quot;Message&quot;, $Data.Channel, $_.Trim() ) }}
+   }
+}
+
+function OnChannelMessage_ResolveUrls {
+   $c = $_.Data.Channel
+   $n = $_.Data.Nick
+   $m = $_.Data.Message
+   Resolve-URL $m | % { $irc.SendMessage(&quot;Message&quot;, $c, &quot;&lt;$($n)&gt; $_&quot; ) }
+
+}
+
+
+Import-Module &quot;$PSScriptRoot\PowerBotCommands.psm1&quot; -Force
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

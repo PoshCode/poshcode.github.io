@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Public Domain">
+    <title>Saturated arithmetic 2.1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Saturated arithmetic 2.1</h1>
+<h3><a href="//scripts/5415.ps1">download</a> - <a href="//scripts/5414.md">parent</a></h3>
+<p>Saturated addition, subtraction, multiplication, and casting from numeric types to integer types using clamping to handle overflows.</p>
+<pre><code class="language-posh">&lt;#
+Version 2.1:
+- fixes a couple of typos
+
+After loading, use it like (where [T] is a primitive integer type):
+
+[sat[T]]::From($a)
+[sat[T]]::Add($a,$b)
+[sat[T]]::Sub($a,$b)
+[sat[T]]::Mul($a,$b)
+
+#&gt;
+
+Add-Type -ReferencedAssemblies System.Numerics -TypeDefinition @'
+using System;
+using System.Numerics;
+
+public static class sat&lt;T&gt; where T : struct, IComparable&lt;T&gt;, IEquatable&lt;T&gt;, IConvertible {
+	internal static readonly Func&lt;T,T,T&gt; add_;
+	internal static readonly Func&lt;T,T,T&gt; sub_;
+	internal static readonly Func&lt;T,T,T&gt; mul_;
+	internal static readonly Func&lt;sbyte,T&gt; i8_;
+	internal static readonly Func&lt;byte,T&gt; u8_;
+	internal static readonly Func&lt;short,T&gt; i16_;
+	internal static readonly Func&lt;ushort,T&gt; u16_;
+	internal static readonly Func&lt;int,T&gt; i32_;
+	internal static readonly Func&lt;uint,T&gt; u32_;
+	internal static readonly Func&lt;long,T&gt; i64_;
+	internal static readonly Func&lt;ulong,T&gt; u64_;
+	internal static readonly Func&lt;float,T&gt; f32_;
+	internal static readonly Func&lt;double,T&gt; f64_;
+	internal static readonly Func&lt;decimal,T&gt; m_;
+	internal static readonly Func&lt;BigInteger,T&gt; b_;
+
+	public static T Add(T a, T b) { return add_(a, b); }
+	public static T Sub(T a, T b) { return sub_(a, b); }
+	public static T Mul(T a, T b) { return mul_(a, b); }
+
+	public static T From(sbyte value) { return i8_(value); }
+	public static T From(byte value) { return u8_(value); }
+	public static T From(short value) { return i16_(value); }
+	public static T From(ushort value) { return u16_(value); }
+	public static T From(int value) { return i32_(value); }
+	public static T From(uint value) { return u32_(value); }
+	public static T From(long value) { return i64_(value); }
+	public static T From(ulong value) { return u64_(value); }
+	public static T From(float value) { return f32_(value); }
+	public static T From(double value) { return f64_(value); }
+	public static T From(decimal value) { return m_(value); }
+	public static T From(BigInteger value) { return b_(value); }
+
+	static sat() {unchecked{
+		add_ = (Func&lt;sbyte,sbyte,sbyte&gt;)((sbyte a, sbyte b) =&gt; {
+			int ret = a + b;
+			if (ret &gt; sbyte.MaxValue) ret = sbyte.MaxValue;
+			if (ret &lt; sbyte.MinValue) ret = sbyte.MinValue;
+			return (sbyte)ret;
+		}) as Func&lt;T,T,T&gt;;
+		if (add_ != null) {
+			sub_ = (Func&lt;sbyte,sbyte,sbyte&gt;)((sbyte a, sbyte b) =&gt; {
+				int ret = a - b;
+				if (ret &gt; sbyte.MaxValue) ret = sbyte.MaxValue;
+				if (ret &lt; sbyte.MinValue) ret = sbyte.MinValue;
+				return (sbyte)ret;
+			}) as Func&lt;T,T,T&gt;;
+			mul_ = (Func&lt;sbyte,sbyte,sbyte&gt;)((sbyte a, sbyte b) =&gt; {
+				int ret = a * b;
+				if (ret &gt; sbyte.MaxValue) ret = sbyte.MaxValue;
+				if (ret &lt; sbyte.MinValue) ret = sbyte.MinValue;
+				return (sbyte)ret;
+			}) as Func&lt;T,T,T&gt;;
+			i8_ = (Func&lt;sbyte,sbyte&gt;)((sbyte value) =&gt; { return value; }) as Func&lt;sbyte,T&gt;;
+			u8_ = (Func&lt;byte,sbyte&gt;)((byte value) =&gt; { return (sbyte)value &gt;= 0 ? (sbyte)value : sbyte.MaxValue; }) as Func&lt;byte,T&gt;;
+			i16_ = (Func&lt;short,sbyte&gt;)((short value) =&gt; { return value &lt;= sbyte.MinValue ? sbyte.MinValue : value &lt;= sbyte.MaxValue ? (sbyte)value : sbyte.MaxValue; }) as Func&lt;short,T&gt;;
+			u16_ = (Func&lt;ushort,sbyte&gt;)((ushort value) =&gt; { return value &lt;= sbyte.MaxValue ? (sbyte)value : sbyte.MaxValue; }) as Func&lt;ushort,T&gt;;
+			i32_ = (Func&lt;int,sbyte&gt;)((int value) =&gt; { return value &lt;= sbyte.MinValue ? sbyte.MinValue : value &lt;= sbyte.MaxValue ? (sbyte)value : sbyte.MaxValue; }) as Func&lt;int,T&gt;;
+			u32_ = (Func&lt;uint,sbyte&gt;)((uint value) =&gt; { return value &lt;= (byte)sbyte.MaxValue ? (sbyte)value : sbyte.MaxValue; }) as Func&lt;uint,T&gt;;
+			i64_ = (Func&lt;long,sbyte&gt;)((long value) =&gt; { return value &lt;= sbyte.MinValue ? sbyte.MinValue : value &lt;= sbyte.MaxValue ? (sbyte)value : sbyte.MaxValue; }) as Func&lt;long,T&gt;;
+			u64_ = (Func&lt;ulong,sbyte&gt;)((ulong value) =&gt; { return value &lt;= (byte)sbyte.MaxValue ? (sbyte)value : sbyte.MaxValue; }) as Func&lt;ulong,T&gt;;
+			f32_ = (Func&lt;float,sbyte&gt;)((float value) =&gt; { return value &lt;= sbyte.MinValue ? sbyte.MinValue : value &gt;= sbyte.MaxValue ? sbyte.MaxValue : checked((sbyte)value); }) as Func&lt;float,T&gt;;
+			f64_ = (Func&lt;double,sbyte&gt;)((double value) =&gt; { return value &lt;= sbyte.MinValue ? sbyte.MinValue : value &gt;= sbyte.MaxValue ? sbyte.MaxValue : checked((sbyte)value); }) as Func&lt;double,T&gt;;
+			m_ = (Func&lt;decimal,sbyte&gt;)((decimal value) =&gt; { return value &lt;= sbyte.MinValue ? sbyte.MinValue : value &gt;= sbyte.MaxValue ? sbyte.MaxValue : (sbyte)value; }) as Func&lt;decimal,T&gt;;
+			b_ = (Func&lt;BigInteger,sbyte&gt;)((BigInteger value) =&gt; { return value &lt;= (long)sbyte.MinValue ? sbyte.MinValue : value &gt;= (long)sbyte.MaxValue ? sbyte.MaxValue : (sbyte)value; }) as Func&lt;BigInteger,T&gt;;
+			return;
+		}
+
+		add_ = (Func&lt;byte,byte,byte&gt;)((byte a, byte b) =&gt; {
+			int ret = a + b;
+			if (ret &gt; byte.MaxValue) ret = byte.MaxValue;
+			return (byte)ret;
+		}) as Func&lt;T,T,T&gt;;
+		if (add_ != null) {
+			sub_ = (Func&lt;byte,byte,byte&gt;)((byte a, byte b) =&gt; {
+				int ret = a - b;
+				if (ret &lt; 0) ret = 0;
+				return (byte)ret;
+			}) as Func&lt;T,T,T&gt;;
+			mul_ = (Func&lt;byte,byte,byte&gt;)((byte a, byte b) =&gt; {
+				int ret = a * b;
+				if (ret &gt; byte.MaxValue) ret = byte.MaxValue;
+				return (byte)ret;
+			}) as Func&lt;T,T,T&gt;;
+			i8_ = (Func&lt;sbyte,byte&gt;)((sbyte value) =&gt; { return value &gt;= 0 ? (byte)value : (byte)0; }) as Func&lt;sbyte,T&gt;;
+			u8_ = (Func&lt;byte,byte&gt;)((byte value) =&gt; { return value; }) as Func&lt;byte,T&gt;;
+			i16_ = (Func&lt;short,byte&gt;)((short value) =&gt; { return value &lt;= 0 ? (byte)0 : value &lt;= byte.MaxValue ? (byte)value : byte.MaxValue; }) as Func&lt;short,T&gt;;
+			u16_ = (Func&lt;ushort,byte&gt;)((ushort value) =&gt; { return value &lt;= byte.MaxValue ? (byte)value : byte.MaxValue; }) as Func&lt;ushort,T&gt;;
+			i32_ = (Func&lt;int,byte&gt;)((int value) =&gt; { return value &lt;= 0 ? (byte)0 : value &lt;= byte.MaxValue ? (byte)value : byte.MaxValue; }) as Func&lt;int,T&gt;;
+			u32_ = (Func&lt;uint,byte&gt;)((uint value) =&gt; { return value &lt;= byte.MaxValue ? (byte)value : byte.MaxValue; }) as Func&lt;uint,T&gt;;
+			i64_ = (Func&lt;long,byte&gt;)((long value) =&gt; { return value &lt;= 0 ? (byte)0 : value &lt;= byte.MaxValue ? (byte)value : byte.MaxValue; }) as Func&lt;long,T&gt;;
+			u64_ = (Func&lt;ulong,byte&gt;)((ulong value) =&gt; { return value &lt;= byte.MaxValue ? (byte)value : byte.MaxValue; }) as Func&lt;ulong,T&gt;;
+			f32_ = (Func&lt;float,byte&gt;)((float value) =&gt; { return value &lt;= 0 ? (byte)0 : value &gt;= byte.MaxValue ? byte.MaxValue : checked((byte)value); }) as Func&lt;float,T&gt;;
+			f64_ = (Func&lt;double,byte&gt;)((double value) =&gt; { return value &lt;= 0 ? (byte)0 : value &gt;= byte.MaxValue ? byte.MaxValue : checked((byte)value); }) as Func&lt;double,T&gt;;
+			m_ = (Func&lt;decimal,byte&gt;)((decimal value) =&gt; { return value &lt;= 0 ? (byte)0 : value &gt;= byte.MaxValue ? byte.MaxValue : (byte)value; }) as Func&lt;decimal,T&gt;;
+			b_ = (Func&lt;BigInteger,byte&gt;)((BigInteger value) =&gt; { return value.Sign &lt;= 0 ? (byte)0 : value &gt;= (long)byte.MaxValue ? byte.MaxValue : (byte)value; }) as Func&lt;BigInteger,T&gt;;
+			return;
+		}
+
+		add_ = (Func&lt;short,short,short&gt;)((short a, short b) =&gt; {
+			int ret = a + b;
+			if (ret &gt; short.MaxValue) ret = short.MaxValue;
+			if (ret &lt; short.MinValue) ret = short.MinValue;
+			return (short)ret;
+		}) as Func&lt;T,T,T&gt;;
+		if (add_ != null) {
+			sub_ = (Func&lt;short,short,short&gt;)((short a, short b) =&gt; {
+				int ret = a - b;
+				if (ret &gt; short.MaxValue) ret = short.MaxValue;
+				if (ret &lt; short.MinValue) ret = short.MinValue;
+				return (short)ret;
+			}) as Func&lt;T,T,T&gt;;
+			mul_ = (Func&lt;short,short,short&gt;)((short a, short b) =&gt; {
+				int ret = a * b;
+				if (ret &gt; short.MaxValue) ret = short.MaxValue;
+				if (ret &lt; short.MinValue) ret = short.MinValue;
+				return (short)ret;
+			}) as Func&lt;T,T,T&gt;;
+			i8_ = (Func&lt;sbyte,short&gt;)((sbyte value) =&gt; { return value; }) as Func&lt;sbyte,T&gt;;
+			u8_ = (Func&lt;byte,short&gt;)((byte value) =&gt; { return value; }) as Func&lt;byte,T&gt;;
+			i16_ = (Func&lt;short,short&gt;)((short value) =&gt; { return value; }) as Func&lt;short,T&gt;;
+			u16_ = (Func&lt;ushort,short&gt;)((ushort value) =&gt; { return value &gt;= 0 ? (short)value : short.MaxValue; }) as Func&lt;ushort,T&gt;;
+			i32_ = (Func&lt;int,short&gt;)((int value) =&gt; { return value &lt;= short.MinValue ? short.MinValue : value &lt;= short.MaxValue ? (short)value : short.MaxValue; }) as Func&lt;int,T&gt;;
+			u32_ = (Func&lt;uint,short&gt;)((uint value) =&gt; { return value &lt;= (ushort)short.MaxValue ? (short)value : short.MaxValue; }) as Func&lt;uint,T&gt;;
+			i64_ = (Func&lt;long,short&gt;)((long value) =&gt; { return value &lt;= short.MinValue ? short.MinValue : value &lt;= short.MaxValue ? (short)value : short.MaxValue; }) as Func&lt;long,T&gt;;
+			u64_ = (Func&lt;ulong,short&gt;)((ulong value) =&gt; { return value &lt;= (ushort)short.MaxValue ? (short)value : short.MaxValue; }) as Func&lt;ulong,T&gt;;
+			f32_ = (Func&lt;float,short&gt;)((float value) =&gt; { return value &lt;= short.MinValue ? short.MinValue : value &gt;= short.MaxValue ? short.MaxValue : checked((short)value); }) as Func&lt;float,T&gt;;
+			f64_ = (Func&lt;double,short&gt;)((double value) =&gt; { return value &lt;= short.MinValue ? short.MinValue : value &gt;= short.MaxValue ? short.MaxValue : checked((short)value); }) as Func&lt;double,T&gt;;
+			m_ = (Func&lt;decimal,short&gt;)((decimal value) =&gt; { return value &lt;= short.MinValue ? short.MinValue : value &gt;= short.MaxValue ? short.MaxValue : (short)value; }) as Func&lt;decimal,T&gt;;
+			b_ = (Func&lt;BigInteger,short&gt;)((BigInteger value) =&gt; { return value &lt;= (long)short.MinValue ? short.MinValue : value &gt;= (long)short.MaxValue ? short.MaxValue : (short)value; }) as Func&lt;BigInteger,T&gt;;
+			return;
+		}
+
+		add_ = (Func&lt;ushort,ushort,ushort&gt;)((ushort a, ushort b) =&gt; {
+			int ret = a + b;
+			if (ret &gt; ushort.MaxValue) ret = ushort.MaxValue;
+			return (ushort)ret;
+		}) as Func&lt;T,T,T&gt;;
+		if (add_ != null) {
+			sub_ = (Func&lt;ushort,ushort,ushort&gt;)((ushort a, ushort b) =&gt; {
+				int ret = a - b;
+				if (ret &lt; 0) ret = 0;
+				return (ushort)ret;
+			}) as Func&lt;T,T,T&gt;;
+			mul_ = (Func&lt;ushort,ushort,ushort&gt;)((ushort a, ushort b) =&gt; {
+				uint ret = (uint)a * (uint)b;
+				if (ret &gt; ushort.MaxValue) ret = ushort.MaxValue;
+				return (ushort)ret;
+			}) as Func&lt;T,T,T&gt;;
+			i8_ = (Func&lt;sbyte,ushort&gt;)((sbyte value) =&gt; { return value &gt;= 0 ? (ushort)value : (ushort)0; }) as Func&lt;sbyte,T&gt;;
+			u8_ = (Func&lt;byte,ushort&gt;)((byte value) =&gt; { return value; }) as Func&lt;byte,T&gt;;
+			i16_ = (Func&lt;short,ushort&gt;)((short value) =&gt; { return value &gt;= 0 ? (ushort)value : (ushort)0; }) as Func&lt;short,T&gt;;
+			u16_ = (Func&lt;ushort,ushort&gt;)((ushort value) =&gt; { return value; }) as Func&lt;ushort,T&gt;;
+			i32_ = (Func&lt;int,ushort&gt;)((int value) =&gt; { return value &lt;= 0 ? (ushort)0 : value &lt;= ushort.MaxValue ? (ushort)value : ushort.MaxValue; }) as Func&lt;int,T&gt;;
+			u32_ = (Func&lt;uint,ushort&gt;)((uint value) =&gt; { return value &lt;= ushort.MaxValue ? (ushort)value : ushort.MaxValue; }) as Func&lt;uint,T&gt;;
+			i64_ = (Func&lt;long,ushort&gt;)((long value) =&gt; { return value &lt;= 0 ? (ushort)0 : value &lt;= ushort.MaxValue ? (ushort)value : ushort.MaxValue; }) as Func&lt;long,T&gt;;
+			u64_ = (Func&lt;ulong,ushort&gt;)((ulong value) =&gt; { return value &lt;= ushort.MaxValue ? (ushort)value : ushort.MaxValue; }) as Func&lt;ulong,T&gt;;
+			f32_ = (Func&lt;float,ushort&gt;)((float value) =&gt; { return value &lt;= 0 ? (ushort)0 : value &gt;= ushort.MaxValue ? ushort.MaxValue : checked((ushort)value); }) as Func&lt;float,T&gt;;
+			f64_ = (Func&lt;double,ushort&gt;)((double value) =&gt; { return value &lt;= 0 ? (ushort)0 : value &gt;= ushort.MaxValue ? ushort.MaxValue : checked((ushort)value); }) as Func&lt;double,T&gt;;
+			m_ = (Func&lt;decimal,ushort&gt;)((decimal value) =&gt; { return value &lt;= 0 ? (ushort)0 : value &gt;= ushort.MaxValue ? ushort.MaxValue : (ushort)value; }) as Func&lt;decimal,T&gt;;
+			b_ = (Func&lt;BigInteger,ushort&gt;)((BigInteger value) =&gt; { return value.Sign &lt;= 0 ? (ushort)0 : value &gt;= (long)ushort.MaxValue ? ushort.MaxValue : (ushort)value; }) as Func&lt;BigInteger,T&gt;;
+			return;
+		}
+
+		add_ = (Func&lt;int,int,int&gt;)((int a, int b) =&gt; {
+			long ret = (long)a + (long)b;
+			if (ret &gt; int.MaxValue) ret = int.MaxValue;
+			if (ret &lt; int.MinValue) ret = int.MinValue;
+			return (int)ret;
+		}) as Func&lt;T,T,T&gt;;
+		if (add_ != null) {
+			sub_ = (Func&lt;int,int,int&gt;)((int a, int b) =&gt; {
+				long ret = (long)a - (long)b;
+				if (ret &gt; int.MaxValue) ret = int.MaxValue;
+				if (ret &lt; int.MinValue) ret = int.MinValue;
+				return (int)ret;
+			}) as Func&lt;T,T,T&gt;;
+			mul_ = (Func&lt;int,int,int&gt;)((int a, int b) =&gt; {
+				long ret = (long)a * (long)b;
+				if (ret &gt; int.MaxValue) ret = int.MaxValue;
+				if (ret &lt; int.MinValue) ret = int.MinValue;
+				return (int)ret;
+			}) as Func&lt;T,T,T&gt;;
+			i8_ = (Func&lt;sbyte,int&gt;)((sbyte value) =&gt; { return value; }) as Func&lt;sbyte,T&gt;;
+			u8_ = (Func&lt;byte,int&gt;)((byte value) =&gt; { return value; }) as Func&lt;byte,T&gt;;
+			i16_ = (Func&lt;short,int&gt;)((short value) =&gt; { return value; }) as Func&lt;short,T&gt;;
+			u16_ = (Func&lt;ushort,int&gt;)((ushort value) =&gt; { return value; }) as Func&lt;ushort,T&gt;;
+			i32_ = (Func&lt;int,int&gt;)((int value) =&gt; { return value; }) as Func&lt;int,T&gt;;
+			u32_ = (Func&lt;uint,int&gt;)((uint value) =&gt; { return (int)value &gt;= 0 ? (int)value : int.MaxValue; }) as Func&lt;uint,T&gt;;
+			i64_ = (Func&lt;long,int&gt;)((long value) =&gt; { return value &lt;= int.MinValue ? int.MinValue : value &lt;= int.MaxValue ? (int)value : int.MaxValue; }) as Func&lt;long,T&gt;;
+			u64_ = (Func&lt;ulong,int&gt;)((ulong value) =&gt; { return value &lt;= (uint)int.MaxValue ? (int)value : int.MaxValue; }) as Func&lt;ulong,T&gt;;
+			f32_ = (Func&lt;float,int&gt;)((float value) =&gt; { return value &lt;= int.MinValue ? int.MinValue : value &gt;= -(float)int.MinValue ? int.MaxValue : checked((int)value); }) as Func&lt;float,T&gt;;
+			f64_ = (Func&lt;double,int&gt;)((double value) =&gt; { return value &lt;= int.MinValue ? int.MinValue : value &gt;= int.MaxValue ? int.MaxValue : checked((int)value); }) as Func&lt;double,T&gt;;
+			m_ = (Func&lt;decimal,int&gt;)((decimal value) =&gt; { return value &lt;= int.MinValue ? int.MinValue : value &gt;= int.MaxValue ? int.MaxValue : (int)value; }) as Func&lt;decimal,T&gt;;
+			b_ = (Func&lt;BigInteger,int&gt;)((BigInteger value) =&gt; { return value &lt;= (long)int.MinValue ? int.MinValue : value &gt;= (long)int.MaxValue ? int.MaxValue : (int)value; }) as Func&lt;BigInteger,T&gt;;
+			return;
+		}
+
+		add_ = (Func&lt;uint,uint,uint&gt;)((uint a, uint b) =&gt; {
+			ulong ret = (ulong)a + (ulong)b;
+			if (ret &gt; uint.MaxValue) ret = uint.MaxValue;
+			return (uint)ret;
+		}) as Func&lt;T,T,T&gt;;
+		if (add_ != null) {
+			sub_ = (Func&lt;uint,uint,uint&gt;)((uint a, uint b) =&gt; {
+				long ret = (long)a - (long)b;
+				if (ret &lt; 0) ret = 0;
+				return (uint)ret;
+			}) as Func&lt;T,T,T&gt;;
+			mul_ = (Func&lt;uint,uint,uint&gt;)((uint a, uint b) =&gt; {
+				ulong ret = (ulong)a * (ulong)b;
+				if (ret &gt; uint.MaxValue) ret = uint.MaxValue;
+				return (uint)ret;
+			}) as Func&lt;T,T,T&gt;;
+			i8_ = (Func&lt;sbyte,uint&gt;)((sbyte value) =&gt; { return value &gt;= 0 ? (byte)value : 0U; }) as Func&lt;sbyte,T&gt;;
+			u8_ = (Func&lt;byte,uint&gt;)((byte value) =&gt; { return value; }) as Func&lt;byte,T&gt;;
+			i16_ = (Func&lt;short,uint&gt;)((short value) =&gt; { return value &gt;= 0 ? (ushort)value : 0U; }) as Func&lt;short,T&gt;;
+			u16_ = (Func&lt;ushort,uint&gt;)((ushort value) =&gt; { return value; }) as Func&lt;ushort,T&gt;;
+			i32_ = (Func&lt;int,uint&gt;)((int value) =&gt; { return value &gt;= 0 ? (uint)value : 0U; }) as Func&lt;int,T&gt;;
+			u32_ = (Func&lt;uint,uint&gt;)((uint value) =&gt; { return value; }) as Func&lt;uint,T&gt;;
+			i64_ = (Func&lt;long,uint&gt;)((long value) =&gt; { return value &lt;= 0 ? 0U : value &lt;= uint.MaxValue ? (uint)value : uint.MaxValue; }) as Func&lt;long,T&gt;;
+			u64_ = (Func&lt;ulong,uint&gt;)((ulong value) =&gt; { return value &lt;= uint.MaxValue ? (uint)value : uint.MaxValue; }) as Func&lt;ulong,T&gt;;
+			f32_ = (Func&lt;float,uint&gt;)((float value) =&gt; { return value &lt;= 0 ? 0U : value &gt;= 4294967296.0f ? uint.MaxValue : checked((uint)value); }) as Func&lt;float,T&gt;;
+			f64_ = (Func&lt;double,uint&gt;)((double value) =&gt; { return value &lt;= 0 ? 0U : value &gt;= uint.MaxValue ? uint.MaxValue : checked((uint)value); }) as Func&lt;double,T&gt;;
+			m_ = (Func&lt;decimal,uint&gt;)((decimal value) =&gt; { return value &lt;= 0 ? 0U : value &gt;= uint.MaxValue ? uint.MaxValue : (uint)value; }) as Func&lt;decimal,T&gt;;
+			b_ = (Func&lt;BigInteger,uint&gt;)((BigInteger value) =&gt; { return value.Sign &lt;= 0 ? 0U : value &gt;= (long)uint.MaxValue ? uint.MaxValue : (uint)value; }) as Func&lt;BigInteger,T&gt;;
+			return;
+		}
+
+		add_ = (Func&lt;long,long,long&gt;)((long a, long b) =&gt; {
+			long ret = a + b;
+			long ov = (ret &lt; 0) ? long.MaxValue : long.MinValue;
+			if (((a ^ ret) &amp; (b ^ ret)) &lt; 0) ret = ov;
+			return ret;
+		}) as Func&lt;T,T,T&gt;;
+		if (add_ != null) {
+			sub_ = (Func&lt;long,long,long&gt;)((long a, long b) =&gt; {
+				long ret = a - b;
+				long ov = (ret &lt; 0) ? long.MaxValue : long.MinValue;
+				if (((a ^ b) &amp; (a ^ ret)) &lt; 0) ret = ov;
+				return ret;
+			}) as Func&lt;T,T,T&gt;;
+			mul_ = (Func&lt;long,long,long&gt;)((long a, long b) =&gt; {
+				if (a &gt; 0) {
+					if (b &gt;= 0) return b &lt;= long.MaxValue / a ? a*b : long.MaxValue;
+					return b &gt;= long.MinValue / a ? a*b : long.MinValue;
+				} else if (a &lt; 0) {
+					if (b &lt;= 0) return b &gt;= long.MaxValue / a ? a*b : long.MaxValue;
+					return a &gt;= long.MinValue / b ? a*b : long.MinValue;
+				}
+				return 0;
+			}) as Func&lt;T,T,T&gt;;
+			i8_ = (Func&lt;sbyte,long&gt;)((sbyte value) =&gt; { return value; }) as Func&lt;sbyte,T&gt;;
+			u8_ = (Func&lt;byte,long&gt;)((byte value) =&gt; { return value; }) as Func&lt;byte,T&gt;;
+			i16_ = (Func&lt;short,long&gt;)((short value) =&gt; { return value; }) as Func&lt;short,T&gt;;
+			u16_ = (Func&lt;ushort,long&gt;)((ushort value) =&gt; { return value; }) as Func&lt;ushort,T&gt;;
+			i32_ = (Func&lt;int,long&gt;)((int value) =&gt; { return value; }) as Func&lt;int,T&gt;;
+			u32_ = (Func&lt;uint,long&gt;)((uint value) =&gt; { return value; }) as Func&lt;uint,T&gt;;
+			i64_ = (Func&lt;long,long&gt;)((long value) =&gt; { return value; }) as Func&lt;long,T&gt;;
+			u64_ = (Func&lt;ulong,long&gt;)((ulong value) =&gt; { return (long)value &gt;= 0 ? (long)value : long.MaxValue; }) as Func&lt;ulong,T&gt;;
+			f32_ = (Func&lt;float,long&gt;)((float value) =&gt; { return value &lt;= long.MinValue ? long.MinValue : value &gt;= -(float)long.MinValue ? long.MaxValue : checked((long)value); }) as Func&lt;float,T&gt;;
+			f64_ = (Func&lt;double,long&gt;)((double value) =&gt; { return value &lt;= long.MinValue ? long.MinValue : value &gt;= -(double)long.MinValue ? long.MaxValue : checked((long)value); }) as Func&lt;double,T&gt;;
+			m_ = (Func&lt;decimal,long&gt;)((decimal value) =&gt; { return value &gt;= long.MaxValue ? long.MaxValue : value &lt;= long.MinValue ? long.MinValue : (long)value; }) as Func&lt;decimal,T&gt;;
+			b_ = (Func&lt;BigInteger,long&gt;)((BigInteger value) =&gt; { return value &gt;= long.MaxValue ? long.MaxValue : value &lt;= long.MinValue ? long.MinValue : (long)value; }) as Func&lt;BigInteger,T&gt;;
+			return;
+		}
+
+		add_ = (Func&lt;ulong,ulong,ulong&gt;)((ulong a, ulong b) =&gt; {
+			return a + b &gt;= a ? a + b : ulong.MaxValue;
+		}) as Func&lt;T,T,T&gt;;
+		if (add_ != null) {
+			sub_ = (Func&lt;ulong,ulong,ulong&gt;)((ulong a, ulong b) =&gt; {
+				return a - b &lt;= a ? a - b : 0UL;
+			}) as Func&lt;T,T,T&gt;;
+			mul_ = (Func&lt;ulong,ulong,ulong&gt;)((ulong a, ulong b) =&gt; {
+				if (b == 0) return 0UL;
+				return a &lt;= ulong.MaxValue / b ? a*b : ulong.MaxValue;
+			}) as Func&lt;T,T,T&gt;;
+			i8_ = (Func&lt;sbyte,ulong&gt;)((sbyte value) =&gt; { return value &gt;= 0 ? (byte)value : 0UL; }) as Func&lt;sbyte,T&gt;;
+			u8_ = (Func&lt;byte,ulong&gt;)((byte value) =&gt; { return value; }) as Func&lt;byte,T&gt;;
+			i16_ = (Func&lt;short,ulong&gt;)((short value) =&gt; { return value &gt;= 0 ? (ushort)value : 0UL; }) as Func&lt;short,T&gt;;
+			u16_ = (Func&lt;ushort,ulong&gt;)((ushort value) =&gt; { return value; }) as Func&lt;ushort,T&gt;;
+			i32_ = (Func&lt;int,ulong&gt;)((int value) =&gt; { return value &gt;= 0 ? (uint)value : 0UL; }) as Func&lt;int,T&gt;;
+			u32_ = (Func&lt;uint,ulong&gt;)((uint value) =&gt; { return value; }) as Func&lt;uint,T&gt;;
+			i64_ = (Func&lt;long,ulong&gt;)((long value) =&gt; { return value &gt;= 0 ? (ulong)value : 0UL; }) as Func&lt;long,T&gt;;
+			u64_ = (Func&lt;ulong,ulong&gt;)((ulong value) =&gt; { return value; }) as Func&lt;ulong,T&gt;;
+			f32_ = (Func&lt;float,ulong&gt;)((float value) =&gt; { return value &lt;= 0 ? 0UL : value &gt;= 18446744073709551616.0f ? ulong.MaxValue : checked((ulong)value); }) as Func&lt;float,T&gt;;
+			f64_ = (Func&lt;double,ulong&gt;)((double value) =&gt; { return value &lt;= 0 ? 0UL : value &gt;= 18446744073709551616.0 ? ulong.MaxValue : checked((ulong)value); }) as Func&lt;double,T&gt;;
+			m_ = (Func&lt;decimal,ulong&gt;)((decimal value) =&gt; { return value &lt;= 0 ? 0UL : value &gt;= ulong.MaxValue ? ulong.MaxValue : (ulong)value; }) as Func&lt;decimal,T&gt;;
+			b_ = (Func&lt;BigInteger,ulong&gt;)((BigInteger value) =&gt; { return value.Sign &lt;= 0 ? 0UL : value &gt;= ulong.MaxValue ? ulong.MaxValue : (ulong)value; }) as Func&lt;BigInteger,T&gt;;
+			return;
+		}
+
+		throw new SystemException();
+	}}
+}
+'@
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

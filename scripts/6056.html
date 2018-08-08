@@ -1,0 +1,1171 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BattleChicken">
+    <title>WinSCPPowershell Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>WinSCPPowershell Module</h1>
+<h3><a href="//scripts/6056.ps1">download</a> - <a href="//scripts/5981.md">parent</a></h3>
+<p>WinSCP wrapper module I created out of necessity that I put together through my own exploration of the objects and the WinSCP documentation/examples.</p>
+<p>How pipeline is implemented is incorrect, but the module functions.  At some point I would like to revisit this and fix the issues with how I do valuefrompipeline (which is implemented 'wrong', but doesn't manifest in problems because I limit the pipe to a single object) and other cleanup...</p>
+<p>I haven't finished all of the help for all of the functions either.  The module is not fully polished or completed - mostly issues with documentation being incomplete - connecting (at least via sftp), syncing directories, uploading files, and downloading files all function properly.  Even if you don't use the module, you can see how to accomplish the tasks by interacting with the COM objects to write your own method.</p>
+<p>it's not finished and I need to improve it but it functions.</p>
+<pre><code class="language-posh">
+$Script:WinSCPCSettingsOptionsObjectType = &quot;&quot;
+$Script:WinSCPDirHasBeenLoaded   = $false 
+$script:WinSCPDLLFolder          = &quot;&quot; #path to folder containing the WinSCP DLL and EXE
+
+Function Set-WinSCPDLLFolder {
+&lt;#
+.Synopsis
+   Specify the folder for WinSCP.exe and WinSCPnet.dll
+.DESCRIPTION
+   Validates that WinSCP.exe and WinSCPnet.dll exists, then sets the folder containing WinSCP.exe and WinSCPnet.dll
+.PARAMETER DLLFolder
+    String that contains the path containing the WinSCPnet.dll and WinSCPnet.dll
+.EXAMPLE
+   Set-WinSCPDLLFolder -DLLFolder C:\Admin
+   Sets the DLL folder for the WinSCPPowershell module to C:\Admin
+.NOTES
+   The Function will throw an error if the executables do not exist EXACTLY as WinSCPnet.dll and WinSCP.exe in the target directory.  Once it gets set one time, no cmdlets require it to be provided.
+.COMPONENT
+   WinSCPnet.dll
+.FUNCTIONALITY
+   Sets the folder containing WinSCP.exe and WinSCPnet.dll
+#&gt;
+    param(
+        [parameter(Mandatory=$true)]
+        [string]$DLLFolder
+    )
+
+    #Make sure the required components exist in $DLLFolder
+    if (test-path $DLLFolder){
+        if ((Test-Path &quot;${DLLFolder}\WinSCPnet.dll&quot;)){}
+        else{
+            throw &quot;no WinSCPnet.dll found in ${DLLFolder}.&quot;
+        }
+        if ((Test-Path &quot;${DLLFolder}\WinSCP.exe&quot;)){}
+        else{
+            throw &quot;no WinSCP.exe found in ${DLLFolder}.&quot;
+        }
+    }
+    else {throw &quot;$DLLFolder does not appear to exist.&quot;}
+    # set the global for later use
+    $script:WinSCPDLLFolder = $DLLFolder
+    
+    # adding the type here so it's accessible in later cmdlets.
+    add-type -Path &quot;$dllfolder\WinSCPnet.dll&quot; -ErrorAction stop
+    if ($?){
+        $Script:WinSCPDirHasBeenLoaded = $true
+    }
+    # the next code line is to store the type of [WinSCP.SessionOptions] object so connect-WinscpServer can validate $WinSCPSessionOptionsObject AFTER this function
+    # gets loaded inside the function - $WinSCPSessionOptionsObject has type [object] since [WinSCP.SessionOptions] doesn't exist until this function gets loaded and 
+    # connect-winscpserver loads it - Something of a Which came first, the chicken or the egg scenario. Edit:  I changed the method but haven't retrofitted a lot of this.  Anyway.
+    $tempObj = New-Object WinSCP.SessionOptions
+    $Script:WinSCPCSettingsOptionsObjectType = $tempObj.psobject.typenames[0]
+}
+
+#confirms a remote path exists. i may update this function do do more, validate additional things.. that's why it exists.
+Function Test-WinSCPRemotePathExists {
+&lt;#
+.Synopsis
+   Check if a remote file or folder exists on a SFTP site
+.DESCRIPTION
+   Check if a remote file or folder exists on a SFTP site
+.PARAMETER WinSCPSessionObject
+    WinSCP Session object.
+.PARAMETER RemotePath
+    String containing a remote path
+.EXAMPLE
+   Test-WinSCPRemotePathExists -WinSCPSessionObject $MySession -RemotePath /temp
+   Checks if /temp exists on the SFTP site connected to $MySession
+.EXAMPLE
+   $MySession | Test-WinSCPRemotePathExists -RemotePath /TextFile.txt
+   Checks if /TextFile.txt exists on the SFTP site connected to $MySession
+.OUTPUTS
+   Returns $True if $remotePath exists, $False if it does not.
+#&gt;
+        param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject,
+        
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath
+    )
+    if ($RemotePath.contains(&quot;\&quot;)){
+        $RemotePath = $RemotePath -replace &quot;\\&quot;,&quot;/&quot; # invert the slashes, since the behavior is really erratic if the type is wrong.
+    }
+    # remove Stars to confirm that if someone passes * to $remotepath that it won't throw an error.
+    $WinSCPSessionObject.FileExists(($RemotePath.replace(&quot;*&quot;,&quot;&quot;)))
+}
+
+
+Function Get-WinSCPItemInfo {
+&lt;#
+.Synopsis
+   Returns a PSObject that contains information about $RemotePath
+.DESCRIPTION
+   Returns a PSObject that contains File information data about the file or folder $RemotePath
+.EXAMPLE
+   Get-WinSCPItemInfo -WinSCPSessionObject $MySession -RemotePath /temp
+   Returns a PSObject that contains information about /temp
+.EXAMPLE
+   $MySession | Get-WinSCPItemInfo -RemotePath /TextFile.txt
+   Returns a PSObject that contains information about /TextFile.txt
+.OUTPUTS
+   Outputs an object containing data like the following (if it exists) /temp in this example is a directory:
+        Name            : /temp
+        FileType        : D
+        Length          : 0
+        LastWriteTime   : 7/31/2014 1:22:10 PM
+        FilePermissions : rwxrw-rw-
+        IsDirectory     : True
+   Othewise it returns nothing.
+#&gt;    
+    param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject,
+        
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath
+    )
+    try{
+        $WinSCPSessionObject.GetFileInfo($RemotePath)
+    }
+    catch {
+        throw &quot;$RemotePath does not exist&quot;
+    }
+}
+
+
+Function Get-PasswordFromEncryptedFile {
+&lt;#
+.Synopsis
+   Converts a password stored as a secure string to a file to plain text.
+.DESCRIPTION
+   Converts a password stored as a secure string to a file to plain text.
+.EXAMPLE
+   Get-PasswordFromEncryptedFile -PasswordFile &quot;c:\admin\MyEncryptedPass.txt&quot;
+   Assuming the user who encryptedt he password is the same user executing the command, will decrypt the string in c:\admin\MyEncryptedPass.txt to plain-text.
+.OUTPUTS
+   Outputs a string object
+.NOTES
+   This function can be tricky.  it decrypts a securestring, so it will only be reversible by the same user that created the original encrypted file.  So, if my user is MyDomain\MyUsername, only MyDomain\MyUsername on the same machine can reverse the encryption.  Keep in mind the decrypt will only work if you created the file on that same machine.
+.FUNCTIONALITY
+   Decrypts a secure string saved to a file.
+#&gt;
+    param(
+        [parameter(Mandatory=$true)]
+        [string]$PasswordFile
+    )
+
+    if (-not (Test-Path $PasswordFile)){
+        throw &quot;Nonexistent Password file&quot;
+    }
+    else {
+        try{
+            $encryptedPass = get-content $PasswordFile | ConvertTo-SecureString
+            $encryptedStr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($encryptedPass)
+            [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($encryptedStr)
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($encryptedStr) # Cleanup to avoid memory leak
+        }
+        catch {
+            throw &quot;Error decrypting Secure string.  Only files encrypted by $env:USERNAME on $env:COMPUTERNAME can be decrypted in this session.&quot;
+        }
+
+    }
+}
+
+Function New-PasswordFile {
+&lt;#
+.Synopsis
+   Saves a string (a password most likely) to the specified file.
+.DESCRIPTION
+   Saves a string (a password most likely) to the specified file.
+.EXAMPLE
+   New-PasswordFile -PasswordFile c:\admin\MyEncryptedPassword.txt
+   Prompts the user for a string, which gets saved encrypted to c:\admin\MyEncryptedPassword.txt
+#&gt;
+    param(
+        [parameter(Mandatory=$true)]
+        [string]$PasswordFile
+    )
+
+    read-host -AsSecureString &quot;Enter a password&quot; | ConvertFrom-SecureString -ErrorAction stop| out-file $PasswordFile -ErrorAction Stop
+}
+
+#
+# need to upgrade to account for all possible protocols.  Need to figure out how to specify the port.  Need default values based on protocol.. will use a switch probably
+# to set the port values.  need to explore the sessionobject more.  Built originally from the example code so it's all SFTP currently.
+#
+
+
+Function New-WinSCPBlankSessionOptions{
+&lt;#
+.Synopsis
+   Create a WinSCP session options object.
+.DESCRIPTION
+   Create a winSCP session options object, which will be blank in order to create a more flexible sessionoptions object.
+.PARAMETER DLLFolder
+    The path to the directory containing WinSCP.exe and WinSCPnet.dll.
+.EXAMPLE
+   $myOptions = New-WinSCPBlankSessionOptions
+   Creates a blank WinSCP Session options object and stores it to $myoptions.  You can then do $myOptions | Get-Member to show the available properties.
+.FUNCTIONALITY
+   Create a blank WinSCP Session options object for connecting to SFTP.
+#&gt;    
+    param(
+        [parameter()]
+        [string]$DLLFolder=$Script:WinSCPDLLFolder
+    )
+
+if (-not ($Script:WinSCPDirHasBeenLoaded)){
+        Set-WinSCPDLLFolder -DLLFolder $DLLFolder
+        $DLLFolder = $Script:WinSCPDLLFolder
+    }
+    
+    # Setup session options
+    New-Object WinSCP.SessionOptions
+
+
+}
+
+
+Function New-WinSCPSessionOptions {
+&lt;#
+.Synopsis
+   Create a WinSCP session options object.
+.DESCRIPTION
+   Create a winSCP session options object, which contains all of the configuration options to connect to a site via SFTP.
+.PARAMETER Hostname
+    The IP or name of the site to connect to
+.PARAMETER Port
+    Used to specify a non-standard to connect to the specified Hostname.  If not specified, it will use the default protocol port.
+.PARAMETER Username
+    Account to log into the SFTP/SCP/FTP site with
+.PARAMETER PasswordFile
+    String path to an encrypted file containing a password to be read or created (depending on if -SetSecurePassword is selected)
+.PARAMETER SshHostKeyFingerprint
+    String containing the ssh host key fingerprint.  Expects format like &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;
+.PARAMETER SetSecurePassword
+    Choose this if you want to create $PasswordFile in addition to reading $passwordFile in.  It will use read-host, so not for automated usage.
+.PARAMETER PlainTextPassword
+    String containing a plain-text password to log into the SFTP/SCP/FTP site.
+.PARAMETER DLLFolder
+    The path to the directory containing WinSCP.exe and WinSCPnet.dll.
+.EXAMPLE
+   New-WinSCPSessionOptions -Hostname sftp.example.com -Username MyUsername -PasswordFile c:\admin\MyUsernamePass.txt -SshHostKeyFingerprint &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;
+   Creates a session options object pointing at sftp.example.com, which has a host key fingerprint of &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;. It will connect as MyUsername using the password encrypted in MyUsernamePass.txt
+.EXAMPLE
+   New-WinSCPSessionOptions -Hostname sftp.example.com -Username MyUsername -PasswordFile c:\admin\MyUsernamePass.txt -SshHostKeyFingerprint &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot; -SetSecurePassword
+   Creates a session options object pointing at sftp.example.com, which has a host key fingerprint of &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;. It will connect as MyUsername and will prompt the user to enter a string, which it will save as MyUsernamePass.txt
+.EXAMPLE
+   New-WinSCPSessionOptions -Hostname sftp.example.com -Username MyUsername -PlainTextPassword &quot;Password123&quot; -SshHostKeyFingerprint &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;
+   Creates a session options object pointing at sftp.example.com, which has a host key fingerprint of &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;. It will connect as MyUsername using the password &quot;Password123&quot;
+.NOTES
+   The function needs some work to increase the flexibiliy.  Right now it only works for SFTP since it is all the author had access to for testing.  to create a custom object, you can do New-Object WinSCP.SessionOptions.  This will hopefully change at some point in the future.
+.FUNCTIONALITY
+   Create a WinSCP Session options object for connecting to SFTP.
+#&gt;
+    param(
+        [parameter(Mandatory=$true)]
+        [string]$Hostname,
+        
+        [parameter()]
+        [validateset(&quot;Ftp&quot;,&quot;Scp&quot;,&quot;Sftp&quot;)] # Webdav was added as an option, but not adding it yet since I haven't looked into the requirements yet.
+        [string]$Protocol=&quot;Sftp&quot;,
+
+        [parameter()]
+        [string]$Port = $null, # based on protocol, the session options automatically use the right default port so it is not required.
+
+        [parameter(Mandatory=$true)]
+        [string]$Username,
+    
+        [parameter(Mandatory=$true,ParameterSetName=&quot;SecurePass&quot;)]
+        [string]$PasswordFile,
+
+        [parameter(Mandatory=$true)]
+        [string]$SshHostKeyFingerprint,
+
+        [parameter(ParameterSetName=&quot;SecurePass&quot;)]
+        [switch]$SetSecurePassword,
+
+        [parameter(Mandatory=$true,ParameterSetName=&quot;PlainTextPass&quot;)]
+        [ValidateNotNullOrEmpty()]
+        [string]$PlainTextPassword,
+        
+        [parameter()]
+        [string]$DLLFolder=$Script:WinSCPDLLFolder
+    )
+    
+    if (-not ($Script:WinSCPDirHasBeenLoaded)){
+        Set-WinSCPDLLFolder -DLLFolder $DLLFolder
+        $DLLFolder = $Script:WinSCPDLLFolder
+    }
+    
+    # Setup session options
+    $sessionOptions = New-Object WinSCP.SessionOptions
+
+    if ($SetSecurePassword){
+        New-PasswordFile -PasswordFile $PasswordFile
+    }
+
+    $sessionOptions.Protocol   = [WinSCP.Protocol]::$Protocol
+    $sessionOptions.HostName   = $HostName
+    $sessionOptions.UserName   = $Username
+
+    if ($port){
+        $sessionOptions.PortNumber = $Port
+    }
+
+    if ($PasswordFile){
+        $sessionOptions.Password = Get-PasswordFromEncryptedFile -PasswordFile $PasswordFile
+    }
+    else {
+        $sessionOptions.Password = $PlainTextPassword
+    }
+    $sessionOptions.SshHostKeyFingerprint = $SshHostKeyFingerprint
+ 
+    $sessionOptions
+}
+
+#
+#  Need to modify this to allow a passed in SessionOptions object.  Add 2 appropriate param sets
+#
+Function Connect-WinSCPSFTPServer{
+&lt;#
+.Synopsis
+   Create a WinSCP session options object.
+.DESCRIPTION
+   Create a winSCP session options object, which contains all of the configuration options to connect to a site via SFTP.
+.PARAMETER Hostname
+    The IP or name of the site to connect to
+.PARAMETER Port
+    Used to specify a non-standard to connect to the specified Hostname.  If not specified, it will use the default protocol port.
+.PARAMETER Username
+    Account to log into the SFTP/SCP/FTP site with
+.PARAMETER PasswordFile
+    String path to an encrypted file containing a password to be read or created (depending on if -SetSecurePassword is selected)
+.PARAMETER SshHostKeyFingerprint
+    String containing the ssh host key fingerprint.  Expects format like &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;
+.PARAMETER SetSecurePassword
+    Choose this if you want to create $PasswordFile in addition to reading $passwordFile in.  It will use read-host, so not for automated usage.
+.PARAMETER PlainTextPassword
+    String containing a plain-text password to log into the SFTP/SCP/FTP site.
+.PARAMETER DLLFolder
+    The path to the directory containing WinSCP.exe and WinSCPnet.dll.
+.EXAMPLE
+   Connect-WinSCPSFTPServer -Hostname sftp.example.com -Username MyUsername -PasswordFile c:\admin\MyUsernamePass.txt -SshHostKeyFingerprint &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;
+   Creates a session options object pointing at sftp.example.com, which has a host key fingerprint of &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;. It will connect as MyUsername using the password encrypted in MyUsernamePass.txt and connects to the server.
+.EXAMPLE
+   Connect-WinSCPSFTPServer -Hostname sftp.example.com -Username MyUsername -PasswordFile c:\admin\MyUsernamePass.txt -SshHostKeyFingerprint &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot; -SetSecurePassword
+   Creates a session options object pointing at sftp.example.com, which has a host key fingerprint of &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;. It will connect as MyUsername and will prompt the user to enter a string, which it will save as MyUsernamePass.txt and connects to the server.
+.EXAMPLE
+   Connect-WinSCPSFTPServer -Hostname sftp.example.com -Username MyUsername -PlainTextPassword &quot;Password123&quot; -SshHostKeyFingerprint &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;
+   Creates a session options object pointing at sftp.example.com, which has a host key fingerprint of &quot;ssh-rsa 2048 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff&quot;. It will connect as MyUsername using the password &quot;Password123&quot; and connects to the server.
+.EXAMPLE
+   Connect-WinSCPSFTPServer -WinSCPSessionOptionsObject $customSessionOptions
+   Creates a session object connected to the specified server using the WinSCPSessionOptionsObject created prior to the connection.
+.NOTES
+  
+.FUNCTIONALITY
+   Create a WinSCP Session options object for connecting to SFTP then connects to the specified host.
+#&gt;
+    param(
+        [parameter(Mandatory=$true,ParameterSetName=&quot;MakeObjPlainTextPass&quot;)]
+        [parameter(Mandatory=$true,ParameterSetName=&quot;MakeObjSecurePass&quot;)]
+        [string]$Hostname,
+
+        [parameter(ParameterSetName=&quot;MakeObjPlainTextPass&quot;)]
+        [parameter(ParameterSetName=&quot;MakeObjSecurePass&quot;)]
+        [validateset(&quot;Ftp&quot;,&quot;Scp&quot;,&quot;Sftp&quot;)]
+        [string]$Protocol=&quot;Sftp&quot;,
+        
+        [parameter(ParameterSetName=&quot;MakeObjPlainTextPass&quot;)]
+        [parameter(ParameterSetName=&quot;MakeObjSecurePass&quot;)]
+        [int]$Port = $null,
+
+        [parameter(Mandatory=$true,ParameterSetName=&quot;MakeObjPlainTextPass&quot;)]
+        [parameter(Mandatory=$true,ParameterSetName=&quot;MakeObjSecurePass&quot;)]
+        [string]$Username,
+    
+        [parameter(Mandatory=$true,ParameterSetName=&quot;MakeObjSecurePass&quot;)]
+        [string]$PasswordFile,
+
+        [parameter(Mandatory=$true,ParameterSetName=&quot;MakeObjPlainTextPass&quot;)]
+        [parameter(Mandatory=$true,ParameterSetName=&quot;MakeObjSecurePass&quot;)]
+        [string]$SshHostKeyFingerprint,
+
+        [parameter(Mandatory=$true,ParameterSetName=&quot;MakeObjPlainTextPass&quot;)]
+        [ValidateNotNullOrEmpty()]
+        [string]$PlainTextPassword,
+
+        [parameter(ParameterSetName=&quot;PassObj&quot;)]
+        [Object]$WinSCPSessionOptionsObject,
+
+        [parameter()]
+        [string]$DLLFolder=$Script:WinSCPDLLFolder,
+
+        [parameter(ParameterSetName=&quot;MakeObjSecurePass&quot;)]
+        [switch]$SetSecurePassword
+    )
+    
+    if (-not ($Script:WinSCPDirHasBeenLoaded)){
+        Set-WinSCPDLLFolder -DLLFolder $DLLFolder
+        $DLLFolder = $Script:WinSCPDLLFolder
+    }
+
+    if ($SetSecurePassword){
+        New-PasswordFile -PasswordFile $PasswordFile
+    }
+    
+    $sessionOptions = $null
+    if (-not $WinSCPSessionOptionsObject){
+        if ($PasswordFile){
+            $sessionOptions = New-WinSCPSessionOptions -DLLFolder $DLLFolder -Username $Username -Hostname $Hostname -Protocol $Protocol -Port $Port -PasswordFile $PasswordFile -SshHostKeyFingerprint $SshHostKeyFingerprint
+        }
+        if ($PlainTextPassword){
+            $sessionOptions = New-WinSCPSessionOptions -DLLFolder $DLLFolder -Username $Username -Hostname $Hostname -Protocol $Protocol -Port $Port -PlainTextPassword $PlainTextPassword -SshHostKeyFingerprint $SshHostKeyFingerprint
+        }
+    }
+    else{
+        if ($WinSCPSessionOptionsObject.psobject.typenames[0] -eq $Script:WinSCPCSettingsOptionsObjectType){
+            $sessionOptions = $WinSCPSessionOptionsObject
+        }
+        else{
+            throw &quot;invalid object type passed.  Object of type $Script:WinSCPCSettingsOptionsObjectType expected&quot;
+        }
+    }
+
+    $session = New-Object WinSCP.Session
+	$session.ExecutablePath = &quot;$DLLFolder\WinSCP.exe&quot;
+		
+    # I need to rework the output text. I don't like it currently - will do write-verbose
+	Write-Verbose &quot;attempting to connect to server $Hostname&quot;
+
+    # connect to FTP session
+	try {
+	    $session.Open($sessionOptions)
+	}
+    catch {
+        throw &quot;Exception opening session.  Double-check your credentials&quot;
+	}
+    if ($session.opened -eq $true){
+        $session
+    }
+    else{
+        throw &quot;Unable to connect to server.  Check your connection details and try again&quot;
+    }
+}; New-Alias -Name Connect-WinSCPServer -Value Connect-WinSCPSFTPServer -Description &quot;Connect to a MFT server&quot;
+
+
+Function New-WinSCPTransferOptions {
+&lt;#
+.Synopsis
+   Creates a new WinSCP Transfer Options object
+.DESCRIPTION
+   Long description
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+.INPUTS
+   Inputs to this cmdlet (if any)
+.OUTPUTS
+   Output from this cmdlet (if any)
+.NOTES
+   General notes
+.COMPONENT
+   The component this cmdlet belongs to
+.ROLE
+   The role this cmdlet belongs to
+.FUNCTIONALITY
+   The functionality that best describes this cmdlet
+#&gt;
+    param(
+        [parameter()]
+        [ValidateSet(&quot;Ascii&quot;,&quot;Automatic&quot;,&quot;Binary&quot;)]
+        [string]$Mode=&quot;Binary&quot;,
+
+        [parameter()]
+        [ValidateSet(&quot;Default&quot;,&quot;Off&quot;,&quot;On&quot;,&quot;Smart&quot;)]
+        [string]$ResumeSupport=&quot;Default&quot;,
+
+        [parameter()]
+        [string]$FileMask=&quot;&quot;,
+
+        [parameter()]
+        [ValidateScript({$_ -ge 0})]
+        [int]$SpeedLimitKB=0
+    )
+    
+
+    # set optional params
+	$TransferOptions = New-Object WinSCP.TransferOptions
+	if($FileMask -ne &quot;&quot;) {
+		$TransferOptions.FileMask = $FileMask
+	}
+    $TransferOptions.SpeedLimit = $SpeedLimitKB
+	$TransferOptions.TransferMode = [WinSCP.TransferMode]::$Mode
+    $TransferOptions.ResumeSupport.State = [WinSCP.TransferResumeSupportState]::$ResumeSupport
+
+    $TransferOptions
+}
+
+	
+
+
+
+
+
+
+# This functions for a single file (might for multiple, haven't tested yet) and for a single folder. 
+# I need to add some additional logic about the Local and remote locations to make sure there's a leading / at the end of the folder name.
+Function New-WinSCPTransfer {
+&lt;#
+.Synopsis
+   Specify the folder for WinSCP.exe and WinSCPnet.dll
+.DESCRIPTION
+   Long description
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+.INPUTS
+   Inputs to this cmdlet (if any)
+.OUTPUTS
+   Output from this cmdlet (if any)
+.NOTES
+   General notes
+.COMPONENT
+   The component this cmdlet belongs to
+.ROLE
+   The role this cmdlet belongs to
+.FUNCTIONALITY
+   The functionality that best describes this cmdlet
+#&gt;
+    param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject,
+        
+        [parameter()]
+		[validateset(&quot;Download&quot;,&quot;Upload&quot;)]
+		[string]$TransferType,
+
+        [parameter(Mandatory=$true)]
+        [string]$LocalPath,
+
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath,
+
+        [parameter()]
+        [ValidateSet(&quot;Ascii&quot;,&quot;Automatic&quot;,&quot;Binary&quot;)]
+        [string]$Mode=&quot;Binary&quot;,
+
+        [parameter()]
+        [string]$FileMask=&quot;&quot;,
+
+        [parameter()]
+        [switch]$DeleteSourceFilesAfterTransfer,
+
+        [parameter()]
+        [ValidateSet(&quot;Default&quot;,&quot;Off&quot;,&quot;On&quot;,&quot;Smart&quot;)]
+        [string]$ResumeSupport=&quot;Default&quot;,
+
+        [parameter()]
+        [ValidateScript({$_ -ge 0})]
+        [int]$SpeedLimitKB=0
+    )
+
+    if (-not (Test-WinSCPRemotePathExists -WinSCPSessionObject $WinSCPSessionObject -RemotePath ($RemotePath.replace(&quot;*&quot;,&quot;&quot;)))){
+		throw(&quot;The RemotePath does not exist on FTP: ${RemotePath}&quot;)
+	}
+
+	if ($DeleteSourceFilesAfterTransfer){
+        $remove = $true
+    }
+    else {
+        $remove = $false
+    }
+    
+    #
+    #  Will increase the validation here at some point.  It isn't doing as much error correction as I want it to do long term.
+    #  The com object expects the ending slashes. may need to rethink the bit for &quot;Download&quot;.  Upload absolutely requires the end slash on $remotepath
+    #
+    $RemotePath = $RemotePath -replace &quot;\\&quot;,&quot;/&quot; # Invert the slashes in case they're wrong.  It behaves really erratically if the slashes are wrong.
+    switch ($TransferType.tolower()){
+        &quot;download&quot; {
+            #if (-not ($LocalPath.endswith(&quot;/&quot;))){
+            #    $LocalPath += &quot;\&quot;
+            #}
+            break
+        }
+        &quot;upload&quot; {
+            if (-not ($RemotePath.EndsWith(&quot;/&quot;)) -or ($RemotePath.EndsWith(&quot;*&quot;))){
+                $RemotePath += &quot;/&quot;
+            }
+            break
+        }
+    }
+	
+    $TransferOptions = New-WinSCPTransferOptions -Mode $Mode -ResumeSupport $ResumeSupport -FileMask $FileMask -SpeedLimitKB $SpeedLimitKB
+	
+    switch ($TransferType.tolower()){
+        upload {
+	        Write-Verbose &quot;Beginning upload...&quot;
+	        # execute File Upload
+	        $result = $WinSCPSessionObject.PutFiles($LocalPath, $RemotePath, $remove, $TransferOptions)
+        }
+        download{
+		    Write-Verbose &quot;Beginning download...&quot;
+		    # execute File Download
+		    $result = $WinSCPSessionObject.GetFiles($RemotePath, $LocalPath, $remove, $TransferOptions)
+        }
+    }
+
+	# need to validate this better.
+	$result.Check()
+		
+
+
+    # Validate the transfers.  May rework some of this, haven't decided yet.
+	if(($result.Transfers | Measure).count -gt 0) {
+		write-verbose &quot;Files successfully transfered:&quot;
+        $i = 1
+		$result.Transfers | % {
+			Write-Verbose &quot;`t$i - $($_.Destination)&quot;
+            $i++
+		}
+	}
+	if(($result.Failures | Measure).count -gt 0) {
+		Write-Verbose &quot;Failed file transfers:&quot;
+        $i=1
+		$result.Failures | % {
+			Write-Verbose &quot;`t$i - $($_.FileName)&quot;
+            $i++
+		}
+	}
+	if(-not $result.IsSuccess) {
+		throw(&quot;FTP transfer Failed&quot;)
+	}
+}
+
+
+#
+#
+# Upload wrapper function
+#
+#
+
+Function New-WinSCPUpload {
+&lt;#
+.Synopsis
+   Specify the folder for WinSCP.exe and WinSCPnet.dll
+.DESCRIPTION
+   Long description
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+.INPUTS
+   Inputs to this cmdlet (if any)
+.OUTPUTS
+   Output from this cmdlet (if any)
+.NOTES
+   General notes
+.COMPONENT
+   The component this cmdlet belongs to
+.ROLE
+   The role this cmdlet belongs to
+.FUNCTIONALITY
+   The functionality that best describes this cmdlet
+#&gt;
+    param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject,
+        
+        [parameter(Mandatory=$true)]
+        [string]$LocalPath,
+
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath,
+
+        [parameter()]
+        [ValidateSet(&quot;Ascii&quot;,&quot;Automatic&quot;,&quot;Binary&quot;)]
+        [string]$Mode=&quot;Binary&quot;,
+
+        [parameter()]
+        [string]$FileMask=&quot;&quot;,
+
+        [parameter()]
+        [switch]$DeleteSourceFilesAfterTransfer,
+
+        [parameter()]
+        [ValidateSet(&quot;Default&quot;,&quot;Off&quot;,&quot;On&quot;,&quot;Smart&quot;)]
+        [string]$ResumeSupport=&quot;Default&quot;,
+
+        [parameter()]
+        [ValidateScript({$_ -ge 0})]
+        [int]$SpeedLimitKB=0
+    )
+
+    if ($DeleteSourceFilesAfterTransfer){
+        $WinSCPSessionObject | New-WinSCPTransfer -TransferType Upload -LocalPath $LocalPath -RemotePath $RemotePath -Mode $Mode -FileMask $FileMask -ResumeSupport $ResumeSupport -SpeedLimitKB $SpeedLimitKB -DeleteSourceFilesAfterTransfer
+    }
+    else{
+        $WinSCPSessionObject | New-WinSCPTransfer -TransferType Upload -LocalPath $LocalPath -RemotePath $RemotePath -Mode $Mode -FileMask $FileMask -ResumeSupport $ResumeSupport -SpeedLimitKB $SpeedLimitKB
+    }
+    
+}; New-Alias -Name Upload-Files -Value New-WinSCPUpload -Description &quot;Upload a file using WinSCP&quot;
+
+#
+#
+# Download wrapper function
+#
+#
+
+Function New-WinSCPDownload {
+&lt;#
+.Synopsis
+   Specify the folder for WinSCP.exe and WinSCPnet.dll
+.DESCRIPTION
+   Long description
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+.INPUTS
+   Inputs to this cmdlet (if any)
+.OUTPUTS
+   Output from this cmdlet (if any)
+.NOTES
+   General notes
+.COMPONENT
+   The component this cmdlet belongs to
+.ROLE
+   The role this cmdlet belongs to
+.FUNCTIONALITY
+   The functionality that best describes this cmdlet
+#&gt;
+    param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject=$null,
+        
+        [parameter(Mandatory=$true)]
+        [string]$LocalPath,
+
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath,
+
+        [parameter()]
+        [ValidateSet(&quot;Ascii&quot;,&quot;Automatic&quot;,&quot;Binary&quot;)]
+        [string]$Mode=&quot;Binary&quot;,
+
+        [parameter()]
+        [string]$FileMask=&quot;&quot;,
+
+        [parameter()]
+        [switch]$DeleteSourceFilesAfterTransfer,
+
+        [parameter()]
+        [ValidateSet(&quot;Default&quot;,&quot;Off&quot;,&quot;On&quot;,&quot;Smart&quot;)]
+        [string]$ResumeSupport=&quot;Default&quot;,
+
+        [parameter()]
+        [ValidateScript({$_ -ge 0})]
+        [int]$SpeedLimitKB=0
+    )
+
+    if ($DeleteSourceFilesAfterTransfer){
+        $WinSCPSessionObject | New-WinSCPTransfer -TransferType Download -LocalPath $LocalPath -RemotePath $RemotePath -Mode $Mode -FileMask $FileMask -ResumeSupport $ResumeSupport -SpeedLimitKB $SpeedLimitKB -DeleteSourceFilesAfterTransfer
+    }
+    else{
+        $WinSCPSessionObject | New-WinSCPTransfer -TransferType Download -LocalPath $LocalPath -RemotePath $RemotePath -Mode $Mode -FileMask $FileMask -ResumeSupport $ResumeSupport -SpeedLimitKB $SpeedLimitKB
+    }
+    
+}; New-Alias -Name Download-Files -Value New-WinSCPDownload -Description &quot;Upload a file using WinSCP&quot;
+
+
+Function Close-WinSCPSFTPServerConnection {
+&lt;#
+.Synopsis
+   Specify the folder for WinSCP.exe and WinSCPnet.dll
+.DESCRIPTION
+   Long description
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+.INPUTS
+   Inputs to this cmdlet (if any)
+.OUTPUTS
+   Output from this cmdlet (if any)
+.NOTES
+   General notes
+.COMPONENT
+   The component this cmdlet belongs to
+.ROLE
+   The role this cmdlet belongs to
+.FUNCTIONALITY
+   The functionality that best describes this cmdlet
+#&gt;
+    param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject=$null
+    )
+
+    $WinSCPSessionObject.dispose()
+}
+
+
+
+
+#
+# Returns an object array with file listing data
+#
+Function Get-WinSCPDirectoryList {
+&lt;#
+.Synopsis
+   Specify the folder for WinSCP.exe and WinSCPnet.dll
+.DESCRIPTION
+   Long description
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+.INPUTS
+   Inputs to this cmdlet (if any)
+.OUTPUTS
+   Output from this cmdlet (if any)
+.NOTES
+   General notes
+.COMPONENT
+   The component this cmdlet belongs to
+.ROLE
+   The role this cmdlet belongs to
+.FUNCTIONALITY
+   The functionality that best describes this cmdlet
+#&gt;
+    param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject=$null,
+        
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath
+    )
+
+    if (Test-WinSCPRemotePathExists -WinSCPSessionObject $WinSCPSessionObject -RemotePath $RemotePath){
+        $WinSCPSessionObject.ListDirectory($RemotePath) | select -ExpandProperty files
+    }
+    else {
+        Write-Warning &quot;$RemotePath Does not exist&quot;
+        return $null
+    }
+}
+
+
+#
+# Creates remote directory
+#
+Function New-WinSCPRemoteDirectory {
+&lt;#
+.Synopsis
+   Specify the folder for WinSCP.exe and WinSCPnet.dll
+.DESCRIPTION
+   Long description
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+.INPUTS
+   Inputs to this cmdlet (if any)
+.OUTPUTS
+   Output from this cmdlet (if any)
+.NOTES
+   General notes
+.COMPONENT
+   The component this cmdlet belongs to
+.ROLE
+   The role this cmdlet belongs to
+.FUNCTIONALITY
+   The functionality that best describes this cmdlet
+#&gt;
+    param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject,
+        
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath
+    )
+
+    if (Test-WinSCPRemotePathExists -WinSCPSessionObject $WinSCPSessionObject -RemotePath $RemotePath){
+        Write-Verbose &quot;$RemotePath already existed&quot;
+    }
+    else{
+        try {
+            $WinSCPSessionObject.CreateDirectory($RemotePath)
+            if ($?){
+                Write-Verbose &quot;$RemotePath has been created&quot;
+            }
+        }
+        catch {
+            throw &quot;Error creating $RemotePath&quot;
+        }
+    }
+}
+
+
+
+Function Remove-WinSCPRemoteItem {
+&lt;#
+.Synopsis
+   Specify the folder for WinSCP.exe and WinSCPnet.dll
+.DESCRIPTION
+   Long description
+.EXAMPLE
+   Example of how to use this cmdlet
+.EXAMPLE
+   Another example of how to use this cmdlet
+.INPUTS
+   Inputs to this cmdlet (if any)
+.OUTPUTS
+   Output from this cmdlet (if any)
+.NOTES
+   General notes
+.COMPONENT
+   The component this cmdlet belongs to
+.ROLE
+   The role this cmdlet belongs to
+.FUNCTIONALITY
+   The functionality that best describes this cmdlet
+#&gt;
+    param(
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject,
+        
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath,
+
+        [parameter()]
+        [switch]$force
+    )
+    $delData = $null
+    $dirContents = $null
+
+    if (-not (Test-WinSCPRemotePathExists -WinSCPSessionObject $WinSCPSessionObject -RemotePath $RemotePath)){
+        Write-Verbose &quot;$RemotePath does not exist.  No action taken.&quot;
+    }
+    else{
+        $itemInfo = Get-WinSCPItemInfo -WinSCPSessionObject $WinSCPSessionObject -RemotePath $RemotePath
+        if ($itemInfo.isDirectory){
+            $dirContents = @(Get-WinSCPDirectoryList -WinSCPSessionObject $WinSCPSessionObject -RemotePath $RemotePath)
+            if (($dirContents.count -gt 0) -and (-not ($force))){
+                #Check if it recurses, correct the notice if it doesn't.  Definitely don't want to recurse down.
+                Write-Warning &quot;${RemotePath} is a directory with additional files in it. at least $($dirContents.count) items. This check does NOT recurse - there may be a lot more files.&quot;
+                $input = (read-host &quot;Are you sure you want to delete everything inside ${RemotePath}?&quot;).tolower()
+                if ($input.StartsWith(&quot;y&quot;)){
+                    $delData = $WinSCPSessionObject.RemoveFiles($RemotePath)
+                }
+                else {
+                    Write-Verbose &quot;$RemotePath has not been deleted.  No action taken&quot;
+                }
+            }
+            else {
+                $delData = $WinSCPSessionObject.RemoveFiles($RemotePath)
+            }
+        }
+        else{
+            $delData = $WinSCPSessionObject.RemoveFiles($RemotePath)
+        }
+    }
+
+    #
+    # List what was deleted, confirm the deletes were succesful
+    #
+    if ($delData -ne $null){
+        # Validate the transfers.  May rework some of this, haven't decided yet.
+	    if(($delData.Removals | Measure).count -gt 0) {
+		    write-verbose &quot;Files/folders successfully deleted:&quot;
+            $i = 1
+		    $delData.Removals | % {
+			    Write-Verbose &quot;$i - $($_.FileName)&quot;
+                $i++
+		    }
+	    }
+	    if(($delData.Failures | Measure).count -gt 0) {
+		    Write-Verbose &quot;Failed file/folder deletions:&quot;
+            $i=1
+		    $delData.Failures | % {
+			    Write-Verbose &quot;$i - $($_.FileName)&quot;
+                $i++
+		    }
+	    }
+	    if(-not $delData.IsSuccess) {
+		    throw(&quot;Deletion of ${RemotePath} failed.&quot;)
+	    }
+
+
+    }
+}
+
+
+function Sync-WinSCPDirectory{
+    param(
+    	[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[WinSCP.Session]$WinSCPSessionObject,
+
+        [parameter(Mandatory=$true)]
+        [string]$LocalPath,
+
+        [parameter(Mandatory=$true)]
+        [string]$RemotePath,
+
+        [Parameter(Mandatory=$true)]
+        [ValidateSet(&quot;Local&quot;,&quot;Remote&quot;,&quot;Both&quot;)]
+        [WinSCP.SynchronizationMode]$SynchronizationMode,
+
+        [Parameter()]
+        [ValidateSet(&quot;None&quot;,&quot;Time&quot;,&quot;Size&quot;,&quot;Either&quot;)]
+        [WinSCP.SynchronizationCriteria]$SynchronizationCriteria=&quot;Time&quot;,
+
+        [Parameter()]
+        [Switch]$Mirror,
+
+        [parameter()]
+        [ValidateSet(&quot;Ascii&quot;,&quot;Automatic&quot;,&quot;Binary&quot;)]
+        [string]$TransferMode=&quot;Binary&quot;,
+
+        [parameter()]
+        [string]$FileMask=&quot;&quot;,
+
+        [Parameter()]
+        [Switch]$RemoveFilesAfterTransfer,
+
+        [parameter()]
+        [ValidateSet(&quot;Default&quot;,&quot;Off&quot;,&quot;On&quot;,&quot;Smart&quot;)]
+        [string]$ResumeSupport=&quot;Default&quot;,
+
+        [parameter()]
+        [ValidateScript({$_ -ge 0})]
+        [int]$SpeedLimitKB=0
+    )
+
+    $TransferOptions = New-WinSCPTransferOptions -Mode $Mode -ResumeSupport $ResumeSupport -FileMask $FileMask -SpeedLimitKB $SpeedLimitKB
+
+    try{
+        $output = $WinSCPSessionObject.SynchronizeDirectories($SynchronizationMode, $LocalPath, $RemotePath, $RemoveFilesAfterTransfer.IsPresent, $Mirror.IsPresent, $SynchronizationCriteria, $TransferOptions)
+    }
+    catch {
+        #I want to update this later
+        Throw $_
+    }
+    
+    if (($output.uploads | Measure).count -gt 0){
+        write-verbose &quot;Files/folders successfully uploaded:&quot;
+        $i = 1
+		$output.uploads | % {Write-Verbose &quot;`t$i - $($_.FileName)&quot;; $i++}
+    }
+    
+    if (($output.downloads | Measure).count -gt 0){
+        write-verbose &quot;Files/folders successfully downloaded:&quot;
+        $i = 1
+		$output.downloads | % {Write-Verbose &quot;`t$i - $($_.FileName)&quot;; $i++}
+    }
+    if (($output.Failures | Measure).count -gt 0){
+        write-verbose &quot;Files/folders Failed:&quot;
+        $i = 1
+		$output.Failures | % {Write-Verbose &quot;`t$i - $($_.FileName)&quot;; $i++}
+    }
+}
+
+
+#
+# Check if the WinSCP .exe and .dll exist in the module direcory and auto-load if so.
+#
+$modulePath = split-path $SCRIPT:MyInvocation.MyCommand.Path -parent
+if ((Test-Path &quot;$modulePath\WinSCP.exe&quot;) -and (Test-Path &quot;$modulePath\WinSCPnet.dll&quot;)){
+    Set-WinSCPDLLFolder -DLLFolder $modulePath
+}
+else{
+    throw &quot;Unable to find the WinSCP executables WinSCPnet.dll and WinSCP.exe in $modulePath&quot;
+}
+# End DLLFolder auto-load
+#
+
+
+export-modulemember -alias * -function *
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

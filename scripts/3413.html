@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Test-Hash - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Test-Hash</h1>
+<h3><a href="//scripts/3413.ps1">download</a> - <a href="//scripts/989.md">parent</a></h3>
+<p>Check md5/sha1/etc hashes</p>
+<p>I've enhanced this script to make it easy to store the results in a csv file and then test them later.  See Example 1.</p>
+<pre><code class="language-posh">function Test-Hash { 
+#.Synopsis
+#   Test the HMAC hash(es) of a file
+#.Description
+#   Takes the HMAC hash of a file using specified algorithm, and optionally, compare it to a baseline hash
+#.Example
+#   C:\PS&gt;ls .\Bin\Release -recurse | Test-Hash -BasePath .\Bin\Release -Type SHA256 | Export-CSV ~\Hashes.csv
+#   C:\Program Files\MyProduct&gt;Import-CSV ~\Hashes.csv | Test-Hash
+#
+#   This example shows how to take the hash of a collection of files and store them in a csv file, and then later verify that the files in a secondary location match the originals exactly.
+#
+#.Example
+#   Test-Hash npp.5.3.1.Installer.exe -HashFile npp.5.3.1.release.md5
+# 
+#   Searches the provided hash file for a line matching the &quot;npp.5.3.1.Installer.exe&quot; file name
+#   and take the hash of the file (using the extension of the HashFile as the Type of Hash).
+#
+#.Example
+#   Test-Hash npp.5.3.1.Installer.exe 360293affe09ffc229a3f75411ffa9a1 MD5
+#
+#   Takes the MD5 hash and compares it to the provided hash
+#
+#.Example
+#   Test-Hash npp.5.3.1.Installer.exe 5e6c2045f4ddffd459e6282f3ff1bd32b7f67517 
+#
+#   Tests all of the hashes against the provided (Sha1) hash
+[CmdletBinding(DefaultParameterSetName=&quot;NoExpectation&quot;)]
+PARAM(
+   # The path to the file to hash
+   [Parameter(Position=0,Mandatory=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;PSPath&quot;)]
+   [string]$Path,
+   
+   # When hashing many files in folders, use this to convert to relative paths (so you can compare again in a different location)
+   [Parameter(Position=2,Mandatory=$false,ParameterSetName=&quot;NoExpectation&quot;)]
+   [string]$BasePath,
+   
+   # Supports hashing against a .md5 or .sha1 file such as frequently found on open source servers or torrent sites
+   [Parameter(Position=1,Mandatory=$true,ParameterSetName=&quot;FromHashFile&quot;)]
+   [string]$HashFileName,
+   
+   # Supports passing in the expected hash (particularly useful when piping input from a previous run)
+   [Parameter(Position=2,Mandatory=$true,ParameterSetName=&quot;ManualHash&quot;, ValueFromPipelineByPropertyName=$true)]
+   [Parameter(Position=2,Mandatory=$false,ParameterSetName=&quot;FromHashFile&quot;)]
+   [ALias(&quot;Hash&quot;)]
+   [string]$ExpectedHash = $(if($HashFileName){  ((Get-Content $HashFileName) -match $Path)[0].split(&quot; &quot;)[0]  }),
+   
+   # The algorithm to use when hashing
+   [Parameter(Position=1,Mandatory=$true,ParameterSetName=&quot;ManualHash&quot;, ValueFromPipelineByPropertyName=$true)]
+   [Parameter(Position=1,Mandatory=$false,ParameterSetName=&quot;NoExpectation&quot;)]
+   [ValidateSet(&quot;MD5&quot;,&quot;SHA1&quot;,&quot;SHA256&quot;,&quot;SHA384&quot;,&quot;SHA512&quot;,&quot;RIPEMD160&quot;)]
+   [string[]]$Algorithm = $(if($HashFileName){ [IO.Path]::GetExtension((Convert-Path $HashFileName)).Substring(1) } else { &quot;SHA256&quot; })
+)
+
+begin {
+   $ofs=&quot;&quot;
+   if($BasePath) {
+      Push-Location $BasePath
+   }
+}  
+
+process {
+   if($BasePath) {
+      $Path = Resolve-Path $Path -Relative
+   }
+   if(Test-Path $Path -Type Container) {
+      # I'd like to support recursing all the files, but for now, just skip
+      Write-Warning &quot;Cannot calculate hash for directories: '$Path'&quot;
+      return
+   }
+
+   $Hashes = @(
+      foreach($Type in $Algorithm) {
+         # Take the Hash without storing the bytes (ouch)
+         [string]$hash = [Security.Cryptography.HashAlgorithm]::Create( $Type ).ComputeHash( [IO.File]::ReadAllBytes( (Convert-Path $Path) ) ) | ForEach { &quot;{0:x2}&quot; -f $_ }
+         # Output an object with the hash, algorithm and path
+         New-Object PSObject -Property @{ Path = $Path; Algorithm = $Type; Hash = $Hash }
+      }
+   )
+
+   if($ExpectedHash) {
+      # Check all the hashes to see if any of them match
+      if( $Match = $Hashes | Where { $_.Hash -eq $ExpectedHash } ) {
+         Write-Verbose &quot;Matched hash:`n$($Match | Out-String)&quot;
+         # Output an object with the hash, algorithm and path
+         New-Object PSObject -Property @{ Path = $Match.Path; Algorithm = $Match.Algorithm; Hash = $Match.Hash; Matches = $True }
+      } else {
+         Write-Verbose &quot;Failed to match hash:`n$($PSBoundParameters | Out-String)&quot;
+         # Output an object with the first hash, algorithm and path
+         New-Object PSObject -Property @{ Path = $Hashes[0].Path; Algorithm = $Hashes[0].Algorith; Hash = $Hashes[0].Hash; Matches = $False }
+      }         
+   } else {
+      Write-Output $Hashes  
+   }
+}
+end {  
+   if($BasePath) {
+      Pop-Location
+   }
+}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

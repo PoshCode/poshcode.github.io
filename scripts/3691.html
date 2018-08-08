@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="googleru">
+    <title>Get-WebSite - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-WebSite</h1>
+<h3><a href="//scripts/3691.ps1">download</a> - <a href="//scripts/2496.md">parent</a></h3>
+<p>This script will allow you to query a web site and retrieve information about the web site and whether it is available or not.</p>
+<pre><code class="language-posh">function Get-WebSite {
+&lt;#  
+.SYNOPSIS  
+    Retrieves information about a website.
+.DESCRIPTION
+    Retrieves information about a website.
+.PARAMETER Url
+    URL of the website to test access to.
+.PARAMETER UseDefaultCredentials
+    Use the currently authenticated user's credentials  
+.PARAMETER Proxy
+    Used to connect via a proxy
+.PARAMETER TimeOut
+    Timeout to connect to site, in milliseconds
+.PARAMETER Credential
+    Provide alternate credentials              
+.NOTES  
+    Name: Get-WebSite
+    Author: Boe Prox
+    DateCreated: 08Feb2011        
+.EXAMPLE  
+    Get-WebSite -url &quot;http://www.bing.com&quot;
+    
+Description
+------------
+Returns information about Bing.Com to include StatusCode and type of web server being used to host the site.
+
+#&gt; 
+[cmdletbinding(
+	DefaultParameterSetName = 'url',
+	ConfirmImpact = 'low'
+)]
+    Param(
+        [Parameter(
+            Mandatory = $True,
+            Position = 0,
+            ParameterSetName = '',
+            ValueFromPipeline = $True)]
+            [string][ValidatePattern(&quot;^(http|https)\://*&quot;)]$Url,
+        [Parameter(
+            Position = 1,
+            Mandatory = $False,
+            ParameterSetName = 'defaultcred')]
+            [switch]$UseDefaultCredentials,
+        [Parameter(
+            Mandatory = $False,
+            ParameterSetName = '')]
+            [string]$Proxy,
+        [Parameter(
+            Mandatory = $False,
+            ParameterSetName = '')]
+            [Int]$Timeout,
+        [Parameter(
+            Mandatory = $False,
+            ParameterSetName = 'altcred')]
+            [switch]$Credential            
+                        
+        )
+Begin {     
+    $psBoundParameters.GetEnumerator() | % { 
+        Write-Verbose &quot;Parameter: $_&quot; 
+        }
+   
+    #Create the initial WebRequest object using the given url
+    Write-Verbose &quot;Creating the web request object&quot;        
+    $webRequest = [net.WebRequest]::Create($url)
+    
+    #Use Proxy address if specified
+    If ($PSBoundParameters.ContainsKey('Proxy')) {
+        #Create Proxy Address for Web Request
+        Write-Verbose &quot;Creating proxy address and adding into Web Request&quot;
+        $webRequest.Proxy = New-Object -TypeName Net.WebProxy($proxy,$True)
+        }
+        
+    #Set timeout
+    If ($PSBoundParameters.ContainsKey('TimeOut')) {
+        #Setting the timeout on web request
+        Write-Verbose &quot;Setting the timeout on web request&quot;
+        $webRequest.Timeout = $timeout
+        }        
+    
+    #Determine if using Default Credentials
+    If ($UseDefaultCredentials) {
+        #Set to True, otherwise remains False
+        Write-Verbose &quot;Using Default Credentials&quot;
+        $webrequest.UseDefaultCredentials = $True
+        }
+    #Determine if using Alternate Credentials
+    If ($Credential) {
+        #Prompt for alternate credentals
+        Write-Verbose &quot;Prompt for alternate credentials&quot;
+        $wc.Credential = (Get-Credential).GetNetworkCredential()
+        }            
+        
+    #Set TimeStamp prior to attempting connection    
+    $then = get-date
+    }
+Process {    
+    Try {
+        #Make connection to gather response from site
+        $response = $webRequest.GetResponse()
+        #If successful, get the date for comparison
+        $now = get-date 
+        
+        #Generate report
+        Write-Verbose &quot;Generating report from website connection and response&quot;  
+        $report = @{
+            URL = $url
+            StatusCode = $response.Statuscode -as [int]
+            StatusDescription = $response.StatusDescription
+            ResponseTime = &quot;$(($now - $then).totalseconds)&quot;
+            WebServer = $response.Server
+            Size = $response.contentlength
+            } 
+        }
+    Catch {
+        #Get timestamp of failed attempt
+        $now = get-date
+        #Put the current error into a variable for later use
+        $errorstring = &quot;$($error[0])&quot;
+        
+        #Generate report
+        $report = @{
+            URL = $url
+            StatusCode = ([regex]::Match($errorstring,&quot;\b\d{3}\b&quot;)).value
+            StatusDescription = (($errorstring.split('\)')[2]).split('.\')[0]).Trim()
+            ResponseTime = &quot;$(($now - $then).totalseconds)&quot; 
+            WebServer = $response.Server
+            Size = $response.contentlength
+            }   
+        }
+    }
+End {        
+    #Display Report    
+    New-Object PSObject -property $report  
+    }    
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

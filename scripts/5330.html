@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Adrian Rodriguez">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/5330.ps1">download</a></h3>
+<p>Deleting Horizon View Linked Clones/Stale Virtual Desktops</p>
+<pre><code class="language-posh">function Remove-ViewComputer{
+    [CmdletBinding()]
+
+    #Requires -Modules ActiveDirectory
+    #Requires -PSSnapin vmware.vimautomation.core
+    
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$VCenterServer,
+
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ViewServer,
+
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ComputerName,
+
+        [Parameter(Mandatory=$False)]
+        [pscredential]$Credential
+    )
+
+    Begin{
+        If($Credential -eq $null){
+            $Credential = Get-Credential -UserName &quot;contoso\$env:USERNAME&quot; -Message &quot;Please enter administrator credentials for $VCenterServer`:&quot;
+        }
+    }
+    
+    Process{
+        Remove-ViewADAMEntry -ViewServer $ViewServer -ComputerName $ComputerName
+        Remove-ViewComposerEntry -VCenterServer $VCenterServer -ComputerName $ComputerName -Credential $Credential
+        Remove-ViewADObject -ComputerName $ComputerName
+        Remove-ViewVM -VCenterServer $VCenterServer -ComputerName $ComputerName
+        Remove-ViewDatastoreEntry -VCenterServer $VCenterServer -ComputerName $ComputerName
+    }
+
+    End{} 
+}
+
+function Connect-ViewADAMDatabase{
+    [CmdletBinding()]
+
+    #Requires -Modules ActiveDirectory
+    
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ViewServer
+    )
+
+    Begin{}
+    
+    Process{
+        $ViewServer = $ViewServer.ToUpper()
+
+        Try{
+            Write-Verbose -Message &quot;Trying to connect to $ViewServer ADAM database ...&quot;
+            $VDMADAMDatabase = New-PSDrive -Name $ViewServer -PSProvider ActiveDirectory -Root &quot;OU=Servers,dc=vdi,dc=vmware,dc=int&quot; -Server &quot;$ViewServer.contoso.net:389&quot; -Scope Global -ErrorAction Stop
+            Write-Verbose -Message &quot;Successfully connected to $ViewServer ADAM database.&quot;
+        }
+        Catch{
+            Write-Warning -Message &quot;Could not connect to $ViewServer ADAM database: $($_.Exception.Message)&quot;
+        }
+    }
+
+    End{
+        If($PassThru -eq $True){
+            $VDMADAMDatabase
+        }
+    } 
+}
+
+function Disconnect-ViewADAMDatabase{
+    [CmdletBinding()]
+
+    #Requires -Modules ActiveDirectory
+    
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ViewServer
+    )
+
+    Begin{}
+    
+    Process{
+        $ViewServer = $ViewServer.ToUpper()
+
+        Try{
+            Write-Verbose -Message &quot;Disconnecting $ViewServer ADAM database ...&quot;
+            Remove-PSDrive -Name $ViewServer -ErrorAction Stop
+            Write-Verbose -Message &quot;$ViewServer ADAM database was successfully disconnected.&quot;
+        }
+        Catch{
+            Write-Warning -Message &quot;A drive with the name '$ViewServer' does not exist.&quot;
+        }
+    }
+
+    End{} 
+}
+
+function Remove-ViewADAMEntry{
+    [CmdletBinding()]
+
+    #Requires -Modules ActiveDirectory
+    
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ViewServer,
+
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ComputerName
+    )
+
+    Begin{}
+    
+    Process{
+        $ViewServer = $ViewServer.ToUpper()
+        $ComputerName = $ComputerName.ToUpper()
+        Write-Verbose -Message &quot;Checking if $ViewServer ADAM database is connected ...&quot;
+        $PSDriveTest = Test-Path -Path &quot;$ViewServer`:&quot;
+        
+        If($PSDriveTest){
+            Write-Verbose -Message &quot;$ViewServer ADAM database is connected.&quot;
+        }
+        Else{
+            Write-Verbose -Message &quot;$ViewServer ADAM database is not connected. Attempting to connect ...&quot;
+            Connect-NAUViewADAMDatabase -ViewServer $ViewServer
+            $PSDriveTest = Test-Path -Path &quot;$ViewServer`:&quot;
+        } 
+
+        If($PSDriveTest){
+            Push-Location
+            Write-Verbose -Message &quot;Accessing $ViewServer ADAM database ...&quot;
+            Set-Location -Path &quot;$ViewServer`:&quot; -ErrorAction Stop
+
+            Foreach($Computer in $ComputerName){
+                $ADAMComputer = Get-ADObject -Filter {pae-DisplayName -like $Computer} -Properties * -ErrorAction Stop  
+                
+                If($ADAMComputer -ne $null){
+                    Write-Verbose -Message &quot;Trying to remove $Computer from $ViewServer ADAM database ...&quot;
+                    $ADAMComputer | Remove-ADObject -Confirm:$True
+                    Write-Verbose -Message &quot;$Computer was successfully removed from ADAM database.&quot;
+                }
+                ElseIf($ADAMComputer -eq $null){
+                    Write-Warning -Message &quot;$Computer was not found in ADAM database. Please check spelling and try again.&quot;
+                }
+            }
+
+            Pop-Location
+            Disconnect-NAUViewADAMDatabase -ViewServer $ViewServer
+        }
+        
+        Else{
+            Write-Warning -Message &quot;Could not access $ViewServer ADAM database.&quot;
+        }
+    }
+
+    End{} 
+}
+
+function Remove-ViewComposerEntry{
+    [CmdletBinding()]
+
+    #Requires -Modules ActiveDirectory
+    #Requires -PSSnapin vmware.vimautomation.core
+    
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$VCenterServer,
+        
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ComputerName,
+
+        [Parameter(Mandatory=$False)]
+        [pscredential]$Credential
+    )
+
+    Begin{
+        If($Credential -eq $null){
+            $Credential = Get-Credential -UserName &quot;contoso\$env:USERNAME&quot; -Message &quot;Please enter administrator credentials for $VCenterServer`:&quot;
+        }
+        
+        $Username = $Credential.UserName
+        $Password = $Credential.GetNetworkCredential().Password
+    }
+    
+    Process{
+        $VCenterServer = $VCenterServer.ToUpper()
+        $ComputerName = $ComputerName.ToUpper()
+        
+        Invoke-Command -ComputerName $VCenterServer -ArgumentList $VerbosePreference,$ComputerName,$Username,$Password -ScriptBlock {
+            Param(
+                [System.Management.Automation.ActionPreference]$VerbosePreference,
+                $ComputerName,
+                $Username,
+                $Password
+            )
+
+            $ProcessInfo = New-Object -Typename System.Diagnostics.ProcessStartInfo
+            $ProcessInfo.FileName = &quot;C:\Program Files (x86)\VMware\VMware View Composer\SviConfig.exe&quot;
+            $ProcessInfo.RedirectStandardError = $true
+            $ProcessInfo.RedirectStandardOutput = $true
+            $ProcessInfo.UseShellExecute = $false
+            
+            Foreach($Computer in $ComputerName){
+                Write-Verbose -Message &quot;Attempting to remove $Computer from View Composer database ...&quot;
+
+                $ProcessInfo.Arguments = &quot;-operation=RemoveSviClone -VmName=$Computer -AdminUser=$Username -AdminPassword=$Password -ServerUrl=https://localhost:18443/SviService/v3_0&quot;
+                $Process = New-Object -TypeName System.Diagnostics.Process
+                $Process.StartInfo = $ProcessInfo
+                $Process.Start() | Out-Null
+                $Process.WaitForExit()
+                $ProcessOutput = $Process.StandardOutput.ReadToEnd() -replace &quot;`n&quot;,&quot; &quot;
+                $ProcessError = $Process.StandardError.ReadToEnd() -replace &quot;`n&quot;,&quot; &quot;
+
+                If($ProcessOutput -match &quot;error&quot;){
+                    Write-Warning -Message &quot;$ProcessOutput&quot;
+                }
+                Else{
+                    Write-Verbose -Message &quot;$ProcessOutput&quot;
+                }
+            }
+        }
+    }
+
+    End{} 
+}
+
+function Remove-ViewADObject{
+    [CmdletBinding()]
+
+    #Requires -Modules ActiveDirectory
+    
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ComputerName
+    )
+
+    Begin{}
+    
+    Process{
+        $ComputerName = $ComputerName.ToUpper()
+
+        Foreach($Computer in $ComputerName){
+            Try{
+                Write-Verbose -Message &quot;Trying to remove $Computer from Active Directory ...&quot;
+                Remove-ADComputer -Identity $Computer -Confirm:$True
+                Write-Verbose -Message &quot;$Computer was successfully removed from Active Directory.&quot;
+            }
+            Catch{
+                Write-Warning -Message &quot;$Computer was not found in Active Directory. Please check spelling and try again.&quot;
+            }
+        }
+    }
+
+    End{} 
+}
+
+function Remove-ViewVM{
+    [CmdletBinding()]
+
+    #Requires -PSSnapin vmware.vimautomation.core
+    
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$VCenterServer,
+
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ComputerName,
+
+        [Parameter(Mandatory=$False)]
+        [pscredential]$Credential
+    )
+
+    Begin{}
+    
+    Process{
+        $VCenterServer = $VCenterServer.ToUpper()
+        $Computername = $ComputerName.ToUpper()
+
+        Try{
+            Write-Verbose -Message &quot;Connecting to vCenter server ...&quot;
+            
+            $Params = @{
+                &quot;Server&quot; = $VCenterServer
+                &quot;ErrorAction&quot; = &quot;Stop&quot;
+            }
+
+            If($Credential -ne $null){
+                $Params.Credential = $Credential
+            }
+
+            Connect-VIServer @Params *&gt; $null
+            
+            Foreach($Computer in $ComputerName){
+                Try{
+                    Write-Verbose -Message &quot;Retrieving $Computer from vCenter datastore ...&quot;
+                    $PowerState = (get-vm -Name $Computer -ErrorAction Stop).PowerState
+
+                    If($PowerState -eq &quot;PoweredOff&quot;){
+                        Try{
+                            Write-Verbose -Message &quot;Trying to remove $Computer from vCenter datastore ...&quot;
+                            Remove-VM -VM $Computer -DeletePermanently -Confirm:$True -ErrorAction Stop
+                            Write-Verbose -Message &quot;$Computer was successfully removed from vCenter datastore.&quot;
+                        }
+                        Catch{
+                            Write-Warning -Message &quot;$Computer could not be removed from vCenter datastore.&quot;
+                        }
+                    }
+                    ElseIf($PowerState -eq &quot;PoweredOn&quot;){
+                        Try{
+                            Write-Verbose -Message &quot;$Computer currently PoweredOn. Trying to set VM to PoweredOff ...&quot;
+                            Stop-VM -VM $Computer -Kill -ErrorAction Stop
+                            Write-Verbose -Message &quot;$Computer was successfully set to PoweredOff.&quot;
+
+                            Try{
+                                Write-Verbose -Message &quot;Trying to remove $Computer from vCenter datastore ...&quot;
+                                Remove-VM -VM $Computer -DeletePermanently -Confirm:$True -ErrorAction Stop
+                                Write-Verbose -Message &quot;$Computer was successfully removed from vCenter datastore.&quot;
+                            }
+                            Catch{
+                                Write-Warning -Message &quot;$Computer could not be removed from vCenter datastore.&quot;
+                            }
+                        }
+                        Catch{
+                            Write-Warning -Message &quot;Could not set $Computer to PoweredOff. Cannot remove VM while VM is PoweredOn.&quot;
+                        }
+                    }
+                }
+                Catch{
+                    Write-Warning -Message &quot;$Computer was not found in vCenter datastore. Please check spelling and try again.&quot;
+                }
+            }
+
+            Disconnect-VIServer -Server $VCenterServer -Confirm:$false
+        }
+        
+        Catch{
+            Write-Warning -Message &quot;Could not connect to VCenterServer. Please verify appropriate credentials are being used.&quot;
+        }
+    }
+
+    End{} 
+}
+
+function Remove-ViewDatastoreEntry{
+    [CmdletBinding()]
+    
+    #Requires -PSSnapin vmware.vimautomation.core
+    
+    Param(
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$VCenterServer,
+
+        [Parameter(Mandatory=$True,ValueFromPipelineByPropertyName=$True)]
+        [string[]]$ComputerName,
+
+        [Parameter(Mandatory=$False)]
+        [pscredential]$Credential
+    )
+
+    Begin{}
+
+    Process{
+        $VCenterServer = $VCenterServer.ToUpper()
+        $Computername = $ComputerName.ToUpper()
+
+        Try{
+            Write-Verbose -Message &quot;Connecting to vCenter server ...&quot;
+            
+            $Params = @{
+                &quot;Server&quot; = $VCenterServer
+                &quot;ErrorAction&quot; = &quot;Stop&quot;
+            }
+
+            If($Credential -ne $null){
+                $Params.Credential = $Credential
+            }
+
+            Connect-VIServer @Params *&gt; $null
+
+            $Datastore = Get-Datastore | Select-Object -ExpandProperty DatastoreBrowserPath
+
+            Foreach($Computer in $ComputerName){
+                $DatastoreEntries = Get-ChildItem -Path &quot;$Datastore\$Computer*&quot;
+
+                Foreach($Entry in $DatastoreEntries){
+                    $title = &quot;Delete datastore entry?&quot;
+                    $message = &quot;Are you sure you want to delete the datastore folder $($Entry.Name)?&quot;
+                    $yes = New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList &quot;&amp;Yes&quot;,&quot;Yes Action&quot;
+                    $no = New-Object -TypeName System.Management.Automation.Host.ChoiceDescription -ArgumentList &quot;&amp;No&quot;,&quot;No Action&quot;
+                    $options = [System.Management.Automation.Host.ChoiceDescription[]]($yes,$no)
+                    $result = $host.ui.PromptForChoice($title, $message, $options, 1) 
+                    
+                    If($result = 0){
+                        Try{
+                            Write-Verbose -Message &quot;Deleting $($Entry.Name) ...&quot;
+                            $Entry | Remove-Item -Recurse -Confirm:$False
+                            Write-Verbose -Message &quot;$($Entry.Name) deleted successfully.&quot;
+                        }
+                        Catch{
+                            Write-Warning -Message &quot;Deletion failed. $($_.Exception.Message)&quot;
+                        }
+                    }
+                    Else{
+                        Write-verbose -Message &quot;Deletion aborted.&quot;
+                    }
+                }
+            }
+
+            Disconnect-VIServer -Server $VCenterServer -Confirm:$false
+        }
+        
+        Catch{
+            Write-Warning -Message &quot;Could not connect to VCenterServer. Please verify appropriate credentials are being used.&quot;
+        }
+    }
+
+    End{}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

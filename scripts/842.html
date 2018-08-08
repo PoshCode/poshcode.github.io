@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>RunSSIS - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>RunSSIS</h1>
+<h3><a href="//scripts/842.ps1">download</a></h3>
+<p>Executes a SQL Server Integrations Services package for both server and file system storage types. Optionally Resets a Package Configuration connection string named &quot;SSISCONFIG&quot; to new server location. Also includes optional processing of external configuration file.</p>
+<pre><code class="language-posh"># ---------------------------------------------------------------------------
+### &lt;Script&gt;
+### &lt;Author&gt;
+### Chad Miller 
+### &lt;/Author&gt;
+### &lt;Description&gt;
+### Executes a SQL Server Integrations Services package for both server and file system storage types.
+### Optionally Resets a Package Configuration connection string named &quot;SSISCONFIG&quot; to new server location.
+### Also includes optional processing of external configuration file.
+### &lt;/Description&gt;
+### &lt;Usage&gt;
+###  -------------------------- EXAMPLE 1 --------------------------
+### ./RunSSIS.ps1 -path Z002_SQL1\sqlpsx -serverName 'Z002\SQL1'
+###
+### This command will execute package sqlpsx on the server Z002\SQL1
+###
+###  -------------------------- EXAMPLE 2 --------------------------
+### ./RunSSIS.ps1 -path Z002_SQL1\sqlpsx -serverName 'Z002\SQL1' -SSISCONFIG 'Z002\SQL1'
+###
+### This command will execute as in Example 1 and using SSISCONFIG on Z002\SQL1 regardless of the SSISCONFIG location defined in the package
+###
+###  -------------------------- EXAMPLE 3 --------------------------
+### ./RunSSIS.ps1 -path Z002_SQL1\sqlpsx -serverName Z002\SQL1 -configFile 'C:\SSISConfig\sqlpsx.xml' 
+###
+### This command will execute the package as in Example 1 and process and configuration file
+###
+###  -------------------------- EXAMPLE 4 --------------------------
+### ./RunSSIS.ps1 -path 'C:\SSIS\sqlpsx.dtsx'
+###
+### This command will execute the package sqlpsx.dtsx located on the file system
+###
+###  -------------------------- EXAMPLE 5 --------------------------
+### ./RunSSIS.ps1 -path 'C:\SSIS\sqlpsx.dtsx -nolog
+###
+### This command will execute the package sqlpsx.dtsx located on the file system and skip Windows Event logging
+###
+### &lt;/Usage&gt;
+### &lt;/Script&gt;
+# ---------------------------------------------------------------------------
+
+param($path=$(throw 'path is required.'), $serverName, $configFile, $SSISCONFIG, [switch]$nolog)
+
+# Note: SSIS is NOT backwards compatible. At the beginning of the script you’ll need to comment/uncomment the specific assembly
+# to load 2005 or 2008. Default of the script is set to 2005 
+[reflection.assembly]::Load(&quot;Microsoft.SqlServer.ManagedDTS, Version=9.0.242.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot;) &gt; $null
+#[Reflection.Assembly]::LoadFile(&quot;C:\Program Files\Microsoft SQL Server\90\SDK\Assemblies\Microsoft.SQLServer.ManagedDTS.dll&quot;) &gt; $null
+#[reflection.assembly]::Load(&quot;Microsoft.SqlServer.ManagedDTS, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot;) &gt; $null
+#[Reflection.Assembly]::LoadFile(&quot;C:\Program Files\Microsoft SQL Server\100\SDK\Assemblies\Microsoft.SQLServer.ManagedDTS.dll&quot;) &gt; $null
+#[reflection.assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.ManagedDTS&quot;) &gt; $null
+
+#######################
+function New-ISApplication
+{
+   new-object (&quot;Microsoft.SqlServer.Dts.Runtime.Application&quot;) 
+
+} #New-ISApplication
+
+#######################
+function Test-ISPath
+{
+    param([string]$path=$(throw 'path is required.'), [string]$serverName=$(throw 'serverName is required.'), [string]$pathType='Any')
+
+    #If serverName contains instance i.e. server\instance, convert to just servername:
+    $serverName = $serverName -replace &quot;\\.*&quot;
+
+    #Note: Don't specify instance name
+
+    $app = New-ISApplication
+
+    switch ($pathType)
+    {
+        'Package' { trap { $false; continue } $app.ExistsOnDtsServer($path,$serverName) }
+        'Folder'  { trap { $false; continue } $app.FolderExistsOnDtsServer($path,$serverName) }
+        'Any'     { $p=Test-ISPath $path $serverName 'Package'; $f=Test-ISPath $path $serverName 'Folder'; [bool]$($p -bor $f)}
+        default { throw 'pathType must be Package, Folder, or Any' }
+    }
+
+} #Test-ISPath
+
+#######################
+function Get-ISPackage
+{
+    param([string]$path, [string]$serverName)
+
+    #If serverName contains instance i.e. server\instance, convert to just servername:
+    $serverName = $serverName -replace &quot;\\.*&quot;
+
+    $app = New-ISApplication
+
+    #SQL Server Store
+    if ($path -and $serverName)
+    { 
+        if (Test-ISPath $path $serverName 'Package')
+        { $app.LoadFromDtsServer($path, $serverName, $null) }
+        else
+        { Write-Error &quot;Package $path does not exist on server $serverName&quot; }
+    }
+    #File Store
+    elseif ($path -and !$serverName)
+    { 
+        if (Test-Path -literalPath $path)
+        { $app.LoadPackage($path, $null) }
+        else
+        { Write-Error &quot;Package $path does not exist&quot; }
+    }
+    else
+    { throw 'You must specify a file path or package store path and server name' }
+    
+} #Get-ISPackage
+
+#######################
+function Set-ISConnectionString
+{
+    param($package=$(throw 'package is required.'), $connectionInfo=$(throw 'value is required.'))
+
+    foreach ($i in $connectionInfo.GetEnumerator())
+    {
+        $name = $($i.Key); $value = $($i.Value);
+        Write-Verbose &quot;Set-ISConnectionString name:$name value:$value &quot;
+        $connectionManager = $package.connections | where {$_.Name -eq &quot;$name&quot;}
+        Write-Verbose &quot;Set-ISConnectionString connString1:$($connectionManager.ConnectionString)&quot;
+        if ($connectionManager)
+        {
+            $connString = $connectionManager.ConnectionString
+            Write-Verbose &quot;Set-ISConnectionString connString:$connString&quot;
+            $connString -match &quot;^Data Source=(?&lt;server&gt;[^;]+);&quot; &gt; $null
+            $newConnString = $connString -replace $($matches.server -replace &quot;\\&quot;,&quot;\\&quot;),$value
+            Write-Verbose &quot;Set-ISConnectionString newConnString:$newConnString&quot;
+            if ($newConnString)
+            { $connectionManager.ConnectionString = $newConnString }
+        }
+    }
+
+} #Set-ISConnectionString
+
+#######################
+#MAIN
+
+Write-Verbose &quot;$MyInvocation.ScriptName path:$path serverName:$serverName configFile:$configFile SSISCONFIG:$SSISCONFIG nolog:$nolog.IsPresent&quot;
+
+if (!($nolog.IsPresent))
+{ 
+    $log = Get-EventLog -List | Where-Object { $_.Log -eq &quot;Application&quot; }
+    $log.Source = $MyInvocation.ScriptName 
+    $log.WriteEntry(&quot;Starting:$path&quot;,'Information') 
+}
+
+
+$package = Get-ISPackage $path $serverName
+
+if ($package)
+{
+    if ($SSISCONFIG)
+    { Set-ISConnectionString $package @{SSISCONFIG=$SSISCONFIG} }
+
+    if ($configFile)
+    { $package.ImportConfigurationFile(&quot;$configFile&quot;) }
+
+    #$connectionManager = $package.connections | where {$_.Name -eq &quot;SSISCONFIG&quot;}
+    #$connString = $connectionManager.ConnectionString
+    #Write-Verbose &quot;***connString:$connString&quot;
+
+    $package.Execute()
+
+    if ($?)
+    { 
+        if (!($nolog.IsPresent)) { $log.WriteEntry(&quot;Completed:$path&quot;,'Information') }
+    }
+    else
+    {
+        if (!($nolog.IsPresent)) { $log.WriteEntry(&quot;Abend:$path:$Error[0]&quot;,'Error') }
+    }
+}
+else
+{
+    if (!($nolog.IsPresent)) { $log.WriteEntry(&quot;Abort:$path:$Error[0]&quot;,'Error') }
+    throw ('CannotLoadPackage')
+}
+#MAIN
+#######################
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,1592 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Andre Combrinck">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/5569.ps1">download</a> - <a href="//scripts/5487.md">parent</a></h3>
+<p>Generate your own CA and sign your own certificates
+http://vmwarenotes.blogspot.com/2014/10/certificator.html</p>
+<pre><code class="language-posh">Param
+    (
+    [switch]$Script
+    )
+
+#---------------
+# Define Default Values
+#---------------
+[hashtable]$Global:hshDefaultValues = @{}
+$Global:hshDefaultValues = @{
+    OpenSSLVersion = &quot;0.9.8&quot;
+    WinSCPVersion = 5.2
+    RootFolderPath = &quot;C:\Customers\A Test Company&quot;
+    Company = &quot;My Company&quot;
+    FQDN = &quot;company.co.za&quot;
+    Countrycode = &quot;ZA&quot;
+    StateOrProvinceName = &quot;Gauteng&quot;
+    LocalityCity = &quot;Pretoria&quot;
+    NumberOfBits = 2048
+    DaysToExpiry = 3650
+    Passphrase = &quot;qwer1234&quot;
+    vCenterHostname = &quot;vCenter55&quot;
+    vCenterIPAddress = &quot;10.0.0.10&quot;
+    SSOPassword = &quot;P@ssw0rd&quot;
+    RootPassword = &quot;vmware&quot;
+    }
+$Global:hshDefaultValues.Add(&quot;CertStorePath&quot;,$Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)+&quot;\ssl&quot;)
+$Global:hshDefaultValues.Add(&quot;SigningCARoot&quot;,$Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)+&quot;\ssl\ca&quot;)
+$Global:hshDefaultValues.Add(&quot;SigningCACRT&quot;,$Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)+&quot;\ssl\ca\ca.crt&quot;)
+$Global:hshDefaultValues.Add(&quot;SigningCAKey&quot;,$Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)+&quot;\ssl\ca\ca.key&quot;)
+
+#---------------
+# Test OpenSSL Installation
+#---------------
+Function Check-OpenSSL
+{
+    Param 
+        (
+        [string]$OpenSSLVersion = $Global:hshDefaultValues.Item(&quot;OpenSSLVersion&quot;)
+        )
+
+    $Global:strWorkingDirectoryPath = &quot;&quot;
+    $Global:strOpenSSLExecutablePath = &quot;&quot;
+    $urlInstallOpenSSL = &quot;http://kb.vmware.com/selfservice/search.do?cmd=displayKC&amp;docType=kc&amp;docTypeID=DT_KB_1_1&amp;externalId=2015387&quot;
+
+    Write-Host &quot;Checking if you have OpenSSL 32-bit Installed...&quot;
+    $strOpenSSLRegKey = &quot;HKLM:Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\OpenSSL (32-bit)_is1\&quot;
+    $bolOpenSSLRegExist = Test-Path -Path $strOpenSSLRegKey
+    If ($bolOpenSSLRegExist)
+        {
+        $strOpenSSLInstallPath = Get-ItemProperty -Path $strOpenSSLRegKey -Name &quot;Inno Setup: App Path&quot;
+        $strInstallLocation = $strOpenSSLInstallPath.&quot;Inno Setup: App Path&quot;
+        $Global:strWorkingDirectoryPath = &quot;$strInstallLocation\bin\&quot;
+        $Global:strOpenSSLExecutablePath = &quot;$strInstallLocation\bin\openssl.exe&quot;
+        Write-Host &quot;`tOpenSSL will run from: $Global:strOpenSSLExecutablePath&quot;
+        $strOpenSSLVersion = &amp; $strInstallLocation\bin\openssl.exe version
+
+        If ($strOpenSSLVersion.Contains($OpenSSLVersion))
+            {
+            Write-Host &quot;`tOpenSSL is installed in $strInstallLocation and is the correct version of $strOpenSSLVersion&quot; -ForegroundColor Green
+            return @($strInstallLocation, &quot;OpenSSL is installed in $strInstallLocation and is the correct version of $strOpenSSLVersion&quot;)
+            }
+        Else
+            {
+            Write-Host &quot;`tOpenSSL is installed in $strInstallLocation but it needs to be version $OpenSSLVersion&quot; -ForegroundColor Yellow
+            Start-Process $urlInstallOpenSSL
+            return $false, &quot;OpenSSL is installed in $strInstallLocation but it needs to be version $OpenSSLVersion&quot;
+            }
+        }
+    Else
+        {
+        Write-Host &quot;`tYou will need to install OpenSSL before you can continue&quot; -ForegroundColor Red
+        Start-Process $urlInstallOpenSSL
+        return $false, &quot;You will need to install OpenSSL before you can continue&quot;
+        }
+}
+
+#---------------
+# Test WinSCP Installation
+#---------------
+Function Check-WinSCP
+{
+    Param 
+        (
+        [single]$WinSCPVersion = $Global:hshDefaultValues.Item(&quot;WinSCPVersion&quot;)
+        )
+
+    Write-Host &quot;Checking if you have WinSCP Installed...&quot;
+    $Global:strWinSCPExecutablePath = &quot;&quot;
+    $strWinSCPRegKey = &quot;HKLM:Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\winscp3_is1\&quot;
+    $bolWinSCPRegExist = Test-Path -Path $strWinSCPRegKey
+    If ($bolWinSCPRegExist)
+        {
+        $strWinSCPInstallPath = Get-ItemProperty -Path $strWinSCPRegKey -Name &quot;Inno Setup: App Path&quot;
+        $strInstallLocation = $strWinSCPInstallPath.&quot;Inno Setup: App Path&quot;
+        $Global:strWinSCPExecutablePath = &quot;$strInstallLocation\WinSCP.exe&quot;
+        Write-Host &quot;`tWinSCP will run from: $Global:strWinSCPExecutablePath&quot;
+
+        $strWinSCPDisplayVersion = (Get-ItemProperty -Path $strWinSCPRegKey -Name &quot;DisplayVersion&quot;).DisplayVersion
+        $objRequiredVersion = New-Object -TypeName System.Version -ArgumentList $WinSCPVersion
+        $objInstalledVersion = New-Object -TypeName System.Version -ArgumentList $strWinSCPDisplayVersion
+        $strColour = &quot;&quot;
+        $strMessage = &quot;&quot;
+
+        If ($objInstalledVersion -ge $objRequiredVersion)
+            {
+            $strColour = &quot;Green&quot;
+            $strMessage = &quot;WinSCP is installed in $strInstallLocation and is the correct version of $objInstalledVersion&quot;
+            Write-Host &quot;   &quot;$strMessage -ForegroundColor Green 
+            }
+        Else
+            {
+            #Version 5.2 and higher allows the use of -hostkey=* to accept the SSL thumbprint of an unknown server. We need this.
+            #The alternative is to connect to the destination at least once an accept the thumbprint before running the script.
+            $strColour = &quot;Orange&quot;
+            $strMessage = &quot;WinSCP is installed in $strInstallLocation, but should be version $objRequiredVersion or higher&quot;
+            Write-Host &quot;   &quot;$strMessage -ForegroundColor Orange
+            }
+        return @($strInstallLocation, $strMessage, $strColour)
+       }
+    Else
+        {
+        Write-Host &quot;`tYou will need to install WinSCP before you can continue&quot; -ForegroundColor Red
+        return @($false, &quot;If you need to upload the certificates after they are created, you will need to install WinSCP before you can continue&quot;, &quot;Red&quot;)
+        }
+}
+
+#---------------
+# Test PowerCLI Installation
+#---------------
+Function Test-PowerCLI
+	{
+	$objVVC = $null
+	$objVVC = Get-PSSnapin -Name VMware.VimAutomation.Core -ErrorAction SilentlyContinue
+	If ($objVVC -eq &quot;VMware.VimAutomation.Core&quot;)
+		{
+	    $urlInstallPowerCLI = &quot;https://my.vmware.com/web/vmware/details?downloadGroup=PCLI550&amp;productId=352&quot;
+	    Start-Process $urlInstallPowerCLI
+        return $false
+		}
+    Else
+        {
+	    Add-PSSnapin VMware.VimAutomation.Core
+        return $true
+        }
+	}
+
+#---------------
+# Check if the specified folder has the correct sub-folders
+#---------------
+Function Check-CertStore # The returned path is important for other functions
+{
+    Param (
+        [string]$RootFolderPath = $Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)
+        )
+
+    [int]$count = 0
+    Write-Host &quot;Checking if the necessary folders exist for the certificates&quot;
+    If (Test-Path &quot;$RootFolderPath\ssl&quot;)
+        {
+        If (Test-Path $RootFolderPath\ssl\ca){$count++}
+        If (Test-Path $RootFolderPath\ssl\vpxd){$count++}
+        If (Test-Path $RootFolderPath\ssl\inventoryservice){$count++}
+        If (Test-Path $RootFolderPath\ssl\autodeploy){$count++}
+        If (Test-Path $RootFolderPath\ssl\logbrowser){$count++}
+        return $true,$count
+        }
+    Else
+        {
+        return $false,$count
+        }
+}
+
+#---------------
+# Create the certificate store
+#---------------
+Function Create-CertStore
+{
+    Param (
+        [string]$RootFolderPath = $Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;),
+        [switch]$CAonly,
+        $Folder
+        )
+
+    [int]$count = 0
+    If (-Not (Test-Path $RootFolderPath\ssl))
+        {
+        Write-Host &quot;`tCreating $RootFolderPath\ssl&quot;
+        New-Item $RootFolderPath\ssl -ItemType Directory | Out-Null
+        }
+    If ($CAonly)
+        {
+        If (-Not (Test-Path $RootFolderPath\ssl\ca))
+            {
+            Write-Host &quot;`tCreating $RootFolderPath\ssl\ca&quot;
+            Write-Host &quot;`tCreating the necessary files for you CA&quot;
+            New-Item $RootFolderPath\ssl\ca -ItemType Directory | Out-Null
+            New-Item $RootFolderPath\ssl\ca\certs -ItemType Directory | Out-Null
+            New-Item $RootFolderPath\ssl\ca\newcerts -ItemType Directory | Out-Null
+            New-Item $RootFolderPath\ssl\ca\crl -ItemType Directory | Out-Null
+            New-Item $RootFolderPath\ssl\ca\.rnd -ItemType File | Out-Null
+            New-Item $RootFolderPath\ssl\ca\index.txt -ItemType File | Out-Null
+            New-Item $RootFolderPath\ssl\ca\index.txt.attr -ItemType File | Out-Null
+            New-Item $RootFolderPath\ssl\ca\serial -ItemType File | Out-Null
+            Set-Content -Path $RootFolderPath\ssl\ca\serial -Value &quot;1000&quot; | Out-Null
+            New-Item $RootFolderPath\ssl\ca\crlnumber -ItemType File | Out-Null
+            New-Item $RootFolderPath\ssl\ca\crl.pem -ItemType File | Out-Null
+            }
+        return &quot;$RootFolderPath\ssl\$Folder&quot;
+        }
+    Else
+        {
+        If (-Not (Test-Path &quot;$RootFolderPath\ssl\$Folder&quot;))
+            {
+            Write-Host &quot;`tCreating $RootFolderPath\ssl\$Folder&quot;
+            New-Item &quot;$RootFolderPath\ssl\$Folder&quot; -ItemType Directory | Out-Null
+            }
+        return &quot;$RootFolderPath\ssl\$Folder&quot;
+        }
+}
+
+#---------------
+# Create the Config Files
+#---------------
+Function Create-OpenSSLConfigFile
+{
+    Param (
+        [string]$CertStorePath, #This is the path that is returned from Create-CertStore
+        [string]$ConfigFileName,
+        [string]$KeyFileName,
+        [int]$NumberOfBits = $Global:hshDefaultValues.Item(&quot;NumberOfBits&quot;),
+        [string]$KeyPass = $Global:hshDefaultValues.Item(&quot;Passphrase&quot;),
+        [string]$hostname = $Global:hshDefaultValues.Item(&quot;vCenterHostname&quot;),
+        [string]$IPaddress = $Global:hshDefaultValues.Item(&quot;vCenterIPAddress&quot;),
+        [string]$FQDN = $Global:hshDefaultValues.Item(&quot;FQDN&quot;),
+        [string]$commonName = &quot;$hostname.$FQDN&quot;,
+        [string]$CountryCode = $Global:hshDefaultValues.Item(&quot;Countrycode&quot;),
+        [string]$StateOrProvinceName = $Global:hshDefaultValues.Item(&quot;StateOrProvinceName&quot;),
+        [string]$LocalityCity = $Global:hshDefaultValues.Item(&quot;LocalityCity&quot;),
+        [string]$organizationName = $Global:hshDefaultValues.Item(&quot;Company&quot;),
+        [string]$organizationalUnitName,
+        [string]$CAStorePath = $Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)+&quot;\ssl\ca&quot;
+        )
+
+    Write-Host &quot;`tCreating the custom config file&quot;
+    $PathToKeyFile = &quot;$CertStorePath\$KeyFileName&quot;
+    $subjectAltName = &quot;IP:$IPaddress, DNS:$hostname.$FQDN, DNS:$hostname&quot;
+    $CAdir = ($CAStorePath).Replace(&quot;\&quot;,&quot;\\&quot;)
+
+    $RequestFile = @&quot;
+RANDFILE		= $CAdir\\.rnd
+
+[ req ]
+default_md = sha256 #was sha512
+default_bits = $NumberOfBits
+default_keyfile = $PathToKeyFile
+distinguished_name = req_distinguished_name
+encrypt_key = no
+prompt = no
+string_mask = nombstr
+req_extensions = v3_req
+input_password = $KeyPass
+output_password = $KeyPass
+
+[ v3_req ]
+basicConstraints = CA:false
+keyUsage = digitalSignature, keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth, clientAuth
+subjectAltName = $subjectAltName
+
+[ req_distinguished_name ]
+countryName = $CountryCode
+stateOrProvinceName = $StateOrProvinceName
+localityName = $LocalityCity
+0.organizationName = $organizationName
+organizationalUnitName = $organizationalUnitName
+commonName = $commonName
+
+[ ca ]
+default_ca	= CA_default		# The default ca section
+
+[ CA_default ]
+dir		= $CAdir		# Where everything is kept
+certs		= $CAdir\\certs		# Where the issued certs are kept
+crl_dir		= $CAdir\\crl		# Where the issued crl are kept
+database	= $CAdir\\index.txt	# database index file.
+unique_subject	= no			# Set to 'no' to allow creation of certificates with same subject.
+new_certs_dir	= $CAdir\\newcerts		# default place for new certs.
+certificate	= $CAdir\\ca.crt 	# The CA certificate
+serial		= $CAdir\\serial 		# The current serial number
+crlnumber	= $CAdir\\crlnumber	# the current crl number must be commented out to leave a V1 CRL
+crl		= $CAdir\\crl.pem 		# The current CRL
+private_key	= $CAdir\\ca.key# The private key
+RANDFILE	= $CAdir\\.rand	# private random number file
+copy_extensions = copy
+
+x509_extensions	= usr_cert		# The extentions to add to the cert
+name_opt 	= ca_default		# Subject Name options
+cert_opt 	= ca_default		# Certificate field options
+default_days	= 3650			# how long to certify for
+default_crl_days= 30			# how long before next CRL
+default_md	= sha256			# which md to use.
+preserve	= no			# keep passed DN ordering
+policy		= policy_match
+
+[ policy_match ]
+countryName		= match
+stateOrProvinceName	= optional
+organizationName	= match
+organizationalUnitName	= optional
+commonName		= supplied
+emailAddress		= optional
+
+
+[ req_attributes ]
+challengePassword		= A challenge password
+challengePassword_min		= 4
+challengePassword_max		= 20
+
+unstructuredName		= An optional company name
+
+[ usr_cert ]
+basicConstraints=CA:FALSE
+nsComment			= &quot;Certificator by Andre Combrinck&quot;
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
+
+[ v3_ca ]
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid:always,issuer:always
+basicConstraints = CA:true
+#keyUsage = digitalSignature, Certificate Signing, Off-line CRL Signing, CRL Signing
+&quot;@
+    Set-Content -Path &quot;$CertStorePath\$ConfigFileName&quot; -Value $RequestFile 
+}
+
+#---------------
+# Test if the key is in PKCS1 format
+#---------------
+Function Test-PKCS1Key
+{
+    Param (
+        [string]$PathToKeyFile
+        )
+
+    Write-Host &quot;`tChecking if the key is in PKCS1 format&quot;
+    If ((Get-Content $PathToKeyFile | select -First 1).Contains('BEGIN RSA PRIVATE KEY'))
+        {
+        Write-Host &quot;`t`t$PathToKeyFile is in PKCS1 format&quot; -ForegroundColor Green
+        return $true
+        }
+    Else
+        {
+        Write-Host &quot;`t`t$PathToKeyFile is not in PKCS1 format&quot; -ForegroundColor Red
+        return $false
+        }
+}
+
+#---------------
+# Create the Certificate Signing Requests
+#---------------
+Function New-CertificateSigningRequest
+{
+    Param (
+        [string]$CertStorePath, #This is the path that is returned from Create-CertStore
+        [string]$ConfigFileName,
+        [string]$KeyFileName,
+        [string]$CSRFileName
+        )
+
+    $strPathToKeyFile = &quot;$CertStorePath\$KeyFileName&quot;
+    $strPathToCSRFile = &quot;$CertStorePath\$CSRFileName&quot;
+    $strPathToConfigFile = &quot;$CertStorePath\$ConfigFileName&quot;
+
+    Write-Host &quot;`tCreating the certificate signing request&quot;
+    Start-Process $Global:strOpenSSLExecutablePath -ArgumentList &quot; req -new -nodes -out `&quot;$strPathToCSRFile`&quot; -keyout `&quot;$strPathToKeyFile`&quot; -config `&quot;$strPathToConfigFile`&quot;&quot; -WorkingDirectory $Global:strWorkingDirectoryPath -Wait
+
+    If (Test-PKCS1Key -PathToKeyFile $strPathToKeyFile)
+        {
+        Start-Process $Global:strOpenSSLExecutablePath -ArgumentList &quot; req -text -noout -in `&quot;$strPathToCSRFile`&quot;&quot;  -WorkingDirectory $Global:strWorkingDirectoryPath -Wait
+        }
+}
+
+#---------------
+# Test if the certificate is in PEM format
+#---------------
+Function Test-PEMCertificate
+{
+    Param (
+        [string]$PathToCRTFile
+        )
+
+    Write-Host &quot;`tChecking if the certificate is in PEM format...&quot;
+
+    If ((Get-Content &quot;$PathToCRTFile&quot; | select -First 1).Contains('BEGIN CERTIFICATE'))
+        {
+        Write-Host &quot;`t`t$PathToCRTFile is in PEM format&quot; -ForegroundColor Green
+        return $true
+        }
+    Else
+        {
+        Write-Host &quot;`t`t$PathToCRTFile is not in PEM format&quot; -ForegroundColor Red
+        return $false
+        }
+}
+
+#---------------
+# Create the ROOT CA for company
+#---------------
+Function Create-CAwithKey
+{
+     Param (
+        [string]$OrganizationName,
+        [string]$RootFolderPath, #This is the path that is returned from Create-CertStore
+        [string]$OrganizationalUnitName,
+        [string]$Hostname, #Common name field from the form
+        [string]$FQDN = $Global:hshDefaultValues.Item(&quot;FQDN&quot;),
+        [string]$CountryCode = $Global:hshDefaultValues.Item(&quot;CountryCode&quot;),
+        [string]$StateOrProvinceName = $Global:hshDefaultValues.Item(&quot;StateOrProvinceName&quot;),
+        [string]$LocalityCity = $Global:hshDefaultValues.Item(&quot;LocalityCity&quot;),
+        [string]$Passphrase = $Global:hshDefaultValues.Item(&quot;Passphrase&quot;),
+        [int]$NumberOfBits = $Global:hshDefaultValues.Item(&quot;DaysToExpiry&quot;),
+        [int]$NumOfDays = $Global:hshDefaultValues.Item(&quot;DaysToExpiry&quot;)
+         )
+
+    $strCertStorePath = (Create-CertStore -RootFolderPath $RootFolderPath -CAonly -Folder &quot;ca&quot;)
+    $strKeyFileName = &quot;ca.key&quot;
+    $strConfigFileName = &quot;ca.cfg&quot;
+    $strCRTFileName = &quot;ca.crt&quot;
+    $strPathToKeyFile = &quot;$strCertStorePath\$strKeyFileName&quot;
+    $PathToCRTFile = &quot;$strCertStorePath\$strCRTFileName&quot;
+    $strPathToConfigFile = &quot;$strCertStorePath\$strConfigFileName&quot;
+
+    Create-OpenSSLConfigFile `
+        -CAStorePath $strCertStorePath `
+        -CertStorePath $strCertStorePath `
+        -NumberOfBits $NumberOfBits `
+        -KeyFileName $strKeyFileName `
+        -hostname $Hostname `
+        -commonName $Hostname `
+        -IPaddress &quot;0.0.0.0&quot; `
+        -FQDN $FQDN `
+        -CountryCode $CountryCode `
+        -StateOrProvinceName $StateOrProvinceName `
+        -LocalityCity $LocalityCity `
+        -organizationName $OrganizationName `
+        -organizationalUnitName &quot;Certification Authorities&quot; `
+        -ConfigFileName $strConfigFileName
+
+    Start-Process $Global:strOpenSSLExecutablePath -ArgumentList &quot; genrsa -out `&quot;$strPathToKeyFile`&quot; $NumberOfBits&quot; -WorkingDirectory $Global:strWorkingDirectoryPath -Wait #
+
+    If (Test-PKCS1Key -PathToKeyFile $strPathToKeyFile)
+        {
+        Write-Host &quot;Creating the CA's certificate and key&quot;
+        Start-Process $Global:strOpenSSLExecutablePath -ArgumentList &quot; req -new -x509 -extensions v3_ca -days $NumOfDays -key `&quot;$strPathToKeyFile`&quot; -out `&quot;$PathToCRTFile`&quot; -config `&quot;$strPathToConfigFile`&quot; -outform PEM&quot; -WorkingDirectory $Global:strWorkingDirectoryPath
+        }
+    Else
+        {
+        Write-Host &quot;The CA certificate and key could not be created&quot; -ForegroundColor Red
+        }
+}
+
+#---------------
+# Signing the Certificate Signing Requests
+#---------------
+Function Sign-CertificateSigningRequests
+{
+    Param (
+        [string]$CertStorePath, #This is the path that is returned from Create-CertStore
+        [string]$ConfigFileName, #= &quot;vpxd.cfg&quot;,
+        [string]$CSRFileName, #= &quot;vpxd.csr&quot;,
+        [string]$CRTFileName,
+        [string]$PathToCAKeyFile = $Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)+&quot;\ca\ca.key&quot;,
+        [string]$PathToCACRTFile = $Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)+&quot;\ca\ca.crt&quot;
+        )
+
+        $strPathToCSRFile = &quot;$CertStorePath\$CSRFileName&quot;
+        $strPathToConfigFile = &quot;$CertStorePath\$ConfigFileName&quot;
+        $strPathToCRTFile = &quot;$CertStorePath\$CRTFileName&quot;
+
+        Start-Process $Global:strOpenSSLExecutablePath &quot; ca -batch -extensions v3_req -config `&quot;$strPathToConfigFile`&quot; -out `&quot;$strPathToCRTFile`&quot; -infiles `&quot;$strPathToCSRFile`&quot;&quot; -WorkingDirectory $Global:strWorkingDirectoryPath -Wait | Out-Null
+        Start-Process $Global:strOpenSSLExecutablePath &quot; x509 -in `&quot;$strPathToCRTFile`&quot; -out `&quot;$strPathToCRTFile`&quot; -outform PEM&quot; -WorkingDirectory $Global:strWorkingDirectoryPath -Wait | Out-Null
+        If (Test-PEMCertificate -PathToCRTFile $strPathToCRTFile)
+            {
+            return $strPathToCRTFile 
+            }
+}
+
+#---------------
+# Creating a certificate chain in PEM format
+#---------------
+Function Chain-Certificates
+{
+    Param (
+        [string]$PathToCACRTFile,
+        [string]$PathToServerCRTFile,
+        [string]$CertStorePath
+        )
+
+    Write-Host &quot;`tCreating a certificate chain&quot;
+    $CAChain += Get-Content $PathToServerCRTFile
+    $CAChain += Get-Content $PathToCACRTFile
+    Set-Content -Path &quot;$CertStorePath\chain.pem&quot; -Value $CAChain
+    return &quot;chain.pem&quot;
+}
+
+#---------------
+# Create Certificates in PFX
+#---------------
+Function Create-PFXCertificate
+    {
+    Param (
+        [string]$RootFolderPath,
+        [string]$ServerName,
+        [string]$PFXFileName,
+        [string]$ChainFileName,
+        [string]$KeyFileName,
+        [string]$PEMFileName,
+        [string]$Passphrase
+        )
+    $strPathToPFXFile = &quot;$RootFolderPath\ssl\$ServerName\$PFXFileName&quot;
+    $strPathToKeyFile = &quot;$RootFolderPath\ssl\$ServerName\$KeyFileName&quot;
+    $strPathToChainFile = &quot;$RootFolderPath\ssl\$ServerName\$ChainFileName&quot;
+    $strPathToPEMFile = &quot;$RootFolderPath\ssl\$ServerName\$PEMFileName&quot;
+
+    Write-Host &quot;`tCreating the PFX File $strPathToPFXFile&quot;
+    Start-Process $Global:strOpenSSLExecutablePath &quot; pkcs12 -in `&quot;$strPathToPFXFile`&quot; -nodes -out `&quot;$PEMFileName`&quot;&quot; -WorkingDirectory $Global:strWorkingDirectoryPath -Wait | Out-Null
+    Write-Host &quot;To create a PEM file for vCOPS, copy and paste the text below to the command prompt using no password`r`n$Global:strOpenSSLExecutablePath pkcs12 -in `&quot;$strPathToPFXFile`&quot; -nodes -out `&quot;$strPathToPEMFile`&quot;&quot; -ForegroundColor DarkYellow
+    Start-Process $Global:strOpenSSLExecutablePath &quot; pkcs12 -export -out `&quot;$strPathToPFXFile`&quot; -in `&quot;$strPathToChainFile`&quot; -inkey `&quot;$strPathToKeyFile`&quot; -name `&quot;$ServerName created with Andre's Certificator`&quot; -passout pass:$Passphrase&quot; -WorkingDirectory $Global:strWorkingDirectoryPath -Wait | Out-Null
+    return $strPathToPFXFile
+    }
+
+#---------------
+# Create vCenter Appliance 5.5 Certificates
+#---------------
+Function New-VCSA55Certificates
+{
+    Param (
+        [string]$OrganizationName,
+        [string]$RootFolderPath,
+        [string]$hostname,
+        [string]$IPaddress,
+        [string]$FQDN,
+        [string]$CountryCode,
+        [string]$StateOrProvinceName,
+        [string]$LocalityCity,
+        [string]$CAStorePath,
+        [string]$PathToCAKeyFile,
+        [string]$PathToCACRTFile,
+        [string]$Password
+        )
+
+    # &quot;Static Varialbles&quot; ;-)                                                     #
+    # These variables are built in, but for VMware purposes should not be changed #
+    #-----------------------------------------------------------------------------#
+        $strCAKeyPass = &quot;testpassword&quot;                                            #
+        [int]$NumberOfBits = 2048                                                 #
+        $strKeyFileName = &quot;rui.key&quot;                                               #
+    #-----------------------------------------------------------------------------#
+
+    @(&quot;vpxd&quot;,&quot;inventoryservice&quot;,&quot;autodeploy&quot;,&quot;logbrowser&quot;) | foreach {
+        Write-Host &quot;Creating $_ files&quot;
+        $strCertStorePath = (Create-CertStore -RootFolderPath $RootFolderPath -Folder $_)
+        $strConfigFileName = &quot;$_.cfg&quot;
+        $strCSRFileName = &quot;$_.csr&quot;
+        Switch -exact ($_)
+            {
+            &quot;vpxd&quot; 
+                {
+                $strOrganizationalUnitName = &quot;VMware vSphere Autodeploy Service Certificate&quot;
+                }
+            &quot;inventoryservice&quot; 
+                {
+                $strOrganizationalUnitName = &quot;VMware LogBrowser Service Certificate&quot;
+                }
+            &quot;autodeploy&quot; 
+                {
+                $strOrganizationalUnitName = &quot;VMware Inventory Service Certificate&quot;
+                }
+            &quot;logbrowser&quot; 
+                {
+                $strOrganizationalUnitName = &quot;VMware vCenter Service Certificate&quot;
+                }
+            }
+        Create-OpenSSLConfigFile `
+            -CertStorePath $strCertStorePath `
+            -ConfigFileName &quot;$strConfigFileName&quot; `
+            -KeyFileName &quot;$strKeyFileName&quot; `
+            -NumberOfBits $NumberOfBits `
+            -KeyPass $strCAKeyPass `
+            -hostname $hostname `
+            -IPaddress $IPaddress `
+            -FQDN $FQDN `
+            -CountryCode $CountryCode `
+            -StateOrProvinceName $StateOrProvinceName `
+            -LocalityCity $LocalityCity `
+            -organizationName $organizationName `
+            -organizationalUnitName $strOrganizationalUnitName `
+            -CAStorePath $CAStorePath
+        New-CertificateSigningRequest `
+            -CertStorePath $strCertStorePath `
+            -ConfigFileName $strConfigFileName `
+            -KeyFileName $strKeyFileName `
+            -CSRFileName $strCSRFileName
+        $strPathToCRTFile = Sign-CertificateSigningRequests `
+            -CertStorePath $strCertStorePath `
+            -ConfigFileName $strConfigFileName `
+            -CSRFileName $strCSRFileName `
+            -CRTFileName &quot;rui.crt&quot; `
+            -PathToCAKeyFile $PathToCAKeyFile `
+            -PathToCACRTFile $PathToCACRTFile
+        Chain-Certificates `
+            -PathToCACRTFile $PathToCACRTFile `
+            -PathToServerCRTFile $strPathToCRTFile `
+            -CertStorePath $strCertStorePath
+        }
+}
+
+#---------------
+# Prompt for ESXi Hosts and IPs
+#---------------
+Function Form-ESXiHostsAndIPsHash
+{
+    [void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Drawing&quot;)
+    [void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;) 
+
+    [hashtable]$Global:hshHostAndIP = $null
+    $Global:hshHostAndIP = @{}
+    $objWShell = New-Object -ComObject Wscript.Shell
+    $Global:listHostAndIP = @()
+
+    # Form
+    #---------------
+    $objESXiHostsAndIPsHashForm = New-Object System.Windows.Forms.Form 
+
+        [int]$formHeight = 420
+        [int]$formWidth = 240
+        [int]$lblWidth = 80
+        [int]$lblHeight = 20
+        [int]$tbWidth = 120
+        [int]$tbHeight = 20
+        [int]$gap = 4
+
+        $objESXiHostsAndIPsHashForm.Text = &quot;Certificator&quot;
+        $objESXiHostsAndIPsHashForm.Size = New-Object System.Drawing.Size($formWidth,$formHeight) 
+        $objESXiHostsAndIPsHashForm.StartPosition = &quot;CenterScreen&quot;
+
+        $objESXiHostsAndIPsHashForm.KeyPreview = $True
+        $objESXiHostsAndIPsHashForm.Add_KeyDown({
+            If ($_.KeyCode -eq &quot;Escape&quot;)
+                {
+                $objESXiHostsAndIPsHashForm.Close()
+                }
+            })
+
+        # Introduction
+        #---------------
+        $lblIntroduction = New-Object System.Windows.Forms.Label
+
+            $lblIntroduction.Location = New-Object System.Drawing.Size(10,10)
+            $lblIntroduction.Width = $formWidth - 20
+            $lblIntroduction.Height = 30 
+            $lblIntroduction.Text = &quot;Enter the Hostname and IP address then click Add to populate the list&quot; 
+
+        $objESXiHostsAndIPsHashForm.Controls.Add($lblIntroduction)
+
+        # Hostname
+        #---------------
+        #@&quot;
+        $lblhostname = New-Object System.Windows.Forms.Label
+        $tbhostname = New-Object System.Windows.Forms.TextBox
+
+            $lblhostname.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+            $lblhostname.Top = $lblIntroduction.Bottom + $gap
+            $lblhostname.Left = $lblIntroduction.Left
+            $lblhostname.Text = &quot;Hostname&quot;
+
+            $tbhostname.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+            $tbhostname.Top = $lblhostname.Top
+            $tbhostname.Left = $lblhostname.Right + 10
+            $tbhostname.Text = &quot;&quot;
+
+        $objESXiHostsAndIPsHashForm.Controls.Add($lblhostname) 
+        $objESXiHostsAndIPsHashForm.Controls.Add($tbhostname) 
+        #&quot;@
+
+        # IP Address
+        #---------------
+        #@&quot;
+        $lblIPaddress = New-Object System.Windows.Forms.Label
+        $tbIPaddress = New-Object System.Windows.Forms.TextBox
+
+            $lblIPaddress.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+            $lblIPaddress.Top = $lblhostname.Bottom + $gap
+            $lblIPaddress.Left = $lblIntroduction.Left
+            $lblIPaddress.Text = &quot;IP Address&quot;
+
+            $tbIPaddress.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+            $tbIPaddress.Top = $lblIPaddress.Top
+            $tbIPaddress.Left = $lblIPaddress.Right + 10
+            $tbIPaddress.Text = &quot;&quot;
+
+        $objESXiHostsAndIPsHashForm.Controls.Add($lblIPaddress) 
+        $objESXiHostsAndIPsHashForm.Controls.Add($tbIPaddress) 
+        #&quot;@
+
+        # Add Button
+        #---------------
+        $btnAdd = New-Object System.Windows.Forms.Button
+
+            $btnAdd.Top = $lblIPaddress.Bottom + 10
+            $btnAdd.Left = $lblIntroduction.Left
+            $btnAdd.Width = 200
+            $btnAdd.Height = 20
+            $btnAdd.Text = &quot;Add&quot;
+
+            $btnAdd.Add_Click({
+                If ($Global:hshHostAndIP.Contains($tbhostname.Text))
+                    {
+                    $strPopupMessage = &quot;Entry already exists.`r`nYou already added &quot; + $tbhostname.Text + &quot; to the list.`r`nPlease enter a unique value. &quot;
+                    $objWShell.Popup($strPopupMessage,0,&quot;Done&quot;,0x1)
+                    }
+                Else
+                    {
+                    $Global:hshHostAndIP.Add($tbhostname.Text,$tbIPaddress.Text)
+                    $lbHostsAndIPs.Text += $tbhostname.Text + &quot;,&quot; + $tbIPaddress.Text +&quot;`r`n&quot;
+                    }
+                })
+
+        $objESXiHostsAndIPsHashForm.Controls.Add($btnAdd)
+
+        # Hosts and IPs list 
+        #---------------
+        $lbHostsAndIPs = New-Object System.Windows.Forms.Label
+
+            $lbHostsAndIPs.Top = $btnAdd.Bottom + 10
+            $lbHostsAndIPs.Left = $lblIntroduction.Left
+            $lbHostsAndIPs.Width = 200
+            $lbHostsAndIPs.Height = 200
+            $lbHostsAndIPs.Text = &quot;&quot;
+
+        $objESXiHostsAndIPsHashForm.Controls.Add($lbHostsAndIPs)
+
+
+        # Done Button
+        #---------------
+        $btnDone = New-Object System.Windows.Forms.Button
+
+            $btnDone.Top = $lbHostsAndIPs.Bottom + 10
+            $btnDone.Left = $lblIntroduction.Left
+            $btnDone.Width = 200
+            $btnDone.Height = 40
+            $btnDone.Text = &quot;Done&quot;
+
+            $btnDone.Add_Click(
+                {
+                $objESXiHostsAndIPsHashForm.Close()
+                })
+
+        $objESXiHostsAndIPsHashForm.Controls.Add($btnDone)
+
+    $objESXiHostsAndIPsHashForm.Add_Shown({$objESXiHostsAndIPsHashForm.Activate()})
+    [void] $objESXiHostsAndIPsHashForm.ShowDialog()
+}
+
+#---------------
+# Create ESXi 5.5 Certificates
+#---------------
+Function New-ESXi55Certificates
+{
+    Param (
+        [string]$OrganizationName,
+        [string]$RootFolderPath,
+        [string]$FQDN,
+        [string]$CountryCode,
+        [string]$StateOrProvinceName,
+        [string]$LocalityCity,
+        [string]$CAStorePath,
+        [string]$PathToCAKeyFile,
+        [string]$PathToCACRTFile
+        )
+
+    # &quot;Static Varialbles&quot; ;-)                                                     #
+    # These variables are built in, but for VMware purposes should not be changed #
+    #-----------------------------------------------------------------------------#
+        $strCAKeyPass = &quot;testpassword&quot;                                            #
+        [int]$NumberOfBits = 2048                                                 #
+        $strKeyFileName = &quot;rui.key&quot;                                               #
+        $strCSRFileName = 'rui.csr'                                               #
+    #-----------------------------------------------------------------------------#
+
+    $Global:hshHostAndIP.GetEnumerator() | foreach {
+        Write-Host &quot;Creating &quot;$_.Name&quot; files&quot;
+        $strCertStorePath = (Create-CertStore -RootFolderPath $RootFolderPath -Folder $_.Name)
+        $strConfigFileName = $_.Name +'.cfg'
+        $strKeyFileName = &quot;rui.key&quot;
+        $strCSRFileName = $_.Name +'.csr'
+        $strIPAddress = $Global:hshHostAndIP.Get_Item($_.Name)
+        $strCommonName = &quot;&quot;
+        Create-OpenSSLConfigFile `
+            -CAStorePath $CAStorePath `
+            -CertStorePath $strCertStorePath `
+            -NumberOfBits $NumberOfBits `
+            -KeyFileName &quot;$strKeyFileName&quot; `
+            -KeyPass $strCAKeyPass `
+            -hostname $_.Name `
+            -IPaddress $strIPAddress `
+            -FQDN $FQDN `
+            -CountryCode $CountryCode `
+            -StateOrProvinceName $StateOrProvinceName `
+            -LocalityCity $LocalityCity `
+            -organizationName $OrganizationName `
+            -organizationalUnitName &quot;ESXi Hosts&quot; `
+            -ConfigFileName &quot;$strConfigFileName&quot;
+        New-CertificateSigningRequest `
+            -CertStorePath $strCertStorePath `
+            -ConfigFileName $strConfigFileName `
+            -KeyFileName $strKeyFileName `
+            -CSRFileName $strCSRFileName
+        $strPathToCRTFile = Sign-CertificateSigningRequests `
+            -CertStorePath $strCertStorePath `
+            -ConfigFileName $strConfigFileName `
+            -CSRFileName $strCSRFileName `
+            -CRTFileName &quot;rui.crt&quot; `
+            -PathToCAKeyFile $PathToCAKeyFile `
+            -PathToCACRTFile $PathToCACRTFile
+        Chain-Certificates `
+            -PathToCACRTFile $PathToCACRTFile `
+            -PathToServerCRTFile $strPathToCRTFile `
+            -CertStorePath $strCertStorePath
+        }
+}
+
+#---------------
+# Create a Custom Server Certificate
+#---------------
+Function New-ServerCertificate
+{
+    Param (
+        [string]$OrganizationName,
+        [string]$ServerName,
+        [string]$ServerIP,
+        [string]$RootFolderPath,
+        [string]$FQDN,
+        [string]$CountryCode,
+        [string]$StateOrProvinceName,
+        [string]$LocalityCity,
+        [string]$Passphrase,
+        [string]$NumberOfBits,
+        [string]$CAStorePath,
+        [string]$PathToCAKeyFile,
+        [string]$PathToCACRTFile
+        )
+
+    Write-Host &quot;Creating $ServerName files&quot;
+    $strCertStorePath = (Create-CertStore -RootFolderPath $RootFolderPath -Folder $ServerName)
+    $strConfigFileName = $ServerName +'.cfg'
+    $strKeyFileName = $ServerName + '.key'
+    $strCSRFileName = $ServerName +'.csr'
+    $strIPAddress = $ServerIP
+    $strCommonName = $ServerName + &quot;.&quot; + $FQDN
+    Create-OpenSSLConfigFile `
+        -CAStorePath $CAStorePath `
+        -CertStorePath $strCertStorePath `
+        -NumberOfBits $NumberOfBits `
+        -KeyFileName &quot;$strKeyFileName&quot; `
+        -KeyPass $strCAKeyPass `
+        -hostname $ServerName `
+        -IPaddress $strIPAddress `
+        -FQDN $FQDN `
+        -CountryCode $CountryCode `
+        -StateOrProvinceName $StateOrProvinceName `
+        -LocalityCity $LocalityCity `
+        -organizationName $OrganizationName `
+        -organizationalUnitName &quot;Web Servers&quot; `
+        -ConfigFileName &quot;$strConfigFileName&quot;
+    New-CertificateSigningRequest `
+        -CertStorePath $strCertStorePath `
+        -ConfigFileName $strConfigFileName `
+        -KeyFileName $strKeyFileName `
+        -CSRFileName $strCSRFileName
+    $strPathToCRTFile = Sign-CertificateSigningRequests `
+        -CertStorePath $strCertStorePath `
+        -ConfigFileName $strConfigFileName `
+        -CSRFileName $strCSRFileName `
+        -CRTFileName &quot;$ServerName.crt&quot;`
+        -PathToCAKeyFile $PathToCAKeyFile `
+        -PathToCACRTFile $PathToCACRTFile
+    $strChainFileName = Chain-Certificates `
+        -PathToCACRTFile $PathToCACRTFile `
+        -PathToServerCRTFile $strPathToCRTFile `
+        -CertStorePath $strCertStorePath
+    $Global:tbPFXFile.Text = Create-PFXCertificate `
+        -RootFolderPath $RootFolderPath `
+        -ServerName $ServerName `
+        -PFXFileName &quot;$ServerName.pfx&quot; `
+        -ChainFileName $strChainFileName `
+        -KeyFileName &quot;$ServerName.key&quot; `
+        -PEMFileName &quot;$ServerName.pem&quot; `
+        -Passphrase $Passphrase
+}
+
+#---------------
+# Upload VCSA files with WinSCP
+#---------------
+Function Upload-vCenterCertificates
+    {
+    Param
+        (
+        [string]$SSOAdminPassword,
+        [string]$LookupServiceIP,
+        [string]$rootPassword,
+        [string]$RootFolderPath        
+        )
+
+    $strIPandPort = $LookupServiceIP+':7444'
+    @(&quot;ca&quot;,&quot;vpxd&quot;,&quot;inventoryservice&quot;,&quot;autodeploy&quot;,&quot;logbrowser&quot;) | foreach {
+        $strUploadCommand = `
+@&quot;
+ /console /command &quot;open root:$rootPassword@$LookupServiceIP -hostkey=*&quot; &quot;call mkdir /ssl&quot; &quot;put &quot;&quot;$RootFolderPath\ssl\$_&quot;&quot; /ssl/&quot; &quot;exit&quot;
+&quot;@
+        Start-Process $Global:strWinSCPExecutablePath -ArgumentList $strUploadCommand -Wait
+        }
+        $strCertCommands = `
+@&quot; 
+  /console /command &quot;open root:$rootPassword@$LookupServiceIP -hostkey=*&quot; &quot;call service vmware-stsd stop&quot; &quot;call service vmware-vpxd stop&quot; &quot;cd /ssl/vpxd/&quot; &quot;call /usr/sbin/vpxd_servicecfg certificate change chain.pem rui.key&quot; &quot;call service vmware-stsd start&quot; &quot;call cd /etc/vmware-sso/register-hooks.d&quot; &quot;call ./02-inventoryservice --mode uninstall --ls-server https://$strIPandPort/lookupservice/sdk&quot; &quot;call cd /ssl/inventoryservice&quot; &quot;call openssl pkcs12 -export -out rui.pfx -in chain.pem -inkey rui.key -name rui -passout pass:testpassword&quot; &quot;call cp rui.key /usr/lib/vmware-vpx/inventoryservice/ssl&quot; &quot;call cp rui.crt /usr/lib/vmware-vpx/inventoryservice/ssl&quot; &quot;call cp rui.pfx /usr/lib/vmware-vpx/inventoryservice/ssl&quot; &quot;call cd /usr/lib/vmware-vpx/inventoryservice/ssl/&quot; &quot;call chmod 400 rui.key rui.pfx&quot; &quot;call chmod 644 rui.crt&quot; &quot;call cd /etc/vmware-sso/register-hooks.d&quot; &quot;call ./02-inventoryservice --mode install --ls-server https://$strIPandPort/lookupservice/sdk --user administrator@vsphere.local --password $SSOAdminPassword&quot; &quot;call rm /var/vmware/vpxd/inventoryservice_registered&quot; &quot;call service vmware-inventoryservice stop&quot; &quot;call service vmware-vpxd stop&quot; &quot;call service vmware-inventoryservice start&quot; &quot;call service vmware-vpxd start&quot; &quot;call cd /etc/vmware-sso/register-hooks.d&quot; &quot;call ./09-vmware-logbrowser --mode uninstall --ls-server https://$strIPandPort/lookupservice/sdk&quot; &quot;call cd /ssl/logbrowser&quot; &quot;call openssl pkcs12 -export -in rui.crt -inkey rui.key -name rui -passout pass:testpassword -out rui.pfx&quot; &quot;call cp rui.key /usr/lib/vmware-logbrowser/conf&quot; &quot;call cp rui.crt /usr/lib/vmware-logbrowser/conf&quot; &quot;call cp rui.pfx /usr/lib/vmware-logbrowser/conf&quot; &quot;call cd /usr/lib/vmware-logbrowser/conf&quot; &quot;call chmod 400 rui.key rui.pfx&quot; &quot;call chmod 644 rui.crt&quot; &quot;call cd /etc/vmware-sso/register-hooks.d&quot; &quot;call ./09-vmware-logbrowser --mode install --ls-server https://$strIPandPort/lookupservice/sdk --user administrator@vsphere.local --password $SSOAdminPassword&quot; &quot;call service vmware-logbrowser stop&quot; &quot;call service vmware-logbrowser start&quot; &quot;call cp /ssl/autodeploy/rui.crt /etc/vmware-rbd/ssl/waiter.crt&quot; &quot;call cp /ssl/autodeploy/rui.key /etc/vmware-rbd/ssl/waiter.key&quot; &quot;call cd /etc/vmware-rbd/ssl/&quot; &quot;call chmod 644 waiter.crt&quot; &quot;call chmod 400 waiter.key&quot; &quot;call chown deploy:deploy waiter.crt waiter.key&quot; &quot;call service vmware-rbd-watchdog stop&quot; &quot;call rm /var/vmware/vpxd/autodeploy_registered&quot; &quot;call service vmware-vpxd restart&quot; &quot;exit&quot;
+&quot;@
+    Start-Process $Global:strWinSCPExecutablePath -ArgumentList $strCertCommands -Wait
+}
+
+#---------------
+# Upload ESXi 5.5 Certificates with WinSCP
+#---------------
+Function Upload-HostCertificates
+	{
+	Param
+		(
+		[string]$RootFolderPath,
+        [string]$rootPassword
+		)
+	    $Global:hshHostAndIP.GetEnumerator() | foreach
+		    {
+            $strIPAddress = $Global:hshHostAndIP.Get_Item($_.Name)
+            $strCertStorePath = &quot;$RootFolderPath\ssl\$_.Name&quot;
+#Put host into maintenance mode
+#Enable SSH
+        $strUploadCommand = `
+@&quot;
+&quot;/console /command &quot;open root:$rootPassword@$strIPAddress -hostkey=*&quot; &quot;call cd  /etc/vmware/ssl&quot; &quot;call mkdir backup&quot; &quot;call mv *.* ./backup&quot; &quot;call rm rui.crt&quot; &quot;call rm rui.key&quot; &quot;put &quot;&quot;$strCertStorePath&quot;&quot; /etc/vmware/ssl&quot; &quot;exit&quot;
+&quot;@
+#Restart management agents on the host
+#Disable SSH
+#Take host out of maintenance mode
+
+    Start-Process $Global:strWinSCPExecutablePath -ArgumentList $strUploadCommand -Wait
+            }
+	}
+
+#---------------
+# Import the default values from file
+#---------------
+Function Get-CertificatorDefaults
+	{
+    [void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Drawing&quot;)
+    [void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;) 
+
+    # Form
+    #---------------
+    $objDefaultsList = New-Object System.Windows.Forms.Form 
+
+        $objDefaultsList.KeyPreview = $True
+
+        [int]$gap = 4
+        $objDefaultsList.Text = &quot;Certificator&quot;
+        $objDefaultsList.AutoSize = $True
+        $objDefaultsList.StartPosition = &quot;CenterScreen&quot;
+
+        # Introduction
+        #---------------
+        $lblIntroduction = New-Object System.Windows.Forms.Label
+
+            $lblIntroduction.Location = New-Object System.Drawing.Size(10,10)
+            $lblIntroduction.Height = 50
+            $lblIntroduction.Width = 300
+            $lblIntroduction.Text = &quot;Previously saved default files were found.`r`nSelect the file you want to use and click OK.`r`nClick Cancel to use the script defaults.&quot; 
+
+        $objDefaultsList.Controls.Add($lblIntroduction) 
+
+        # Files and associated companies
+        #---------------
+        $hdrFileName = New-Object System.Windows.Forms.ColumnHeader
+        $hdrCompany = New-Object System.Windows.Forms.ColumnHeader
+        $lstDefaultsFiles = New-Object System.Windows.Forms.ListView
+        $btnCancel = New-Object System.Windows.Forms.Button
+        $btnOK = New-Object System.Windows.Forms.Button 
+
+            $hdrFileName.Text = &quot;File Name&quot;
+            $hdrFileName.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Left
+
+            $hdrCompany.Text = &quot;Company&quot;
+            $hdrCompany.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
+
+            $lstDefaultsFiles.Top = $lblIntroduction.Bottom + $gap
+            $lstDefaultsFiles.Left = $lblIntroduction.Left
+            $lstDefaultsFiles.Height = 200
+            $lstDefaultsFiles.Width = 200
+            $lstDefaultsFiles.GridLines = $true
+            $lstDefaultsFiles.Columns.Add($hdrFileName.Text, -2)
+            $lstDefaultsFiles.Columns.Add($hdrCompany.Text, -2)
+            $lstDefaultsFiles.View = [System.Windows.Forms.View]::Details
+            $lstDefaultsFiles.FullRowSelect = $True
+
+            Get-ChildItem $env:APPDATA\Certificator | foreach {
+				$arrFileName = $_.ToString().Split(&quot;.&quot;)
+                $lvItem = New-Object System.Windows.Forms.ListViewItem($_.Name)
+                $lvItem.SubItems.Add($arrFileName[0])
+                $lstDefaultsFiles.Items.Add($lvItem)
+                }
+
+            $btnOK.Height = 20
+            $btnOK.Width = ($lstDefaultsFiles.Width/2)-5
+            $btnOK.Top = $lstDefaultsFiles.Bottom + $gap
+            $btnOK.Left = $lblIntroduction.Left
+            $btnOK.Text = &quot;OK&quot;
+
+            $btnCancel.Height = $btnOK.Height
+            $btnCancel.Width = $btnOK.Width
+            $btnCancel.Top = $btnOK.Top
+            $btnCancel.Left = $btnOK.Right + 10
+            $btnCancel.Text = &quot;Cancel&quot;
+
+            $btnOK.Add_Click({
+                $lstDefaultsFiles.SelectedItems | foreach {
+                    $strSelectedFile = $_.Text
+                    $Global:hshDefaultValues = Import-Clixml &quot;$env:APPDATA\Certificator\$strSelectedFile&quot;
+                    $objDefaultsList.Close()
+                    }
+                })
+
+            $btnCancel.Add_Click({
+                $objDefaultsList.Close()
+                })
+
+        $objDefaultsList.Controls.Add($btnCancel) 
+        $objDefaultsList.Controls.Add($btnOK) 
+        $objDefaultsList.Controls.Add($lstDefaultsFiles) 
+
+    $objDefaultsList.Add_KeyDown({
+        If ($_.KeyCode -eq &quot;Escape&quot;)
+            {
+            $objDefaultsList.Close()
+            }
+        })
+
+    $objDefaultsList.Add_Shown({$objDefaultsList.Activate()})
+    [void] $objDefaultsList.ShowDialog()
+    }
+
+#---------------
+# Display a form to get the Certificate Info
+#---------------
+Function Form-CertificateInfo
+{
+    Param (
+        $Source
+        )
+
+    # Create objects
+    #---------------
+    $objShell = New-Object -ComObject shell.application
+    $arrOpenSSLCheckResult = @()
+
+    [int]$formHeight = 650
+    [int]$formWidth = 510
+    [int]$tbHeight = 20
+    [int]$tbWidth = 260
+    [int]$lblHeight = 31
+    [int]$lblWidth = 150
+    [int]$gap = 4
+
+    [void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Drawing&quot;) 
+    [void] [System.Reflection.Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;) 
+
+    # Create Form and Controls
+    #---------------
+    $objForm = New-Object System.Windows.Forms.Form 
+
+        $objForm.Text = &quot;Certificator&quot;
+        $objForm.AutoSize = $True
+        $objForm.StartPosition = &quot;CenterScreen&quot;
+
+        # Introduction
+        #---------------
+        $lblIntroduction = New-Object System.Windows.Forms.Label
+
+            $lblIntroduction.Location = New-Object System.Drawing.Size(10,10)
+            $lblIntroduction.Width = $objForm.Width-300
+            $lblIntroduction.Height = 30 
+            $lblIntroduction.Text = &quot;&quot; 
+
+        $objForm.Controls.Add($lblIntroduction) 
+
+        # Company Name
+        #---------------
+        $lblCompanyName = New-Object System.Windows.Forms.Label
+        $tbCompanyName_ws = New-Object System.Windows.Forms.TextBox 
+
+            $lblCompanyName.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+            $lblCompanyName.Top = $lblIntroduction.Bottom + 10
+            $lblCompanyName.Left = $lblIntroduction.Left
+            $lblCompanyName.Text = &quot;Company Name&quot;
+
+            $tbCompanyName_ws.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight) 
+            $tbCompanyName_ws.Top = $lblCompanyName.Top
+            $tbCompanyName_ws.Left = $lblCompanyName.Right + 10
+            $tbCompanyName_ws.Text = $Global:hshDefaultValues.Item(&quot;Company&quot;)
+
+        $objForm.Controls.Add($lblCompanyName) 
+        $objForm.Controls.Add($tbCompanyName_ws) 
+
+        # Root Folder
+        #---------------
+        $btnRootFolderBrowse = New-Object System.Windows.Forms.Button
+        $tbRootFolder = New-Object System.Windows.Forms.TextBox 
+        $lblCertificateStoreCheck = New-Object System.Windows.Forms.Label
+
+            $btnRootFolderBrowse.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+            $btnRootFolderBrowse.Top = $lblCompanyName.Bottom + $gap
+            $btnRootFolderBrowse.Left = $lblIntroduction.Left
+            $btnRootFolderBrowse.Text = &quot;Root Folder&quot;#`r`n(Parent for the ssl folder)&quot;
+
+            $tbRootFolder.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+            $tbRootFolder.Top = $btnRootFolderBrowse.Top + 5
+            $tbRootFolder.Left = $btnRootFolderBrowse.Right + 10
+            $tbRootFolder.Text = $Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)
+
+            $lblCertificateStoreCheck.Width = $objForm.Width
+            $lblCertificateStoreCheck.Height = $lblHeight 
+            $lblCertificateStoreCheck.Top = $btnRootFolderBrowse.Bottom + 1
+            $lblCertificateStoreCheck.Left = $lblIntroduction.Left
+
+            $btnRootFolderBrowse.Add_Click({$tbRootFolder.Text = ($objShell.BrowseForFolder(0,&quot;Please select the folder where the certificate store should be created:&quot;,0,$strDefaultBrowseFolderPath).self.Path)
+            $arrCertStoreCheckResult = @(Check-CertStore -RootFolderPath $tbRootFolder.Text)
+            If (-Not $arrCertStoreCheckResult[0])
+                {
+                $lblCertificateStoreCheck.ForeColor = &quot;Red&quot;
+                $lblCertificateStoreCheck.Text = &quot;An ssl folder and the relevant subfolders don't exist in the specified location `r`nand will be created.&quot;
+                }
+            ElseIf ($arrCertStoreCheckResult[0] -and $arrCertStoreCheckResult[1] -lt 5)
+                {
+                $lblCertificateStoreCheck.ForeColor = &quot;Orange&quot;
+                $lblCertificateStoreCheck.Text = &quot;An ssl folder exists in the specified location, but some or all of the subfolders `r`nneed to be created.&quot;
+                }
+            ElseIf ($arrCertStoreCheckResult[0] -and $arrCertStoreCheckResult[1] -eq 5)
+                {
+                $lblCertificateStoreCheck.ForeColor = &quot;Green&quot;
+                $lblCertificateStoreCheck.Text = &quot;An ssl folder and all of the required subfolders exist.&quot;
+                }
+            Else {$lblCertificateStoreCheck.Text = &quot;The result is undetermined&quot;;Write-Host &quot;Undetermined&quot;}
+                })
+
+        $objForm.Controls.Add($tbRootFolder) 
+        $objForm.Controls.Add($btnRootFolderBrowse)
+        $objForm.Controls.Add($lblCertificateStoreCheck) 
+
+        # Hostname
+        #---------------
+        $lblhostname = New-Object System.Windows.Forms.Label
+        $tbhostname = New-Object System.Windows.Forms.TextBox
+
+            $lblhostname.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+            $lblhostname.Top = $lblCertificateStoreCheck.Bottom + $gap
+            $lblhostname.Left = $lblIntroduction.Left
+
+            $tbhostname.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+            $tbhostname.Top = $lblhostname.Top
+            $tbhostname.Left = $lblhostname.Right + 10
+
+            If ($Source -eq &quot;btnNewCA&quot;)
+                {
+                $lblhostname.Text = &quot;Common Name&quot;
+                $tbhostname.Text = $tbCompanyName_ws.Text + ' Root CA'
+                }
+            ElseIf ($Source -eq &quot;btnVCSACerts&quot; -or $Source -eq &quot;btnESXiCerts&quot; -or $Source -eq &quot;btnDefaults&quot;)
+                {
+                $lblhostname.Text = &quot;vCenter Hostname&quot;
+                $tbhostname.Text = $Global:hshDefaultValues.Item(&quot;vCenterHostname&quot;)
+                }
+            Else
+                {
+                $lblhostname.Text = &quot;Hostname&quot;
+                $tbhostname.Text = &quot;WEB01&quot;
+                }
+
+        $objForm.Controls.Add($lblhostname) 
+        $objForm.Controls.Add($tbhostname) 
+
+        If (-Not ($Source -eq &quot;btnNewCA&quot;))
+            {
+            If (-not ($Source -eq &quot;btnESXiCerts&quot;))
+                {
+
+                # IP Address
+                #---------------
+                $lblIPaddress = New-Object System.Windows.Forms.Label
+                $tbIPaddress = New-Object System.Windows.Forms.TextBox
+
+                    $lblIPaddress.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+                    $lblIPaddress.Top = $lblhostname.Bottom + $gap
+                    $lblIPaddress.Left = $lblIntroduction.Left
+                    If ($Source -eq &quot;btnVCSACerts&quot;)
+                        {
+                        $lblIPaddress.Text = &quot;vCenter IP Address&quot;
+                        $tbIPaddress.Text = $Global:hshDefaultValues.Item(&quot;vCenterIPAddress&quot;)
+                        }
+                    Else
+                        {
+                        $lblIPaddress.Text = &quot;IP Address&quot;
+                        $tbIPaddress.Text = &quot;10.20.30.40&quot;
+                        }
+
+                    $tbIPaddress.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+                    $tbIPaddress.Top = $lblIPaddress.Top
+                    $tbIPaddress.Left = $lblIPaddress.Right + 10
+
+                $objForm.Controls.Add($lblIPaddress) 
+                $objForm.Controls.Add($tbIPaddress) 
+
+                }
+                Else
+                {
+
+                # Hostnames and IP addresses
+                #---------------
+                $btnManHostAndIP = New-Object System.Windows.Forms.Button
+                $btnAutoHostAndIP = New-Object System.Windows.Forms.Button 
+                $hdrHostName = New-Object System.Windows.Forms.ColumnHeader
+                $hdrIPAddress = New-Object System.Windows.Forms.ColumnHeader
+                $lstHostAndIP = New-Object System.Windows.Forms.ListView
+
+                    $btnManHostAndIP.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+                    $btnManHostAndIP.Top = $lblhostname.Bottom + $gap
+                    $btnManHostAndIP.Left = $lblIntroduction.Left
+                    $btnManHostAndIP.Text = &quot;Specify Hostname and IP&quot;
+
+                    $btnAutoHostAndIP.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight) 
+                    $btnAutoHostAndIP.Top = $btnManHostAndIP.Bottom + $gap
+                    $btnAutoHostAndIP.Left = $lblIntroduction.Left
+                    $btnAutoHostAndIP.Text = &quot;Get Hostname and IP from vCenter&quot;
+
+                    $hdrHostName.Text = &quot;Host Name&quot;
+                    $hdrHostName.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Left
+
+                    $hdrIPAddress.Text = &quot;IP Address&quot;
+                    $hdrIPAddress.TextAlign = [System.Windows.Forms.HorizontalAlignment]::Center
+
+                    $lstHostAndIP.Height = $btnAutoHostAndIP.Bottom - $btnManHostAndIP.Top + $gap
+                    $lstHostAndIP.Width = $tbWidth
+                    $lstHostAndIP.Top = $btnManHostAndIP.Top
+                    $lstHostAndIP.Left = $btnManHostAndIP.Right + 10
+                    $lstHostAndIP.GridLines = $true
+
+                    $lstHostAndIP.Columns.Add($hdrHostName.Text, -2)
+                    $lstHostAndIP.Columns.Add($hdrIPAddress.Text, -2)
+                    $lstHostAndIP.View = [System.Windows.Forms.View]::Details
+
+                    $btnManHostAndIP.Add_Click({
+                        Form-ESXiHostsAndIPsHash
+                        $i = 1
+                        $Global:hshHostAndIP.GetEnumerator() | foreach {
+                            $lvItem = New-Object System.Windows.Forms.ListViewItem($_.Key)
+                            $lvItem.SubItems.Add($_.Value)
+                            $lstHostAndIP.Items.Add($lvItem)
+                            }
+                        })
+
+                    $btnAutoHostAndIP.Add_Click({
+                        If (Test-PowerCLI)
+                            {
+                            $strvCenterServer = $tbhostname.Text + '.' + $tbFQDN.Text
+                            #Connect-VIServer -Server $tbIPAddress.Text -Credential (Get-Credential -Credential root)
+                            [hashtable]$Global:hshHostAndIP = $null
+                            $Global:hshHostAndIP = @{}
+                            Get-VMHost | Get-VMHostNetworkAdapter -VMKernel | foreach {
+				                $arrHostName = $_.VMHost.Name.ToString().Split(&quot;.&quot;)
+				                $Global:hshHostAndIP.Add($arrHostName[0],$_.IP)
+				                    }
+                                $Global:hshHostAndIP.GetEnumerator() | foreach {
+                                $lvItem = New-Object System.Windows.Forms.ListViewItem($_.Key)
+                                $lvItem.SubItems.Add($_.Value)
+                                $lstHostAndIP.Items.Add($lvItem)
+                                    }
+                            }
+                        })
+
+                $objForm.Controls.Add($btnManHostAndIP) 
+                $objForm.Controls.Add($btnAutoHostAndIP) 
+                $objForm.Controls.Add($lstHostAndIP) 
+                }
+
+            # FQDN
+            #---------------
+            $lblFQDN = New-Object System.Windows.Forms.Label
+            $tbFQDN = New-Object System.Windows.Forms.TextBox
+
+                $lblFQDN.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+                $lblFQDN.Left = $lblIntroduction.Left
+                If ($Source -eq &quot;btnESXiCerts&quot;)
+                    {
+                    $lblFQDN.Top = $lstHostAndIP.Bottom + $gap
+                    }
+                Else
+                    {
+                    $lblFQDN.Top = $lblIPaddress.Bottom + $gap
+                    }
+                $lblFQDN.Text = &quot;Company FQDN&quot;
+
+                $tbFQDN.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+                $tbFQDN.Top = $lblFQDN.Top
+                $tbFQDN.Left = $lblFQDN.Right + 10
+                $tbFQDN.Text = $Global:hshDefaultValues.Item(&quot;FQDN&quot;)
+
+            $objForm.Controls.Add($lblFQDN) 
+            $objForm.Controls.Add($tbFQDN) 
+            }
+
+        # Country
+        #---------------
+        $lblCountryCode = New-Object System.Windows.Forms.Label
+        $tbCountryCode = New-Object System.Windows.Forms.TextBox
+
+            $lblCountryCode.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+            If ($Source -eq &quot;btnNewCA&quot;)
+                {
+                $lblCountryCode.Top = $lblhostname.Bottom + $gap
+                }
+            Else
+                {
+                $lblCountryCode.Top = $lblFQDN.Bottom + $gap
+                }
+            $lblCountryCode.Left = $lblIntroduction.Left
+            $lblCountryCode.Text = &quot;Country Code`r`n(Two letter code)&quot;
+
+            $tbCountryCode.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+            $tbCountryCode.Top = $lblCountryCode.Top
+            $tbCountryCode.Left = $lblCountryCode.Right + 10
+            $tbCountryCode.Text = $Global:hshDefaultValues.Item(&quot;CountryCode&quot;)
+
+        $objForm.Controls.Add($lblCountryCode) 
+        $objForm.Controls.Add($tbCountryCode) 
+
+        # State or Province
+        #---------------
+        $lblStateOrProvinceName = New-Object System.Windows.Forms.Label
+        $tbStateOrProvinceName = New-Object System.Windows.Forms.TextBox
+
+            $lblStateOrProvinceName.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+            $lblStateOrProvinceName.Top = $lblCountryCode.Bottom + $gap
+            $lblStateOrProvinceName.Left = $lblIntroduction.Left
+            $lblStateOrProvinceName.Text = &quot;Province&quot;
+
+            $tbStateOrProvinceName.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+            $tbStateOrProvinceName.Top = $lblStateOrProvinceName.Top
+            $tbStateOrProvinceName.Left = $lblStateOrProvinceName.Right + 10
+            $tbStateOrProvinceName.Text = $Global:hshDefaultValues.Item(&quot;StateOrProvinceName&quot;)
+
+        $objForm.Controls.Add($lblStateOrProvinceName) 
+        $objForm.Controls.Add($tbStateOrProvinceName) 
+
+        # Locality or City
+        #---------------
+        $lblLocalityCity = New-Object System.Windows.Forms.Label
+        $tbLocalityCity = New-Object System.Windows.Forms.TextBox
+
+            $lblLocalityCity.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+            $lblLocalityCity.Top = $lblStateOrProvinceName.Bottom + $gap
+            $lblLocalityCity.Left = $lblIntroduction.Left
+            $lblLocalityCity.Text = &quot;Locality/City&quot;
+
+            $tbLocalityCity.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+            $tbLocalityCity.Top = $lblLocalityCity.Top
+            $tbLocalityCity.Left = $lblLocalityCity.Right + 10
+            $tbLocalityCity.Text = $Global:hshDefaultValues.Item(&quot;LocalityCity&quot;)
+
+        $objForm.Controls.Add($lblLocalityCity) 
+        $objForm.Controls.Add($tbLocalityCity) 
+
+        # Number of Bits
+        #---------------
+        If ($Source -eq &quot;btnNewCA&quot; -or $Source -eq &quot;btnCustomCert&quot; -or $Source -eq &quot;btnDefaults&quot;)
+            {
+            $lblNumberOfBits = New-Object System.Windows.Forms.Label
+            $tbNumberOfBits = New-Object System.Windows.Forms.TextBox
+
+                $lblNumberOfBits.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+                $lblNumberOfBits.Top = $lblLocalityCity.Bottom + $gap
+                $lblNumberOfBits.Left = $lblIntroduction.Left
+                $lblNumberOfBits.Text = &quot;Number of Bits&quot;
+
+                $tbNumberOfBits.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+                $tbNumberOfBits.Top = $lblNumberOfBits.Top
+                $tbNumberOfBits.Left = $lblNumberOfBits.Right + 10
+                $tbNumberOfBits.Text = $Global:hshDefaultValues.Item(&quot;NumberOfBits&quot;)
+
+            $objForm.Controls.Add($lblNumberOfBits) 
+            $objForm.Controls.Add($tbNumberOfBits) 
+            }
+
+        # Signing CA Directory
+        #---------------
+        If ($Source -eq &quot;btnVCSACerts&quot; -or $Source -eq &quot;btnCustomCert&quot; -or $Source -eq &quot;btnESXiCerts&quot; -or $Source -eq &quot;btnDefaults&quot;)
+            {
+            $btnSigningCAdirBrowse = New-Object System.Windows.Forms.Button
+            $tbSigningCAdir = New-Object System.Windows.Forms.TextBox 
+
+                $btnSigningCAdirBrowse.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+                If ($Source -eq &quot;btnCustomCert&quot; -or $Source -eq &quot;btnDefaults&quot;)
+                    {
+                    $btnSigningCAdirBrowse.Top = $lblNumberOfBits.Bottom + $gap
+                    }
+                ElseIf ($Source -eq &quot;btnESXiCerts&quot;  -or $Source -eq &quot;btnVCSACerts&quot;)
+                    {
+                    $btnSigningCAdirBrowse.Top = $lblLocalityCity.Bottom + $gap
+                    }
+                $btnSigningCAdirBrowse.Left = $lblIntroduction.Left
+                $btnSigningCAdirBrowse.Text = &quot;Signing CA Root Directory&quot;
+
+                $tbSigningCAdir.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+                $tbSigningCAdir.Top = $btnSigningCAdirBrowse.Top + 5
+                $tbSigningCAdir.Left = $btnSigningCAdirBrowse.Right + 10
+                $tbSigningCAdir.Text = $Global:hshDefaultValues.Item(&quot;SigningCARoot&quot;)
+
+                $btnSigningCAdirBrowse.Add_Click({
+                    $tbSigningCAdir.Text = ($objShell.BrowseForFolder(0,&quot;Please select the folder where the Certification Authority files are stored:&quot;,0,$strDefaultBrowseFolderPath).self.Path)
+                    })
+
+            $objForm.Controls.Add($btnSigningCAdirBrowse)
+            $objForm.Controls.Add($tbSigningCAdir) 
+            }
+
+            # Signing CA Certificate
+            #---------------
+            $btnSigningCAcrtBrowse = New-Object System.Windows.Forms.Button
+            $tbSigningCAcrt = New-Object System.Windows.Forms.TextBox 
+            $dlgSigningCAcrt = New-Object System.Windows.Forms.OpenFileDialog
+
+                $btnSigningCAcrtBrowse.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+                If ($Source -eq &quot;btnNewCA&quot;)
+                    {
+                    $btnSigningCAcrtBrowse.Top = $lblNumberOfBits.Bottom + $gap
+                    }
+                Else
+                    {
+                    $btnSigningCAcrtBrowse.Top = $btnSigningCAdirBrowse.Bottom + $gap
+                    }
+                $btnSigningCAcrtBrowse.Left = $lblIntroduction.Left
+                $btnSigningCAcrtBrowse.Text = &quot;Signing CA .crt file&quot;
+
+                $tbSigningCAcrt.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight) 
+                $tbSigningCAcrt.Top = $btnSigningCAcrtBrowse.Top + 5
+                $tbSigningCAcrt.Left = $btnSigningCAcrtBrowse.Right + 10 
+                $tbSigningCAcrt.Text = $Global:hshDefaultValues.Item(&quot;SigningCACRT&quot;)
+
+                $dlgSigningCAcrt.Title = &quot;Specify the Certificate file for the Certification Authority&quot; ;
+                $dlgSigningCAcrt.InitialDirectory = $Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)
+                $dlgSigningCAcrt.Filter = &quot;Certificate files (*.crt)|*.crt|All files (*.*)|*.*&quot;
+
+                $btnSigningCAcrtBrowse.Add_Click({
+                    If ($dlgSigningCAcrt.ShowDialog() -eq &quot;OK&quot;)
+                        {
+                        $tbSigningCAcrt.Text = $dlgSigningCAcrt.FileName
+                        }
+                    })
+
+            $objForm.Controls.Add($btnSigningCAcrtBrowse)
+            $objForm.Controls.Add($tbSigningCAcrt) 
+
+        If ($Source -eq &quot;btnVCSACerts&quot; -or $Source -eq &quot;btnCustomCert&quot; -or $Source -eq &quot;btnESXiCerts&quot; -or $Source -eq &quot;btnDefaults&quot;)
+            {
+            # Signing CA Key
+            #---------------
+            $btnSigningCAkeyBrowse = New-Object System.Windows.Forms.Button
+            $tbSigningCAkey = New-Object System.Windows.Forms.TextBox 
+            $dlgSigningCAkey = New-Object System.Windows.Forms.OpenFileDialog
+
+                $btnSigningCAkeyBrowse.Size = New-Object System.Drawing.Size($lblWidth,$lblHeight)
+                $btnSigningCAkeyBrowse.Top = $btnSigningCAcrtBrowse.Bottom + $gap
+                $btnSigningCAkeyBrowse.Left = $lblIntroduction.Left
+                $btnSigningCAkeyBrowse.Text = &quot;Signing CA .key file&quot;
+
+                $tbSigningCAkey.Size = New-Object System.Drawing.Size($tbWidth,$tbHeight)
+                $tbSigningCAkey.Top = $btnSigningCAkeyBrowse.Top + 5
+                $tbSigningCAkey.Left = $btnSigningCAkeyBrowse.Right + 10
+                $tbSigningCAkey.Text = $Global:hshDefaultValues.Item(&quot;SigningCAKey&quot;)
+
+                $dlgSigningCAkey.Title = &quot;Specify the Key file for the Certification Authority&quot; ;
+                $dlgSigningCAkey.InitialDirectory = $Global:hshDefaultValues.Item(&quot;RootFolderPath&quot;)
+                $dlgSigningCAkey.Filter = &quot;Key files (*.key)|*.key|All files (*.*)|*.*&quot;
+
+                $btnSigningCAkeyBrowse.Add_Click({
+                    If ($dlgSigningCAkey.ShowDialog() -eq &quot;OK&quot;)
+                        {
+                        $tbSigningCAkey.Text = $dlgSigningCAkey.FileName
+                        }
+                    })
+
+            $objForm.Controls.Add($btnSigningCAkeyBrowse)
+            $objForm.Controls.Add($tbSigningCAkey) 
+            }
+
+        If ($Sour
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Nathan Hartley">
+    <title>Find-Replace - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Find-Replace</h1>
+<h3><a href="//scripts/3773.ps1">download</a></h3>
+<p>Finds and Replaces multiple entries, in multiple files.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Finds and Replaces multiple entries, in multiple files.
+
+.DESCRIPTION
+By default, performs an ordinal (case-sensitive and culture-insensitive) search to find an old value and replace it.
+
+.PARAMETER Path
+One or more files Paths to process. Excepts values from the Pipeline. Will except the output from Get-ChildItem.
+
+.PARAMETER Object
+Any object or array of objects with Find and Replace properties that will be used to make the swap.
+-Object (Import-CSV SomeFile.csv)
+-Object @{Find = 'this'; Replace = 'that'}, @{Find = 'something'; Replace = 'other'}
+
+.PARAMETER Find
+One or more strings to Find.
+
+.PARAMETER Replace
+A string to replace those matching -Find.
+
+.PARAMETER Regex
+Treat find values as Regular Expressions.
+
+.PARAMETER WhatIf
+Test Find and Replace without making any changes.
+
+.PARAMETER Backup
+Backup the original file to &lt;OriginalFileName&gt;_yyyyMMddHHmmss.
+
+.PARAMETER PassThru
+Passes changed (or needing to be changed with WhatIf enabled) files through the pipeline.
+
+.PARAMETER Encoding
+
+.INPUTS
+Excepts file names and file objects for the Path parameter.
+
+.OUTPUTS
+None, unless PassThru specified. With PassThru, passes changed (or needing to be changed with WhatIf enabled) files through the pipeline.
+
+.EXAMPLE
+Get-ChildItem SomePath\* -recurse -include *.config,*.xslt,*.xml,*.txt | Find-Replace.ps1 -Object (Import-Csv Replacements.csv) -PassThru | set-content ChangedFiles.txt
+
+#&gt;
+[CmdletBinding(DefaultParametersetName=&quot;string&quot;)]
+param (
+	[Parameter(
+		Mandatory=$True,
+		ValueFromPipeline=$True,
+		ValueFromPipelineByPropertyName=$True,
+		Position=0,
+		HelpMessage=&quot;One or more file Paths to process.&quot;
+	)]
+	[string[]]$Path,
+
+	[Parameter(
+		ParameterSetName=&quot;object&quot;,
+		Mandatory=$True,
+		Position=1,
+		HelpMessage=&quot;Any object or array of objects with Find and Replace properties that will be used to make the swap.&quot;
+	)]
+	$Object,
+
+	[Parameter(
+		ParameterSetName=&quot;string&quot;,
+		Mandatory=$True,
+		Position=1,
+		HelpMessage=&quot;An array of strings to Find.&quot;
+	)]
+	[string[]]$Find,
+	[Parameter(
+		ParameterSetName=&quot;string&quot;,
+		Mandatory=$False,
+		Position=2,
+		HelpMessage=&quot;A string to replace those matching -Find.&quot;
+	)]
+	[string]$Replace,
+
+	
+	[Parameter(	HelpMessage=&quot;Treat find values as Regular Expressions.&quot; )]
+	[switch]$Regex,
+	
+	[Parameter(	HelpMessage=&quot;Test Find and Replace without making any changes.&quot; )]
+	[switch]$WhatIf,
+	
+	[Parameter(	HelpMessage=&quot;Backup the original file to &lt;OriginalFileName&gt;_yyyyMMddHHmmss.&quot; )]
+	[switch]$Backup,
+	
+	[Parameter(	HelpMessage=&quot;Passes changed (or needing to be changed with WhatIf enabled) files through the pipeline.&quot; )]
+	[switch]$PassThru,
+	
+	[string]$Encoding = 'ASCII'
+)
+
+BEGIN {
+    $replaceCache = $null
+	if ($PsCmdlet.ParameterSetName -eq 'string') {
+		$replaceCache = $Find | Foreach { @{find=$_; replace=$Replace} }
+	} else {
+		$replaceCache = $Object | Where {$_.Find -is [string] -and $_.Find.length -gt 0 -and $_.Replace -is [string] } | Foreach { @{find=$_.find; replace=$_.replace}}
+	}
+	if ($replaceCache -eq $null) {
+		Write-Warning 'No find values found or specified.'
+		Exit
+	}
+	$numFiles = 0
+	$numLines = 0
+	$numFilesChanged = 0
+	$numLinesChanged = 0
+	$RunTime = Get-Date
+}
+
+PROCESS {
+	$Path
+	foreach ($file in @($Path)){
+		Write-Verbose &quot;Processing $file&quot;
+		$numFiles++
+		$lineNum = 0 
+		$changesNum = 0
+		Get-Content $file | Foreach {
+			$line = $_
+			$lineNum++
+			Write-Debug ('{0:  0}: {1}' -f $lineNum, $line)
+			Foreach ($replace in @($replaceCache)) {
+				Write-Debug ('Find: [{0}]  Replace: [{1}]' -f $replace.find, $replace.replace)
+				if ($Regex) {
+					$line = $line -replace $replace.find, $replace.replace
+				} else {
+					$line = $line.Replace($replace.find, $replace.replace)
+				}
+			}
+			if ($_ -cne $line) {
+				$changesNum++
+				Write-Verbose &quot;   Changed line $lineNum from '$_' to '$line' in $file.&quot;
+			}
+			$line
+		} | Where {-not $WhatIf} | Set-Content -encoding:$Encoding -Path ($file + '_FindReplace')
+		$numLines += $lineNum
+		$numLinesChanged += $changesNum
+		if ($changesNum -gt 0) {
+			$numFilesChanged++
+			if (-not $WhatIf) {
+				if ($Backup) {
+					Copy-Item ($file + '_FindReplace') ('{0}_{1:yyyyMMddHHmmss}' -f $file, $RunTime) -Verbose:$Verbose
+				}
+				Remove-Item $file
+				Rename-Item ($file + '_FindReplace') $file
+				Write-Verbose &quot;    Changed $changesNum of $lineNum Lines&quot;
+			}
+			if ($PassThru) { $file }
+		}
+	}
+}
+
+END {
+	$totals = &quot;Totals: Changed $numFilesChanged of $numFiles Files  Changed $numLinesChanged of $numLines Lines&quot;
+	if ($WhatIf) {
+		Write-Host &quot;What if: $totals&quot;
+	} else {
+		Write-Verbose $totals
+	}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

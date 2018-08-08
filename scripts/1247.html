@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Justin Grote">
+    <title>VMWare Quick Migration - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>VMWare Quick Migration</h1>
+<h3><a href="//scripts/1247.ps1">download</a> - <a href="//scripts/1246.md">parent</a></h3>
+<p>Performs the functional equivalent of a Hyper-V Quick Migration by suspending a VM, moving it to a new host, and resuming it. This does not require vMotion licensing. It works by providing required VM objects via the pipeline or the second argument, and specifying the Destination host in the first argument, so you can use whatever query you want to build a list of VM's to send to the command.</p>
+<pre><code class="language-posh">#########################################
+#Name: VMWare Quick Migration Function
+#Author: Justin Grote &lt;jgrote NOSPAMAT enpointe DOT com&gt;
+#Credit: Inspired by Mike DiPetrillo's Quick Migration Script: http://www.mikedipetrillo.com/mikedvirtualization/2008/10/quick-migration-for-vmware-the-power-of-powershell.html
+#Source: http://poshcode.org/1246
+#Version: 0.1
+#Last Revised: 31 July 2009
+#
+#Description: Performs the fucntional equivalent of a Hyper-V Quick Migration by suspending a VM, 
+#	moving it to a new host, and resuming it. This does not require vMotion licensing.
+#	it works by providing required VM objects via the pipeline or the second argument, 
+#	and specifying the Destination host in the first argument.
+#	The commeand accepts both text strings and VMHost objects for the VMHost Parameter
+#
+
+#Prerequisites:
+#	Powershell v1
+#	VMWare PowerCLI 4.0 (May work with earlier version but not tested)
+#
+#Instructions to Install: Save this script and import into your session with, for example, . C:\temp\quickmigrate.ps1
+#	You can also include it in your PowerCLI profile to have it automatically included.
+#Command Usage: get-vm MyTestVM | Quick-MigrateVM &quot;MyTestHost2&quot;
+#########################################
+function QuickMigrate-VM {
+	PARAM(
+		$NewVMHost = &quot;&quot;
+		, [VMware.VimAutomation.Client20.VirtualMachineImpl]$VMsToMigrate = $null
+	)
+	BEGIN {
+		if (!$NewVMHost){
+			Write-Error &quot;No Destination VMHost Specified. You must specify a host to migrate to. `n Example: Get-VM `&quot;Test`&quot; | QuickMigrate-VM `&quot;Host1`&quot;&quot;
+			break
+		}
+		elseif ($VMsToMigrate) {
+			Write-Output $InputObject | &amp;($MyInvocation.InvocationName) -NewVMHost $newVMHost
+		}
+		else {
+			#If NewVMHost was provided as a String, convert it into a VMHost Object.
+			if ($NewVMHost.GetType().Name -eq &quot;String&quot;) {
+				set-variable -name destinationVMHost -value (get-vmhost $NewVMHost) -scope 1
+			}
+			#Make sure that we have a VMHost object to work with.
+			if (! $destinationVMHost -or (! $destinationVMHost.GetType().Name -eq &quot;VMHostImpl&quot;)) {
+				write-error &quot;Destination VM Host was not found or you provided the wrong object type. Please provide a VMHostImpl object or specify the fully qualified name of a VM Host&quot;
+				break
+			}
+			write-host -fore white &quot;===Begin Quick Migration===&quot;
+		}
+	}
+	
+	PROCESS {
+		$step = 0
+		$skip = $false
+		#In the Event of an error, output the error, and skip the rest of the current item.
+		#This is a workaround for the fact that &quot;continue&quot; doesn't work in a function process loop.
+		trap {
+			write-host -fore yellow &quot;`tSKIPPED: &quot;$_.Exception.Message
+			set-variable -name skip -value ($true) -scope 1
+			continue
+		}
+		$vmToMigrate = $_
+		
+		### Validation Checks
+		if($_ -is [VMware.VimAutomation.Client20.VirtualMachineImpl]) {
+			write-host -fore white &quot;Quick Migrating $($vmToMigrate.Name) to $NewVMHost...&quot;
+		}
+		else {
+			throw &quot;Object Passed was not a Virtual Machine object. Object must be of type VMware.VimAutomation.Client20.VirtualMachineImpl.&quot;
+		}
+		# Check for connected devices
+		if (! $skip -and (get-cddrive $vmToMigrate).ConnectionState.Connected -ieq &quot;TRUE&quot;) {
+			throw &quot;Connected CD Drive. Please disconnect and try again.&quot;
+		}
+		if (! $skip -and (get-floppydrive $vmToMigrate).ConnectionState.Connected -ieq &quot;TRUE&quot;) {
+			throw &quot;Connected Floppy Drive. Please disconnect and try again.&quot;
+		}
+		
+		# Make sure the current VM Host and the Destination Host are different.
+		$sourceVMHost = get-vmhost -vm $vmToMigrate
+		if (! $skip -and ($sourceVMHost.Name -eq $destinationVMHost.Name)) {
+			throw &quot;Source and Destination Hosts are the same.&quot;
+		}
+		
+		###Validation Complete, begin Migration
+		if (! $skip) {
+			$step++
+			write-host -fore cyan &quot;`t$($step. Suspending&quot; $vmToMigrate.Name&quot;...&quot;
+			$suspend = Suspend-VM -VM $vmToMigrate -confirm:$false
+		}
+		if (! $skip) {
+			$step++
+			write-host -fore cyan &quot;`t($step). Moving&quot; $vmToMigrate.Name &quot;to&quot; $destinationVMHost.Name&quot;...&quot;
+			$migrate = Get-VM $vmToMigrate | Move-VM -Destination $destinationVMHost
+		}
+		if (! $skip) {
+			$step++
+			write-host -fore cyan &quot;`t($step). Resuming&quot; $vmToMigrate.Name&quot;...&quot;
+			$resume = Start-VM -VM $vmToMigrate
+		}
+		write-host -fore green &quot;`tCOMPLETED&quot;
+	}
+
+		END { write-host -fore white &quot;===END Quick Migration===&quot; }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

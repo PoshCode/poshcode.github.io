@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DBAWithABeard">
+    <title>Refresh an AG DB - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Refresh an AG DB</h1>
+<h3><a href="//scripts/5399.ps1">download</a></h3>
+<pre><code>    Refreshes an Availability group database from a backup taken from a Load Server
+
+    YOU WILL NEED TO RESOLVE ORPHANED USERS IF REQUIRED
+</code></pre>
+<pre><code class="language-posh">&lt;#
+
+    .NOTES 
+    Name: Availability Group Refresh
+    Author: Rob Sewell http://sqldbawithabeard.com
+    
+    .DESCRIPTION 
+        Refreshes an Availability group database from a backup taken from a Load Server
+
+        YOU WILL NEED TO RESOLVE ORPHANED USERS IF REQUIRED
+#&gt; 
+
+## http://msdn.microsoft.com/en-gb/library/hh213078.aspx#PowerShellProcedure
+# http://msdn.microsoft.com/en-us/library/hh213326(v=sql.110).aspx
+cls
+
+# To Load SQL Server Management Objects into PowerShell
+    [System.Reflection.Assembly]::LoadWithPartialName(‘Microsoft.SqlServer.SMO’)  | out-null
+    [System.Reflection.Assembly]::LoadWithPartialName(‘Microsoft.SqlServer.SMOExtended’)  | out-null
+
+$LoadServer = &quot;&quot; # The Load Server 
+
+$Date = Get-Date -Format ddMMyy
+$PrimaryServer = &quot;&quot; # The Primary Availability Group Server
+$SecondaryServer = &quot;&quot; # The Secondary Availability Group Server
+$TertiaryServer = &quot;&quot; # The Tertiary Availability Group Server
+$AGName = &quot;&quot; # Availability Group Name
+$DBName = &quot;&quot; # Database Name
+
+$LoadDatabaseBackupFile = &quot;\\sql2012ser2012\Backups\GoldenBackup\LoadTestDatabase&quot; + $Date + &quot;.bak&quot; # Load database Backup location - Needs access permissions granted
+$DatabaseBackupFile = &quot;\\sql2012ser2012\Backups\GoldenBackup\TestDatabase&quot; + $Date + &quot;.bak&quot; # database Backup location - Needs access permissions granted
+$LogBackupFile = &quot;\\sql2012ser2012\Backups\GoldenBackup\TestDatabase&quot; + $Date + &quot;.trn&quot; # database Backup location - Needs access permissions granted
+
+# Path to Availability Database Objects
+$MyAgPrimaryPath = &quot;SQLSERVER:\SQL\$PrimaryServer\DEFAULT\AvailabilityGroups\$AGName&quot;
+$MyAgSecondaryPath = &quot;SQLSERVER:\SQL\$SecondaryServer\DEFAULT\AvailabilityGroups\$AGName&quot;
+$MyAgTertiaryPath = &quot;SQLSERVER:\SQL\$TertiaryServer\DEFAULT\AvailabilityGroups\$AGName&quot;
+
+$StartDate = Get-Date
+Write-Host &quot;
+##########################################
+Results of Script to refresh $DBName on
+$PrimaryServer , $SecondaryServer , $TertiaryServer
+on AG $AGName
+Time Script Started $StartDate
+
+&quot; -ForegroundColor Green
+
+
+cd c:
+
+# Remove old backups
+If(Test-Path $LoadDatabaseBackupFile){Remove-Item -Path $LoadDatabaseBackupFile -Force}
+If(Test-Path $DatabaseBackupFile){Remove-Item -Path $DatabaseBackupFile}
+If(Test-Path $LogBackupFile ) {Remove-Item -Path $LogBackupFile }
+
+Write-Host &quot;Backup Files removed&quot; -ForegroundColor Green
+
+# Remove Secondary Replica Database from Availability Group to enable restore
+Remove-SqlAvailabilityDatabase -Path SQLSERVER:\SQL\$SecondaryServer\DEFAULT\AvailabilityGroups\$AGName\AvailabilityDatabases\$DBName 
+
+Write-Host &quot;Secondary Removed from Availability Group&quot; -ForegroundColor Green
+
+# Remove Tertiary Replica Database from Availability Group to enable restore
+Remove-SqlAvailabilityDatabase -Path SQLSERVER:\SQL\$TertiaryServer\DEFAULT\AvailabilityGroups\$AGName\AvailabilityDatabases\$DBName
+
+Write-Host &quot;Tertiary removed from Availability Group&quot; -ForegroundColor Green
+
+# Remove Primary Replica Database from Availability Group to enable restore
+Remove-SqlAvailabilityDatabase -Path SQLSERVER:\SQL\$PrimaryServer\DEFAULT\AvailabilityGroups\$AGName\AvailabilityDatabases\$DBName
+
+Write-Host &quot;Primary removed from Availability Group&quot; -ForegroundColor Green
+
+# Backup Load Database
+Backup-SqlDatabase -Database $DBName -BackupFile $LoadDatabaseBackupFile -ServerInstance $LoadServer
+
+Write-Host &quot;Load Database Backed up&quot; -ForegroundColor Green
+
+# Remove connections to database for Restore
+$srv = New-Object Microsoft.SqlServer.Management.Smo.Server $PrimaryServer
+$srv.KillAllProcesses($dbname)
+
+# Restore Primary Replica Database from Load Database
+Restore-SqlDatabase -Database $DBName -BackupFile $LoadDatabaseBackupFile  -ServerInstance $PrimaryServer -ReplaceDatabase
+
+Write-Host &quot;Primary Database Restored&quot; -ForegroundColor Green
+
+# Backup Primary Database
+Backup-SqlDatabase -Database $DBName -BackupFile $DatabaseBackupFile -ServerInstance $PrimaryServer
+Backup-SqlDatabase -Database $DBName -BackupFile $LogBackupFile -ServerInstance $PrimaryServer -BackupAction 'Log'
+
+Write-Host &quot;Primary Database Backed Up&quot; -ForegroundColor Green
+
+# Remove connections to database for Restore
+$srv = New-Object Microsoft.SqlServer.Management.Smo.Server $SecondaryServer
+$srv.KillAllProcesses($dbname)
+
+# Restore Secondary Replica Database 
+Restore-SqlDatabase -Database $DBName -BackupFile $DatabaseBackupFile -ServerInstance $SecondaryServer -NoRecovery -ReplaceDatabase 
+Restore-SqlDatabase -Database $DBName -BackupFile $LogBackupFile -ServerInstance $SecondaryServer -RestoreAction 'Log' -NoRecovery  -ReplaceDatabase
+
+Write-Host &quot;Secondary Database Restored&quot; -ForegroundColor Green
+
+# Remove connections to database for Restore
+$srv = New-Object Microsoft.SqlServer.Management.Smo.Server $TertiaryServer
+$srv.KillAllProcesses($dbname)
+
+# Restore Tertiary Replica Database 
+Restore-SqlDatabase -Database $DBName -BackupFile $DatabaseBackupFile -ServerInstance $TertiaryServer -NoRecovery -ReplaceDatabase
+Restore-SqlDatabase -Database $DBName -BackupFile $LogBackupFile -ServerInstance $TertiaryServer -RestoreAction 'Log' -NoRecovery  -ReplaceDatabase
+
+Write-Host &quot;Tertiary Database Restored&quot; -ForegroundColor Green
+
+# Add database back into Availability Group
+Add-SqlAvailabilityDatabase -Path $MyAgPrimaryPath -Database $DBName 
+Add-SqlAvailabilityDatabase -Path $MyAgSecondaryPath -Database $DBName 
+Add-SqlAvailabilityDatabase -Path $MyAgTertiaryPath -Database $DBName 
+
+Write-Host &quot;Database Added to Availability Group &quot; -ForegroundColor Green
+
+# Check Availability Group Status
+ $srv = New-Object Microsoft.SqlServer.Management.Smo.Server $PrimaryServer
+    $AG = $srv.AvailabilityGroups[$AGName]
+    $AG.DatabaseReplicaStates|ft -AutoSize
+
+    $EndDate = Get-Date
+    $Time = $EndDate - $StartDate
+Write-Host &quot;
+##########################################
+Results of Script to refresh $DBName on
+$PrimaryServer , $SecondaryServer , $TertiaryServer
+on AG $AGName
+Time Script ended at $EndDate and took
+$Time
+
+&quot; -ForegroundColor Green
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

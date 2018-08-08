@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Mostafa Elhemali">
+    <title>Hadoop Dev - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Hadoop Dev</h1>
+<h3><a href="//scripts/5065.ps1">download</a></h3>
+<p>Script to setup a working environment for working with Apache Hadoop code on Windows.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Prepares your dev environment for working with Apache Hadoop.
+#&gt;
+
+function Get-ScriptDirectory
+{
+    $Invocation = (Get-Variable MyInvocation -Scope 1).Value
+    Split-Path $Invocation.MyCommand.Path
+}
+
+$sourceDirectory = Split-Path $(Get-ScriptDirectory)
+$sourceCodeDirectory = &quot;$sourceDirectory\hadoop-common&quot;
+$toolsDirectory = &quot;$sourceDirectory\Tools&quot;
+$distDirectory = &quot;$sourceDirectory\hadoop-common\hadoop-dist\target\hadoop-3.0.0-SNAPSHOT&quot;
+$defaultSingleNodeDirectory = 'c:\YarnSingleNode'
+$defaultDownloadDirectory = &quot;$sourceDirectory\Downloads&quot;
+$defaultLogsDirectory = &quot;$sourceDirectory\Logs&quot;
+$defaultPatchesDirectory = &quot;$sourceDirectory\Patches&quot;
+
+function Unzip($fileName, $destination)
+{
+    $shellApp = New-Object -com shell.application
+    $zipFile = $shellApp.namespace($fileName)
+    $mdOutput = md -Force $destination
+    $destinationShell = $shellApp.namespace($destination)
+    $firstItem = $zipFile.items() | Select-Object -first 1 | %{Split-Path -Leaf $_.Path}
+    if ($(Test-Path $(Join-Path $destination $firstItem)))
+    {
+        Write-Host 'Unzip destination already exists - skipping...'
+    }
+    else
+    {
+        $destinationShell.CopyHere($zipFile.items())
+    }
+    return Join-Path $destination $firstItem
+}
+
+function Get-Ant($downloadsDirectory = $defaultDownloadDirectory, $logsDirectory = $defaultLogsDirectory, $installDirectory = $toolsDirectory)
+{
+    $wc = New-Object System.Net.WebClient
+    $baseUrl = 'http://www.apache.org/dist/ant/binaries/'
+    $binariesPage = $wc.DownloadString($baseUrl)
+    $regex = [regex]'href=&quot;(?&lt;URL&gt;.*\.zip)&quot;'
+    $zipName = $($regex.Matches($binariesPage) | %{$_.Groups['URL'].Value})
+    $downloadUrl = $baseUrl + $zipName
+    $destZip = Join-Path $downloadsDirectory $zipName
+    if (-not $(Test-Path $destZip))
+    {
+        Write-Host &quot;Downloading Ant...&quot;
+        $wc.DownloadFile($downloadUrl, $destZip)
+        Write-Host &quot;Done!&quot;
+    }
+    else
+    {
+        Write-Host 'Ant zip file already present - using that.'
+    }
+    Write-Host &quot;Extracting Ant...&quot;
+    Unzip $destZip $installDirectory
+    Write-Host &quot;Done!&quot;
+}
+
+function Get-Maven($downloadsDirectory = $defaultDownloadDirectory, $logsDirectory = $defaultLogsDirectory, $installDirectory = $toolsDirectory)
+{
+    $wc = New-Object System.Net.WebClient
+    $baseUrl = 'http://www.apache.org/dist/maven/binaries/'
+    $binariesPage = $wc.DownloadString($baseUrl)
+    $regex = [regex]'href=&quot;(?&lt;URL&gt;apache-maven-(?&lt;Ver&gt;[0-9.]*)-bin\.zip)&quot;'
+    $zipName = $regex.Matches($binariesPage) | Sort-Object -property @{Expression={[System.Version]$_.Groups['Ver'].Value};Ascending=$false} | Select-Object -First 1 | %{$_.Groups['URL'].Value}
+    $downloadUrl = $baseUrl + $zipName
+    $destZip = Join-Path $downloadsDirectory $zipName
+    if (-not $(Test-Path $destZip))
+    {
+        Write-Host &quot;Downloading Maven...&quot;
+        $wc.DownloadFile($downloadUrl, $destZip)
+        Write-Host &quot;Done!&quot;
+    }
+    else
+    {
+        Write-Host 'Maven zip file already present - using that.'
+    }
+    Write-Host &quot;Extracting Maven...&quot;
+    Unzip $destZip $installDirectory
+    Write-Host &quot;Done!&quot;
+}
+
+function Get-ProtoBuf($downloadsDirectory = $defaultDownloadDirectory, $logsDirectory = $defaultLogsDirectory, $installDirectory = $toolsDirectory)
+{
+    $wc = New-Object System.Net.WebClient
+    $downloadUrl = 'https://protobuf.googlecode.com/files/protoc-2.5.0-win32.zip'
+    $zipName = 'protoc-2.5.0-win32.zip'
+    $destZip = Join-Path $downloadsDirectory $zipName
+    if (-not $(Test-Path $destZip))
+    {
+        Write-Host &quot;Downloading ProtoBuf...&quot;
+        $wc.DownloadFile($downloadUrl, $destZip)
+        Write-Host &quot;Done!&quot;
+    }
+    else
+    {
+        Write-Host 'ProtoBuf zip file already present - using that.'
+    }
+    $destination = Join-Path $installDirectory 'ProtoBuf'
+    Write-Host &quot;Extracting ProtoBuf...&quot;
+    $protoc = Unzip $destZip $destination
+    Write-Host &quot;Done!&quot;
+    $destination
+}
+
+function Apply-SpacePatch($patchesDirectory = $defaultPatchesDirectory, $dest = $sourceCodeDirectory, $logsDirectory = $defaultLogsDirectory)
+{
+    Trap { &quot;Exception applying space patch`: $_&quot;; Break }
+    $wc = New-Object System.Net.WebClient
+    $downloadUrl = 'http://issues.apache.org/jira/secure/attachment/12639264/HADOOP-9600.6.patch'
+    $mdOutput = md -Force $patchesDirectory
+	$localPath = &quot;$patchesDirectory\SpacePatch.patch&quot;
+    $wc.DownloadFile($downloadUrl, $localPath)
+	pushd $dest
+	git apply $localPath &gt; $(Join-Path $logsDirectory 'GitApply.log') 2&gt;&amp;1
+	popd
+}
+
+function Add-Path($directory)
+{
+    if (-not($env:PATH -like &quot;*$directory*&quot;))
+    {
+        $env:PATH = &quot;$env:PATH;$directory;&quot;
+    }
+}
+
+function Get-Trunk($dest = $sourceDirectory, $logsDirectory = $defaultLogsDirectory)
+{
+    Write-Host 'Downloading Hadoop trunk source'
+    pushd $dest
+    git clone https://github.com/apache/hadoop-common.git &gt; $(Join-Path $logsDirectory 'GitCheckout.log') 2&gt;&amp;1
+    popd
+    Write-Host 'Done!'
+}
+
+$antDirectory = &quot;$toolsDirectory\apache-ant-1.9.1\bin&quot;
+$mavenDirectory = &quot;$toolsDirectory\apache-maven-3.2.1\bin&quot;
+$protoBufDirectory = &quot;$toolsDirectory\ProtoBuf&quot;
+Add-Path $antDirectory
+Add-Path $mavenDirectory
+Add-Path $protoBufDirectory
+Add-Path &quot;$toolsDirectory\cygwin\bin&quot;
+Add-Path &quot;$env:windir\Microsoft.NET\Framework64\v4.0.30319&quot;
+Add-Path &quot;$env:ProgramFiles\Java\bin&quot;
+Add-Path &quot;$env:ProgramFiles\Java\jre\bin&quot;
+$env:JAVA_HOME = &quot;$env:ProgramFiles\Java\jdk1.7.0_51&quot;
+$env:PLATFORM = 'x64'
+
+$scriptLogsDirectory = &quot;$env:LOCALAPPDATA\HadoopDevScriptLogs&quot;
+$mdOutput = md -Force $scriptLogsDirectory
+$mdOutput = md -Force $defaultLogsDirectory
+$mdOutput = md -Force $defaultDownloadDirectory
+
+function Check-Dist
+{
+    if (-not (Test-Path $distDirectory))
+    {
+        Write-Error 'Build not found, please run: Build-Package'
+        return $false;
+    }
+    return $true;
+}
+
+function Build-Package([Switch]$noClean = $false)
+{
+    pushd $sourceDirectory\hadoop-common
+    mvn $(if ($noClean) {&quot;&quot;} else {&quot;clean&quot;}) package -DskipTests -Pdist -Dtar | Tee-Object -FilePath BuildLogs.txt
+    popd
+}
+
+function Alter-XmlFile
+(
+    [Parameter(Mandatory = $true, HelpMessage = 'The file to alter.')]
+    [string]$xmlFile,
+    [Parameter(Mandatory = $true, HelpMessage = 'The new XML for the file')]
+    [xml]$xml
+)
+{
+    Trap { &quot;Exception altering file $($xmlFile)`: $_&quot;; Break }
+
+    $xmlFile = (Resolve-Path $xmlFile).Path
+    $reader = New-Object System.Xml.XmlTextReader $xmlFile
+    $didRead = $reader.Read()
+    $encoding = $reader.Encoding
+    $reader.Close()
+    $writerSettings = New-Object System.Xml.XmlWriterSettings
+    $writerSettings.Encoding = $encoding
+    $writerSettings.Indent = $true
+    $writerSettings.IndentChars = &quot;  &quot;
+    $writer = [System.Xml.XmlWriter]::Create($xmlFile, $writerSettings)
+    $xml.WriteContentTo($writer)
+    $writer.Close()
+}
+
+function Add-Property($xmlFile, $propertyName, $propertyValue)
+{
+    if (-not (Test-Path $xmlFile))
+    {
+        Out-File -FilePath $xmlFile -Encoding ascii -InputObject @&quot;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;?xml-stylesheet type=&quot;text/xsl&quot; href=&quot;configuration.xsl&quot;?&gt;
+&lt;configuration&gt;
+
+&lt;/configuration&gt;
+&quot;@
+    }
+    [xml]$xml = Get-Content $xmlFile
+    $propertyNode = $xml.CreateElement('property')
+    $nameNode = $xml.CreateElement('name')
+    $nameNode.InnerText = $propertyName
+    $inserted = $propertyNode.InsertAfter($nameNode, $null)
+    $valueNode = $xml.CreateElement('value')
+    $valueNode.InnerText = $propertyValue
+    $inserted = $propertyNode.InsertAfter($valueNode, $nameNode)
+    $inserted = $xml.DocumentElement.InsertAfter($propertyNode, $xml.DocumentElement.LastChild)
+    Alter-XmlFile $xmlFile $xml
+}
+
+function Configure-SingleNode($destinationDirectory = $defaultSingleNodeDirectory)
+{
+    Trap
+    {
+        $_
+        break;
+    }
+    if (Check-Dist)
+    {
+        Write-Host &quot;Copying Hadoop...&quot;
+        $robocopyOutput = robocopy /MIR $distDirectory $destinationDirectory
+		$mdOutput = md &quot;$destinationDirectory\logs&quot;
+        
+        $clusterFilesDirectory = &quot;$destinationDirectory\ClusterFiles&quot;
+        $clusterFilesUri = $(New-Object -Type 'System.Uri' -ArgumentList $clusterFilesDirectory).AbsoluteUri
+        
+        Write-Host &quot;Writing out configuration files...&quot;
+        $localHost = $env:COMPUTERNAME # When I use just localhost I get resource manager not being able to connect to node manager, not sure why
+        $mapredSite = &quot;$destinationDirectory\etc\hadoop\mapred-site.xml&quot;
+        Add-Property $mapredSite 'mapreduce.framework.name' &quot;yarn&quot;
+        Add-Property $mapredSite 'fs.defaultFS' &quot;hdfs://$($localHost):9000&quot;
+        
+        $yarnSite = &quot;$destinationDirectory\etc\hadoop\yarn-site.xml&quot;
+        Add-Property $yarnSite 'yarn.resourcemanager.resource-tracker.address' &quot;$($localHost):6010&quot;
+        Add-Property $yarnSite 'yarn.resourcemanager.scheduler.address' &quot;$($localHost):6011&quot;
+        Add-Property $yarnSite 'yarn.resourcemanager.scheduler.class' 'org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler'
+        Add-Property $yarnSite 'yarn.resourcemanager.address' &quot;$($localHost):6012&quot;
+        Add-Property $yarnSite 'yarn.nodemanager.local-dirs' &quot;$clusterFilesDirectory\NMLocal&quot;
+        Add-Property $yarnSite 'yarn.nodemanager.address' &quot;$($localHost):6013&quot;
+        Add-Property $yarnSite 'yarn.nodemanager.log-dirs' &quot;$clusterFilesDirectory\NMLogs&quot;
+        Add-Property $yarnSite 'yarn.nodemanager.aux-services' 'mapreduce_shuffle'
+        
+        $hdfsSite = &quot;$destinationDirectory\etc\hadoop\hdfs-site.xml&quot;
+        Add-Property $hdfsSite 'fs.defaultFS' &quot;hdfs://$($localHost):9000&quot;
+        Add-Property $hdfsSite 'dfs.replication' '1'
+        Add-Property $hdfsSite 'dfs.name.dir' &quot;$clusterFilesUri/nn&quot;
+        Add-Property $hdfsSite 'dfs.data.dir' &quot;$clusterFilesUri/dn&quot;
+        
+        Write-Host &quot;Done!&quot;
+    }
+}
+
+function Run-PowerShellSeparateWindow($command, $title)
+{
+	Start-Process powershell &quot;`$(Get-Host).UI.RawUI.WindowTitle = '$title';$command&quot;
+}
+
+function Run-HadoopNode($cmd, $logFileName, $title, $hadoopDirectory = $defaultSingleNodeDirectory)
+{
+    Run-PowerShellSeparateWindow &quot;cd `&quot;$hadoopDirectory`&quot;;`$(Get-Host).PrivateData.ErrorForegroundColor = 'White'; $cmd 2&gt;&amp;1 | Tee-Object `&quot;$hadoopDirectory/logs/$logFileName.txt`&quot;&quot; &quot;$title&quot;
+}
+
+function Run-NameNode($hadoopDirectory = $defaultSingleNodeDirectory)
+{
+	Run-HadoopNode &quot;./bin/hdfs namenode&quot; &quot;NameNodeLogs&quot; &quot;Namenode&quot;
+}
+
+function Run-DataNode($hadoopDirectory = $defaultSingleNodeDirectory)
+{
+	Run-HadoopNode &quot;./bin/hdfs datanode&quot; &quot;DataNodeLogs&quot; &quot;Datanode&quot;
+}
+
+function Run-ResourceManager($hadoopDirectory = $defaultSingleNodeDirectory)
+{
+	Run-HadoopNode &quot;./bin/yarn resourcemanager&quot; &quot;ResourceManagerLogs&quot; &quot;ResourceManager&quot;
+}
+
+function Run-NodeManager($hadoopDirectory = $defaultSingleNodeDirectory)
+{
+	Run-HadoopNode &quot;./bin/yarn nodemanager&quot; &quot;NodeManagerLogs&quot; &quot;NodeManager&quot;
+}
+
+function Run-SingleNode($singleNodeDirectory = $defaultSingleNodeDirectory, [Switch]$format = $(-not (Test-Path &quot;$singleNodeDirectory\ClusterFiles\nn&quot;)))
+{
+    if ($format)
+    {
+        pushd &quot;$singleNodeDirectory&quot;;
+		./bin/hdfs namenode -format
+		popd
+
+        # Make sure to delete DataNode files since that doesn't get deleted by namenode format (and will cause trouble)
+        $dataNodeDirectory = &quot;$singleNodeDirectory\ClusterFiles\dn&quot;
+        if (Test-Path $dataNodeDirectory)
+        {
+            Remove-Item $dataNodeDirectory -Recurse
+        }
+    }
+
+    Run-NameNode $singleNodeDirectory
+    Run-DataNode $singleNodeDirectory
+    Run-ResourceManager $singleNodeDirectory
+    Run-NodeManager $singleNodeDirectory
+}
+
+function Run-Hadoop
+(
+    [Parameter(Mandatory=$true,Position=0,ValueFromRemainingArguments=$true)]
+    [String[]]
+    $args,
+    [Parameter()]
+    $hadoopDirectory = $defaultSingleNodeDirectory
+)
+{
+    pushd &quot;$hadoopDirectory&quot;;
+	./bin/hadoop $args
+	popd
+}
+
+function Run-Hdfs
+(
+    [Parameter(Mandatory=$true,Position=0,ValueFromRemainingArguments=$true)]
+    [String[]]
+    $args,
+    [Parameter()]
+    $hadoopDirectory = $defaultSingleNodeDirectory
+)
+{
+    pushd &quot;$hadoopDirectory&quot;;
+	./bin/hdfs $args
+	popd
+}
+
+function Invoke-Environment($Command)
+{
+	cmd /c &quot;$Command &gt; nul 2&gt;&amp;1 &amp;&amp; set&quot; | .{process{
+		if ($_ -match '^([^=]+)=(.*)') {
+			[System.Environment]::SetEnvironmentVariable($matches[1], $matches[2])
+		}
+	}}
+}
+
+Invoke-Environment &quot;`&quot;$env:ProgramFiles\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.Cmd`&quot; /x64 /Release&quot;
+$(Get-Host).UI.RawUI.ForegroundColor = 'White'
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Get-PEManifest - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-PEManifest</h1>
+<h3><a href="//scripts/5316.ps1">download</a></h3>
+<p>Script is commented for explanation of each step</p>
+<pre><code class="language-posh">function Get-PEManifest {
+  &lt;#
+    .SYNOPSIS
+        Extract PE file manifest if it's possible.
+    .DESCRIPTION
+        This script is alternative for next way to get dump of PE manifest:
+        Add-Type -AssemblyName System.Deployment
+        
+        try {
+          [Text.Encoding]::Default.GetString(
+            ($SystemUtils = [Activator]::CreateInstance(
+              ([AppDomain]::CurrentDomain.GetAssemblies() | ? {
+                 $_.FullName.Contains(($asm = 'System.Deployment'))
+              }).GetType(
+                 $asm + '.Application.Win32InterOp.SystemUtils'
+              )
+            )).GetType().InvokeMember(
+              'GetManifestFromPEResources',
+              [Reflection.BindingFlags]280,
+              $null,
+              $SystemUtils,
+              @($PE)
+            )
+          )
+        }
+        catch [Management.Automation.MethodInvocationException] {
+          $_.Exception.InnerException
+        }
+    .EXAMPLE
+        PS E:\&gt; Get-PEManifest &quot;E:\Program Files(x86)\Sysinternals\accesschk.exe&quot;
+        &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; standalone=&quot;yes&quot;?&gt;
+        &lt;assembly xmlns=&quot;urn:schemas-microsoft-com:asm.v1&quot; manifestVersion=&quot;1.0&quot;&gt;
+        &lt;assemblyIdentity
+            name=&quot;AccessChk&quot;
+            processorArchitecture=&quot;x86&quot;
+            version=&quot;1.0.0.0&quot;
+            type=&quot;win32&quot;/&gt;
+        &lt;description&gt;File System Monitor&lt;/description&gt;
+        &lt;dependency&gt;
+            &lt;dependentAssembly&gt;
+                &lt;assemblyIdentity
+                    type=&quot;win32&quot;
+                    name=&quot;Microsoft.Windows.Common-Controls&quot;
+                    version=&quot;6.0.0.0&quot;
+                    processorArchitecture=&quot;x86&quot;
+                    publicKeyToken=&quot;6595b64144ccf1df&quot;
+                    language=&quot;*&quot;
+                /&gt;
+            &lt;/dependentAssembly&gt;
+        &lt;/dependency&gt;
+          &lt;trustInfo xmlns=&quot;urn:schemas-microsoft-com:asm.v3&quot;&gt;
+            &lt;security&gt;
+              &lt;requestedPrivileges&gt;
+                &lt;requestedExecutionLevel level='asInvoker' uiAccess='false' /&gt;
+              &lt;/requestedPrivileges&gt;
+            &lt;/security&gt;
+          &lt;/trustInfo&gt;
+        &lt;/assembly&gt;
+    .LINK
+        http://download.microsoft.com/download/9/c/5/9c5b2167-8017-4bae-9fde-d599bac8184a/pecoff_v83.docx
+    .NOTES
+        Author: greg zakharov
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+    [ValidateScript({Test-Path $_})]
+    [String]$FileName
+  )
+  
+  try {
+    $fs = [IO.File]::OpenRead($FileName)
+    $br = New-Object IO.BinaryReader($fs)
+    
+    #get DOS signature
+    $buf = New-Object &quot;Byte[]&quot; 2
+    [void]$br.Read($buf, 0, $buf.Length)
+    $e_magic = [Text.Encoding]::Default.GetString($buf)
+    #get PE signature
+    $fs.Position = 0x3C
+    $e_lfanew = $br.ReadUInt16()
+    [void]$fs.Seek($e_lfanew, [IO.SeekOrigin]::Begin)
+    $buf = New-Object &quot;Byte[]&quot; 4
+    [void]$br.Read($buf, 0, $buf.Length)
+    $pe_sign = [Text.Encoding]::Default.GetString($buf)
+    
+    if ($e_magic -ne 'MZ' -and $pe_sign -ne &quot;PE`0`0&quot;) {
+      throw (New-Object ComponentModel.Win32Exception('Invalid file format.'))
+    }
+    
+    #number of sections
+    $fs.Position += 0x02
+    $pe_sec = $br.ReadUInt16()
+    #size of optional header
+    $fs.Position += 0x0C
+    $pe_ioh = $br.ReadUInt16()
+    
+    #jump to sections location and looking for resources directory
+    $fs.Position += $pe_ioh + 0x02
+    $buf = New-Object &quot;Byte[]&quot; 8 #length of section name (constant)
+    0..($pe_sec - 1) | % {
+      [void]$br.Read($buf, 0, $buf.Length)
+      if ([Text.Encoding]::Default.GetString($buf) -ne '.rsrc') {
+        $fs.Position += 0x20 #skip other data of section
+      }
+      else { #looking for virtual address and pointer to raw data
+        #virtual address
+        $fs.Position += 0x04
+        $vrt_addr = $br.ReadUInt32()
+        #file pointer to raw data
+        $fs.Position += 0x04
+        $ptr_data = $br.ReadUInt32()
+      }
+    } #foreach
+    
+    if ($vrt_addr -eq $null -or $ptr_data -eq $null) {
+      throw (New-Object ComponentModel.Win32Exception('File does not contain resources or packed.'))
+    }
+    
+    #jump to IMAGE_RESOURCE_DIRECTORY and skip its first two fields
+    $fs.Position  = $ptr_data + 0x0C
+    #get length of IMAGE_RESOURCE_DIRECTORY_ENTRY[] and walk through it
+    0..($br.ReadUInt16() + $br.ReadUInt16() - 1) | % {
+      $Name = $br.ReadUInt32()
+      $OffsetToData = $br.ReadUInt32() -band 0xfffffff
+      if ($Name -eq 0x10) { #here lies manifest
+        $raw_addr = $OffsetToData
+      }
+    } #foreach
+    #walk through resource binary tree, get IMAGE_RESOURCE_DIRECTORY_ENTRY
+    $fs.Position = $ptr_data + 0x10 + $raw_addr
+    $fs.Position += 0x04
+    $raw_addr = $br.ReadUInt32() -band 0xfffffff
+    #go to the manifest directory
+    $fs.Position = $ptr_data + 0x10 + $raw_addr
+    $fs.Position += 0x04
+    $raw_addr = $br.ReadUInt32()
+    #get first two fields of IMAGE_RESOURCE_DATA_ENTRY
+    $fs.Position = $ptr_data + 0x10 + $raw_addr
+    $ofs_data = $br.ReadUInt32() #OffsetToData
+    $res_size = $br.ReadUInt32() #Size
+    #get address of resource and read
+    $fs.Position = $ptr_data + ($ofs_data - $vrt_addr)
+    $buf = New-Object &quot;Byte[]&quot; $res_size
+    [void]$br.Read($buf, 0, $buf.Length)
+    [Text.Encoding]::Default.GetString($buf)
+  }
+  catch {
+    if (($exp = $_.Exception.InnerException) -eq $null) {
+      Write-Host $_.Exception.Message`n
+    }
+    else { Write-Host $exp.Message`n }
+  }
+  finally {
+    if ($br -ne $null) { $br.Close() }
+    if ($fs -ne $null) { $fs.Close() }
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

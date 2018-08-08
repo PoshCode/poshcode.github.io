@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Zachary Loeber">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/4368.ps1">download</a></h3>
+<p>A multithreaded remote registry gathering function. Includes the ability to return both a specific subkey value or an entire key of subkey values in a custom psobject.</p>
+<pre><code class="language-posh">function Get-RemoteRegistryInformation
+{
+&lt;#
+.SYNOPSIS
+   Retrieves registry subkey information.
+.DESCRIPTION
+   Retrieves registry subkey information. If an explicit subkey is passed then that subkey value
+   is returned. Otherwise, all subkeys and their values are returned as a custom psobject.
+.PARAMETER ComputerName
+   Specifies the target computer for data query.
+.PARAMETER Hive
+   Registry hive to retrieve from. By default this is 2147483650 (HKLM). Valid hives include:
+      HKEY_CLASSES_ROOT = 2147483648
+      HKEY_CURRENT_USER = 2147483649
+      HKEY_LOCAL_MACHINE = 2147483650
+      HKEY_USERS = 2147483651
+      HKEY_CURRENT_CONFIG = 2147483653
+      HKEY_DYN_DATA = 2147483654
+.PARAMETER Key
+   Registry key to inspect (ie. SYSTEM\CurrentControlSet\Services\W32Time\Parameters)
+.PARAMETER SubKey
+   Registry subkey to return data from. If this is not passed then all subkeys within the key being
+   inspected are returned as a custom psobject.
+.PARAMETER ThrottleLimit
+   Specifies the maximum number of systems to inventory simultaneously 
+.PARAMETER Timeout
+   Specifies the maximum time in second command can run in background before terminating this thread.
+.PARAMETER ShowProgress
+   Show progress bar information
+.EXAMPLE
+   PS &gt; Get-RemoteRegistryInformation -Key &quot;SYSTEM\CurrentControlSet\Services\W32Time\Parameters&quot; -Subkey 'Type'
+
+   NT5DS
+   
+   Description
+   -----------
+   Return the value of the 'Type' subkey within SYSTEM\CurrentControlSet\Services\W32Time\Parameters of
+   HKLM.
+.EXAMPLE
+   PS &gt; $b = Get-RemoteRegistryInformation -Key &quot;SYSTEM\CurrentControlSet\Services\W32Time\Parameters&quot;
+   PS &gt; $b | Select SubKey,SubKeyValue
+   
+    SubKey                                                         SubKeyValue                                                  
+    ------                                                         -----------                                                  
+    ServiceDll                                                     C:\Windows\system32\w32time.dll
+    ServiceMain                                                    SvchostEntry_W32Time
+    ServiceDllUnloadOnStop                                                             
+    Type                                                           NT5DS               
+    NtpServer                                                             
+
+   Description
+   -----------
+   Return subkeys and their values within SYSTEM\CurrentControlSet\Services\W32Time\Parameters of
+   HKLM.
+
+.NOTES
+   Author: Zachary Loeber
+   Site: http://www.the-little-things.net/
+   Requires: Powershell 2.0
+
+   Version History
+   1.0.0 - 08/06/2013
+    - Initial release
+#&gt;
+    [CmdletBinding()]
+    Param
+    (
+        [Parameter(HelpMessage=&quot;Computer or computers to gather information from&quot;,
+                   ValueFromPipeline=$true,
+                   ValueFromPipelineByPropertyName=$true,
+                   Position=0)]
+        [ValidateNotNullOrEmpty()]
+        [Alias('DNSHostName','PSComputerName')]
+        [string[]]
+        $ComputerName=$env:computername,
+        
+        [Parameter( HelpMessage=&quot;Registry Hive (Default is HKLM).&quot; )]
+    	[UInt32]
+        $Hive = 2147483650,
+        
+    	[Parameter( Mandatory=$true,
+                    HelpMessage=&quot;Registry Key to inspect.&quot; )]
+    	[String]
+        $Key,
+        
+    	[Parameter( HelpMessage=&quot;Registry Subkey to retrieve. Do not pass this and all subkeys within the key will be returned instead.&quot; )]
+    	[String]
+        $SubKey = '',
+       
+        [Parameter(HelpMessage=&quot;Maximum number of concurrent threads.&quot;)]
+        [ValidateRange(1,65535)]
+        [int32]
+        $ThrottleLimit = 32,
+ 
+        [Parameter(HelpMessage=&quot;Timeout before a thread stops trying to gather the information.&quot;)]
+        [ValidateRange(1,65535)]
+        [int32]
+        $Timeout = 120,
+ 
+        [Parameter(HelpMessage=&quot;Display progress of function.&quot;)]
+        [switch]
+        $ShowProgress,
+        
+        [Parameter(HelpMessage=&quot;Set this if you want the function to prompt for alternate credentials.&quot;)]
+        [switch]
+        $PromptForCredential,
+        
+        [Parameter(HelpMessage=&quot;Set this if you want to provide your own alternate credentials.&quot;)]
+        [System.Management.Automation.Credential()]
+        $Credential = [System.Management.Automation.PSCredential]::Empty
+    )
+
+    Begin
+    {
+        # Gather possible local host names and IPs to prevent credential utilization in some cases
+        Write-Verbose -Message 'Creating local hostname list'
+        $IPAddresses = [net.dns]::GetHostAddresses($env:COMPUTERNAME) | Select-Object -ExpandProperty IpAddressToString
+        $HostNames = $IPAddresses | ForEach-Object {
+            try {
+                [net.dns]::GetHostByAddress($_)
+            } catch {
+                # We do not care about errors here...
+            }
+        } | Select-Object -ExpandProperty HostName -Unique
+        $LocalHost = @('', '.', 'localhost', $env:COMPUTERNAME, '::1', '127.0.0.1') + $IPAddresses + $HostNames
+ 
+        Write-Verbose -Message 'Creating initial variables'
+        $runspacetimers       = [HashTable]::Synchronized(@{})
+        $runspaces            = New-Object -TypeName System.Collections.ArrayList
+        $bgRunspaceCounter    = 0
+        
+        if ($PromptForCredential)
+        {
+            $Credential = Get-Credential
+        }
+        
+        Write-Verbose -Message 'Creating Initial Session State'
+        $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+        foreach ($ExternalVariable in ('runspacetimers', 'Credential', 'LocalHost'))
+        {
+            Write-Verbose -Message &quot;Adding variable $ExternalVariable to initial session state&quot;
+            $iss.Variables.Add((New-Object -TypeName System.Management.Automation.Runspaces.SessionStateVariableEntry -ArgumentList $ExternalVariable, (Get-Variable -Name $ExternalVariable -ValueOnly), ''))
+        }
+        
+        Write-Verbose -Message 'Creating runspace pool'
+        $rp = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $ThrottleLimit, $iss, $Host)
+        $rp.Open()
+ 
+        # This is the actual code called for each computer
+        Write-Verbose -Message 'Defining background runspaces scriptblock'
+        $ScriptBlock = {
+            [CmdletBinding()]
+            Param
+            (
+                [Parameter(Position=0)]
+                [string]
+                $ComputerName,
+
+                [Parameter()]
+            	[UInt32]
+                $Hive = 2147483650,
+                
+            	[Parameter()]
+            	[String]
+                $Key,
+                
+            	[Parameter()]
+            	[String]
+                $SubKey = '',
+
+                [Parameter()]
+                [int]
+                $bgRunspaceID
+            )
+            $runspacetimers.$bgRunspaceID = Get-Date
+            
+            try
+            {
+                Write-Verbose -Message ('Runspace {0}: Start' -f $ComputerName)
+                $WMIHast = @{
+                    ComputerName = $ComputerName
+                    ErrorAction = 'Stop'
+                }
+                if (($LocalHost -notcontains $ComputerName) -and ($Credential -ne $null))
+                {
+                    $WMIHast.Credential = $Credential
+                }
+
+                # General variables
+                $PSDateTime = Get-Date
+                
+                #region Registry
+                Write-Verbose -Message ('Runspace {0}: Registry information' -f $ComputerName)
+
+                # WMI data
+                $wmi_data = Get-WmiObject @WMIHast -Class StdRegProv -Namespace 'root\default' -List:$true
+                
+                # If we have a subkey then we are returning an individual value
+                if ($SubKey -ne '')
+                {
+                    $subkeys = $wmi_data.GetStringValue($Hive, $Key, $Subkey)
+                    $ResultObject = $subkeys.sValue
+                }
+                # Otherwise we are returning a bunch of subkeys and their values
+                else
+                {
+                   $ResultObject = @() #($wmi_data.EnumValues($Hive,$Key)).sNames
+                   Foreach ($_subkey in (($wmi_data.EnumValues($Hive,$Key)).sNames))
+                   {
+                        $ResultProperty = @{
+                            'PSComputerName' = $ComputerName
+                            'PSDateTime' = $PSDateTime
+                            'ComputerName' = $ComputerName
+                            'SubKey' = $_subkey
+                            'SubKeyValue' = ($wmi_data.GetStringValue($Hive, $Key, $_subkey)).sValue
+                        }
+                        $ResultObject += New-Object PSObject -Property $ResultProperty
+                    }
+                }
+
+                Write-Output -InputObject $ResultObject
+            }
+            catch
+            {
+                Write-Warning -Message ('{0}: {1}' -f $ComputerName, $_.Exception.Message)
+            }
+            Write-Verbose -Message ('Runspace {0}: End' -f $ComputerName)
+        }
+ 
+        function Get-Result
+        {
+            [CmdletBinding()]
+            Param 
+            (
+                [switch]$Wait
+            )
+            do
+            {
+                $More = $false
+                foreach ($runspace in $runspaces)
+                {
+                    $StartTime = $runspacetimers.($runspace.ID)
+                    if ($runspace.Handle.isCompleted)
+                    {
+                        Write-Verbose -Message ('Thread done for {0}' -f $runspace.IObject)
+                        $runspace.PowerShell.EndInvoke($runspace.Handle)
+                        $runspace.PowerShell.Dispose()
+                        $runspace.PowerShell = $null
+                        $runspace.Handle = $null
+                    }
+                    elseif ($runspace.Handle -ne $null)
+                    {
+                        $More = $true
+                    }
+                    if ($Timeout -and $StartTime)
+                    {
+                        if ((New-TimeSpan -Start $StartTime).TotalSeconds -ge $Timeout -and $runspace.PowerShell)
+                        {
+                            Write-Warning -Message ('Timeout {0}' -f $runspace.IObject)
+                            $runspace.PowerShell.Dispose()
+                            $runspace.PowerShell = $null
+                            $runspace.Handle = $null
+                        }
+                    }
+                }
+                if ($More -and $PSBoundParameters['Wait'])
+                {
+                    Start-Sleep -Milliseconds 100
+                }
+                foreach ($threat in $runspaces.Clone())
+                {
+                    if ( -not $threat.handle)
+                    {
+                        Write-Verbose -Message ('Removing {0} from runspaces' -f $threat.IObject)
+                        $runspaces.Remove($threat)
+                    }
+                }
+                if ($ShowProgress)
+                {
+                    $ProgressSplatting = @{
+                        Activity = 'Getting asset info'
+                        Status = '{0} of {1} total threads done' -f ($bgRunspaceCounter - $runspaces.Count), $bgRunspaceCounter
+                        PercentComplete = ($bgRunspaceCounter - $runspaces.Count) / $bgRunspaceCounter * 100
+                    }
+                    Write-Progress @ProgressSplatting
+                }
+            }
+            while ($More -and $PSBoundParameters['Wait'])
+        }
+    }
+    Process
+    {
+        foreach ($Computer in $ComputerName)
+        {
+            $bgRunspaceCounter++
+            #$psCMD = [System.Management.Automation.PowerShell]::Create().AddScript($ScriptBlock).AddParameter('bgRunspaceID',$bgRunspaceCounter).AddParameter('ComputerName',$Computer).AddParameter('IncludeMemoryInfo',$IncludeMemoryInfo).AddParameter('IncludeDiskInfo',$IncludeDiskInfo).AddParameter('IncludeNetworkInfo',$IncludeNetworkInfo).AddParameter('Verbose',$Verbose)
+            $psCMD = [System.Management.Automation.PowerShell]::Create().AddScript($ScriptBlock)
+            $null = $psCMD.AddParameter('bgRunspaceID',$bgRunspaceCounter)
+            $null = $psCMD.AddParameter('ComputerName',$Computer)
+            $null = $psCMD.AddParameter('Hive',$Hive)
+            $null = $psCMD.AddParameter('Key',$Key)
+            $null = $psCMD.AddParameter('SubKey',$SubKey)
+            $null = $psCMD.AddParameter('Verbose',$VerbosePreference)
+            $psCMD.RunspacePool = $rp
+ 
+            Write-Verbose -Message ('Starting {0}' -f $Computer)
+            [void]$runspaces.Add(@{
+                Handle = $psCMD.BeginInvoke()
+                PowerShell = $psCMD
+                IObject = $Computer
+                ID = $bgRunspaceCounter
+           })
+           Get-Result
+        }
+    }
+ 
+    End
+    {
+        Get-Result -Wait
+        if ($ShowProgress)
+        {
+            Write-Progress -Activity 'Getting share session information' -Status 'Done' -Completed
+        }
+        Write-Verbose -Message &quot;Closing runspace pool&quot;
+        $rp.Close()
+        $rp.Dispose()
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

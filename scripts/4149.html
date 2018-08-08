@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Justin Grote">
+    <title>Set VMware CBT - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set VMware CBT</h1>
+<h3><a href="//scripts/4149.ps1">download</a></h3>
+<p>This function will enable or disable CBT on a VM, and optionally apply the change by stunning the VM with a snapshot. It is useful when CBT needs to be reset or disabled en masse.</p>
+<pre><code class="language-posh">function Load-PowerCLISnapin{
+    #Load Required VMware Snapin if not already loaded
+    if (!(Get-PSSnapin VMware.vimautomation.core -erroraction SilentlyContinue)) {
+        #Throw error if not installed
+        if (!(Get-pssnapin -registered vmware.vimautomation.core)) {
+            write-error &quot;VMware PowerCLI not installed. Please install VMware PowerCLI and try again&quot;
+            exit
+        }
+        #Load the Snapin
+        Add-PSSnapin vmware.vimautomation.core
+
+    }
+}
+
+function Set-VMChangedBlockTracking {
+&lt;#
+.SYNOPSIS
+Enables or disables Changed Block Tracking on a Virtual Machine
+.DESCRIPTION
+This function will enable or disable CBT on a VM, and optionally apply the change by stunning the VM with a snapshot. It is useful when CBT needs to be reset or disabled en masse. 
+
+.EXAMPLE 
+Disable CBT on virtual machine and apply it, confirming the action first.
+
+set-vmchangedblocktracking TESTVM01 -enabled:$false -applynow -confirm:$true
+
+.EXAMPLE 
+Get all virtual machines with CBT disabled, enable it, and apply it.
+
+Get-VM | where {$_.ExtensionData.config.ChangeTrackingEnabled} | Set-VMChangedBlockTracking -enabled:$true -applynow
+
+.LINK
+http://www.robertwmartin.com/?p=274
+.PARAMETER VMNames
+The Virtual Machines to set CBT on. Accepts Virtual Machine Objects or one or more virtual machine names.
+.PARAMETER Enabled
+Specifies whether to enable or disable CBT. CBT does not apply until a VM stun action such as a snapshot or restart occurs unless the -applynow option is specified
+.PARAMETER ApplyNow
+Specifies whether to enable CBT immediately stun the VM by creating and subsequently deleting a VM snapshot on the VM 
+#&gt;
+
+[CmdletBinding(SupportsShouldProcess)]
+
+Param(
+    [Parameter(Mandatory=$true,ValueFromPipeline=$True,Position=0)]
+    [string[]]$VMNames,
+    
+    #Enable or Disable CBT on the VM
+    [Parameter(Mandatory=$true)]
+    [Boolean] $Enabled,
+
+    #Apply the setting by taking a snapshot and removing it.
+    [Parameter(Mandatory=$false)]
+    [Switch] $ApplyNow
+)
+
+BEGIN {
+    #Load Required VMware Snapin if not already loaded
+    if (!(Get-PSSnapin VMware.vimautomation.core -erroraction SilentlyContinue)) {
+        #Throw error if not installed
+        if (!(Get-pssnapin -registered vmware.vimautomation.core)) {
+            write-error &quot;VMware PowerCLI not installed. Please install VMware PowerCLI and try again&quot;
+            exit
+        }
+        #Load the Snapin
+        Add-PSSnapin vmware.vimautomation.core
+    }
+    
+    #Create a spec to enable/disable CBT based on the setting
+    $spec = New-Object VMware.Vim.VirtualMachineConfigSpec 
+    $spec.ChangeTrackingEnabled = $Enabled
+}
+
+PROCESS {
+    foreach ($VMName in $VMNames) {
+        $vm = get-vm $VMName
+
+        #Specify Should Process
+        if ($Enabled) {$CBTAction = &quot;Enable&quot;} else {$CBTAction = &quot;Disable&quot;}
+
+        if($PSCmdlet.ShouldProcess($VMName,&quot;$CBTAction Changed Block Tracking&quot;)) {
+
+        #Apply CBT Change
+        write-verbose &quot;Apply CBT Configuration: $($Enabled) to $VMName&quot;
+        $vm.ExtensionData.ReconfigVM($spec)
+
+        #If enabled, stun VM with a snapshot to enable CBT
+        
+        if ($ApplyNow) {
+            write-verbose &quot;Applying CBT by stunning $($vm.ToString())&quot;
+            $snap=$vm | New-Snapshot -Name 'Disable CBT Temporary' 
+            $snap | Remove-Snapshot -confirm:$false
+        }
+        }
+    }
+
+}
+
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

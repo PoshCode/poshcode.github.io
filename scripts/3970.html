@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="AdrianWoodrup">
+    <title>Veeam backup to OVF - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Veeam backup to OVF</h1>
+<h3><a href="//scripts/3970.ps1">download</a></h3>
+<p>If you want to get an off site backup of your VM's but dont have a 2nd office and dont want to rely on tapes, then use Veeam, Amazon AWS and a few powershell snapin's to get your VM's into the cloud. This solution costs a fraction of a DR budget and the VM's can be powered on and running in an hour.</p>
+<pre><code class="language-posh"># This script runs a different OVF conversion depending on the Day of the week.
+$VeeamJob = &quot;JobName&quot;
+$server1 = 'ServerName'
+
+asnp VMware.VimAutomation.Core -ErrorAction SilentlyContinue
+asnp VeeamPSSnapin -ErrorAction SilentlyContinue
+
+$Dest1 = &quot;R:\VMWARE\OVF\$Server1\&quot;
+
+$OVFFile1 = &quot;$($Dest1)$($Server1).ovf&quot;
+
+$VmIRName1 = $Server1 + &quot;_ovf&quot;
+
+# Name of vCenter to Export VM From
+$VcName = &quot;vCenterServer&quot;
+# Name of ESX host for Instant VM Restore
+$EsxHost = &quot;SingleESXHost&quot;
+# Path to OVF Tool on your system
+$OVFTool = &quot;D:\Program Files\VMware\VMware OVF Tool\ovftool.exe&quot;
+# Date
+$Date = get-date -Format yy-MM-dd
+$TimeStamp = get-date 
+# Path of Log file
+$Log = &quot;D:\logs\VMWare\&quot; + $Date + ' ' + $Server1 + &quot; OVF to AWS.log&quot;
+# Email sender address
+$EmailTo = 'Address@Domain.com'
+$EmailFrom = 'Address@Domain.com'
+
+#############################################################################################
+$error.clear()
+Add-content -Path $Log -Value &quot;Backup of Server $Server1 Started at $TimeStamp&quot;
+# Find most recent restore point for VM
+$ExportObj1 = (Get-VBRBackup -name &quot;$VeeamJob&quot;).GetLastOibs() | Where-Object {$_.Name -eq $Server1}
+
+# Get ESX Server and Resource Pool and start Instant Recovery with VM powered off
+$EsxObj1 = Get-VBRServer -Name &quot;$EsxHost&quot;
+$ResourcePoolObj = Find-VBRResourcePool -Server $EsxObj1 -Name &quot;Resources&quot; 
+Start-VBRInstantRecovery -RestorePoint $ExportObj1 -VMName $VmIRName1 -Server $EsxObj1 -ResourcePool $ResourcePoolObj -PowerUp $false -NICsEnabled $true
+if (!$?) {
+	Add-Content -Path $Log -Value &quot;$server1 InstantRecovery failed with Error (error code:0x00000080): $error&quot;
+	Add-Content -Path $Log -Value &quot;Stopping the backup of $Server1&quot;
+	Break}
+Else{
+	Add-Content -Path $Log -Value &quot;$Server1 InstantRecovery Started successfully...&quot;
+	# Connect to vCenter and get the Instant Recovery VM
+	Connect-VIServer $VCName -User 'ESXAdminUser' -Password 'Password' 
+	if (!$?) {
+		Add-Content -Path $Log -Value &quot;$server1 Connection to vCenter failed with Error (error code:0x00000079): $error&quot;
+		Add-Content -Path $Log -Value &quot;Stopping the backup of $Server1&quot;
+		Break}
+	Else{
+		Add-Content -Path $Log -Value &quot;$Server1 Connection to VI Server was successful...&quot;
+		$VmIR1 = Get-VM -Name &quot;$VmIRName1&quot;
+		# Get session and ticket
+		$Session = Get-View -Id Sessionmanager
+		$Ticket = $Session.AcquireCloneTicket()
+		# Call OVFtool to 
+		&amp; $OVFTool &quot;--name=$Server1&quot; &quot;--noSSLVerify&quot; &quot;--targetType=OVF&quot; &quot;--overwrite&quot; &quot;--I:sourceSessionTicket=$($Ticket)&quot; &quot;vi://$($VcName)?moref=vim.VirtualMachine:$($VmIR1.extensiondata.moref.value)&quot; &quot;$($Dest1)$($Server1).ovf&quot;
+		if (!$?) {
+			Add-Content -Path $Log -Value &quot;$server1 OVF conversion and transfer failed with Error (error code:0x00000078): $error&quot;
+			Add-Content -Path $Log -Value &quot;Stopping the backup of $Server1&quot;
+			Break}
+		Else{
+			Add-Content -Path $Log -Value &quot;$Server1 OVF conversion and transfer completed successfully...&quot;
+			# Remove VM from vCenter Inventory and Stop Instant VM Recovery
+			$IR1 = Get-VBRInstantRecovery | where-object {$_.VMName -eq &quot;$VMIRName1&quot;}
+			Stop-VBRInstantRecovery $IR1
+			if (!$?) {
+				Add-Content -Path $Log -Value &quot;$server1 Stop InstantRecovery failed with Error (error code:0x0000077): $error&quot;
+				Add-Content -Path $Log -Value &quot;Stopping the backup of $Server1&quot;
+				Break}
+			Else{
+				Add-Content -Path $Log -Value &quot;$Server1 stopping of the Instant Recovery completed successfully...&quot;
+				Remove-VM $VmIR1 -Confirm:$false 
+				if (!$?) {
+					Add-Content -Path $Log -Value &quot;$server1 Removal of Server_OVF Failed with Error (error code:0x00000076): $error&quot;
+					Add-Content -Path $Log -Value &quot;Stopping the backup of $Server1&quot;
+					Break}
+				Else{
+					Add-Content -Path $Log -Value &quot;$Server1 Removeal of the temp OVF completed successfully...&quot;
+					# disconnect from vCenter
+					Disconnect-VIServer $VCName -Confirm:$False
+					if (!$?) {
+						Add-Content -Path $Log -Value &quot;$server1 failed to disconnect from the vCenter server with Error (error code:0x00000075): $error&quot;
+						Add-Content -Path $Log -Value &quot;Stopping backup of $Server1&quot;
+						Break}
+					Else{
+						Add-Content -Path $Log -Value &quot;$Server1 OVF conversion and transfer completed successfully (OK) at $TimeStamp...&quot;
+						
+					}
+				}
+			}
+		}
+	}
+}
+
+#################################################################
+#		Check backup status and send notification				#
+#################################################################
+#Check OVF has completed
+$Failed = Get-Content $log | Select-String &quot;0x000000&quot; -quiet
+$Success = Get-Content $log | Select-String &quot;(OK)&quot; -quiet
+
+# Email server
+$PSEmailserver = 'EmailServer' 
+# Email subject depends on the log file, if there is an error in the log file set subject to failed. if there is an OK in the log set to success, otherwise set to unknown
+If ($Failed){$Subject = $Server1 + ' OVF backup failed'}
+Elseif ($Success) {$subject = $Server1 + ' OVF backup Success'}
+else {$subject = &quot;UNKNOWN OVF backup Result&quot;}
+
+# Send an email with details. 
+Send-MailMessage -To $EmailTo -From $EmailFrom -Subject $Subject -attachments $log -Body &quot;See the log file for the results of the OVF backup of $Server1&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

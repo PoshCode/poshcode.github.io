@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="themoblin">
+    <title>Copy Shares - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Copy Shares</h1>
+<h3><a href="//scripts/4630.ps1">download</a></h3>
+<p>Copies shared folders from one server to another. Run on the new server (as administrator).
+Tested during migration of SBS 2003 to SBS 2011</p>
+<pre><code class="language-posh">$oldserver = &quot;hostname&quot;
+# Exclude the following shares. Update to particular needs of your environment.
+$excludes = @(&quot;DLOAgent&quot;,&quot;faxclient&quot;,&quot;CertEnroll&quot;,&quot;Resources$&quot;,&quot;FxsSrvCp$&quot;,&quot;tsweb&quot;,&quot;NETLOGON&quot;,&quot;WSUSTemp&quot;,&quot;prnproc$&quot;,&quot;SYSVOL&quot;,&quot;Address&quot;,&quot;tsclient&quot;,&quot;WsusContent&quot;,&quot;UpdateServicesPackages&quot;,&quot;print$&quot;)
+$shares = get-wmiobject -computername $oldserver -Class win32_share|where-object {($_.type -eq 0) -and ($excludes -notcontains $_.name)}
+
+foreach ($share in $shares)
+ {
+ #  This section was required as the old server had a C: and a D:
+ #  The new server had only a C: so had to edit the paths to replace any reference of D: with C:
+ 	if ($share.path -like &quot;D:*&quot;)
+ 	    {
+		$newntfspath = $share.path.replace(&quot;D:\&quot;,&quot;C:\&quot;)
+		Write-Host -foregroundcolor Green &quot;Destination folder&quot; $newntfspath
+		}
+	else {  $newntfspath = $share.path
+		Write-Host -foregroundcolor Green &quot;Destination folder&quot; $newntfspath
+		}
+
+#       Test to see if the file paths already exist - only needed on the first run if you intend to robocopy more than once.
+
+	    if (!(Test-Path $newntfspath))
+		{
+		Write-Host -foregroundcolor Green &quot;Folder $newntfspath does not exist&quot;
+		Write-Host -foregroundcolor Green &quot;Starting robocopy job&quot;
+#       Robocopy job - requires that the log folder exists already - in this case C:\RobocopyLogs
+		robocopy \\$oldserver\$($share.name) $newntfspath /W:5 /R:2 /XO /E /PURGE /SEC /V /NFL /LOG:C:\RobocopyLogs\$($share.name).txt
+		}
+	else { Write-Host -foregroundcolor Red &quot;Folder $newntfspath Already exists&quot;
+		Write-Host -foregroundcolor Red &quot;Skipping this folder&quot;
+		Write-Host -ForegroundColor Red &quot;Creating error log&quot;
+		New-Item -force -ItemType File -Path C:\RobocopyLogs\$($share.name)_Fail.txt
+		Set-content -Value &quot;Location already exists, Robocopy was not attempted&quot; -Path C:\RobocopyLogs\$($share.name)_Fail.txt
+		}
+
+        $sourceperms = get-wmiobject -computername $oldserver -Class win32_LogicalShareSecuritySetting | Where-Object {$_.name -eq $share.name}
+        $sourceperms = $sourceperms.GetSecurityDescriptor().Descriptor
+
+#       FOR TESTING ONLY -- Drilling into the source permissions object to display friendly name and accessrights values
+#	    $sourceperms = $sourceperms.DACL
+#	    foreach ($DACL in $sourceperms)
+#		    {
+#		    $DACLname = $DACL.trustee.name
+#		    $DACLname
+#		    $Accessrights = $($DACL.Accessmask -as [Security.AccessControl.FileSystemRights])
+#		    $Accessrights
+#		    }
+
+        if (!(get-wmiobject -Class Win32_Share |Where-Object {$_.name -eq $share.name}))
+            {
+            Write-Host -ForegroundColor Green &quot;Creating shared folder&quot;
+#           Creates an object with the Win32_share class
+            $newshare = [wmiclass]&quot;Win32_Share&quot;
+#           Creates the share using the &quot;create&quot; method of the wmiclass object.
+#           This take 7 arguments in a specific order 1.Path 2.Share Name 3.Type (0 is for file share) 4. Max connections allow 5. Description 6. Password 7.Permissions object 
+            $newshare = $newshare.Create($newntfspath,$share.name,0,$null,$null,$null,$sourceperms)
+		    }
+        else { Write-Host -foregroundcolor RED &quot;Shared folder already exists&quot;
+             }
+ }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

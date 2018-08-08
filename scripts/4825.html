@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Parul Jain">
+    <title>Hadoop HDFS client - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Hadoop HDFS client</h1>
+<h3><a href="//scripts/4825.ps1">download</a></h3>
+<p>Put and get large files to and from a Hadoop cluster</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+	Hadoop HDFS client for Windows
+
+.DESCRIPTION
+	I have data files on my Windows machine I want to send to a Hadoop cluster for map-reduce. I also want to get back the reduced data back 		 to my Windows system, perhaps to analyze with Excel or QlikView. And I want to be able to do this without installing Hadoop clients on my Windows machine. One way to do that is to SFTP or SCP files to/from one of the Hadoop cluster nodes, and then use hadoop fs commands to put/get from HDFS. However this needs twice the storage space on the cluster. A better way is needed.
+
+Hadoop natively offers a REST API to HDFS called WebHDFS. It is a pretty straightforward API that can be used with cURL. However Windows does not natively come with cURL and also it is not practical to transfer large multi-GB files with cURL. So I decided to whip up a PowerShell script that can put, get, rename, delete files, and also make and delete directories. The script will only work on a cluster where security is not enabled.
+
+To use the REST API you will need to enable WebHDFS on all nodes. To do so edit the hdfs-site.xml on each node to add the following:
+
+        &lt;property&gt;
+           &lt;name&gt;dfs.webhdfs.enabled&lt;/name&gt;
+           &lt;value&gt;true&lt;/value&gt;
+        &lt;/property&gt;
+
+Also because the REST API will re-direct the request to the node that has the data, or where Hadoop determines the data should be stored in case of a PUT request, your Windows machine should be able to resolve names of all nodes in the cluster to IP addresses either through DNS or local hosts file.
+
+.NOTES
+	Author         : Parul Jain paruljain@hotmail.com
+	Prerequisite   : PowerShell V3 or higher
+
+.LINK
+	http://usehadoop.blogspot.com/2013/11/interacting-with-hdfs-from-windows.html
+
+.EXAMPLE
+	Hdfs-List -hostname nameNode -hdfsPath /user/jack
+.EXAMPLE
+	Hdfs-Mkdir -hostname nameNode -hdfsPath /user/jack/folder1 -user jack
+.EXAMPLE
+	Hdfs-PutFile -hostname nameNode -hdfsPath /user/jack/folder1/myfile.txt -localPath c:\myfile.txt -user jack
+.EXAMPLE
+	Hdfs-PutFile -hostname nameNode -hdfsPath /user/jack/folder1/myfile.txt -localPath c:\myfile2.txt -user jack -mode append
+.EXAMPLE
+	Hdfs-PutFile -hostname nameNode -hdfsPath /user/jack/folder1/myfile.txt -localPath c:\myfile3.txt -user jack -mode overwrite
+.EXAMPLE
+	Hdfs-Rename -hostname nameNode -hdfsPath /user/jack/folder1/myfile.txt -hdfsNewPath /user/jack/folder1/newfile.txt -user jack
+.EXAMPLE
+	Hdfs-GetFile -hostname nameNode -hdfsPath /user/jack/folder1/newfile.txt -localPath c:\myfile4.txt -user jack
+.EXAMPLE
+	Hdfs-GetFile -hostname nameNode -hdfsPath /user/jack/folder1/newfile.txt -localPath c:\myfile4.txt -user jack -length 2000
+.EXAMPLE
+	Hdfs-GetFile -hostname nameNode -hdfsPath /user/jack/folder1/newfile.txt -localPath c:\myfile4.txt -user jack -overwrite
+.EXAMPLE
+	Hdfs-GetFile -hostname nameNode -hdfsPath /user/jack/folder1/newfile.txt -localPath c:\myfile4.txt -user jack -append
+.EXAMPLE
+	Hdfs-Remove -hostname nameNode -hdfsPath /user/jack -user jack -recurse
+#&gt;
+
+function Hdfs-Put {
+    param (
+        [Parameter(Mandatory=$True)][string]$hostname,
+        [Parameter(Mandatory=$False)][int]$port = 50070,
+        [Parameter(Mandatory=$True)][byte[]]$data,
+        [Parameter(Mandatory=$True)][string]$hdfsPath,
+        [Parameter(Mandatory=$True)][string]$user,
+        [Parameter(Mandatory=$False)][ValidateSet('open', 'append', 'overwrite')][string]$mode = 'open'
+    )
+         
+    if (!(Test-Path $localPath)) { throw &quot;$localPath does not exist&quot; }
+    if ($hdfsPath -notmatch '^/') { throw &quot;hdfsPath must start with a /&quot; }
+    $method = 'PUT'
+    $uri = &quot;http://${hostname}:$port/webhdfs/v1${hdfspath}?op=CREATE&amp;overwrite=false&amp;user.name=$user&quot;
+    if ($mode -match 'append') { $uri = &quot;http://${hostname}:$port/webhdfs/v1${hdfspath}?op=APPEND&amp;user.name=$user&quot;; $method = 'POST' }
+    if ($mode -match 'overwrite') { $uri = &quot;http://${hostname}:$port/webhdfs/v1${hdfspath}?op=CREATE&amp;overwrite=true&amp;user.name=$user&quot; }
+    # webHDFS Create operation requires two requests. The first is sent without data and redirects
+    # to node name and port where data should be sent
+    $wr = [System.Net.WebRequest]::Create($uri)
+    $wr.Method = $method
+    $wr.AllowAutoRedirect = $false
+    $response = $wr.GetResponse()
+    if ($response.StatusCode -ne 'TemporaryRedirect') {
+        throw 'Error: Expected temporary redirect, got ' + $response.StatusCode
+    }
+    $wr = [System.Net.WebRequest]::Create($response.Headers['Location'])
+    $wr.Method = $method
+    $wr.ContentLength = $data.Length
+    $requestBody = $wr.GetRequestStream()
+    $requestBody.Write($data, 0, $data.Length)
+    $requestBody.Close()
+ 
+    # Return the reponse from webHDFS to the caller
+    $wr.GetResponse()
+}
+ 
+function Hdfs-Get {
+    param (
+        [Parameter(Mandatory=$True)][string]$hostname,
+        [Parameter(Mandatory=$False)][int]$port = 50070,
+        [Parameter(Mandatory=$True)][string]$hdfsPath,
+        [Parameter(Mandatory=$False)][string]$user,
+        [Parameter(Mandatory=$False)][long]$offset = 0,
+        [Parameter(Mandatory=$False)][long]$length = 67108864
+    )
+         
+    $uri = &quot;http://${hostname}:$port/webhdfs/v1${hdfspath}?op=OPEN&amp;offset=$offset&amp;length=$length&quot;
+   
+    if ($user) { $uri += '&amp;user.name=' + $user }
+    $wr = [System.Net.WebRequest]::Create($uri)
+    $response = $wr.GetResponse()
+    $responseStream = $response.GetResponseStream()
+    $br = New-Object System.IO.BinaryReader($responseStream)
+    $br.ReadBytes($response.ContentLength)
+    $br.Close()
+    $responseStream.Close()
+}
+ 
+function Hdfs-List {
+    param (
+        [Parameter(Mandatory=$True)][string]$hostname,
+        [Parameter(Mandatory=$False)][int]$port = 50070,
+        [Parameter(Mandatory=$True)][string]$hdfsPath
+    )
+    if ($hdfsPath -notmatch '^/') { throw &quot;hdfsPath must start with a /&quot; }
+    $fileStatus= Invoke-RestMethod -Method Get -Uri &quot;http://${hostname}:$port/webhdfs/v1${hdfsPath}?op=LISTSTATUS&quot;
+    foreach ($item in $fileStatus.FileStatuses.FileStatus) {
+        $item.accessTime = Convert-FromEpochTime $item.accessTime
+        $item.modificationTime = Convert-FromEpochTime $item.modificationTime
+        $item
+    }
+}
+ 
+function Hdfs-Remove {
+    param (
+        [Parameter(Mandatory=$True)][string]$hostname,
+        [Parameter(Mandatory=$False)][int]$port = 50070,
+        [Parameter(Mandatory=$True)][string]$hdfsPath,
+        [Parameter(Mandatory=$True)][string]$user,
+        [switch]$recurse
+    )
+    if ($hdfsPath -notmatch '^/') { throw &quot;hdfsPath must start with a /&quot; }
+    if ($recurse) { $rec = 'true' } else { $rec = 'false' }
+    $result = Invoke-RestMethod -Method Delete -Uri &quot;http://${hostname}:$port/webhdfs/v1${hdfsPath}?op=DELETE&amp;recursive=$rec&amp;user.name=$user&quot;
+    $result.boolean
+}
+ 
+function Hdfs-Mkdir {
+    param (
+        [Parameter(Mandatory=$True)][string]$hostname,
+        [Parameter(Mandatory=$False)][int]$port = 50070,
+        [Parameter(Mandatory=$True)][string]$hdfsPath,
+        [Parameter(Mandatory=$True)][string]$user,
+        [Parameter(Mandatory=$False)][string]$permission
+    )
+    if ($hdfsPath -notmatch '^/') { throw &quot;hdfsPath must start with a /&quot; }
+    if ($permission) {
+        $result = Invoke-RestMethod -Method Put -Uri &quot;http://${hostname}:$port/webhdfs/v1${hdfsPath}?op=MKDIRS&amp;permission=$permission&amp;user.name=$user&quot; }
+    else { $result = Invoke-RestMethod -Method Put -Uri &quot;http://${hostname}:$port/webhdfs/v1${hdfsPath}?op=MKDIRS&amp;user.name=$user&quot; }
+    $result.boolean
+}
+ 
+function Hdfs-Rename {
+    param (
+        [Parameter(Mandatory=$True)][string]$hostname,
+        [Parameter(Mandatory=$False)][int]$port = 50070,
+        [Parameter(Mandatory=$True)][string]$hdfsPath,
+        [Parameter(Mandatory=$True)][string]$hdfsNewPath,
+        [Parameter(Mandatory=$True)][string]$user
+    )
+    if ($hdfsPath -notmatch '^/') { throw &quot;hdfsPath must start with a /&quot; }
+    if ($hdfsNewPath -notmatch '^/') { throw &quot;hdfsNewPath must start with a /&quot; }
+    $result = Invoke-RestMethod -Method Put -Uri &quot;http://${hostname}:$port/webhdfs/v1${hdfsPath}?op=RENAME&amp;user.name=$user&amp;destination=$hdfsNewPath&quot;
+    $result.boolean
+}
+ 
+function Convert-FromEpochTime ([long]$epochTime) {
+    [TimeZone]::CurrentTimeZone.ToLocalTime(([datetime]'1/1/1970').AddSeconds($epochTime/1000))
+}
+ 
+function Hdfs-PutFile {
+   param (
+        [Parameter(Mandatory=$True)][string]$hostname,
+        [Parameter(Mandatory=$False)][int]$port = 50070,
+        [Parameter(Mandatory=$True)][string]$localPath,
+        [Parameter(Mandatory=$True)][string]$hdfsPath,
+        [Parameter(Mandatory=$True)][string]$user,
+        [Parameter(Mandatory=$False)][int]$sliceSize = 67108864,
+        [Parameter(Mandatory=$False)][ValidateSet('open', 'append', 'overwrite')][string]$mode = 'open'
+    )
+       
+    try {
+        $br = New-Object System.IO.BinaryReader([System.IO.File]::Open($localPath, [System.IO.FileMode]::Open))
+    } catch { throw $error[0].Exception.Message }
+    $total = $br.BaseStream.Length
+    $sent = 0
+    $firstRun = $true
+   
+    do {
+        Write-Progress -Activity &quot;Copying $localPath to HDFS on $hostname&quot; -PercentComplete ($sent/$total * 100)
+        $data = $br.ReadBytes($sliceSize)
+        try {
+            Hdfs-Put -hostname $hostname -port $port -user $user -hdfsPath $hdfsPath -data $data -mode $mode | out-null
+        } catch { $br.Close(); throw $error[0].Exception.Message }
+        $sent += $sliceSize
+        if ($firstRun) { $firstRun = $false; $mode = 'append' }
+    } while ($data.LongLength -eq $sliceSize)
+    $br.Close()
+}
+ 
+function Hdfs-GetFile {
+    param (
+        [Parameter(Mandatory=$True)][string]$hostname,
+        [Parameter(Mandatory=$False)][int]$port = 50070,
+        [Parameter(Mandatory=$True)][string]$hdfsPath,
+        [Parameter(Mandatory=$False)][string]$user,
+        [Parameter(Mandatory=$False)][string]$localPath,
+        [Parameter(Mandatory=$False)][long]$length,
+        [switch]$append,
+        [switch]$overwrite
+    )
+    if ($append -and $overwrite) { throw 'Cannot use -append and -overwrite together' }
+    $mode = [System.IO.FileMode]::CreateNew
+    if ($append) {$mode = [System.IO.FileMode]::Append}
+    if ($overwrite) {$mode = [System.IO.FileMode]::Create}
+   
+    try {
+        $bw = New-Object System.IO.BinaryWriter([System.IO.File]::Open($localPath, $mode))
+    } catch { throw $error[0].Exception.Message }
+   
+    $fileAttribs = Hdfs-List -hostname $hostname -hdfsPath $hdfsPath -port $port
+    if (!$length) { $length = $fileAttribs.length }
+    $blockSize = $fileAttribs.blockSize
+    if ($length -lt $blockSize) { $blockSize = $length }
+    $got = 0
+   
+    do {
+        Write-Progress -Activity &quot;Copying $hdfsPath to $localPath&quot; -PercentComplete ($got/$length * 100)
+       
+        try {
+            [byte[]]$data = Hdfs-Get -hostname $hostname -port $port -user $user -hdfsPath $hdfsPath -offset $got -length $blockSize
+        } catch { $bw.Close(); throw $error[0].Exception.Message }
+        try {
+            $bw.Write($data)
+        } catch { $bw.Close(); throw $error[0].Exception.Message }
+        $got += $data.LongLength
+    } while ($got -lt $length)
+    $bw.Close()
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

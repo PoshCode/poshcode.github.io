@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="glnsize">
+    <title>OnTapSDK_Discoverability - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>OnTapSDK_Discoverability</h1>
+<h3><a href="//scripts/921.ps1">download</a></h3>
+<p>A couple functions to aid in the discoverability of the OnTap SDK. Functions requires the NetApp OnTap SDK v3.5 which can be found http://communities.netapp.com/docs/DOC-1365. More information about the SDK and it’s use in PowerShell can be found here http://get-admin.com/blog/?tag=ontap-sdk
+~Glenn</p>
+<pre><code class="language-posh"># Glenn Sizemore www . Get-Admin . com
+# Requires the NetApp OnTap SDK v3.5
+
+# Get-NaAPI
+# Will return a list of ZAPI Calls that the filer supports.  Can be used
+# as a poor man's Get-Command for the OnTap SDK.
+#########################################################################
+# Usage:
+# Connect to the filler
+# $Filer = 'TOASTER'
+# $NetApp = New-Object NetApp.Manage.NaServer($filer,1,0)
+# $NetApp.SetAdminUser(UserName,Password)
+#
+# Example
+# Get-NaAPI -Server $NetApp
+#
+# Will retrieve every OnTap ZAPI request in the system
+#
+# Example
+# Get-NaAPI -NaServer $NetApp -Name Volume
+# 
+# Will return every ZAPI call that pertains to volume management.
+Function Get-NaAPI {
+    Param(
+        [NetApp.Manage.NaServer]$NaServer,
+        [string]$Name
+    )
+    Begin {
+        $APIList = @()
+    }
+    Process {
+        $NaElement = New-Object Netapp.Manage.NaElement(&quot;system-api-list&quot;)
+        $apis = $NaServer.InvokeElem($naelement).GetChildByName(&quot;apis&quot;)
+        Foreach ($api in $apis.GetChildren()) {
+           $APIList +=  $api.getchildcontent(&quot;name&quot;)
+        }
+    }
+    End {
+        if ($Name) {
+           return $APIList | Where-Object {$_ -match $name}
+        } else {
+            return $APIList
+        }
+    }
+}
+
+# Get-NaAPIElements
+# Given a ZAPI call return the parameters in that call.
+#########################################################################
+# Usage:
+# Connect to the filler
+# $Filer = 'TOASTER'
+# $NetApp = New-Object NetApp.Manage.NaServer($filer,1,0)
+# $NetApp.SetAdminUser(UserName,Password)
+#
+# Example
+# Get-NaAPIElements -NaServer $NaServer -API &quot;volume-list-info&quot;
+#
+# returns all the elements/parameters used by the volume-list-info API.
+#
+# Example
+# Get-NaAPIElements -NaServer $NaServer -API &quot;volume-list-info&quot; -output
+#
+# Will return any output elements volume-list-info generates.
+Function Get-NaAPIElements {
+    Param(
+        [NetApp.Manage.NaServer]$NaServer,
+        [string[]]$API,
+        [switch]$Output
+    )
+    Process {
+        $e = New-Object NetApp.Manage.NaElement(&quot;api-list&quot;)
+        Foreach ($A in $API) {
+            $e.AddNewChild('api-list-info',$A)
+        }
+        $NaElement = New-Object NetApp.Manage.NaElement(&quot;system-api-get-elements&quot;)
+        $NaElement.AddChildElement($e)
+        $apilist = $NaServer.InvokeElem($naelement).getchildbyname(&quot;api-entries&quot;)
+        Foreach ($A in $apiList.getchildbyname(&quot;system-api-entry-info&quot;)) {
+            $Obj = &quot;&quot; | Select API, ElementName, ElementType, Optional, AllowNull 
+            $N = $A.GetChildContent(&quot;name&quot;)
+            foreach ($e in $a.getchildbyname(&quot;api-elements&quot;).getchildren()) {
+                $obj.API = $N
+                $obj.ElementName = $e.getchildcontent('name')
+                
+                switch ($e.getchildcontent('type')) {
+                    &quot;string&quot;  {$obj.ElementType = &quot;String&quot;}
+                    &quot;integer&quot; {$obj.ElementType = &quot;int&quot;}
+                    &quot;boolean&quot; {$obj.ElementType = &quot;Bool&quot;}
+                    Default   {
+                        $obj.ElementType = $_
+                        $objElem = $true
+                        }
+                }    
+                
+                IF (!$e.getchildbyname('is-optional')) {
+                   $Obj.Optional = $False
+                } Else {
+                   $Obj.Optional = $true
+                }
+                IF (!$e.getchildbyname('is-output')) {
+                   $objOutput = $False
+                } Else {
+                   $objOutput = $true
+                }
+                IF (!$e.getchildbyname('is-optional')) {
+                   $Obj.Optional = $False
+                } Else {
+                   $Obj.Optional = $true
+                }
+                IF (
+                    (!$e.getchildbyname('is-nonempty')) -or `
+                    $e.GetChildContent('is-nonempty') -match &quot;false&quot;
+                   ) {
+                   $Obj.AllowNull = $True
+                } Else {
+                   $Obj.AllowNull = $False
+                }
+                
+                Switch ($objOutput) {
+                    {($Output -eq $true) -and ($_ -eq $true)}
+                        {write-output $obj}
+                    {($Output -eq $false) -and ($_ -eq $false)}
+                        {write-output $obj}
+                }
+            }
+        }
+    }
+}
+
+# Get-NaType
+# The OnTap API only supports three primitive types Int, String, and Bool.
+# It also has over 80 NaTypes; NaTypes are similar to PSObjects in that 
+# there is no formal class.  They are build on the fly, this function
+# returns what is required to construct a new NaElement as the given Natype.
+#########################################################################
+# Usage:
+# Connect to the filler
+# $Filer = 'TOASTER'
+# $NetApp = New-Object NetApp.Manage.NaServer($filer,1,0)
+# $NetApp.SetAdminUser(UserName,Password)
+#
+# Example
+# Get-NaType -NaServer $NaServer -Type &quot;volume-info&quot;
+#
+# Will return all the elements that comprise a volume-info NaElement type.
+Function Get-NaType {
+    Param(
+        [NetApp.Manage.NaServer]$NaServer,
+        [string]$Type
+    )
+    process {
+        $NaElement = New-Object NetApp.Manage.NaElement(&quot;system-api-list-types&quot;)
+        $results = $NaServer.InvokeElem($NaElement).GetChildByName(&quot;type-entries&quot;).getchildren()  
+        If ($type) {
+            $results = $results | ?{$_.GetChildContent(&quot;name&quot;) -eq $type}
+        }
+        $results.GetChildByName(&quot;type-elements&quot;).getchildren() | Select @{
+                    n='name'
+                    E={$_.GetChildContent(&quot;name&quot;)}
+                }, @{
+                    n='type'
+                    E={$_.GetChildContent(&quot;type&quot;)}
+                }, @{
+                    n='optional'
+                    E={$_.GetChildContent(&quot;is-optional&quot;)}
+                }
+
+    }
+    
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

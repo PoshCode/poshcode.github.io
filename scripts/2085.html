@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Hinkle">
+    <title>Exch07 Snd/Rec Report - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Exch07 Snd/Rec Report</h1>
+<h3><a href="//scripts/2085.ps1">download</a></h3>
+<p>Script to run daily send/receive reports in .csv format on a Exchange 2007 server using Power Shell 1.</p>
+<p>I originally found part of this code somewhere else but it didn't properly report the number of messages sent/received.  I cleaned it up and have been running it every morning on our Exchange Server.  It's nothing fancy but it gives good information.</p>
+<pre><code class="language-posh"># Get the start date for the tracking log search
+$Start = (Get-Date -Hour 00 -Minute 00 -Second 00).AddDays(-1)
+
+# Get the end date for the tracking log search
+$End = (Get-Date -Hour 23 -Minute 59 -Second 59).AddDays(-1)
+
+#Create a date for the csv file that this will get spit into
+$date = get-date -Format MM-dd-yyyy
+
+# Declare an array to store the results
+$Results = @()
+
+# Get the SEND events from the message tracking logs
+$Sent = Get-MessageTrackingLog -Server &lt;Server Name Ommited Needs Updated&gt; -Start $Start -End $End -resultsize unlimited | Where { $_.EventID -eq 'Send' -or $_.EventID -eq 'Deliver' }
+
+# Get the RECEIVE events from the message tracking logs
+$Received = Get-MessageTrackingLog -Server &lt;Server Name Ommited Needs Updated&gt; -Start $Start -End $End -resultsize unlimited | Where { $_.EventID -eq 'Receive' -or $_.EventID -eq 'TRANSFER' }
+
+# Get the mailboxes we want to report on
+#For in case I need to one day work with multiple DB's: $Mailboxes = Get-Mailbox -Database &quot;EXCHANGE01\SG1\DB1&quot;
+$Mailboxes = Get-Mailbox
+
+# Set up the counters for the progress bar
+$Total = $Mailboxes.Count
+$Count = 1
+
+# Sort the mailboxes and pipe them to a For-Each loop
+$Mailboxes | Sort-Object DisplayName | ForEach-Object {
+	# Update the progress bar
+	$PercentComplete = $Count / $Total * 100
+	Write-Progress -Activity &quot;Message Tracking Log Search&quot; -Status &quot;Processing mailboxes&quot; -percentComplete $PercentComplete
+
+	# Declare a custom object to store the data
+	$Stats = &quot;&quot; | Select-Object Name,Sent,Received
+
+	# Get the email address for the mailbox
+	$Email = $_.WindowsEmailAddress.ToString()
+
+	# Set the Name property of our object to the mailbox's display name
+	$Stats.Name = $_.DisplayName
+
+	# Set the Sent property to the number of messages sent
+	$Stats.Sent = ($Sent | Where-Object { ($_.EventId -eq &quot;Send&quot; -or $_.EventID -eq &quot;Deliver&quot;) -and ($_.Sender -eq $email) }).Count
+
+	# Set the Received property to the number of messages received
+	$Stats.Received = ($Received | Where-Object { ($_.EventId -eq &quot;RECEIVE&quot;) -and ($_.Recipients -match $email) }).Count
+
+	# Add the statistics for this mailbox to our results array
+	$Results += $Stats
+
+	# Increment the progress bar counter
+	$Count += 1
+}
+
+# Output the results
+$Results | Export-CSV C:\Net_Admin_Stuff\usage_reports\send_receive_log\send_receive_log-$date.csv -NoType
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

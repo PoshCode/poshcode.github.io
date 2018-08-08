@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Get-Parameter 2.8 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-Parameter 2.8</h1>
+<h3><a href="//scripts/4438.ps1">download</a> - <a href="//scripts/3794.md">parent</a></h3>
+<p>This update adds a -SetName filter and fixes bugs with PS3 and PS4 (also adds a &quot;*&quot; marker on the shortest form if it's not an actual alias)</p>
+<pre><code class="language-posh">   #Requires -version 2.0
+
+   #.Synopsis
+   #  Enumerates the parameters of one or more commands
+   #.Notes
+   #  With many thanks to Hal Rottenberg, Oisin Grehan and Shay Levy
+   #  Version 0.80 - April 2008 - By Hal Rottenberg http://poshcode.org/186
+   #  Version 0.81 - May 2008 - By Hal Rottenberg http://poshcode.org/255
+   #  Version 0.90 - June 2008 - By Hal Rottenberg http://poshcode.org/445
+   #  Version 0.91 - June 2008 - By Oisin Grehan http://poshcode.org/446
+   #  Version 0.92 - April 2008 - By Hal Rottenberg http://poshcode.org/549
+   #           - ADDED resolving aliases and avoided empty output
+   #  Version 0.93 - Sept 24, 2009 - By Hal Rottenberg http://poshcode.org/1344
+   #  Version 1.0  - Jan 19, 2010 - By Joel Bennett http://poshcode.org/1592
+   #           - Merged Oisin and Hal's code with my own implementation
+   #           - ADDED calculation of dynamic paramters
+   #  Version 2.0  - July 22, 2010 - By Joel Bennett http://poshcode.org/get/2005
+   #           - CHANGED uses FormatData so the output is objects
+   #           - ADDED calculation of shortest names to the aliases (idea from Shay Levy http://poshcode.org/1982,
+   #            but with a correct implementation)
+   #  Version 2.1  - July 22, 2010 - By Joel Bennett http://poshcode.org/2007
+   #           - FIXED Help for SCRIPT file (script help must be separated from #Requires by an emtpy line)
+   #           - Fleshed out and added dates to this version history after Bergle's criticism ;)
+   #  Version 2.2  - July 29, 2010 - By Joel Bennett http://poshcode.org/2030
+   #           - FIXED a major bug which caused Get-Parameters to delete all the parameters from the CommandInfo
+   #  Version 2.3  - July 29, 2010 - By Joel Bennett 
+   #           - ADDED a ToString ScriptMethod which allows queries like:
+   #            $parameters = Get-Parameter Get-Process; $parameters -match &quot;Name&quot;
+   #  Version 2.4  - July 29, 2010 - By Joel Bennett http://poshcode.org/2032
+   #           - CHANGED &quot;Name&quot; to CommandName
+   #           - ADDED ParameterName parameter to allow filtering parameters
+   #           - FIXED bug in 2.3 and 2.2 with dynamic parameters
+   #  Version 2.5  - December 13, 2010 - By Jason Archer http://poshcode.org/2404
+   #           - CHANGED format temp file to have static name, prevents bloat of random temporary files
+   #  Version 2.6  - July 23, 2011 - By Jason Archer http://poshcode.org/2815
+   #           - FIXED miscalculation of shortest unique name (aliases count as unique names),
+   #            this caused some parameter names to be thrown out (like &quot;Object&quot;)
+   #           - CHANGED code style cleanup
+   #  Version 2.7  - November 28, 2012 - By Joel Bennett http://poshcode.org/3794
+   #           - Added * indicator on default parameter set.
+   #  Version 2.8  - August 27, 2013 - By Joel Bennett (This Version)
+   #           - Added SetName filter 
+   #           - Add * on the short name in the aliases list (to distinguish it from real aliases)
+   #           FIXED PowerShell 4 Bugs:
+   #           - Added PipelineVariable to CommonParameters
+   #           FIXED PowerShell 3 Bugs:
+   #           - Don't add to the built-in Aliases anymore, it changes the command!
+   #           
+   #.Description
+   #  Lists all the parameters of a command, by ParameterSet, including their aliases, type, etc.
+   #
+   #  By default, formats the output to tables grouped by command and parameter set
+   #.Example
+   #  Get-Command Select-Xml | Get-Parameter
+   #.Example
+   #  Get-Parameter Select-Xml
+   [CmdletBinding(DefaultParameterSetName=&quot;ParameterName&quot;)]
+   param ( 
+      # The name of the command to get parameters for
+      [Parameter(Position = 1, Mandatory = $true, ValueFromPipelineByPropertyName = $true)]
+      [string[]]$CommandName,
+
+      # The parameter name to filter by (allows Wilcards)
+      [Parameter(Position = 2, ValueFromPipelineByPropertyName=$true, ParameterSetName=&quot;FilterNames&quot;)]
+      [string[]]$ParameterName = &quot;*&quot;,
+
+      # The ParameterSet name to filter by (allows wildcards)
+      [Parameter(ValueFromPipelineByPropertyName=$true, ParameterSetName=&quot;FilterSets&quot;)]
+      [string[]]$SetName = &quot;*&quot;,
+
+      # The name of the module which contains the command (this is for scoping)
+      [Parameter(ValueFromPipelineByPropertyName = $true)]
+      $ModuleName,
+
+      # Forces including the CommonParameters in the output
+      [switch]$Force
+   )
+
+   Function global:Get-Parameter {
+      #.Synopsis 
+      #  Enumerates the parameters of one or more commands
+      #.Description
+      #  Lists all the parameters of a command, by ParameterSet, including their aliases, type, etc.
+      #
+      #  By default, formats the output to tables grouped by command and parameter set
+      #.Example
+      #  Get-Command Select-Xml | Get-Parameter
+      #.Example
+      #  Get-Parameter Select-Xml
+      [CmdletBinding(DefaultParameterSetName=&quot;ParameterName&quot;)]
+      param(
+         # The name of the command to get parameters for
+         [Parameter(Position = 1, Mandatory = $true, ValueFromPipelineByPropertyName = $true)]
+         [string[]]$CommandName,
+
+         # The parameter name to filter by (allows Wilcards)
+         [Parameter(Position = 2, ValueFromPipelineByPropertyName=$true, ParameterSetName=&quot;FilterNames&quot;)]
+         [string[]]$ParameterName = &quot;*&quot;,
+
+         # The ParameterSet name to filter by (allows wildcards)
+         [Parameter(ValueFromPipelineByPropertyName=$true, ParameterSetName=&quot;FilterSets&quot;)]
+         [string[]]$SetName = &quot;*&quot;,
+
+         # The name of the module which contains the command (this is for scoping)
+         [Parameter(ValueFromPipelineByPropertyName = $true)]
+         $ModuleName,
+
+         # Forces including the CommonParameters in the output
+         [switch]$Force
+      )
+
+      begin {
+         $PropertySet = @( &quot;Name&quot;,
+            @{n=&quot;Position&quot;;e={if($_.Position -lt 0){&quot;Named&quot;}else{$_.Position}}},
+            &quot;Aliases&quot;, 
+            @{n=&quot;Short&quot;;e={$_.Name}},
+            @{n=&quot;Type&quot;;e={$_.ParameterType.Name}}, 
+            @{n=&quot;ParameterSet&quot;;e={$paramset}},
+            @{n=&quot;Command&quot;;e={$command}},
+            @{n=&quot;Mandatory&quot;;e={$_.IsMandatory}},
+            @{n=&quot;Provider&quot;;e={$_.DynamicProvider}},
+            @{n=&quot;ValueFromPipeline&quot;;e={$_.ValueFromPipeline}},
+            @{n=&quot;ValueFromPipelineByPropertyName&quot;;e={$_.ValueFromPipelineByPropertyName}}
+         )
+         function Join-Object {
+            Param(
+              [Parameter(Position=0)]
+              $First
+              ,
+              [Parameter(ValueFromPipeline=$true,Position=1)]
+              $Second
+            )
+            begin {
+              [string[]] $p1 = $First | Get-Member -MemberType Properties | Select-Object -ExpandProperty Name
+            }
+            process {
+              $Output = $First | Select-Object $p1
+              foreach ($p in $Second | Get-Member -MemberType Properties | Where-Object {$p1 -notcontains $_.Name} | Select-Object -ExpandProperty Name) {
+                 Add-Member -InputObject $Output -MemberType NoteProperty -Name $p -Value $Second.&quot;$p&quot;
+              }
+              $Output
+            }
+         }
+      }
+
+      process {
+         foreach ($cmd in $CommandName) {
+         if ($ModuleName) {$cmd = &quot;$ModuleName\$cmd&quot;}
+         $commands = @(Get-Command $cmd)
+
+         foreach ($command in $commands) {
+            # resolve aliases (an alias can point to another alias)
+            while ($command.CommandType -eq &quot;Alias&quot;) {
+              $command = @(Get-Command ($command.definition))[0]
+            }
+            if (-not $command) {continue}
+
+            $Parameters = @{}
+
+            foreach ($provider in Get-PSProvider) {
+               $drive = &quot;{0}\{1}::\&quot; -f $provider.ModuleName, $provider.Name
+               Write-Verbose (&quot;Get-Command $command -Args $drive | Select -Expand Parameters&quot;)
+
+               [Array]$MoreParameters = (Get-Command $command -Args $drive).Parameters.Values
+               [Array]$Dynamic = $MoreParameters | Where-Object {$_.IsDynamic}
+               foreach ($p in $MoreParameters | Where-Object{!$Parameters.ContainsKey($_.Name)}) {$Parameters.($p.Name) = $p | Select *}
+                  # Write-Verbose &quot;Drive: $Drive | Parameters: $($Parameters.Count)&quot;
+                  if ($dynamic) {
+                     foreach ($d in $dynamic) {
+                        if (Get-Member -InputObject $Parameters.($d.Name) -Name DynamicProvider) {
+                           Write-Debug (&quot;ADD:&quot; + $d.Name + &quot; &quot; + $provider.Name)
+                           $Parameters.($d.Name).DynamicProvider += $provider.Name
+                        } else {
+                           Write-Debug (&quot;CREATE:&quot; + $d.Name + &quot; &quot; + $provider.Name)
+                           $Parameters.($d.Name) = $Parameters.($d.Name) | Select *, @{ n=&quot;DynamicProvider&quot;;e={ @($provider.Name) } }
+                        }
+                     } 
+                  }
+               }
+
+               ## Calculate the shortest distinct parameter name -- do this BEFORE removing the common parameters or else.
+               $Aliases = $Parameters.Values | Select-Object -ExpandProperty Aliases  ## Get defined aliases
+               $ParameterNames = $Parameters.Keys + $Aliases
+               foreach ($p in $($Parameters.Keys)) {
+                  $short = &quot;^&quot;
+                  $aliases = @($p) + @($Parameters.$p.Aliases) | sort { $_.Length }
+                  $shortest = &quot;^&quot; + @($aliases)[0]
+
+                  foreach($name in $aliases) {
+                     $short = &quot;^&quot;
+                     foreach ($char in [char[]]$name) {         
+                        $short += $char
+                        $mCount = ($ParameterNames -match $short).Count
+                        if ($mCount -eq 1 ) {
+                           if($short.Length -lt $shortest.Length) {
+                              $shortest = $short
+                           }
+                           break
+                        }
+                     }
+                  }
+                  if($shortest.Length -lt @($aliases)[0].Length +1){
+                     # Overwrite the Aliases with this new value
+                     $Parameters.$p = $Parameters.$p | Add-Member NoteProperty Aliases ($Parameters.$p.Aliases + @(&quot;$($shortest.SubString(1))*&quot;)) -Force -Passthru
+                  }
+               }
+
+               # Write-Verbose &quot;Parameters: $($Parameters.Count)`n $($Parameters | ft | out-string)&quot;
+               $CommonParameters = &quot;ErrorAction&quot;, &quot;WarningAction&quot;, &quot;Verbose&quot;, &quot;Debug&quot;, &quot;ErrorVariable&quot;, &quot;WarningVariable&quot;, &quot;OutVariable&quot;, &quot;OutBuffer&quot;, &quot;PipelineVariable&quot;
+    
+               foreach ($paramset in @($command.ParameterSets | Select-Object -ExpandProperty &quot;Name&quot;)) {
+                  $paramset = $paramset | Add-Member -Name IsDefault -MemberType NoteProperty -Value ($paramset -eq $command.DefaultParameterSet) -PassThru
+                  foreach ($parameter in $Parameters.Keys | Sort-Object) {
+                     # Write-Verbose &quot;Parameter: $Parameter&quot;
+                     if (!$Force -and ($CommonParameters -contains $Parameter)) {continue}
+                     if ($Parameters.$Parameter.ParameterSets.ContainsKey($paramset) -or $Parameters.$Parameter.ParameterSets.ContainsKey(&quot;__AllParameterSets&quot;)) {
+                        if ($Parameters.$Parameter.ParameterSets.ContainsKey($paramset)) {
+                           $output = Join-Object $Parameters.$Parameter $Parameters.$Parameter.ParameterSets.$paramSet 
+                        } else {
+                           $output = Join-Object $Parameters.$Parameter $Parameters.$Parameter.ParameterSets.__AllParameterSets
+                        }
+    
+                        Write-Output $Output | Select-Object $PropertySet | ForEach-Object {
+                              $null = $_.PSTypeNames.Insert(0,&quot;System.Management.Automation.ParameterMetadata&quot;)
+                              $null = $_.PSTypeNames.Insert(0,&quot;System.Management.Automation.ParameterMetadataEx&quot;)
+                              # Write-Verbose &quot;$(($_.PSTypeNames.GetEnumerator()) -join &quot;, &quot;)&quot;
+                              $_
+                           } |
+                           Add-Member ScriptMethod ToString { $this.Name } -Force -Passthru |
+                           Where-Object {$(foreach($pn in $ParameterName) {$_ -like $Pn}) -contains $true} |
+                           Where-Object {$(foreach($sn in $SetName) {$_.ParameterSet -like $sn}) -contains $true}
+    
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+
+
+   # Since you can't update format data without a file that has a ps1xml ending, let's make one up...
+   $tempFile = &quot;$([System.IO.Path]::GetTempPath())Get-Parameter.ps1xml&quot;
+   Set-Content $tempFile @'
+   &lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot; ?&gt;
+   &lt;Configuration&gt;
+      &lt;Controls&gt;
+         &lt;Control&gt;
+            &lt;Name&gt;ParameterGroupingFormat&lt;/Name&gt;
+             &lt;CustomControl&gt;
+                &lt;CustomEntries&gt;
+                  &lt;CustomEntry&gt;
+                     &lt;CustomItem&gt;
+                        &lt;Frame&gt;
+                          &lt;LeftIndent&gt;4&lt;/LeftIndent&gt;
+                          &lt;CustomItem&gt;
+                             &lt;Text&gt;Command: &lt;/Text&gt;
+                             &lt;ExpressionBinding&gt;
+                                &lt;ScriptBlock&gt;&quot;{0}/{1}&quot; -f $(if($_.command.ModuleName){$_.command.ModuleName}else{$_.Command.CommandType.ToString()+&quot;:&quot;}),$_.command.Name&lt;/ScriptBlock&gt;
+                             &lt;/ExpressionBinding&gt;
+                             &lt;NewLine/&gt;
+                             &lt;Text&gt;Set:    &lt;/Text&gt;
+                             &lt;ExpressionBinding&gt;
+                                &lt;ScriptBlock&gt;&quot;$(if($_.ParameterSet -eq &quot;__AllParameterSets&quot;){&quot;Default&quot;}else{$_.ParameterSet})&quot; + &quot;$(if($_.ParameterSet.IsDefault){&quot; *&quot;})&quot;&lt;/ScriptBlock&gt;
+                             &lt;/ExpressionBinding&gt;
+                             &lt;NewLine/&gt;
+                          &lt;/CustomItem&gt; 
+                        &lt;/Frame&gt;
+                     &lt;/CustomItem&gt;
+                  &lt;/CustomEntry&gt;
+                &lt;/CustomEntries&gt;
+            &lt;/CustomControl&gt;
+         &lt;/Control&gt;
+      &lt;/Controls&gt;
+      &lt;ViewDefinitions&gt;
+         &lt;View&gt;
+            &lt;Name&gt;ParameterMetadataEx&lt;/Name&gt;
+            &lt;ViewSelectedBy&gt;
+              &lt;TypeName&gt;System.Management.Automation.ParameterMetadataEx&lt;/TypeName&gt;
+            &lt;/ViewSelectedBy&gt;
+            &lt;GroupBy&gt;
+              &lt;PropertyName&gt;ParameterSet&lt;/PropertyName&gt;
+              &lt;CustomControlName&gt;ParameterGroupingFormat&lt;/CustomControlName&gt;  
+            &lt;/GroupBy&gt;
+            &lt;TableControl&gt;
+               &lt;TableHeaders&gt;
+                  &lt;TableColumnHeader&gt;
+                     &lt;Label&gt;Name&lt;/Label&gt;
+                     &lt;Width&gt;22&lt;/Width&gt;
+                  &lt;/TableColumnHeader&gt;
+                  &lt;TableColumnHeader&gt;
+                     &lt;Label&gt;Aliases&lt;/Label&gt;
+                     &lt;Width&gt;12&lt;/Width&gt;
+                  &lt;/TableColumnHeader&gt;
+                  &lt;TableColumnHeader&gt;
+                     &lt;Label&gt;Position&lt;/Label&gt;
+                     &lt;Width&gt;8&lt;/Width&gt;
+                  &lt;/TableColumnHeader&gt;
+                  &lt;TableColumnHeader&gt;
+                     &lt;Label&gt;Mandatory&lt;/Label&gt;
+                     &lt;Width&gt;9&lt;/Width&gt;
+                  &lt;/TableColumnHeader&gt;
+                  &lt;TableColumnHeader&gt;
+                     &lt;Label&gt;Pipeline&lt;/Label&gt;
+                     &lt;Width&gt;8&lt;/Width&gt;
+                  &lt;/TableColumnHeader&gt;
+                  &lt;TableColumnHeader&gt;
+                     &lt;Label&gt;ByName&lt;/Label&gt;
+                     &lt;Width&gt;6&lt;/Width&gt;
+                  &lt;/TableColumnHeader&gt;
+                  &lt;TableColumnHeader&gt;
+                     &lt;Label&gt;Provider&lt;/Label&gt;
+                     &lt;Width&gt;15&lt;/Width&gt;
+                  &lt;/TableColumnHeader&gt;
+                  &lt;TableColumnHeader&gt;
+                     &lt;Label&gt;Type&lt;/Label&gt;
+                  &lt;/TableColumnHeader&gt;
+               &lt;/TableHeaders&gt;
+               &lt;TableRowEntries&gt;
+                  &lt;TableRowEntry&gt;
+                     &lt;TableColumnItems&gt;
+                        &lt;TableColumnItem&gt;
+                           &lt;PropertyName&gt;Name&lt;/PropertyName&gt;
+                        &lt;/TableColumnItem&gt;
+                        &lt;TableColumnItem&gt;
+                           &lt;PropertyName&gt;Aliases&lt;/PropertyName&gt;
+                        &lt;/TableColumnItem&gt;
+                        &lt;TableColumnItem&gt;
+                           &lt;!--PropertyName&gt;Position&lt;/PropertyName--&gt;
+                           &lt;ScriptBlock&gt;if($_.Position -lt 0){&quot;Named&quot;}else{$_.Position}&lt;/ScriptBlock&gt;
+                        &lt;/TableColumnItem&gt;
+                        &lt;TableColumnItem&gt;
+                           &lt;PropertyName&gt;Mandatory&lt;/PropertyName&gt;
+                        &lt;/TableColumnItem&gt;
+                        &lt;TableColumnItem&gt;
+                           &lt;PropertyName&gt;ValueFromPipeline&lt;/PropertyName&gt;
+                        &lt;/TableColumnItem&gt;
+                        &lt;TableColumnItem&gt;
+                           &lt;PropertyName&gt;ValueFromPipelineByPropertyName&lt;/PropertyName&gt;
+                        &lt;/TableColumnItem&gt;
+                        &lt;TableColumnItem&gt;
+                           &lt;!--PropertyName&gt;Provider&lt;/PropertyName--&gt;
+                           &lt;ScriptBlock&gt;if($_.Provider){$_.Provider}else{&quot;All&quot;}&lt;/ScriptBlock&gt;
+                        &lt;/TableColumnItem&gt;
+                        &lt;TableColumnItem&gt;
+                           &lt;PropertyName&gt;Type&lt;/PropertyName&gt;
+                        &lt;/TableColumnItem&gt;
+                     &lt;/TableColumnItems&gt;
+                  &lt;/TableRowEntry&gt;
+               &lt;/TableRowEntries&gt;
+            &lt;/TableControl&gt;
+         &lt;/View&gt;
+      &lt;/ViewDefinitions&gt;
+   &lt;/Configuration&gt;
+   '@
+
+   Update-FormatData -Append $tempFile
+
+
+   # This is nested stuff, so that you can call the SCRIPT, and after it defines the global function, we will call that.
+   Get-Parameter @PSBoundParameters
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

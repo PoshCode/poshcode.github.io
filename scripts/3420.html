@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="rfoust">
+    <title>Get Exchange DB Stats - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get Exchange DB Stats</h1>
+<h3><a href="//scripts/3420.ps1">download</a></h3>
+<p>Gathers lots of statistics about Exchange 2010 databases, and sends an email with both a html table, and also CSS graphs representing disk usage.</p>
+<pre><code class="language-posh"># requires -version 2.0
+#
+# get-exstats.ps1
+#
+# returns various statistics on databases
+#
+# Author: rfoust@duke.edu
+# Modified: March 12, 2012
+#
+# This has only been tested with Exchange 2010
+
+param([string]$server=$env:computername.tolower(), [string]$database=&quot;NotSpecified&quot;, [switch]$all, [switch]$noemail, [switch]$nologcheck)
+
+#Add-PSSnapin Microsoft.Exchange.Management.PowerShell.Admin
+if (!(get-pssnapin Microsoft.Exchange.Management.PowerShell.E2010 -erroraction silentlycontinue))
+	{
+	Add-PSSnapin Microsoft.Exchange.Management.PowerShell.E2010
+	}
+
+# found this really cool function here: http://www.olavaukan.com/tag/powershell/
+function Util-Convert-FileSizeToString {	 
+	    param (
+	        [Parameter(Mandatory=$true, ValueFromPipeline=$true, Position=0)]
+	        [int64]$sizeInBytes
+	    )
+	 
+	    switch ($sizeInBytes)
+	    {
+	        {$sizeInBytes -ge 1TB} {&quot;{0:n$sigDigits}&quot; -f ($sizeInBytes/1TB) + &quot; TB&quot; ; break}
+	        {$sizeInBytes -ge 1GB} {&quot;{0:n$sigDigits}&quot; -f ($sizeInBytes/1GB) + &quot; GB&quot; ; break}
+	        {$sizeInBytes -ge 1MB} {&quot;{0:n$sigDigits}&quot; -f ($sizeInBytes/1MB) + &quot; MB&quot; ; break}
+	        {$sizeInBytes -ge 1KB} {&quot;{0:n$sigDigits}&quot; -f ($sizeInBytes/1KB) + &quot; KB&quot; ; break}
+	        Default { &quot;{0:n$sigDigits}&quot; -f $sizeInBytes + &quot; Bytes&quot; }
+	    }
+	}
+
+
+# specifying only a single database using -database makes the script run faster for testing
+if ($database -eq &quot;NotSpecified&quot;)
+	{
+	# $dbs = get-mailboxdatabase -status | ? { $_.replicationtype -eq &quot;Remote&quot; } | select-object servername,name,databasesize,mounted | sort servername,name
+	$dbs = get-mailboxdatabase -status | ? { $_.replicationtype -eq &quot;Remote&quot; } | sort servername,name
+	}
+else
+	{
+	$dbs = get-mailboxdatabase $database -status | sort servername,name
+	}
+
+$fragments = @()	# array to hold html fragments
+$data = @()		# array to hold the psobjects
+$prettydata = @()	# array to hold pretty data (strings, not raw bytes)
+
+
+foreach ($db in $dbs)
+	{
+	write-host &quot;Processing $db.&quot;
+	
+	$raw = new-object psobject
+	$pretty = new-object psobject
+
+	write-host &quot;Gathering count of mailboxes on $db.&quot;
+	$mailboxes = (get-mailbox -database $db.name -resultsize unlimited).count
+
+	#get copy status
+	$copystatus = (get-mailboxdatabasecopystatus $db.name | ? { $_.activecopy -eq $false }).status
+
+	if (-not $nologcheck)
+		{
+		#figure out how much space the logs are consuming
+		# $drive will probably end up being D$ in all cases, but might as well do the logic to figure it out
+		write-host &quot;Finding out how much disk space the log files are using for $db ...&quot;
+		$drive = $db.logfolderpath.tostring().substring(0,1) + &quot;$&quot;
+		$substring = $db.logfolderpath.tostring().substring(0,2)
+		$uncpath = &quot;\\$($db.server)\&quot; + $drive + ($db.logfolderpath.tostring().replace($substring,&quot;&quot;)) + &quot;\*.log&quot;
+		$logsize = (ls $uncpath | measure-object -property length -sum).sum
+		$logsizetotal += $logsize
+		$logsize = util-convert-filesizetostring $logsize
+		}
+	
+	#calculate average mailbox size
+	Write-Host &quot;Calculating average mailbox size ...&quot;
+	$avg = get-mailboxstatistics -database $db | % { $_.totalitemsize.value.tobytes() }
+	$avg = ($avg | Measure-Object -Average).average
+	$avgTotal += $avg
+
+	if ($avg)
+		{
+		$avgPretty = util-convert-filesizetostring $avg
+		}
+		
+	#calculate deleted mailbox size
+	Write-Host &quot;Calculating deleted mailbox size ...&quot;
+	$deletedMBsize = get-mailboxstatistics -database $db | ? { $_.DisconnectDate -ne $null } | % { $_.totalitemsize.value.tobytes() }
+	$deletedMBsize = ($deletedMBsize | Measure-Object -Sum).sum
+	$deletedMBsizeTotal += $deletedMBsize
+	
+	if ($deletedMBsize)
+		{
+		$deletedMBsizePretty = util-convert-filesizetostring $deletedMBsize
+		}
+	
+	#calculate dumpster size
+	Write-Host &quot;Calculating dumpster size ...&quot;
+	$dumpster = get-mailboxstatistics -database $db | % { $_.totaldeleteditemsize.value.tobytes() }
+	$dumpster = ($dumpster | Measure-Object -Sum).sum
+	$dumpsterTotal += $dumpster
+	
+	if ($dumpster)
+		{
+		$dumpsterPretty = util-convert-filesizetostring $dumpster
+		}
+	
+	#get a shorter db size
+	$dbsize = $db.databasesize.tobytes()
+	$dbsizetotal += $dbsize
+	if ($dbsize)
+		{
+		$dbsizePretty = util-convert-filesizetostring $dbsize
+		}
+
+	#get free space on the mountpoint volume
+	$freespace = (gwmi win32_volume -computer $db.server | where { $_.name -eq ($db.logfolderpath.tostring() + &quot;\&quot;) }).freespace
+	$freespacetotal += $freespace
+	if ($freespace)
+		{
+		$freespacePretty = util-convert-filesizetostring $freespace
+		}
+
+	#get capacity on the mountpoint volume
+	$capacity = (gwmi win32_volume -computer $db.server | where { $_.name -eq ($db.logfolderpath.tostring() + &quot;\&quot;) }).capacity
+	$capacitytotal += $capacity
+	if ($capacity)
+		{
+		$capacityPretty = util-convert-filesizetostring $capacity
+		}
+
+	#get a shorter whitespace size
+	$whitespace = $db.availablenewmailboxspace.tobytes()
+	$whitespacetotal += $whitespace
+	if ($whitespace)
+		{
+		$whitespacePretty = util-convert-filesizetostring $whitespace
+		}
+
+
+	# create psobject with raw bytes
+	$raw | add-member NoteProperty &quot;ServerName&quot; $db.servername
+	$raw | add-member NoteProperty &quot;Database&quot; $db.name
+	$raw | add-member NoteProperty &quot;Mailboxes&quot; $mailboxes
+	$raw | add-member NoteProperty &quot;CopyStatus&quot; $copystatus
+	$raw | add-member NoteProperty &quot;DBSize&quot; $dbsize
+	# $raw | add-member NoteProperty &quot;Mounted&quot; $db.mounted
+	$raw | add-member NoteProperty &quot;LogSize&quot; $logsize
+	$raw | add-member NoteProperty &quot;FreeSpace&quot; $freespace
+	$raw | add-member NoteProperty &quot;TotalSpace&quot; $capacity
+	$raw | add-member NoteProperty &quot;Whitespace&quot; $whitespace
+	$raw | add-member NoteProperty &quot;Deleted Mbox&quot; $deletedMBsize
+	$raw | add-member NoteProperty &quot;Dumpster&quot; $dumpster
+	$raw | add-member NoteProperty &quot;Avg Mbox&quot; $avgPretty
+	$raw | add-member NoteProperty &quot;Last Full Backup&quot; $db.lastfullbackup
+	$raw | add-member NoteProperty &quot;Last Incr Backup&quot; $db.lastincrementalbackup
+
+	$data += $raw
+
+	# create psobject with pretty display sizes (MB, GB, etc)
+	$pretty | add-member NoteProperty &quot;ServerName&quot; $db.servername
+	$pretty | add-member NoteProperty &quot;Database&quot; $db.name
+	$pretty | add-member NoteProperty &quot;Mailboxes&quot; $mailboxes
+	$pretty | add-member NoteProperty &quot;CopyStatus&quot; $copystatus
+	$pretty | add-member NoteProperty &quot;DBSize&quot; $dbsizePretty
+	# $pretty | add-member NoteProperty &quot;Mounted&quot; $db.mounted
+	$pretty | add-member NoteProperty &quot;LogSize&quot; $logsize
+	$pretty | add-member NoteProperty &quot;FreeSpace&quot; $freespacePretty
+	$pretty | add-member NoteProperty &quot;TotalSpace&quot; $capacityPretty
+	$pretty | add-member NoteProperty &quot;Whitespace&quot; $whitespacePretty
+	$pretty | add-member NoteProperty &quot;Deleted Mbox&quot; $deletedMBsizePretty
+	$pretty | add-member NoteProperty &quot;Dumpster&quot; $dumpsterPretty
+	$pretty | add-member NoteProperty &quot;Avg Mbox&quot; $avgPretty
+	$pretty | add-member NoteProperty &quot;Last Full Backup&quot; $db.lastfullbackup
+	$pretty | add-member NoteProperty &quot;Last Incr Backup&quot; $db.lastincrementalbackup
+
+	$prettydata += $pretty
+	}
+
+# add a &quot;total&quot; row
+$thingy = new-object psobject
+write-host; write-host &quot;Calculating totals ...&quot;
+
+$mailboxes = ($data | measure-object mailboxes -sum).sum
+$deletedMBsizetotal = ($deletedMBsizetotal | Measure-Object -Sum).sum
+
+$thingy | add-member NoteProperty &quot;ServerName&quot; &quot;Total&quot;
+$thingy | add-member NoteProperty &quot;Database&quot; $data.count
+$thingy | add-member NoteProperty &quot;DBSize&quot; (util-convert-filesizetostring $dbsizetotal)
+$thingy | add-member NoteProperty &quot;Mailboxes&quot; $mailboxes
+if (-not $nologcheck)
+	{
+	$thingy | add-member NoteProperty &quot;LogSize&quot; (util-convert-filesizetostring $logsizetotal)
+	}
+$thingy | add-member NoteProperty &quot;FreeSpace&quot; (util-convert-filesizetostring $freespacetotal)
+$thingy | add-member NoteProperty &quot;TotalSpace&quot; (util-convert-filesizetostring $capacitytotal)
+$thingy | add-member NoteProperty &quot;Whitespace&quot; (util-convert-filesizetostring $whitespacetotal)
+$thingy | Add-Member NoteProperty &quot;Deleted Mbox&quot; (util-convert-filesizetostring $deletedMBsizeTotal)
+$thingy | Add-Member NoteProperty &quot;Dumpster&quot; (util-convert-filesizetostring $dumpsterTotal)
+#$thingy | Add-Member NoteProperty &quot;Avg Mbox&quot; (util-convert-filesizetostring $avgTotal)
+
+$prettyData += $thingy
+
+# add raw data total row
+$thingy = new-object psobject
+
+$mailboxes = ($data | measure-object mailboxes -sum).sum
+$deletedMBsizetotal = ($deletedMBsizetotal | Measure-Object -Sum).sum
+
+$thingy | add-member NoteProperty &quot;ServerName&quot; &quot;Total&quot;
+$thingy | add-member NoteProperty &quot;Database&quot; $data.count
+$thingy | add-member NoteProperty &quot;DBSize&quot; $dbsizetotal
+$thingy | add-member NoteProperty &quot;Mailboxes&quot; $mailboxes
+if (-not $nologcheck)
+	{
+	$thingy | add-member NoteProperty &quot;LogSize&quot; $logsizetotal
+	}
+$thingy | add-member NoteProperty &quot;FreeSpace&quot; $freespacetotal
+$thingy | add-member NoteProperty &quot;TotalSpace&quot; $capacitytotal
+$thingy | add-member NoteProperty &quot;Whitespace&quot; $whitespacetotal
+$thingy | Add-Member NoteProperty &quot;Deleted Mbox&quot; $deletedMBsizeTotal
+$thingy | Add-Member NoteProperty &quot;Dumpster&quot; $dumpsterTotal
+#$thingy | Add-Member NoteProperty &quot;Avg Mbox&quot; $avgTotal
+
+$data += $thingy
+
+# dump pretty data out to screen
+$prettyData
+
+# bullet graph idea came from here: http://www.usrecordings.com/test-lab/bullet-graph.htm
+# powershell html chart was inspired by: http://jdhitsolutions.com/blog/2012/02/create-html-bar-charts-from-powershell/
+$style = &quot;&lt;style type=`&quot;text/css`&quot;&gt;
+html * { margin: 0; padding: 0; border: 0; }
+body { text-align: left; font: 10pt Arial, sans-serif; }
+TH { border-width: 1px; padding: 0px; border-style: solid; border-color: black; background-color: thistle }
+h1 { font: 30pt Arial, sans-serif; padding: 10px 0 5px 0; width: 540px; margin: 0 auto 10px auto; border-bottom: 1px solid #8f8f8f; text-align: left; }
+h2 { font: 20pt Arial, sans-serif; }
+p#contact { font: 10pt Arial, sans-serif; width: 398px; margin: 0 auto; padding-top: 7px; text-align: left; line-height: 140%; }
+a:link, a:visited, a:hover { color: rgb(32,108,223); font-weight: bold; text-decoration: none; }
+a:hover { color: #cc0000; font-weight: bold; }
+
+
+div#container { position: relative; margin: 0px 50px; padding: 0; text-align: left; top: 80px; width: 250px; }
+
+/*	BULLET GRAPH */
+div.box-wrap { position: relative; width: 200px; height: 21px; top: 0; left: 0; margin: 0; padding: 0; }
+
+/*	CHANGE THE WIDTH AND BACKGROUND COLORS AS NEEDED */
+div.box1 { position: absolute; height: 20px; width: 30%; left: 0; background-color: #eeeeee; z-index: 1; font-size: 0; }
+div.box2 { position: absolute; height: 20px; width: 30%; left: 30%; background-color: #dddddd; z-index: 1; font-size: 0; }
+div.box3 { position: absolute; height: 20px; width: 30%; left: 60%; background-color: #bbbbbb; z-index: 1; font-size: 0; }
+div.box4 { position: absolute; height: 20px; width: 10%; left: 90%; background-color: #bbbbbb; z-index: 1; font-size: 0; }
+
+/* RED LINE */
+div.target { position: absolute; height: 20px; width: 1px; left: 32px; top: 0; background-color: #cc0000; z-index: 7; font-size: 0; }
+
+/* ONE SEGMENT ONLY */
+div.actual { position: absolute; height: 8px; left: 0px; top: 6px; background-color: #000000; font-size: 0; z-index: 5; font-size: 0; }
+
+/* TWO SEGMENTS */
+div.actualWhitespace { position: absolute; height: 8px; left: 0px; top: 6px; background-color: #b580fe; font-size: 0; z-index: 5; font-size: 0; }
+div.actualDeleted { position: absolute; height: 8px; left: 0px; top: 6px; background-color: #2d006b; font-size: 0; z-index: 5; font-size: 0; }
+div.actualDumpster { position: absolute; height: 8px; left: 0px; top: 6px; background-color: #dabffe; font-size: 0; z-index: 5; font-size: 0; }
+div.actualData { position: absolute; height: 8px; left: 0px; top: 6px; background-color: #400099; font-size: 0; z-index: 5; font-size: 0; }
+
+div.mylabel { 
+	position: relative; 
+	height: 20px; 
+	width: 145px; 
+	left: -155px; 
+	top: 2px; 
+	background-color: #fff; 
+	z-index: 7; 
+	font-size: 0;
+	color: #000000; 
+	font: 10pt Arial, sans-serif; 
+	text-align: right; 
+}
+
+div.scale-tb1 {
+	padding: 0; 
+	margin: 0;
+	font-size: 0;
+	width: 200px;
+	border: 0;	
+	position: relative; 
+	top: 10px; 
+	left: 0px; 
+	border-top: 1px solid #8f8f8f; 
+}
+
+div.scale-tb2 {
+	padding: 0; 
+	margin: 0;
+	font-size: 0;
+	width: 200px;
+	border: 0;	
+	position: relative; 
+	top: 0px; 
+	left: 0px; 
+}
+
+/*	SCALE MARKS */
+div.sc21 { position: absolute; height: 7px; width: 1px; left: 0px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc22 { position: absolute; height: 7px; width: 1px; left: 39px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc23 { position: absolute; height: 7px; width: 1px; left: 79px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc24 { position: absolute; height: 7px; width: 1px; left: 119px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc25 { position: absolute; height: 7px; width: 1px; left: 159px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc26 { position: absolute; height: 7px; width: 1px; left: 199px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+
+div.sc31 { position: absolute; height: 7px; width: 1px; left: 0px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc32 { position: absolute; height: 7px; width: 1px; left: 39px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc33 { position: absolute; height: 7px; width: 1px; left: 79px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc34 { position: absolute; height: 7px; width: 1px; left: 119px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc35 { position: absolute; height: 7px; width: 1px; left: 159px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+div.sc36 { position: absolute; height: 7px; width: 1px; left: 199px; top: 0px; background-color: #8f8f8f; z-index: 7; font-size: 0; }
+
+
+/*	SCALE TEXT */
+div.cap21 { position: absolute; top: 40px; left: -2px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap22 { position: absolute; top: 40px; left: 35px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap23 { position: absolute; top: 40px; left: 71px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap24 { position: absolute; top: 40px; left: 112px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap25 { position: absolute; top: 40px; left: 152px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap26 { position: absolute; top: 40px; left: 191px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+
+div.cap31 { position: absolute; top: 29px; left: -2px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap32 { position: absolute; top: 29px; left: 35px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap33 { position: absolute; top: 29px; left: 71px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap34 { position: absolute; top: 29px; left: 112px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap35 { position: absolute; top: 29px; left: 152px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+div.cap36 { position: absolute; top: 29px; left: 191px; width: 15px; font: 8pt Arial, sans-serif; text-align: center; color: #575757; }
+&lt;/style&gt;&quot;
+
+$fragments += &quot;&lt;H2&gt;Exchange 2010 Statistics&lt;/H2&gt;&quot;
+$fragments += $prettyData | ConvertTo-Html -fragment
+# $fragments += &quot;&lt;br&gt;&quot;
+
+$html = @()
+
+$html += &quot;&lt;div id=`&quot;container`&quot;&gt;&quot;
+$html += &quot;Database Size Graph&quot;
+
+foreach ($db in $data)
+	{
+	if ($db.servername -ne &quot;Total&quot;)
+		{		
+		$html += &quot;&lt;div class=`&quot;box-wrap`&quot;&gt;
+		&lt;div class=`&quot;box1`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box2`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box3`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box4`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;target`&quot; style=`&quot;left: $([math]::round((($db.totalspace - $db.freespace) / $db.totalspace) * 100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualWhitespace`&quot; style=`&quot;width: $([math]::round((($db.dbsize) / $db.totalspace)*100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualDeleted`&quot; style=`&quot;width: $([math]::round((($db.dbsize - $db.whitespace) / $db.totalspace)*100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualDumpster`&quot; style=`&quot;width: $([math]::round((($db.dbsize - $db.whitespace - $db.'deleted mbox') / $db.totalspace)*100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualData`&quot; style=`&quot;width: $([math]::round((($db.dbsize - $db.dumpster - $db.'deleted mbox' - $db.whitespace) / $db.totalspace)*100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;mylabel`&quot;&gt;$($db.database)&lt;/div&gt;
+
+		&lt;div class=`&quot;cap31`&quot;&gt;0%&lt;/div&gt;
+		&lt;div class=`&quot;cap32`&quot;&gt;20%&lt;/div&gt;
+		&lt;div class=`&quot;cap33`&quot;&gt;40%&lt;/div&gt;
+		&lt;div class=`&quot;cap34`&quot;&gt;60%&lt;/div&gt;
+		&lt;div class=`&quot;cap35`&quot;&gt;80%&lt;/div&gt;
+		&lt;div class=`&quot;cap36`&quot;&gt;100%&lt;/div&gt;	
+
+		&lt;div class=`&quot;scale-tb2`&quot;&gt;
+		&lt;div class=`&quot;sc31`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc32`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc33`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc34`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc35`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc36`&quot;&gt;&lt;/div&gt;
+		&lt;/div&gt;	
+
+		&lt;/div&gt;
+
+		&lt;p style=`&quot;height: 30px;`&quot;&gt;&lt;/p&gt;&quot;
+		}
+	else	# total row
+		{
+		$html += &quot;&lt;div class=`&quot;box-wrap`&quot;&gt;
+		&lt;div class=`&quot;box1`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box2`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box3`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box4`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;target`&quot; style=`&quot;left: $([math]::round((($db.totalspace - $db.freespace) / $db.totalspace) * 100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualWhitespace`&quot; style=`&quot;width: $([math]::round((($db.dbsize) / $db.totalspace)*100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualDeleted`&quot; style=`&quot;width: $([math]::round((($db.dbsize - $db.whitespace) / $db.totalspace)*100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualDumpster`&quot; style=`&quot;width: $([math]::round((($db.dbsize - $db.whitespace - $db.'deleted mbox') / $db.totalspace)*100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualData`&quot; style=`&quot;width: $([math]::round((($db.dbsize - $db.dumpster - $db.'deleted mbox' - $db.whitespace) / $db.totalspace)*100))%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;mylabel`&quot;&gt;Total&lt;/div&gt;
+
+		&lt;div class=`&quot;cap31`&quot;&gt;0%&lt;/div&gt;
+		&lt;div class=`&quot;cap32`&quot;&gt;20%&lt;/div&gt;
+		&lt;div class=`&quot;cap33`&quot;&gt;40%&lt;/div&gt;
+		&lt;div class=`&quot;cap34`&quot;&gt;60%&lt;/div&gt;
+		&lt;div class=`&quot;cap35`&quot;&gt;80%&lt;/div&gt;
+		&lt;div class=`&quot;cap36`&quot;&gt;100%&lt;/div&gt;	
+
+		&lt;div class=`&quot;scale-tb2`&quot;&gt;
+		&lt;div class=`&quot;sc31`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc32`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc33`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc34`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc35`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;sc36`&quot;&gt;&lt;/div&gt;
+		&lt;/div&gt;	
+
+		&lt;/div&gt;
+
+		&lt;p style=`&quot;height: 30px;`&quot;&gt;&lt;/p&gt;&quot;
+		}
+	}
+
+# show a graph key
+$html += &quot;&lt;div class=`&quot;box-wrap`&quot;&gt;
+		&lt;div class=`&quot;box1`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box2`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box3`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;box4`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;target`&quot; style=`&quot;left: 90%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualWhitespace`&quot; style=`&quot;width: 100%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualDeleted`&quot; style=`&quot;width: 75%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualDumpster`&quot; style=`&quot;width: 50%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;actualData`&quot; style=`&quot;width: 25%`&quot;&gt;&lt;/div&gt;
+		&lt;div class=`&quot;mylabel`&quot;&gt;Key:&lt;/div&gt;
+
+		&lt;/div&gt;	
+		MBs - Dumpster - Del MB - Whitespace&lt;br&gt;
+		Red Line: Used Disk Space
+		&lt;/div&gt;
+
+		&lt;p style=`&quot;height: 30px;`&quot;&gt;&lt;/p&gt;&quot;
+
+$html += &quot;&lt;/div&gt;&lt;!-- container --&gt;&quot;
+$fragments += $html	
+$emailbody = convertto-html -head $style -Body $fragments
+$date = get-date -uformat &quot;%Y-%m-%d&quot;
+
+if (-not $noemail)
+	{
+	$smtpServer = &quot;your.smtpserver.com&quot;
+	$msg = new-object Net.Mail.MailMessage
+	$smtp = new-object Net.Mail.SmtpClient($smtpServer)
+	$msg.From = &quot;somebody@somewhere.com&quot;
+	$msg.To.Add(&quot;you@somewhere.com&quot;)
+	$msg.Subject = &quot;Exchange 2010 Daily Statistics&quot;
+	$msg.Body = $emailbody
+	$msg.IsBodyHtml = $true
+
+	$smtp.Send($msg)
+	}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

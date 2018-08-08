@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Rob Sewell">
+    <title>Create Database - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Create Database</h1>
+<h3><a href="//scripts/4445.ps1">download</a></h3>
+<p>#############################################################################################</p>
+<h1></h1>
+<h1>NAME: Create-Database.ps1</h1>
+<h1>AUTHOR: Rob Sewell http://sqldbawithabeard.com</h1>
+<h1>DATE:08/09/2013</h1>
+<h1></h1>
+<h1>COMMENTS: Load function for creating a database</h1>
+<h1>Only Server and DB Name are mandatory the rest will be set to small defaults</h1>
+<h1></h1>
+<h1>USAGE:  Create-Database -Server Fade2black -DBName Test35 -SysFileSize 10 -UserFileSize 15 -LogFileSize 20</h1>
+<h1>-UserFileGrowth 7 -UserFileMaxSize 150 -LogFileGrowth 8 -LogFileMaxSize 250 -DBRecModel FULL</h1>
+<h1>————————————————————————</h1>
+<pre><code class="language-posh">
+
+ #############################################################################################
+#
+# NAME: Create-Database.ps1
+# AUTHOR: Rob Sewell http://sqldbawithabeard.com
+# DATE:08/09/2013
+#
+# COMMENTS: Load function for creating a database
+#           Only Server and DB Name are mandatory the rest will be set to small defaults
+#
+# USAGE:  Create-Database -Server Fade2black -DBName Test35 -SysFileSize 10 -UserFileSize 15 -LogFileSize 20
+# -UserFileGrowth 7 -UserFileMaxSize 150 -LogFileGrowth 8 -LogFileMaxSize 250 -DBRecModel FULL
+# ————————————————————————
+
+
+Function Create-Database 
+{
+Param(
+[Parameter(Mandatory=$true)]
+[String]$Server ,
+[Parameter(Mandatory=$true)]
+[String]$DBName,
+[Parameter(Mandatory=$false)]
+[int]$SysFileSize = 5,
+[Parameter(Mandatory=$false)]
+[int]$UserFileSize = 25,
+[Parameter(Mandatory=$false)]
+[int]$LogFileSize = 25,
+[Parameter(Mandatory=$false)]
+[int]$UserFileGrowth = 5,
+[Parameter(Mandatory=$false)]
+[int]$UserFileMaxSize =100,
+[Parameter(Mandatory=$false)]
+[int]$LogFileGrowth = 5,
+[Parameter(Mandatory=$false)]
+$LogFileMaxSize = 100,
+[Parameter(Mandatory=$false)]
+[String]$DBRecModel = 'FULL'
+)
+
+try {
+    # Set server object
+    $srv = New-Object ('Microsoft.SqlServer.Management.SMO.Server') $server
+    $DB = $srv.Databases[$DBName]
+    
+    # Define the variables
+    # Set the file sizes (sizes are in KB, so multiply here to MB)
+    $SysFileSize = [double]($SysFileSize * 1024.0)
+    $UserFileSize = [double] ($UserFileSize * 1024.0)
+    $LogFileSize = [double] ($LogFileSize * 1024.0)
+    $UserFileGrowth = [double] ($UserFileGrowth * 1024.0)
+    $UserFileMaxSize = [double] ($UserFileMaxSize * 1024.0)
+    $LogFileGrowth = [double] ($LogFileGrowth * 1024.0)
+    $LogFileMaxSize = [double] ($LogFileMaxSize * 1024.0)
+   
+
+    Write-Host &quot;Creating database: $DBName&quot;
+ 
+    # Set the Default File Locations
+    $DefaultDataLoc = $srv.Settings.DefaultFile
+    $DefaultLogLoc = $srv.Settings.DefaultLog
+ 
+    # If these are not set, then use the location of the master db mdf/ldf
+    if ($DefaultDataLoc.Length -EQ 0) {$DefaultDataLoc = $srv.Information.MasterDBPath}
+    if ($DefaultLogLoc.Length -EQ 0) {$DefaultLogLoc = $srv.Information.MasterDBLogPath}
+ 
+    # new database object
+    $DB = New-Object ('Microsoft.SqlServer.Management.SMO.Database') ($srv, $DBName)
+ 
+    # new filegroup object
+    $PrimaryFG = New-Object ('Microsoft.SqlServer.Management.SMO.FileGroup') ($DB, 'PRIMARY')
+    # Add the filegroup object to the database object
+    $DB.FileGroups.Add($PrimaryFG )
+ 
+    # Best practice is to separate the system objects from the user objects.
+    # So create a seperate User File Group
+    $UserFG= New-Object ('Microsoft.SqlServer.Management.SMO.FileGroup') ($DB, 'UserFG')
+    $DB.FileGroups.Add($UserFG)
+ 
+    # Create the database files
+    # First, create a data file on the primary filegroup.
+    $SystemFileName = $DBName + &quot;_System&quot;
+    $SysFile = New-Object ('Microsoft.SqlServer.Management.SMO.DataFile') ($PrimaryFG , $SystemFileName)
+    $PrimaryFG.Files.Add($SysFile)
+    $SysFile.FileName = $DefaultDataLoc + $SystemFileName + &quot;.MDF&quot;
+    $SysFile.Size = $SysFileSize
+    $SysFile.GrowthType = &quot;None&quot;
+    $SysFile.IsPrimaryFile = 'True'
+ 
+    # Now create the data file for the user objects
+    $UserFileName = $DBName + &quot;_User&quot;
+    $UserFile = New-Object ('Microsoft.SqlServer.Management.SMO.Datafile') ($UserFG, $UserFileName)
+    $UserFG.Files.Add($UserFile)
+    $UserFile.FileName = $DefaultDataLoc + $UserFileName + &quot;.NDF&quot;
+    $UserFile.Size = $UserFileSize
+    $UserFile.GrowthType = &quot;KB&quot;
+    $UserFile.Growth = $UserFileGrowth
+    $UserFile.MaxSize = $UserFileMaxSize
+ 
+    # Create a log file for this database
+    $LogFileName = $DBName + &quot;_Log&quot;
+    $LogFile = New-Object ('Microsoft.SqlServer.Management.SMO.LogFile') ($DB, $LogFileName)
+    $DB.LogFiles.Add($LogFile)
+    $LogFile.FileName = $DefaultLogLoc + $LogFileName + &quot;.LDF&quot;
+    $LogFile.Size = $LogFileSize
+    $LogFile.GrowthType = &quot;KB&quot;
+    $LogFile.Growth = $LogFileGrowth
+    $LogFile.MaxSize = $LogFileMaxSize
+ 
+    #Set the Recovery Model
+    $DB.RecoveryModel = $DBRecModel
+    #Create the database
+    $DB.Create()
+ 
+    #Make the user filegroup the default
+    $UserFG = $DB.FileGroups['UserFG']
+    $UserFG.IsDefault = $true
+    $UserFG.Alter()
+    $DB.Alter()
+
+    Write-Host &quot; $DBName Created&quot;
+    Write-Host &quot;System File&quot;
+    $SysFile| Select Name, FileName, Size, MaxSize,GrowthType| Format-List
+    Write-Host &quot;User File&quot;
+    $UserFile| Select Name, FileName, Size, MaxSize,GrowthType, Growth| Format-List
+    Write-Host &quot;LogFile&quot;
+    $LogFile| Select Name, FileName, Size, MaxSize,GrowthType, Growth| Format-List
+    Write-Host &quot;Recovery Model&quot;
+    $DB.RecoveryModel
+
+} Catch
+{
+   $error[0] | fl * -force
+}
+    }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

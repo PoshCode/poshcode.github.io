@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Karl Mitschke">
+    <title>Get-ExchangeDBSizes - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-ExchangeDBSizes</h1>
+<h3><a href="//scripts/1901.ps1">download</a></h3>
+<p>Gathers data from Exchange mailbox servers.
+These data include:
+Server\StorageGroup\Database (2007) or Database (2010),
+Total Size (in GB) of the disk,
+Size of the .edb file (in GB),
+Free disk space,
+Percent Disk Free,
+Total Mailboxes on the database,
+White Space,
+Total Free disk space,
+Total Percent Free disk space</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+        Get-ExchangeDBSizes - Gather data on Exchange 2007 / 2010 Mailbox Databases.
+.DESCRIPTION
+        Gathers data from Exchange mailbox servers.
+		These data include:
+		Server\StorageGroup\Database (2007) or Database (2010),
+		Total Size (in GB) of the disk,
+		Size of the .edb file (in GB),
+		Free disk space,
+		Percent Disk Free,
+		Total Mailboxes on the database,
+		White Space,
+		Total Free disk space,
+		Total Percent Free disk space
+.EXAMPLE
+        Get-ExchangeDBSizes 
+.LINK
+		http://unlockpowershell.wordpress.com/
+#&gt;
+
+ 
+Function Get-MountPointInfo($ServerName) { 
+$Summary = @() 
+$VolumeHash = @{}
+$VolumeCapacityHash = @{}
+$DatabaseSizeHash = @{}
+$DatabaseFreeHash = @{}
+$MountPoints = Get-WmiObject -Class Win32_Mountpoint -ComputerName $ServerName
+$MailboxDatabases = Get-MailboxDatabase -Server $ServerName
+$Volumes = Get-WmiObject -Class Win32_Volume -ComputerName $ServerName | Where-Object {$_.DriveType -eq 3}| Select-Object Name,FreeSpace,Capacity 
+$DatabaseLetters = $MailboxDatabases | Select-Object edbfilepath
+foreach ($Volume in $Volumes) {
+$VolumeHash.Add($Volume.name.TrimEnd(&quot;\&quot;),$Volume.FreeSpace)
+$VolumeCapacityHash.Add($Volume.name.TrimEnd(&quot;\&quot;),$Volume.Capacity)
+}
+foreach ($drive in $DatabaseLetters)
+{
+	$letter = $drive.EdbFilePath.Substring(0,$drive.EdbFilePath.lastIndexOf(&quot;\&quot;))
+	$DatabaseSizeHash.Add($letter.TrimEnd(&quot;\&quot;),$VolumeCapacityHash[$letter])
+	$DatabaseFreeHash.Add($letter.TrimEnd(&quot;\&quot;),$VolumeHash[$letter])
+}
+$VolumeHash.Clear()
+$VolumeCapacityHash.Clear()
+#Now I have all mailbox databases, along with the OS reported free space and capacity
+foreach ($MP in $Mountpoints) { 
+$MP.directory = $MP.directory.replace(&quot;\\&quot;,&quot;\&quot;).Split(&quot;=&quot;)[1].Replace(&quot;`&quot;&quot;,&quot;&quot;) 
+if($DatabaseSizeHash[$MP.directory])
+{
+#This mountpoint is a database
+$Record = new-Object PSObject
+$OSfree = $DatabaseFreeHash[$MP.directory]
+$OSCapacity = $DatabaseSizeHash[$MP.directory]
+$DestFolder = &quot;\\&quot;+$ServerName + &quot;\&quot; + $MP.directory
+$colItems = (Get-ChildItem $destfolder.Replace(&quot;:&quot;,&quot;$&quot;) -Recurse| where{$_.length -ne $null} |Measure-Object -property length -sum) 
+if($colItems.sum -eq $null) { 
+$fsize = 0 
+} else { 
+$fsize = $colItems.sum 
+} 
+$TotFolderSize = $fsize + $OSfree 
+$percFree = &quot;{0:P0}&quot; -f ( $OSfree/$TotFolderSize) 
+$Record | add-Member -memberType noteProperty -name Server -Value $ServerName 
+$Record | add-Member -memberType noteProperty -name &quot;Mount Point&quot; -Value $MP.directory
+$Record | add-Member -memberType noteProperty -name &quot;Capacity&quot; -Value (&quot;{0:N2}&quot; -f ($OSCapacity /1gb))
+$Record | add-Member -memberType noteProperty -name &quot;Used&quot; -Value (&quot;{0:N2}&quot; -f ($fsize / 1gb)) 
+$Record | add-Member -memberType noteProperty -name &quot;Free&quot; -Value (&quot;{0:N2}&quot; -f ($OSfree / 1gb)) 
+$Record | add-Member -memberType noteProperty -name &quot;Percent Free&quot; -Value $percFree 
+$Summary += $Record 
+} 
+} 
+return $Summary 
+} 
+function Get-ExchangeWhiteSpace { 
+param( 
+   $ComputerName = $(throw &quot;ComputerName cannot be empty.&quot;) 
+)
+
+# Convert Dates to WMI CIM dates 
+$tc = [System.Management.ManagementDateTimeconverter] 
+$Start =$tc::ToDmtfDateTime( (Get-Date).AddDays(-1).Date ) 
+$End =$tc::ToDmtfDateTime( (Get-Date).Date) 
+
+$whiteSpace = @{}
+
+# Create two claculated properties for InsertionStrings values 
+$DB = @{Name=&quot;DB&quot;;Expression={$_.InsertionStrings[1]}} 
+$FreeMB = @{Name=&quot;FreeMB&quot;;Expression={[int]$_.InsertionStrings[0]}} 
+
+$freespace = Get-WMIObject Win32_NTLogEvent -ComputerName $ComputerName -Filter &quot;LogFile='Application' AND EventCode=1221 AND TimeWritten&gt;='$Start' AND TimeWritten&lt;='$End'&quot; | Select-Object $DB,$FreeMB | Sort-Object DB –Unique –Descending
+$freespace | ForEach-Object {$whiteSpace.Add($_.DB,$_.FreeMB)}
+#Preceding function from Shay Levy http://blogs.microsoft.co.il/blogs/scriptfanatic/archive/2009/08/13/exchange-white-space.aspx
+}
+$AllServers = @()
+$ServerVersion = @{}
+foreach ($server in Get-MailboxServer)
+{
+	$ServerName = $server.name
+	$version = Get-ExchangeServer -Identity $ServerName | Select-Object AdminDisplayVersion
+	if($version.admindisplayversion.major)
+	{
+		$ServerVersion.Add($ServerName,$version.admindisplayversion.major)
+	}
+	else
+	{
+		$ServerVersion.Add($ServerName,$version.admindisplayversion.Split()[1].split(&quot;.&quot;)[0])
+	}	
+}
+foreach ($server in Get-MailboxServer)
+{
+	$ServerName = $server.Name
+	if ([int]$ServerVersion[$ServerName] -gt 8)
+	{ #An Exchange 2010 server, so use Get-MailboxDatabase &lt;database&gt; -Status | Select-Object AvailableNewMailboxSpace
+		$whiteSpace = @{}
+		$Free = Get-MailboxDatabase -Server $ServerName -Status | Select-Object Server,Name,AvailableNewMailboxSpace
+		foreach ($item in $free)
+		{
+			$db = $ServerName+&quot;\&quot;+$item.Name
+			$whiteSpace.Add($item.Name,[int]$item.AvailableNewMailboxSpace.split(&quot;(&quot;)[1].Split()[0]/1mb)
+		}
+	}
+	Else
+	{#not an Exchange 2010 server
+		. Get-ExchangeWhiteSpace $ServerName
+	}
+	$MountPoint = . Get-MountPointInfo $ServerName
+	foreach ($objItem in Get-MailboxDatabase -Server $ServerName)
+    {
+    $edbfilepath = $objItem.edbfilepath
+#    $path = &quot;`\`\&quot; + $ServerName + &quot;`\&quot; + $objItem.EdbFilePath.DriveName.Remove(1).ToString() + &quot;$&quot;+ $objItem.EdbFilePath.PathName.Remove(0,2)
+     $path = &quot;`\`\&quot; + $ServerName + &quot;`\&quot; + $objItem.EdbFilePath.Split(&quot;:&quot;)[0] + &quot;$&quot;+ $objItem.EdbFilePath.Split(&quot;:&quot;)[1]
+    $dbsize = Get-ChildItem $path
+#	$dbpath=(Split-Path $edbfilepath.PathName -Leaf).trimend(&quot;.edb&quot;)
+	$dbpath=(Split-Path $edbfilepath.Split(&quot;:&quot;)[1] -Leaf).trimend(&quot;.edb&quot;)
+	if (!$MountPoint)
+	{
+		$mailboxpath = $ServerName + $edbfilepath.Split(&quot;:&quot;)[1].trimend(&quot;.edb&quot;)
+#		$size = get-wmiobject -computername $ServerName win32_logicaldisk |where-object {$_.deviceid -eq $objItem.EdbFilePath.DriveName} |select-object deviceID, Freespace, Size
+		$size = get-wmiobject -computername $ServerName win32_logicaldisk |where-object {$_.deviceid -eq $objItem.EdbFilePath.Split(&quot;\&quot;)[0]} |select-object deviceID, Freespace, Size
+		$freespace = ($size.freespace / 1GB)
+		$total = ($size.size / 1GB)
+	}
+	if ($MountPoint)
+	{
+		$mailboxpath = &quot;$ServerName\$dbpath&quot;
+		$MPPath = $EdbFilePath.Substring(0,$EdbFilePath.LastIndexOf(&quot;\&quot;))
+		$freespace = $DatabaseFreeHash[$MPPath ] /1GB
+		$total = $DatabaseSizeHash[$MPPath] /1GB
+	}
+	$PercentFree = &quot;{0:n2}&quot; -f ($freespace / $total *100)
+	if (!$MountPoint)
+	{
+		$mailboxcount = Get-MailboxStatistics -database &quot;$mailboxpath&quot;  |Where {$_.DisconnectDate -eq $null -and $_.ObjectClass -eq 'Mailbox'} |measure-object
+	}
+	if($MountPoint)
+	{
+		$mailboxcount = Get-MailboxStatistics -database $mailboxpath.Split(&quot;\&quot;)[1]  |Where {$_.DisconnectDate -eq $null -and $_.ObjectClass -eq 'Mailbox'} |measure-object
+	}
+	
+	$ReturnedObj = New-Object PSObject
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;Server\StorageGroup\Database&quot; -Value $objItem.Identity
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;Total Size (GB)&quot; -Value (&quot;{0:n2}&quot; -f ($total))
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;Used Space (GB)&quot; -Value (&quot;{0:n2}&quot; -f ($dbsize.Length/1024MB))
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;Free Space (GB)&quot; -Value (&quot;{0:n2}&quot; -f ($freespace))
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;Percent Disk Free&quot; -Value $percentfree
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;User Mailbox Count&quot; -Value $mailboxcount.count
+	if ($objitem.Identity.Split(&quot;\&quot;).Count -eq 3){$dbasename = $objitem.Identity.Substring($objitem.Identity.IndexOf(&quot;\&quot;)+1)}
+	else{$dbasename = $objitem.Identity}
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;White Space (GB)&quot; -Value (&quot;{0:n2}&quot; -f ($whiteSpace[$dbasename]/1024))
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;Total Free (GB)&quot; -Value (&quot;{0:n2}&quot; -f ($freespace + $whiteSpace[$dbasename]/1024))
+	$TotalPercent = ($freespace + $whiteSpace[$dbasename]/1024) / $total *100
+	$ReturnedObj | Add-Member -MemberType NoteProperty -Name &quot;Total Percent Free&quot; -Value (&quot;{0:n2}&quot; -f ($TotalPercent))
+    $AllServers += $ReturnedObj
+	}
+}
+$AllServers |Export-Csv C:\MailboxDatabaseSizeReport.csv -NoTypeInformation
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

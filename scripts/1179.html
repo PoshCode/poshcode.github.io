@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jason Fossen">
+    <title>Parse nmap XML output - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Parse nmap XML output</h1>
+<h3><a href="//scripts/1179.ps1">download</a></h3>
+<p>A PowerShell script into which one or more nmap XML output file objects can be piped, then the script emits synthetic objects representing port-scanned hosts from the XML file(s).  Get Windows and Linux versions of the nmap scanner for free from http://nmap.org.  Get a sample nmap XML file to play with and see some examples of using the script at https://blogs.sans.org/windows-security/2009/06/11/powershell-script-to-parse-nmap-xml-output/</p>
+<pre><code class="language-posh">####################################################################################
+#  Script: parse-nmap.ps1
+# Purpose: Parse the XML output file of the nmap port scanner and emit custom 
+#          objects with properties containing data from XML file.
+# Example: dir *.xml | .\parse-nmap.ps1 
+#  Author: Jason Fossen (www.EnclaveConsulting.com)
+# Version: 2.0
+# Updated: 15.Jun.2009
+#   Notes: Pipe one or more file objects into script.  Don't pipe file contents.
+#          Script is slow, e.g., a 20MB XML log with 65k entries requires 103 seconds
+#          to process on a 2.16GHz T2600 Intel CPU (about 630 entries per second).
+#   LEGAL: PUBLIC DOMAIN.  SCRIPT PROVIDED &quot;AS IS&quot; WITH NO WARRANTIES OR GUARANTEES OF 
+#          ANY KIND, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY AND/OR FITNESS FOR
+#          A PARTICULAR PURPOSE.  ALL RISKS OF DAMAGE REMAINS WITH THE USER, EVEN IF
+#          THE AUTHOR, SUPPLIER OR DISTRIBUTOR HAS BEEN ADVISED OF THE POSSIBILITY OF
+#          ANY SUCH DAMAGE.  IF YOUR STATE DOES NOT PERMIT THE COMPLETE LIMITATION OF
+#          LIABILITY, THEN DELETE THIS FILE SINCE YOU ARE NOW PROHIBITED TO HAVE IT.
+####################################################################################
+
+
+if ($args -ne $null) { 
+    &quot;`nThis script takes no arguments, please pipe one or more files into it.&quot;
+    &quot;Example: dir *.xml | .\parse-nmap.ps1 | export-csv -path c:\file.csv`n&quot;
+    exit 
+}
+
+# Set $ShowProgress to $false if you do not want progress info sent to StdErr.
+$ShowProgress = $true
+
+
+
+ForEach ($file in $input) {
+    If ($ShowProgress) { [Console]::Error.WriteLine(&quot;[&quot; + (get-date).ToLongTimeString() + &quot;] Starting $file&quot; ) }
+
+    $xmldoc = new-object System.XML.XMLdocument
+    $xmldoc.Load($file)
+    $i = 1  #Counter for &lt;host&gt; nodes processed.
+
+    # Process each of the &lt;host&gt; nodes from the nmap report.
+    $xmldoc.nmaprun.host | foreach-object { 
+        $hostnode = $_   # $hostnode is a &lt;host&gt; node in the XML.
+
+        # Init variables, with $entry being the custom object for each &lt;host&gt;. 
+        $service = &quot; &quot; #service needs to be a single space.
+        $entry = ($entry = &quot; &quot; | select-object FQDN, HostName, Status, IPv4, IPv6, MAC, Ports, OS) 
+
+        # Extract state element of status:
+        $entry.Status = $hostnode.status.state.Trim() 
+        if ($entry.Status.length -eq 0) { $entry.Status = &quot;&lt;no-status&gt;&quot; }
+
+        # Extract fully-qualified domain name(s).
+        $hostnode.hostnames | foreach-object { $entry.FQDN += $_.hostname.name + &quot; &quot; } 
+        $entry.FQDN = $entry.FQDN.Trim()
+        if ($entry.FQDN.Length -eq 0) { $entry.FQDN = &quot;&lt;no-fullname&gt;&quot; }
+
+        # Note that this code cheats, it only gets the hostname of the first FQDN if there are multiple FQDNs.
+        if ($entry.FQDN.Contains(&quot;.&quot;)) { $entry.HostName = $entry.FQDN.Substring(0,$entry.FQDN.IndexOf(&quot;.&quot;)) }
+        elseif ($entry.FQDN -eq &quot;&lt;no-fullname&gt;&quot;) { $entry.HostName = &quot;&lt;no-hostname&gt;&quot; }
+        else { $entry.HostName = $entry.FQDN }
+
+        # Process each of the &lt;address&gt; nodes, extracting by type.
+        $hostnode.address | foreach-object {
+            if ($_.addrtype -eq &quot;ipv4&quot;) { $entry.IPv4 += $_.addr + &quot; &quot;}
+            if ($_.addrtype -eq &quot;ipv6&quot;) { $entry.IPv6 += $_.addr + &quot; &quot;}
+            if ($_.addrtype -eq &quot;mac&quot;)  { $entry.MAC  += $_.addr + &quot; &quot;}
+        }        
+        if ($entry.IPv4 -eq $null) { $entry.IPv4 = &quot;&lt;no-ipv4&gt;&quot; } else { $entry.IPv4 = $entry.IPv4.Trim()}
+        if ($entry.IPv6 -eq $null) { $entry.IPv6 = &quot;&lt;no-ipv6&gt;&quot; } else { $entry.IPv6 = $entry.IPv6.Trim()}
+        if ($entry.MAC  -eq $null) { $entry.MAC  = &quot;&lt;no-mac&gt;&quot; }  else { $entry.MAC  = $entry.MAC.Trim() }
+
+
+        # Process all ports from &lt;ports&gt;&lt;port&gt;, and note that &lt;port&gt; does not contain an array if it only has one item in it.
+        if ($hostnode.ports.port -eq $null) { $entry.Ports = &quot;&lt;no-ports&gt;&quot; } 
+        else 
+        {
+            $hostnode.ports.port | foreach-object {
+                If ($_.service.name -eq $null) { $service = &quot;unknown&quot; } else { $service = $_.service.name } 
+                $entry.Ports += $_.state.state + &quot;:&quot; + $_.protocol + &quot;:&quot; + $_.portid + &quot;:&quot; + $service + &quot; &quot; 
+            }
+            $entry.Ports = $entry.Ports.Trim()
+        }
+
+
+        # Extract fingerprinted OS type and percent of accuracy.
+        $hostnode.os.osmatch | foreach-object {$entry.OS += $_.name + &quot; &lt;&quot; + ([String] $_.accuracy) + &quot;%-accuracy&gt; &quot;} 
+        $entry.OS = $entry.OS.Trim()
+        if ($entry.OS -eq &quot;&lt;%-accuracy&gt;&quot;) { $entry.OS = &quot;&lt;no-os&gt;&quot; }
+
+
+        # Emit custom object from script.
+        $entry
+        $i++  #Progress counter...
+    }
+
+If ($ShowProgress) { [Console]::Error.WriteLine(&quot;[&quot; + (get-date).ToLongTimeString() + &quot;] Finished $file, processed $i entries.&quot; ) }
+}
+
+
+
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

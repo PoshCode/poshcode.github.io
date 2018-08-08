@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Import-NugetLibrary - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Import-NugetLibrary</h1>
+<h3><a href="//scripts/6300.ps1">download</a></h3>
+<p>(Install and) load the assemblies from a NuGet package into PowerShell</p>
+<pre><code class="language-posh">#requires -Module PackageManagement
+function Import-NugetLibrary {
+    param(
+        [Parameter(Mandatory)]
+        [String]$Name,
+
+        [String]$Destination = &quot;$(Split-Path $Profile)\Libraries&quot;
+    )
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    if(!(Test-Path $Destination -Type Container)) {
+        throw &quot;The destination path ($Destination) must point to an existing folder, NuGet will install packages in subdirectories of this folder.&quot;
+    }
+
+    # Normalize: nuget requires destination NOT end with a slash
+    $Destination = (Convert-Path $Destination).TrimEnd(&quot;\&quot;)
+    $Package = Install-Package -Name $Name -Destination $Destination -ProviderName NuGet -Source 'https://www.nuget.org/api/v2' -ExcludeVersion -PackageSaveMode nuspec -Force
+    $PackagePath = &quot;$Destination\$Name&quot;
+
+    # Nuget packages hide their assemblies in folders with version numbers...
+    if($PSVersionTable.PSVersion -ge &quot;4.0&quot;) {
+        $Versions = &quot;net46&quot;,&quot;net452&quot;,&quot;net451&quot;,&quot;net45&quot;,&quot;net40&quot;,&quot;net35&quot;,&quot;net20&quot;
+    }elseif($PSVersionTable.PSVersion -ge &quot;3.0&quot;) {
+        $Versions = &quot;net40&quot;,&quot;net35&quot;,&quot;net20&quot;,&quot;net45&quot;,&quot;net451&quot;,&quot;net452&quot;,&quot;net46&quot;
+    }else {
+        $Versions = &quot;net35&quot;,&quot;net20&quot;
+    }
+
+    # build full path with \ on the end
+    $LibraryPath = ($Versions -replace &quot;^&quot;, &quot;$PackagePath\lib\&quot;) + &quot;$PackagePath\lib\&quot; + &quot;$PackagePath&quot;   | 
+        # find the first one that exists
+        Convert-Path -ErrorAction SilentlyContinue | Select -First 1
+
+
+    $Number = $LibraryPath -replace '.*?([\d\.]+)','$1' -replace '(?&lt;=\d)(?=\d)','.'
+
+
+    $References = ([xml](gc &quot;$PackagePath\$Name.nuspec&quot;)).package.metadata.references
+
+    # If there's no references node, this is an old package, just reference everything we found
+    if(!$References) {
+        $Assemblies = Get-ChildItem $LibraryPath -Filter *.dll
+    } else {
+        $group = $references.Group | where { $_.targetFramework.EndsWith($number) }
+        if($group) {
+            $Files = $group.reference.File 
+        } else {
+            # If we can't figure out the right group, just get all the references:
+            $Files = @($references.SelectNodes(&quot;//*[name(.) = 'reference']&quot;).File | Select -Unique)
+        }
+
+        $Assemblies = Get-Item ($Files -replace &quot;^&quot;, &quot;$LibraryPath\&quot;)
+    }
+
+    # Just for the purpose of the verbose output
+    Push-Location $Destination
+    # since we don't know the order, we'll just loop a few times
+    for($e=0; $e -lt $Assemblies.Count; $e++) {
+        $success = $true
+        foreach($assm in $Assemblies) {
+            Write-Verbose &quot;Import Library $(Resolve-Path $Assm.FullName -Relative)&quot;
+            Add-Type -Path $Assm.FullName -ErrorAction SilentlyContinue -ErrorVariable failure
+            if($failure) {
+                $success = $false
+            } else {
+                Write-Host &quot;LOADING: &quot; -Fore Cyan -NoNewline
+                Write-Host $LibraryPath\ -Fore Yellow -NoNewline
+                Write-Host $Assm.Name -Fore White
+            }
+        }
+        # if we loaded everything ok, we're done
+        if($success) { break }
+    }
+    Pop-Location
+    if(!$success) { throw $failure }
+    return
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

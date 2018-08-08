@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BSonPosh">
+    <title>Invoke-VMCommand - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-VMCommand</h1>
+<h3><a href="//scripts/66.ps1">download</a> - <a href="//scripts/51.md">parent</a></h3>
+<p>Invoke-VMCommand.ps1
+Purpose     : Run a remote command and return the results
+Requirements: plink.exe from the Putty project must be in $env:path
+Use -help parameter for instructions</p>
+<pre><code class="language-posh"># Invoke-VMCommand.ps1
+# Purpose     : Run a remote command and return the results
+# Requirements: plink.exe from the Putty project must be in $env:path
+# Use -help parameter for instructions
+
+Param (
+    $VMHost,
+    $username,    
+    $Command,
+    [switch]$Help,
+    [switch]$Verbose
+)
+
+# Obtains list of VMX (config files) corresponding to each VM on a given ESX server
+function GetVMX ($user, $pass, $srv) {
+    $cmd = &quot;plink.exe $user@$srv -pw $pass&quot;
+    $cmd += &quot; vmware-cmd -l&quot;
+    Write-Verbose &quot;Command line: $cmd&quot;
+    $VMList = Invoke-Expression $cmd
+    $collOut = @()
+    $VmList | ForEach-Object {
+        $objOut = &quot;&quot; | Select-Object VmHost, VmName, VMXpath, HasSnapshot # create our output object with desired properties
+        $objOut.VmHost = $srv
+        $objOut.VMXpath = $_
+        $objOut.VmName = (Split-Path $_ -Leaf) -replace &quot;.vmx$&quot;
+        $collOut += $objOut
+    }
+    $collOut
+}
+function Get-ESXProcess($user, $pass, $srv){
+    $cmd =  &quot;plink.exe -t $user@$srv -pw $pass &quot;
+    $cmd += &quot;`&quot;ps -Af | grep `'`'`&quot;&quot;
+    Write-Verbose &quot;Command line: $cmd&quot;
+    $results = invoke-Expression $cmd
+    $colObj = @()
+    foreach($result in $results)
+    {
+        if($result -match &quot;^UID&quot;){continue}
+        $myobj = &quot;&quot; | Select-Object UID,PID,PPID,C,STIME,TTY,TIME,CMD
+        $ary = $result.split([string[]]&quot; &quot;,[System.StringSplitOptions]::RemoveEmptyEntries)
+        $myobj.UID   = $ary[0]
+        $myobj.PID   = $ary[1]
+        $myobj.PPID  = $ary[2]
+        $myobj.C     = $ary[3]
+        $myobj.STIME = $ary[4]
+        $myobj.TTY   = $ary[5]
+        $myobj.Time  = $ary[6]
+        $proc = $null
+        write-verbose &quot;Length: $($ary.Length)&quot;
+        for($i = 7;$i -le $ary.Length;$i++)
+        {
+            $proc = &quot;$proc $($ary[$i])&quot;
+            write-Verbose &quot;Adding [$i] $($ary[$i])&quot;
+        }
+        Write-Verbose &quot;COMMAND = $proc&quot;
+        $myobj.CMD   = $proc
+        $colObj += $myobj
+    }
+    $colObj
+}
+function Kill-Process{
+    Param($User,$Pass,$Srv,$killcmd)
+    $cmd =  &quot;plink.exe -t $user@$srv -pw $pass &quot;
+    $killme = $killcmd.split(&quot;:&quot;)[1]
+    Write-Verbose &quot; - $killcmd&quot;
+    Write-Verbose &quot; - $killme&quot;
+    if($killme -notmatch &quot;^\d&quot;)
+    {
+        $vmprocess = Get-ESXProcess $User $Pass $Srv | where{$_.Cmd -match $killme}
+        $vmpid = $vmprocess.pid
+    }
+    else
+    {
+        $vmpid = $killme
+    }
+    $cmd += &quot;`&quot;kill -9 $vmpid`'`'`&quot;&quot;
+    $results = invoke-Expression $cmd
+    $results
+}
+function RunVMCommand ($user, $pass, $srv, $vmcmd) {
+    $cmd = &quot;plink.exe $user@$srv -pw $pass &quot;
+    $cmd += &quot;`&quot;$vmcmd | grep `'`'`&quot;&quot;
+    Write-Verbose &quot;Command line: $cmd&quot;
+    invoke-Expression $cmd
+}
+function GetSecurePass ($SecurePassword) {
+  $Ptr = [System.Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemUnicode($SecurePassword)
+  $password = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($Ptr)
+  [System.Runtime.InteropServices.Marshal]::ZeroFreeCoTaskMemUnicode($Ptr)
+  $password
+}
+
+
+# Returns help text
+function ShowUsage {
+  $helptext = @&quot;
+
+Invoke-VMCommand
+  Requirements: plink.exe from the Putty project must be in your Path
+  
+INPUT: 
+
+  VMHost     : name or IP of ESX server(s) (REQUIRED)
+  UserName   : User to ssh With (REQUIRED)
+  Command    : Command to Run. This can be a GetVMX, PSList, Kill:&lt;PID/VMName&gt;, or a Custome String (REQUIRED)
+  Help       : shows usage
+
+&quot;@
+  Write-Host $helptext
+}
+
+# Main
+if ($help) { ShowUsage; exit; }
+if ($verbose) { $verbosepreference = &quot;continue&quot; }
+
+$password = (Read-Host &quot;Enter Password&quot; -AsSecureString)
+
+if($Command -eq &quot;GetVMX&quot;){GetVMX $username (GetSecurePass $password) $VMHost}
+elseif($command -eq &quot;PSList&quot;){Get-ESXProcess $username (GetSecurePass $password) $VMHost}
+elseif($command -match &quot;^KILL&quot;){Kill-Process $username (GetSecurePass $password) $VMHost $command}
+else{RunVMCommand $username (GetSecurePass $password) $VMHost $Command}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

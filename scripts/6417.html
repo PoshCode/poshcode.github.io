@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Brandon Warner">
+    <title>Get-BoxedComment - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-BoxedComment</h1>
+<h3><a href="//scripts/6417.ps1">download</a></h3>
+<p>This function takes a string of text and word-wraps it to a specific target line width. In addition
+to word-wrapping the applies optionally prefix and suffix to each line, and also an optional
+indent based on tab with and indent level.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Takes a text string and word-wraps it to a specific length. 
+
+.DESCRIPTION
+This function takes a string of text and word-wraps it to a specific target line width. In addition 
+to word-wrapping the applies optionally prefix and suffix to each line, and also an optional 
+indent based on tab with and indent level.
+
+.NOTES
++--------------------------------------------------------------------------------------------------+
+| ORIGIN STORY                                                                                     |
++--------------------------------------------------------------------------------------------------+
+|   DATE        : 2016-06-23
+|   AUTHOR      : Brandon Warner
+|   DESCRIPTION : Initial Draft
++--------------------------------------------------------------------------------------------------+
+|   DATE        : 2016-06-27
+|   AUTHOR      : Brandon Warner
+|   DESCRIPTION : Fixed bug with line wrapping for lines less than the wrap-width
+                  Also removed line endings from the last line of the returned wrapped text
++--------------------------------------------------------------------------------------------------+
+
+.PARAMETER Text
+The source text that we want to word-wrap.
+
+.PARAMETER WrapWidth
+The target width of one line in the wrapped text.
+
+.PARAMETER Prefix
+A text prefix that should be appended to the begining of each line in resulting wrapped text
+(usefull for box drawing)
+
+.PARAMETER Suffix
+A text suffix that should be appended to the end of each line in resulting wrapped text
+(usefull for box drawing)
+
+.PARAMETER TabWidth
+Defines the character length of each indent level, if a non-zero indent level is supplied.
+
+.PARAMETER IndentLevel
+Indicates the number of levels to indent the resulting wrapped text.
+
+.EXAMPLE
+
+$ThisText  = 'Hello this is a really, really, really, really long sentence that I want to be word-wrapped'
+$ThisText += ' so that it displays nicely in a document (either printed or on screen) so that I avoid having to scroll'
+$ThisText += ' back and forth, back and forth, wasting both time and effort, that will not have to be spent,'
+$ThisText += ' when the text is properly formatted.'
+
+Get-WordWrappedText `
+  -Text $ThisText `
+  -WrapWidth 50 `
+  -Prefix '&gt;' `
+  -IndentLevel 2 | oh
+
+#&gt;
+function Get-WordWrappedText 
+  {
+    [CmdletBinding()]
+    Param
+      (
+          [Parameter(Mandatory = $true)]
+          [string]$Text  
+
+        , [Parameter(Mandatory = $false)]
+          [ValidateRange(25,150)]
+          [Int]$WrapWidth = 100
+
+        , [Parameter(Mandatory = $false)]
+          [ValidateLength(1,25)]  
+          [String]$Prefix = ''
+  
+        , [Parameter(Mandatory = $false)]
+          [ValidateLength(1,25)]
+          [String]$Suffix = ''  
+  
+        , [Parameter(Mandatory = $false)]
+          [ValidateRange(1,8)]
+          [Int]$TabWidth = 2
+  
+        , [Parameter(Mandatory = $false)]
+          [ValidateRange(0,75)]
+          [Int]$IndentLevel = 0    
+      )
+  
+    if(($WrapWidth - &quot;$Prefix$Suffix&quot;.Length) -lt 10)
+      { 
+        Write-Error `
+          -Message &quot;The wrap width (minus prefix and suffix length) is too short. There should be at least 10 characters width of text space left over after the prefix and suffix.&quot; 
+      }
+  
+    [String]$Result       = ''
+    [String]$ThisLine     = ''
+    [String]$IndentSpace  = ''.PadLeft($TabWidth*$IndentLevel)
+    [Int]$WorkingWidth    = $WrapWidth - $Prefix.Length - $Suffix.Length - 2 #Allow for prefix suffix and two spaces
+   
+    &lt;#+--------------------------------------------------------------------+#\
+      | See if the whole thing fits on one line                            |
+    \#+--------------------------------------------------------------------+#&gt;
+    [Int]$LineWidth     = &quot;$Prefix $Text $Suffix&quot;.Length
+    
+    if($LineWidth -le $WrapWidth)
+      {
+        return &quot;$IndentSpace$Prefix $Text$(&quot;$Suffix&quot;.PadLeft($WrapWidth - $Text.Length - $Prefix.Length))&quot;
+      }
+  
+    &lt;#+--------------------------------------------------------------------+#\
+      | Proceed with word-wrapping the text                                |
+    \#+--------------------------------------------------------------------+#&gt;  
+    else
+      {
+        [Bool]$Done         = $false
+        [Int]$Position      = 0
+        [Int]$PositionPrev  = 0
+
+        while(!$Done)
+          {
+            $PositionPrev = $Position 
+            $Position += $WorkingWidth
+   
+            if($Position -lt $Text.Length)
+              {        
+                &lt;#+-------------------------------------------+#\
+                  | Inch back till you hit a space            |
+                \#+-------------------------------------------+#&gt;  
+                while(!($Text.Substring($Position,1) -match '\s') -and ($Position -gt $PositionPrev))
+                  { 
+                    $Position-- 
+                  }
+              }
+            else
+              {
+                &lt;#+--------------------------------------------------------------------+#\
+                  | If we over-shot, inch back to the end of the text                  |
+                \#+--------------------------------------------------------------------+#&gt;
+                while($Position -ge $Text.Length)
+                  { 
+                    $Position-- 
+                  }              
+                $Done = $true
+              }
+      
+            &lt;#+------------------------------------------------------------------------------+#\
+              | If there entire line width was unbroken by white space, break the word       |
+            \#+------------------------------------------------------------------------------+#&gt;
+            if($Position -eq $PositionPrev)
+              {
+                $Position += $WorkingWidth 
+              }
+      
+            $LineWidth = $Position - $PositionPrev 
+
+            $Result += &quot;$IndentSpace$Prefix $($Text.Substring($PositionPrev,$LineWidth))$(&quot; $Suffix&quot;.PadLeft($WrapWidth-$LineWidth-$Prefix.Length))&quot;
+            if(!$Done)
+              {
+                $Result += &quot;`r`n&quot;
+              }
+      
+            &lt;#+--------------------------------------------------------------------+#\
+              | Inch past white space to the next word                             |
+            \#+--------------------------------------------------------------------+#&gt;      
+            while(($Text.Substring($Position,1) -match '\s') -and ($Position -lt $Text.Length))
+              { 
+                $Position++ 
+              }
+          }   
+      }
+    return $Result
+  }
+
+&lt;#
+.SYNOPSIS
+Returns comment block of word-wrapped text inside a character based box drawing.
+
+.DESCRIPTION
+Given a string of body text which you want to appear in a comment block surrounded in box
+drawing characters, produces said comment block, word-wrapped to a given width and indented
+to a given level as per the indent level and tab width.
+
+.NOTES
++--------------------------------------------------------------------------------------------------+
+| ORIGIN STORY                                                                                     |
++--------------------------------------------------------------------------------------------------+
+|   DATE        : 2016-06-23
+|   AUTHOR      : Brandon Warner
+|   DESCRIPTION : Initial Draft
++--------------------------------------------------------------------------------------------------+
+|   DATE        : 2016-06-27
+|   AUTHOR      : Brandon Warner
+|   DESCRIPTION : Adjusted final return string to account for change in line endings of last line
+                  returned in Get-WordWrappedText
++--------------------------------------------------------------------------------------------------+
+
+.PARAMETER CommentText
+The text that we want to appear in the comment block.
+
+.PARAMETER SectionWidth
+The target width of the comment block
+
+.PARAMETER TabWidth
+The number of characters which the comment block will be indented for each indentation level.
+
+.PARAMETER IndentLevel
+The number of indentation levels which we want to indent the text by.
+
+.PARAMETER Encoding
+'Unicode' for special unicode box-drawing characters to be used. 'OEM' for approximat ANSI characters to appear instead.
+
+.PARAMETER CommentStyle
+Specifies the comment style for the programming language we are providing the comment block for.
+
+.EXAMPLE
+
+Get-BoxedComment `
+  -CommentText 'Line breaking, also known as word wrapping, is the process of breaking a section of text into lines such that it will fit in the available width of a page, window or other display area. In text display, line wrap is the feature of continuing on a new line when a line is full, such that each line fits in the viewable window, allowing text to be read from top to bottom without any horizontal scrolling. Word wrap is the additional feature of most text editors, word processors, and web browsers, of breaking lines between words rather than within words, when possible. Word wrap makes it unnecessary to hard-code newline delimiters within paragraphs, and allows the display of text to adapt flexibly and dynamically to displays of varying sizes.' `
+  -IndentLevel 2 `
+  -CommentStyle PowerShell | Out-File -FilePath &quot;$env:USERPROFILE\CommentBlockSample.ps1&quot; -Force
+
+#&gt;
+
+function Get-BoxedComment
+  {
+    [OutputType([String])]    
+    [CmdletBinding()]
+    Param
+      (
+          [Parameter(Mandatory = $true)]
+          [string]$CommentText  
+
+        , [Parameter(Mandatory = $false)]
+          [ValidateRange(25,150)]
+          [Int]$SectionWidth = 100
+
+        , [Parameter(Mandatory = $false)]
+          [ValidateRange(1,8)]
+          [Int]$TabWidth = 2
+  
+        , [Parameter(Mandatory = $false)]
+          [ValidateRange(0,50)]
+          [Int]$IndentLevel = 0  
+
+        , [Parameter(Mandatory = $false)]
+          [ValidateSet('Unicode','OEM')]
+          [String]$Encoding = 'Unicode'  
+
+        , [Parameter(Mandatory = $false)]
+          [ValidateSet('SQL','PowerShell')]
+          [String]$CommentStyle = 'SQL'  
+      )
+
+    &lt;#+--------------------------------------------------------------------+#\
+      | Define the box drawing characters                                  |
+    \#+--------------------------------------------------------------------+#&gt;  
+    switch($Encoding)
+      {
+        'Unicode' 
+          {
+            $BoxHorizontalLineChar     = '-'
+            $BoxVerticalLineChar       = '|'
+            $BoxUpperLeftCornerChar    = '+'
+            $BoxUpperRightCornerChar   = '+'
+            $BoxLowerLeftCornerChar    = '+'
+            $BoxLowerRightCornerChar   = '+'
+          }
+        'OEM'
+          {
+            $BoxHorizontalLineChar     = '-'
+            $BoxVerticalLineChar       = '|'
+            $BoxUpperLeftCornerChar    = '+'
+            $BoxUpperRightCornerChar   = '+'
+            $BoxLowerLeftCornerChar    = '+'
+            $BoxLowerRightCornerChar   = '+'
+          }
+      }
+  
+    &lt;#+--------------------------------------------------------------------+#\
+      | Define the multi-line commenting delimiters &amp; corrisponding        |
+      | symmetry embellishments as per the given comment style             |  
+    \#+--------------------------------------------------------------------+#&gt;
+    switch($CommentStyle)
+      {
+        'SQL' 
+          {
+            $MultilineCommentOpen   = '/*'
+            $UpperRightEmbelishment = '*\'
+            $LowerLeftEmbelishment  = '\*'
+            $MultilineCommentClose  = '*/'
+          }
+        'PowerShell'
+          {
+            $MultilineCommentOpen   = '&lt;#'
+            $UpperRightEmbelishment = '# '
+            $LowerLeftEmbelishment  = ' #'
+            $MultilineCommentClose  = '#&gt;' 
+          }
+      }  
+
+    [String]$BoxHorizontalLine  = $BoxHorizontalLineChar.PadRight($SectionWidth-6).Replace(' ',$BoxHorizontalLineChar)
+    [String]$IndentSpace        = ''.PadLeft($TabWidth*$IndentLevel)
+    [String]$Body               = Get-WordWrappedText `
+                                    -Text $CommentText `
+                                    -Prefix &quot;$(&quot;$BoxVerticalLineChar&quot;.PadLeft($MultilineCommentOpen.Length + 1))&quot; `
+                                    -Suffix &quot;$BoxVerticalLineChar&quot; `
+                                    -WrapWidth ($SectionWidth - $MultilineCommentOpen.Length -1 ) `
+                                    -TabWidth $TabWidth `
+                                    -IndentLevel $IndentLevel
+  
+    return @&quot;
+$($IndentSpace)$($MultilineCommentOpen)$($BoxUpperLeftCornerChar)$($BoxHorizontalLine)$($BoxUpperRightCornerChar)$($UpperRightEmbelishment)
+$($Body)
+$($IndentSpace)$($LowerLeftEmbelishment)$($BoxLowerLeftCornerChar)$($BoxHorizontalLine)$($BoxLowerRightCornerChar)$($MultilineCommentClose)
+  
+&quot;@
+  }
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

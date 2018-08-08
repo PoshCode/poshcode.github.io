@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Ring Monitor - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Ring Monitor</h1>
+<h3><a href="//scripts/1230.ps1">download</a></h3>
+<p>Creates a self-updating graphical monitor which can chart pretty much anything that has a time-interval on it. You can use Add-Monitor and Remove-Monitor to add and remove things to be charted and specify what the data will be. See Examples at the bottom.</p>
+<pre><code class="language-posh">#requires -version 2.0
+Import-Module Accelerators  # http://poshcode.org/762
+Import-Module PowerBoots    # http://boots.codeplex.com
+                            # http://dynamicdatadisplay.codeplex.com
+## You have to get the DynamicDataDisplay control, and put it's DLLs in the PowerBoots folder...
+ls &quot;$PowerBootsPath\DynamicDataDisplay*.dll&quot; | Add-BootsFunction
+
+## This sets up all the types, and requires the accelerators and the DynamicDataDisplay.dll 
+Add-Accelerator TimedDouble &quot;System.Collections.Generic.KeyValuePair[DateTime,Double]&quot;
+Add-Accelerator TimedDoubleRing &quot;Microsoft.Research.DynamicDataDisplay.Common.RingArray[System.Collections.Generic.KeyValuePair[DateTime,Double]]&quot;
+Add-Accelerator EnumerableDataSource &quot;Microsoft.Research.DynamicDataDisplay.DataSources.EnumerableDataSource``1&quot;
+
+function Add-Monitor {
+#.Synopsis
+#  Create a new monitor line
+   Param(
+      [String]$global:Label=&quot;HuddledMasses&quot;, 
+      [ScriptBlock]$global:Script= { 
+         New-Object TimedDouble (Get-Date), ([regex]&quot;time=(\d+)ms&quot;).Match( (ping.exe &quot;HuddledMasses.org&quot; -n 1) ).Groups[1].Value 
+      },      
+      $global:XMapping = $([System.Func[TimedDouble, Double]]{ param([TimedDouble]$value); $value.Key.TimeOfDay.TotalSeconds }),
+      $global:YMapping = $([System.Func[TimedDouble, Double]]{ param([TimedDouble]$value); $value.Value })
+   )
+
+   Invoke-BootsWindow $Global:Plotter {
+      $dataSource = New-Object &quot;EnumerableDataSource[System.Collections.Generic.KeyValuePair[DateTime,Double]]&quot; (New-Object TimedDoubleRing $global:RingSize)
+      $dataSource.SetXMapping( $global:XMapping )
+      $dataSource.SetYMapping( $global:YMapping )
+      $Global:Plotter.Children.Add( (
+         LineGraph -Description $(New-Object Microsoft.Research.DynamicDataDisplay.PenDescription $global:Label) `
+                   -DataSource $dataSource -Filters { InclinationFilter; FrequencyFilter } `
+                   -LinePen (Pen -Brush (SolidColorBrush -Color $([Microsoft.Research.DynamicDataDisplay.ColorHelper]::CreateRandomHsbColor())) -Thickness 2.0) `
+                   -Tag {$global:Script} -Name $($global:Label -replace &quot;[^\p{L}]&quot;)
+      ))
+   }
+}
+
+
+function Remove-Monitor {
+#.Synopsis
+#   Remove a monitor line
+   Param( [String]$global:Label=&quot;HuddledMasses&quot; )
+
+   Invoke-BootsWindow $Global:Plotter {
+      $Global:Plotter.Children.Remove( $(
+         $Global:Plotter.Children | 
+            Where-Object { ($_ -is [Microsoft.Research.DynamicDataDisplay.LineGraph]) -and ($_.Name -eq $Label) } |
+            Select -First 1 ) )
+   }
+}
+function Global:Update-Ring {
+#.Synopsis
+#   Internal function for updating all the data lines
+   foreach($graph in $Plotter.Children | ?{$_ -is [Microsoft.Research.DynamicDataDisplay.LineGraph]} ) {
+      $graph.DataSource.Data.Add( (&amp;$graph.Tag) )
+   }
+}
+
+Function New-RingMonitor {
+#.Synopsis
+#  Creates a new Ring Monitor graph window, and sets the update interval for it
+Param(
+   [TimeSpan]$global:Interval = &quot;00:00:02&quot;,
+   [Int]$global:RingSize = 200
+)
+
+   New-BootsWindow {
+      Param($global:w)
+      $w.Tag = DispatcherTimer -Interval $global:Interval -On_Tick Update-Ring
+      $w.Tag.Start()
+      $w.Add_Closed( { $this.Tag.Stop() } )
+
+      ChartPlotter | Tee -Var Global:Plotter
+   } -Width 800 -Height 600 -Async -Title &quot;Ring Monitor&quot;
+} #-WindowStyle None -AllowsTransparency -Background Transparent -On_MouseLeftButtonDown { $this.DragMove() } -ResizeMode CanResizeWithGrip
+
+
+####################################################################################################
+## Examples: Hopefully you get the idea you can graph anything you like....
+####################################################################################################
+# New-RingMonitor
+#
+# Add-Monitor Memory { 
+#      New-Object TimedDouble (Get-Date), (gwmi Win32_PerfFormattedData_PerfOS_Memory AvailableBytes).AvailableBytes
+# }
+#
+# Add-Monitor CPU { 
+#     New-Object TimedDouble (Get-Date), (gwmi Win32_PerfFormattedData_PerfOS_Processor PercentIdleTime,Name |?{$_.Name -eq &quot;_Total&quot;}).PercentIdleTime
+# }
+# ## Yuck. those two numbers won't work together, because they're too far apart.
+# ## Let's remove the first one and make it percentage based
+# Remove-Monitor Memory
+#
+# Add-Monitor Memory { 
+#   New-Object TimedDouble (Get-Date), ((gwmi Win32_PerfFormattedData_PerfOS_Memory AvailableBytes).AvailableBytes / (gwmi Win32_ComputerSystem TotalPhysicalMemory).TotalPhysicalMemory * 100)
+#  }
+
+####################################################################################################
+# New-RingMonitor
+#
+# Add-Monitor Twitter { 
+#    New-Object TimedDouble (Get-Date), ([regex]&quot;time=(\d+)ms&quot;).Match( (ping.exe &quot;Twitter.com&quot; -n 1) ).Groups[1].Value 
+# }
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>WPFTableSpace - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>WPFTableSpace</h1>
+<h3><a href="//scripts/994.ps1">download</a></h3>
+<p>Uses Powerboots, Visifire and SQLPSX to display a WPF graph of SQL Server table data and index space usage</p>
+<pre><code class="language-posh">#Usage: ./WPFTableSpace.ps1 'Z002\SqlExpress' AdventureWorks
+#Note: Requires .NET 3.5, Visifire Charts (tested on v2.1.0), Powerboots (tested on v0.1), and SQLPSX (tested on v1.5)
+param($sqlserver=$(throw 'sqlserver is required.'),$dbname=$(throw 'dbname is required.'),$top=10)
+
+$libraryDir = Convert-Path (Resolve-Path &quot;$ProfileDir\Libraries&quot;)
+[Void][Reflection.Assembly]::LoadFrom( (Convert-Path (Resolve-Path &quot;$libraryDir\WPFVisifire.Charts.dll&quot;)) )
+. $libraryDir\LibrarySmo.ps1
+
+if (!(Get-PSSnapin | ?{$_.name -eq 'PoshWpf'}))
+{ Add-PsSnapin PoshWpf }
+
+$qry = @&quot;
+CREATE TABLE #spaceused
+(name nvarchar(128),
+rows char(11),
+reserved varchar(18),
+data varchar(18),
+index_size varchar(18),
+unused varchar(18));
+EXEC sp_MSforeachtable 'insert #spaceused exec sp_spaceused ''?''';
+SELECT TOP $top name
+, CAST(rows AS int) AS rows
+, CAST(SUBSTRING(reserved,0,LEN(reserved)-2) AS int) AS reserved
+, CAST(SUBSTRING(data,0,LEN(data)-2) AS int) AS data
+, CAST(SUBSTRING(index_size,0,LEN(index_size)-2) AS int) AS index_size
+, CAST(SUBSTRING(unused,0,LEN(unused)-2) AS int) AS unused
+FROM #spaceused
+ORDER BY reserved DESC;
+DROP TABLE #spaceused;
+&quot;@
+
+New-BootsWindow -Async {
+    $chart = New-Object Visifire.Charts.Chart
+    $chart.Height = 500 
+    $chart.Width = 800 
+    $chart.watermark = $false
+    $chart.Theme = &quot;Theme2&quot;
+    $chart.View3D = $true
+    $chart.BorderBrush = [System.Windows.Media.Brush]&quot;Gray&quot;
+    $chart.CornerRadius = [System.Windows.CornerRadius]5
+    $chart.BorderThickness = [System.Windows.Thickness]0.5
+    $chart.AnimationEnabled = $false
+
+    $ds1 = New-Object Visifire.Charts.DataSeries
+    $ds1.RenderAs = [Visifire.Charts.RenderAs]&quot;StackedBar&quot;
+    $ds1.LegendText = &quot;Data&quot;
+    $ds1.LabelEnabled = $true
+    $ds1.LabelText = &quot;#YValue&quot;
+
+    $ds2 = New-Object Visifire.Charts.DataSeries
+    $ds2.RenderAs = [Visifire.Charts.RenderAs]&quot;StackedBar&quot;
+    $ds2.LegendText = &quot;Index&quot;
+    $ds2.LabelEnabled = $true
+    $ds2.LabelText = &quot;#YValue&quot;
+    $ds2.RadiusX = 5
+    $ds2.RadiusY = 5
+ 
+    foreach ($table in Get-SqlData $sqlserver $dbname $qry)
+    {
+    $dp1 = new-object Visifire.Charts.DataPoint
+    $dp1.AxisXLabel = $table.name
+    $dp1.YValue = $table.data
+    $ds1.DataPoints.Add($dp1)
+
+    $dp2 = new-object Visifire.Charts.DataPoint
+    $dp2.YValue = $table.index_size
+    $ds2.DataPoints.Add($dp2)
+    }   
+    $chart.Series.Add($ds1)
+    $chart.Series.Add($ds2)
+
+    $chart
+} -Title &quot;Table Space&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

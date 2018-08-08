@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DollarUnderscore">
+    <title>Get-CACertificateDatabas - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-CACertificateDatabas</h1>
+<h3><a href="//scripts/5793.ps1">download</a></h3>
+<p>Function for retrieving certificates from a CA instance. It can also return the public key, which I use to encrypt credentials in DSC resources (thumbprint is also returned).</p>
+<p>Blog post about it is available at:
+http://dollarunderscore.azurewebsites.net/?p=4791</p>
+<pre><code class="language-posh">function Get-CACertificateDatabase
+{
+    &lt;#
+    .SYNOPSIS
+    Retrieves information about certificates from the Certificate Authority Database
+
+    .DESCRIPTION
+    This function will fetch items from a Certificate Authority Database. It can also 
+    fetch the public key of the certificates and the thumbprint which could be really
+    useful when you want to use the certificates to for example encrypt something
+    (like a credential in a DSC resource).
+
+    Another useful scenario is to create monitoring of certificate expiration dates.
+
+    .EXAMPLE
+    Get-CACertificateDatabase -CA &quot;myca.contoso.com\Issuing CA Contoso&quot; -IncludeBinaryCertificate
+
+    Fetch certificates from the CA instance and include the public key.
+
+    .EXAMPLE
+    Get-CACertificateDatabase -CA &quot;myca.contoso.com\Issuing CA Contoso&quot; -ValidTo (Get-Date)
+
+    Fetch certificates that expires today.
+
+    .PARAMETER CertificationAuthority
+    The Certificate Authority instance you want to connect to. For example:
+    'myca.contoso.com\Issuing CA Contoso'
+
+    .PARAMETER ValidFrom
+    Filter what certificates should be returned based on if they are valid at this date.
+
+    .PARAMETER ValidTo
+    Filter what certificates should be returned based on if they expire before this date.
+
+    .PARAMETER Disposition
+    Specifies which category to get the certificates from.
+
+    Brief disposition code explanation:
+    * 9 - pending for approval
+    * 15 - CA certificate renewal
+    * 16 - CA certificate chain
+    * 20 - issued certificates
+    * 21 - revoked certificates
+    * all other - failed requests
+
+    .PARAMETER IncludeBinaryCertificate
+    This switch will enable retrieval of the public key of the certificates.
+
+    #&gt;
+
+    [cmdletbinding()]
+    param ([parameter(Mandatory = $true)]
+           [string] $CertificationAuthority,
+           [parameter(Mandatory = $false)]
+           [datetime] $ValidFrom = (Get-Date),
+           [parameter(Mandatory = $false)]
+           [datetime] $ValidTo = (Get-Date).AddYears(2),
+           [parameter(Mandatory = $false)]
+           [int] $Disposition = 20,
+           [parameter(Mandatory = $false)]
+           [switch] $IncludeBinaryCertificate)
+
+    BEGIN { }
+
+    PROCESS {
+
+        Write-Verbose 'Initiating com object'
+
+        $CaView = New-Object -Com CertificateAuthority.View
+
+        try {
+            Write-Verbose &quot;Connecting to $CertificationAuthority...&quot;
+            [void] $CaView.OpenConnection($CertificationAuthority)
+        }
+        catch {
+            Write-Error &quot;Failed to connect to the Certificate Authority instance $CA. The error was: $($_.toString())&quot;
+            break
+        }
+
+        $CaView.SetResultColumnCount(8)
+
+        $index0 = $CaView.GetColumnIndex($false, &quot;Issued Common Name&quot;)
+        $index1 = $CaView.GetColumnIndex($false, &quot;Certificate Expiration Date&quot;)
+        $index2 = $CaView.GetColumnIndex($false, &quot;Issued Email Address&quot;)
+        $index3 = $CaView.GetColumnIndex($false, &quot;Certificate Template&quot;)
+        $index4 = $CaView.GetColumnIndex($false, &quot;Request Disposition&quot;)
+
+        if ($IncludeBinaryCertificate) {
+            $index5 = $CaView.GetColumnIndex($false, &quot;Binary Certificate&quot;)
+        }
+
+        $index6 = $CaView.GetColumnIndex($false, &quot;Certificate Hash&quot;)
+        $index7 = $CaView.GetColumnIndex($false, &quot;Requester Name&quot;)
+
+        $index0, $index1, $index2, $index3, $index4, $index5, $index6, $index7 | ForEach-Object { $CAView.SetResultColumn($_) }
+
+        # CVR_SORT_NONE 0
+        # CVR_SEEK_EQ  1
+        # CVR_SEEK_LT  2
+        # CVR_SEEK_GT  16
+
+
+        $index1 = $CaView.GetColumnIndex($false, &quot;Certificate Expiration Date&quot;)
+        $CAView.SetRestriction($index1,16,0,$ValidFrom)
+        $CAView.SetRestriction($index1,2,0,$ValidTo)
+
+        # brief disposition code explanation:
+        # 9 - pending for approval
+        # 15 - CA certificate renewal
+        # 16 - CA certificate chain
+        # 20 - issued certificates
+        # 21 - revoked certificates
+        # all other - failed requests
+
+        $CAView.SetRestriction($index4,1,0,$Disposition)
+
+        $RowObj= $CAView.OpenView()
+
+        try {
+            Write-Verbose 'Fetching certificates...'
+
+            while ($Rowobj.Next() -ne -1) {
+                $Cert = New-Object PsObject
+                $ColObj = $RowObj.EnumCertViewColumn()
+                [void]$ColObj.Next()
+
+                do {
+                    $current = $ColObj.GetName()
+                    if ($ColObj.GetDisplayName() -eq 'Certificate Hash') {
+                        $Cert | Add-Member -MemberType NoteProperty 'Thumbprint' -Value $($ColObj.GetValue(1).ToUpper() -replace &quot;\s&quot;) -Force
+                    }
+                    elseif ($ColObj.GetDisplayName() -eq 'Binary Certificate') {
+                        $Cert | Add-Member -MemberType NoteProperty 'BinaryCertificate' -Value &quot;-----BEGIN CERTIFICATE-----`n$($ColObj.GetValue(1))-----END CERTIFICATE-----&quot; -Force
+                    }
+                    else {
+                        $Cert | Add-Member -MemberType NoteProperty $($ColObj.GetDisplayName() -replace '\s') -Value $($ColObj.GetValue(1)) -Force
+                    }
+
+                } until ($ColObj.Next() -eq -1)
+
+                Clear-Variable ColObj
+
+                Write-Output $Cert
+            }
+        }
+        catch {
+            if ($_.toString() -like '*CEnumCERTVIEWROW::Next: The parameter is incorrect. 0x80070057*') {
+                Write-Verbose &quot;No certificates matched the criteria in the database of $CertificationAuthority&quot;
+            }
+            else {
+                Write-Error $_.toString()
+            }
+        }
+    }
+
+    END {
+
+        Write-Verbose 'Cleaning up...'
+
+        $RowObj.Reset()
+        $CaView = $null
+        [GC]::Collect()
+
+        Write-Verbose 'Function finished.'
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

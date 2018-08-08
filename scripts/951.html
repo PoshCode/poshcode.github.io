@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="tysonkopczynski">
+    <title>Send-HTMLFormattedEmail - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Send-HTMLFormattedEmail</h1>
+<h3><a href="//scripts/951.ps1">download</a> - <a href="//scripts/950.md">parent</a></h3>
+<p>Use this function to send an HTML Formatted Email that is based on an XSLT template.  This function is based on a blog post by Erik McCarty (http://ewmccarty.spaces.live.com).</p>
+<pre><code class="language-posh">#-------------------------------------------------
+# Send-HTMLFormattedEmail
+#-------------------------------------------------
+# Usage:	Used to send an HTML Formatted Email that is based on an XSLT template.
+#-------------------------------------------------
+function Send-HTMLFormattedEmail{
+    param ( [string] $To,
+            [string] $ToDisName,
+            [string] $BCC,
+            [string] $From,
+            [string] $FromDisName,
+            [string] $Subject,
+            [string] $Content,
+            [string] $Relay,
+            [string] $XSLPath)
+    
+    try {
+        # Load XSL Argument List
+        $XSLArg = New-Object System.Xml.Xsl.XsltArgumentList
+        $XSLArg.Clear() 
+        $XSLArg.AddParam(&quot;To&quot;, $Null, $ToDisName)
+        $XSLArg.AddParam(&quot;Content&quot;, $Null, $Content)
+
+        # Load Documents
+        $BaseXMLDoc = New-Object System.Xml.XmlDocument
+        $BaseXMLDoc.LoadXml(&quot;&lt;root/&gt;&quot;)
+
+        $XSLTrans = New-Object System.Xml.Xsl.XslCompiledTransform
+        $XSLTrans.Load($XSLPath)
+
+        #Perform XSL Transform
+        $FinalXMLDoc = New-Object System.Xml.XmlDocument
+        $MemStream = New-Object System.IO.MemoryStream
+     
+        $XMLWriter = [System.Xml.XmlWriter]::Create($MemStream)
+        $XSLTrans.Transform($BaseXMLDoc, $XSLArg, $XMLWriter)
+
+        $XMLWriter.Flush()
+        $MemStream.Position = 0
+     
+        # Load the results
+        $FinalXMLDoc.Load($MemStream) 
+        $Body = $FinalXMLDoc.Get_OuterXML()
+
+        # Create from, To, BCC and the message strucures
+        $MessFrom = New-Object System.Net.Mail.MailAddress $From, $FromDisName
+        $MessTo = New-Object System.Net.Mail.Mailaddress $To
+        $MessBCC = New-Object System.Net.Mail.Mailaddress $BCC
+        $Message = New-Object System.Net.Mail.MailMessage $MessFrom, $MessTo
+        
+        # Populate message
+        $Message.Subject = $Subject
+        $Message.Body    = $Body
+        $Message.IsBodyHTML = $True
+
+        # Add BCC
+        $Message.BCC.Add($MessBCC)
+     
+        # Create SMTP Client
+        $Client = New-Object System.Net.Mail.SmtpClient $Relay
+
+        # Send The Message
+        $Client.Send($Message)
+        }  
+    catch {
+	return $Error[0]
+        }   
+    }
+
+### XSLT Template Example
+&lt;?xml version=&quot;1.0&quot;?&gt;
+&lt;xsl:stylesheet version=&quot;1.0&quot; xmlns:xsl=&quot;http://www.w3.org/1999/XSL/Transform&quot;&gt;
+ 
+&lt;xsl:output media-type=&quot;xml&quot; omit-xml-declaration=&quot;yes&quot; /&gt;
+    &lt;xsl:param name=&quot;To&quot;/&gt;
+    &lt;xsl:param name=&quot;Content&quot;/&gt;
+    &lt;xsl:template match=&quot;/&quot;&gt;
+        &lt;html&gt;
+            &lt;head&gt;
+                &lt;title&gt;My First Formatted Email&lt;/title&gt;
+            &lt;/head&gt;
+            &lt;body&gt;
+            &lt;div width=&quot;400px&quot;&gt;
+                &lt;p&gt;Dear &lt;xsl:value-of select=&quot;$To&quot; /&gt;,&lt;/p&gt;
+                &lt;p&gt;&lt;/p&gt;
+                &lt;p&gt;&lt;xsl:value-of select=&quot;$Content&quot; /&gt;&lt;/p&gt;
+                &lt;p&gt;&lt;/p&gt;
+				&lt;p&gt;&lt;strong&gt;Please do not respond to this email!&lt;/strong&gt;&lt;br /&gt;
+					An automated system sent this email, if any point you have any questions or concerns please open a help desk ticket.&lt;/p&gt;
+				&lt;p&gt;&lt;/p&gt;
+            &lt;Address&gt;
+			Many thanks from your:&lt;br /&gt;	
+            Really Cool IT Team&lt;br /&gt;
+            &lt;/Address&gt;
+        &lt;/div&gt;
+      &lt;/body&gt;
+    &lt;/html&gt;
+    &lt;/xsl:template&gt; 
+&lt;/xsl:stylesheet&gt;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

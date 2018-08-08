@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="qa_warrior">
+    <title>PowerShellServer Cmdlet - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PowerShellServer Cmdlet</h1>
+<h3><a href="//scripts/995.ps1">download</a></h3>
+<p>This code will obscure the nsoftware PowerShellServer CmdLets:
+New-PowerShellServerRunspace
+Remove-PowerShellServerRunspace
+also Includes a global hashtable <strong>PSRUNSPACES</strong>.
+The code keeps instances of remote runspaces down to one per server.
+when you call New-PowerShellServerRunspace it looks if the RS is in the hashtable and if so it returns that instance of the Runspace
+If the hashtable does not contain the runspace it adds it to the hashtable and returns the instance.
+Each runspace also contains properties for 'Credential', 'Port' and contains a ScriptMethod 'Reconnect' that Reestablishes the server connection.
+Remove-PowerShellServerRunspace will either remove the specified Runspace and the hashtable entry or
+if called with no params it will remove and clear all runspaces in the hashtable.
+ATTN: you must have the NSoftware PowershellServer Snapin installed.
+Add the code to a library file and . source into you current runspace.</p>
+<pre><code class="language-posh">
+#Global Hashtable to Control all Powershell Server Runspace
+Set-Variable -name '__PSRUNSPACES__' -scope 'global' -value @{} -force
+
+function global:New-PowerShellServerRunspace
+{
+	param(
+		$Credential,
+		$ErrorAction='Stop',
+		[switch]$Force,
+		$Password,
+		$Port=22,
+		$Server='127.0.0.1',
+		$SSHAccept,
+		$Timeout=30,
+		$user
+	)
+	Write-FPEvent &quot;Calling New-PowerShellServerRunspace Function&quot;
+	$ErrorActionPreference = $ErrorAction
+	trap{
+		Write-FPEvent -EventInfo &quot;Function New-PowerShellServerRunspace threw error $($error[0])&quot; -EventType 'Error'
+	}
+	if(($Credential -eq $null) -and  (($User -eq $null) -and ($Password -eq $null))){
+		Throw &quot;You Must Provide Authenication `n PSCredential or User and Password&quot;
+	}
+
+	if($User -and $Password){$script:Credential = Get-FPCredential -Username $User -Password $Password}
+	
+	if( ($global:__PSRUNSPACES__.Keys -contains &quot;$Server&quot;) -and ($global:__PSRunspaces__['10.27.1.4'].RunspaceStateInfo -eq 'OPENED' ) )
+	{
+		Write-Output $global:__PSRUNSPACES__[&quot;$Server&quot;]
+		return
+	}
+	else
+	{
+		if($Force){
+			if($Credential){
+				$script:rs = &amp; (Get-Command -commandType 'Cmdlet' -name 'New-PowerShellServerRunspace') -Server $Server -Credential $Credential -Port $Port -Force -ErrorAction $ErrorAction -Timeout $Timeout
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Credential' -value $Credential -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Port' -value $Port -force
+				[scriptblock]$SB = { $This = New-PowerShellServerRunspace -Server $This.SSHServer -Credential $This.Credential -Port $This.Port -Force ; $This.RunspaceStateInfo = 'OPENED'}
+				Add-Member -inputObject $script:rs -memberType ScriptMethod -name 'Reconnect' -value $SB -force
+			}
+			else{
+				$script:rs = &amp; (Get-Command -commandType 'Cmdlet' -name 'New-PowerShellServerRunspace') -Server $Server -User $User -Password $Password -Port $Port -Force -ErrorAction $ErrorAction -Timeout $Timeout
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'User' -value $User -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Password' -value $Password -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Port' -value $Port -force
+				[scriptblock]$SB = { $This = New-PowerShellServerRunspace -Server $This.SSHServer -User $This.User -Password $This.Password -Port $This.Port -Force ; $This.RunspaceStateInfo = 'OPENED'}
+				Add-Member -inputObject $script:rs -memberType ScriptMethod -name 'Reconnect' -value $SB -force
+			}
+		}
+		elseif($SSHAccept){
+			if($Credential){
+				$script:rs = &amp; (Get-Command -commandType 'Cmdlet' -name 'New-PowerShellServerRunspace') -Server $Server -Credential $Credential -Port $Port -SSHAccept $SSHAccept	-ErrorAction $ErrorAction -Timeout $Timeout
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Credential' -value $Credential -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Port' -value $Port -force
+				[scriptblock]$SB = { $This = New-PowerShellServerRunspace -Server $This.SSHServer -Credential $This.Credential -Port $This.Port -Force ; $This.RunspaceStateInfo = 'OPENED'}
+				Add-Member -inputObject $script:rs -memberType ScriptMethod -name 'Reconnect' -value $SB -force
+			}
+			else{
+				$script:rs = &amp; (Get-Command -commandType 'Cmdlet' -name 'New-PowerShellServerRunspace') -Server $Server -User $User -Password $Password -Port $Port -SSHAccept $SSHAccept	-ErrorAction $ErrorAction -Timeout $Timeout
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'User' -value $User -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Password' -value $Password -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Port' -value $Port -force
+				[scriptblock]$SB = { $This = New-PowerShellServerRunspace -Server $This.SSHServer -User $This.User -Password $This.Password -Port $This.Port -Force ; $This.RunspaceStateInfo = 'OPENED'}
+				Add-Member -inputObject $script:rs -memberType ScriptMethod -name 'Reconnect' -value $SB -force
+			}
+		}
+		else{
+			if($Credential){
+				$script:rs = &amp; (Get-Command -commandType 'Cmdlet' -name 'New-PowerShellServerRunspace') -Server $Server -Credential $Credential -Port $Port -ErrorAction $ErrorAction -Timeout $Timeout
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Credential' -value $Credential -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Port' -value $Port -force
+				[scriptblock]$SB = { $This = New-PowerShellServerRunspace -Server $This.SSHServer -Credential $This.Credential -Port $This.Port -Force ; $This.RunspaceStateInfo = 'OPENED'}
+				Add-Member -inputObject $script:rs -memberType ScriptMethod -name 'Reconnect' -value $SB -force
+			}
+			else{
+				$script:rs = &amp; (Get-Command -commandType 'Cmdlet' -name 'New-PowerShellServerRunspace') -Server $Server -User $User -Password $Password -Port $Port -ErrorAction $ErrorAction -Timeout $Timeout
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'User' -value $User -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Password' -value $Password -force
+				Add-Member -inputObject $script:rs -memberType NoteProperty -name 'Port' -value $Port -force
+				[scriptblock]$SB = { $This = New-PowerShellServerRunspace -Server $This.SSHServer -User $This.User -Password $This.Password -Port $This.Port -Force ; $This.RunspaceStateInfo = 'OPENED'}
+				Add-Member -inputObject $script:rs -memberType ScriptMethod -name 'Reconnect' -value $SB -force
+			}
+		}
+		$global:__PSRUNSPACES__[&quot;$Server&quot;] = $script:rs
+		Write-Output $global:__PSRUNSPACES__[&quot;$Server&quot;]
+		return
+	}
+}
+
+function global:Remove-PowerShellServerRunspace
+{
+	param(
+		$SSHRunspace
+	)
+	if($SSHRunspace)
+	{
+		&amp; (Get-Command -commandType 'Cmdlet' -name 'Remove-PowerShellServerRunspace') -SSHRunspace $SSHRunspace
+		if( $global:__PSRUNSPACES__.Keys -contains $SSHRunspace.SSHServer )
+		{
+			$global:__PSRUNSPACES__.Remove($SSHRunspace.SSHServer)
+		}
+	}
+	elseif( $global:__FPRUNSPACES__.Count -gt 0 )
+	{
+		$global:__FPRUNSPACES__ | Foreach-Object { 
+			&amp; (Get-Command -commandType 'Cmdlet' -name 'Remove-PowerShellServerRunspace') -SSHRunspace $_
+		}
+		$global:__PSRUNSPACES__.Clear()
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

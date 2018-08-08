@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Peter Provost">
+    <title>Get-HardlinkInfo - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-HardlinkInfo</h1>
+<h3><a href="//scripts/3293.ps1">download</a></h3>
+<p>An autoload function script (save as Get-HardlinkInfo.ps1, after you use it the function will be in global namespace) that returns hardlink information (siblings) for the given file. Most recent version lives at https://github.com/PProvost/dotfiles/blob/master/powershell/Get-HardlinkInfo.ps1. Can be used in a custom types.ps1xml and format.ps1xml to display whether a file is a hardlink in your directory listings.</p>
+<pre><code class="language-posh"># .SYNOPSIS
+# 	Returns information about NTFS hard links. Only available on Windows Vista or later.
+#
+# .DESCRIPTION
+# 	This script can be used to determine how many alternate file names (i.e. hard link 
+# 	siblings) a particular file has or to return all hard link siblings as FileInfo 
+# 	objects. It uses the Win32 APIs FindFirstFileNameW and FindNextFileNameW to return 
+# 	the hard link siblings, and these APIs are only available on Windows Vista or later.
+#
+# .PARAMETER $filepath
+# 	The file path you want to get hard link info for
+#
+# .PARAMETER $count
+# 	Will cause the script to return the count instead of the filenames. This is more
+# 	efficient than using measure-object on the returned FileInfo objects.
+#
+# .PARAMETER $all
+# 	When specified, will cause the script to return the FileInfo for the provided
+# 	filepath as well. When not specified, the file specified by the filepath 
+# 	parameter is not returned.
+param( [string] $filepath, [switch] $count, [switch] $all )
+
+$typeDef = @'
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+using FILETIME = System.Runtime.InteropServices.ComTypes.FILETIME;
+
+namespace HardLinkEnumerator
+{
+    public static class Kernel32Api
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BY_HANDLE_FILE_INFORMATION
+        {
+            public uint FileAttributes;
+            public FILETIME CreationTime;
+            public FILETIME LastAccessTime;
+            public FILETIME LastWriteTime;
+            public uint VolumeSerialNumber;
+            public uint FileSizeHigh;
+            public uint FileSizeLow;
+            public uint NumberOfLinks;
+            public uint FileIndexHigh;
+            public uint FileIndexLow;
+        }
+
+        [DllImport(&quot;kernel32.dll&quot;, SetLastError = true, CharSet = CharSet.Auto)]
+        static extern SafeFileHandle CreateFile(
+            string lpFileName,
+            [MarshalAs(UnmanagedType.U4)] FileAccess dwDesiredAccess,
+            [MarshalAs(UnmanagedType.U4)] FileShare dwShareMode,
+            IntPtr lpSecurityAttributes,
+            [MarshalAs(UnmanagedType.U4)] FileMode dwCreationDisposition,
+            [MarshalAs(UnmanagedType.U4)] FileAttributes dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
+
+        [DllImport(&quot;kernel32.dll&quot;, SetLastError = true)]
+        static extern bool GetFileInformationByHandle(SafeFileHandle handle, out BY_HANDLE_FILE_INFORMATION lpFileInformation);
+
+        [DllImport(&quot;kernel32.dll&quot;, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool CloseHandle(SafeHandle hObject);
+
+        [DllImport(&quot;kernel32.dll&quot;, SetLastError=true, CharSet=CharSet.Unicode)]
+        static extern IntPtr FindFirstFileNameW(
+            string lpFileName,
+            uint dwFlags,
+            ref uint stringLength,
+            StringBuilder fileName);
+
+        [DllImport(&quot;kernel32.dll&quot;, SetLastError = true, CharSet=CharSet.Unicode)]
+        static extern bool FindNextFileNameW(
+            IntPtr hFindStream,
+            ref uint stringLength,
+            StringBuilder fileName);
+
+        [DllImport(&quot;kernel32.dll&quot;, SetLastError = true)]
+        static extern bool FindClose(IntPtr fFindHandle);
+        
+        [DllImport(&quot;kernel32.dll&quot;)]
+        static extern bool GetVolumePathName(string lpszFileName, 
+            [Out] StringBuilder lpszVolumePathName, uint cchBufferLength);
+        
+        [DllImport(&quot;shlwapi.dll&quot;, CharSet = CharSet.Auto)]
+        static extern bool PathAppend([In, Out] StringBuilder pszPath, string pszMore);
+        
+        public static int GetFileLinkCount(string filepath)
+        {
+            int result = 0;
+            SafeFileHandle handle = CreateFile(filepath, FileAccess.Read, FileShare.Read, IntPtr.Zero, FileMode.Open, FileAttributes.Archive, IntPtr.Zero);
+            BY_HANDLE_FILE_INFORMATION fileInfo = new BY_HANDLE_FILE_INFORMATION();
+            if (GetFileInformationByHandle(handle, out fileInfo))
+                result = (int)fileInfo.NumberOfLinks;
+            CloseHandle(handle);
+            return result;
+        }
+
+        public static string[] GetFileSiblingHardLinks(string filepath)
+        {
+            List&lt;string&gt; result = new List&lt;string&gt;();
+            uint stringLength = 256;
+            StringBuilder sb = new StringBuilder(256);
+            GetVolumePathName(filepath, sb, stringLength);
+            string volume = sb.ToString();
+            sb.Length = 0; stringLength = 256;
+            IntPtr findHandle = FindFirstFileNameW(filepath, 0, ref stringLength, sb);
+            if (findHandle.ToInt32() != -1)
+            {
+                do
+                {
+                    StringBuilder pathSb = new StringBuilder(volume, 256);
+                    PathAppend(pathSb, sb.ToString());
+                    result.Add(pathSb.ToString());
+                    sb.Length = 0; stringLength = 256;
+                } while (FindNextFileNameW(findHandle, ref stringLength, sb));
+                FindClose(findHandle);
+                return result.ToArray();
+            }
+            return null;
+        }
+
+    }
+}
+'@
+
+$type = Add-Type -TypeDefinition $typeDef
+
+function global:Get-HardlinkInfo( [string] $filepath, [switch] $count, [switch] $all ) {
+	$filepath = resolve-path $filepath
+
+	if ($count) {
+		[HardLinkEnumerator.Kernel32Api]::GetFileLinkCount($filepath)
+	} else {
+		$links = [HardLinkEnumerator.Kernel32Api]::GetFileSiblingHardLinks($filepath)
+		if ($all) {
+			$links | get-childitem 
+		} else {
+			$links | ? { $_ -ne $filepath } | get-childitem 
+		}
+	}
+
+}
+
+Get-HardLinkInfo @PSBoundParameters
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

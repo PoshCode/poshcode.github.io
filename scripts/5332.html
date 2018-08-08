@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Parul Jain">
+    <title>Onkyo receiver control - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Onkyo receiver control</h1>
+<h3><a href="//scripts/5332.ps1">download</a> - <a href="//scripts/5163.md">parent</a></h3>
+<p>Library to discover Onkyo network connected home theatre receiver and then send remote control commands to change settings such as volume and query current settings. Uses the Integra Serial Communication Protocol (ISCP). Can be paired with PowerShell RESTful server and some HTML, JS for creating a web based remote control app</p>
+<p>Tested with Onkyo TX-NR509. As of now this can only work with one receiver at a time however extending to multiple receivers should not be that hard. Please contact the author if you have need for multiple receivers or any other requirements.</p>
+<p>Complete Integra Serial Communication Protocol is documented here http://blog.siewert.net/files/ISCP%20AV%20Receiver%20v124-1.xls</p>
+<p>Combine this module with a simple PowerShell RESTful server http://poshcode.org/4073 and some HTML/Javascript and you can quickly build a nice HTML interface to your Onkyo receiver that can be used from any device including PC, Mac and mobile devices. Very useful when you want advanced commands such as dynamic range control that are not available in the official app</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+    Onkyo home theatre receiver controller
+
+.DESCRIPTION
+    Script module to discover Onkyo network connected home theatre receiver and then send remote control commands to change
+    settings such as volume and also query current settings. Uses the Integra Serial Communication Protocol (ISCP).
+    Tested with Onkyo TX-NR509. As of now this can only work with one receiver at a time however extending to multiple
+    receivers should not be that hard. Please contact the author if you have need for multiple receivers or any other requirements.
+    
+    Complete Integra Serial Communication Protocol is documented here http://blog.siewert.net/files/ISCP%20AV%20Receiver%20v124-1.xls
+
+    Combine this module with a simple PowerShell RESTful server http://poshcode.org/4073 and some HTML/Javascript and you can quickly
+    build a nice HTML interface to your Onkyo receiver that can be used from any device including PC, Mac and mobile devices. Very
+    useful when you want advanced commands such as dynamic range control that are not available in the official app.
+
+    This is a PowerShell Script Module. Save as onkyo.psm1.
+
+.NOTES
+    Author: Parul Jain paruljain@hotmail.com
+    Version: 1.2, July 26, 2014
+    Prerequisites: PowerShell v2.0 or higher
+
+.EXAMPLE
+    Import-Module .\onkyo.psm1
+    Onkyo-Discover
+
+.EXAMPLE
+    Import-Module .\onkyo.psm1
+    Onkyo-Connect 192.168.1.200
+    Onkyo-Send 'pwr01','mvl20', 'sli24', 'tun10670'
+    Start-Sleep 10
+    Onkyo-Get
+    Onkyo-Disconnect
+#&gt;
+
+function Convert-ToHex {
+    Process {
+        &quot;{0:X2}&quot; -f $_
+    }
+}
+
+function Convert-ToDec {
+    Process {
+        [Convert]::ToInt32($_, 16).ToString()
+    }
+}
+
+function Onkyo-Discover {
+    $udpClient = New-Object System.Net.Sockets.UdpClient
+    $udpClient.EnableBroadcast = $true
+    $udpClient.Client.ReceiveTimeout = 1000 # milliseconds
+    $localEP = New-Object Net.IPEndPoint($([Net.IPAddress]::Any, 0))
+    $remoteEP = New-Object Net.IPEndPoint($([Net.IPAddress]::Any, 0))
+    $udpClient.Client.Bind($localEP)
+    [byte[]]$packet = (73,83,67,80,0,0,0,16,0,0,0,11,1,0,0,0,33,120,69,67,78,81,83,84,78,13,10)
+    $udpClient.Send($packet, $packet.Count, '255.255.255.255', 60128) | out-null
+    $response = $udpClient.Receive([Ref]$remoteEP)
+    # Get the command length. We need to convert to little-endian before conversion to Int32
+    $cmdLength = [BitConverter]::ToInt32($response[11..8], 0)
+    @{
+        Name = [System.Text.Encoding]::ASCII.GetString($response[24..(13 + $cmdLength)]).split('/')[0];
+        IPAddress = $remoteEP.Address.IPAddressToString;
+        Port = $remoteEP.Port
+    }
+    $udpClient.Close()
+}
+
+function Onkyo-Connect ([string]$IPAddress, [uint32]$Port = 60128) {
+    $script:socket = New-Object System.Net.Sockets.TcpClient
+    $script:socket.ReceiveTimeout = 1000
+    $script:socket.SendTimeout = 1000
+    $script:socket.Connect($IPAddress, $Port)
+}
+
+function Onkyo-Disconnect {
+    $script:socket.GetStream().Close()
+    $script:socket.Close()
+}
+
+function Onkyo-Send ([string[]]$commands) {
+    if (!$script:socket.Connected) { throw 'Not Connected' }
+    foreach ($command in $commands) {
+        if ($command.length -lt 3) { continue }
+        # If no parameter specified add QSTN to the command to query the value of the attribute
+        if ($command.Length -eq 3) { $command += 'QSTN' }
+
+        $cmd = [System.Text.Encoding]::ASCII.GetBytes($command.toUpper()) #Protocol requires all CAPS
+        $cmdLength = [BitConverter]::GetBytes($cmd.Length + 4) # The +4 is for !1 at the begining and CR+LF at end of all commands
+        [Array]::Reverse($cmdLength) # Make it Big-endian
+        [byte[]]$packet = (73,83,67,80,0,0,0,16) + $cmdLength + (1,0,0,0,33,49) + $cmd + (13,10)
+        $stream = $script:socket.GetStream()
+        $stream.Write($packet, 0, $packet.Length)
+    }
+    # Write any buffered data
+    $stream.Flush()
+}
+
+function Onkyo-Get {
+    if (!$script:socket.Connected) { throw 'Not connected' }
+    $stream = $script:socket.GetStream()
+    $response = @{}
+    while ($stream.DataAvailable) {
+        # Read the header and determine length of command
+
+        [byte[]]$header = @()
+        for ($i = 0; $i -lt 16; $i++) {
+            try { $header += $stream.ReadByte() } catch { throw 'Response timed out' }
+        }
+    
+        # Get the command length. We need to reverse to little-endian before conversion to Int32
+        $cmdLength = [BitConverter]::ToInt32($header[11..8], 0)
+    
+        # Now read the command
+        [byte[]]$cmd = @()
+        for ($i = 0; $i -lt $cmdLength; $i++) {
+            try { $cmd += $stream.ReadByte() } catch { throw 'Error reading response' }
+        }
+
+        # Strip first two and last two bytes, convert to ASCII and store
+        $responseStr = [System.Text.Encoding]::ASCII.GetString($cmd[2..($cmd.Length - 4)])
+        $response[$responseStr.Substring(0,3)] = $responseStr.Substring(3)
+    }
+    $response
+}
+
+Export-ModuleMember -Function Onkyo-Discover
+Export-ModuleMember -Function Onkyo-Connect
+Export-ModuleMember -Function Onkyo-Disconnect
+Export-ModuleMember -Function Onkyo-Send
+Export-ModuleMember -Function Onkyo-Get
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

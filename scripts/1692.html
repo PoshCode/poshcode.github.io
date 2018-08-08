@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Get-FtpList - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-FtpList</h1>
+<h3><a href="//scripts/1692.ps1">download</a> - <a href="//scripts/1689.md">parent</a></h3>
+<p>A function to get a file listing via FTP and parse it into objects.</p>
+<p>The default &quot;FtpWebResponse&quot;http://msdn.microsoft.com/en-us/library/system.net.ftpwebresponse.aspx listing comes back in HTML(Hypertext Markup Language) format from my FTP(File Transfer Protocol) server, and this function parses it into objects. However, the string parsing here may not work on the output of your FTP server (if so, please contribute by adding another set of parsing).</p>
+<pre><code class="language-posh">
+function Get-FtpList {
+#.Synopsis
+#  Read a list of files (and directories) from FTP
+#.Description
+#  An initial implementation of a string-parsing lister for FTP which converts lists to objects (in the one format that I've seen -- there are other formats)
+#
+#  This implementation will use whatever proxy is set up in the &quot;Internet Options&quot; proxy settings (usually your web proxy, and basically never an FTP server with USER@HOST settings), which may affect the file list format.
+#.Parameter Path
+#  The full path to the directory you want a listing from, in the form: ftp://servername/folder/
+#.Parameter Credentials
+#  The login credentials for the ftp server, if needed
+#.Example
+# $List = Get-FtpList &quot;ftp://joelbennett.net/&quot; (Get-Credential)
+# C:\PS&gt;$list | ft Name, Type, Length, LastWriteTime, FullName -auto
+#
+# Name       Type      Length LastWriteTime         FullName                                                      
+# ----       ----      ------ -------------         --------                                                      
+# DeskOps    Directory        5/24/2009 12:00:00 AM ftp://joelbennett.net/DeskOps/                
+# GeoShell   Directory        5/24/2009 12:00:00 AM ftp://joelbennett.net/GeoShell/               
+# Jaykul.asc File      1626   5/24/2009 12:00:00 AM ftp://joelbennett.net/Jaykul.asc              
+# ShotGlass  Directory        5/24/2009 12:00:00 AM ftp://joelbennett.net/ShotGlass/              
+# images     Directory        2/6/2010 2:13:00 PM   ftp://joelbennett.net/images/    
+# index.php  File      407    5/9/2009 12:00:00 AM  ftp://joelbennett.net/index.php               
+#
+# Description
+# -----------
+# The first command gets a list of files, directories (and symlinks, if there are any) into $List 
+# The second command outputs that list in a useable table format, because the Huddled.FtpItemInfo type hasn't been set up in my Format ps1xml files so by default the output will be in list form.
+#
+#.Notes
+#  This will use a proxy, but only if it's set up correctly in &quot;Internet Options&quot; proxy settings.
+#.Link 
+# The FTP WebRequest class
+# *   http://msdn.microsoft.com/en-us/library/system.net.ftpwebrequest.aspx
+#.Link
+# The FTP Methods enumeration
+# *   http://msdn.microsoft.com/en-us/library/system.net.webrequestmethods.ftp.aspx
+#
+[CmdletBinding()]
+Param(
+   [Parameter(Mandatory=$true)]
+   [string]$Path
+,
+   [Parameter(Mandatory=$false)]
+   [System.Net.ICredentials]$Credential
+)
+   
+   [System.Net.FtpWebRequest]$request = [System.Net.WebRequest]::Create($path)
+   $request.Method = [System.Net.WebRequestMethods+FTP]::ListDirectoryDetails
+   if($credential) { $request.Credentials = $credential }
+   $response = $request.GetResponse()
+   
+   if( $response.StatusCode -ne &quot;CommandOK&quot; ) {
+      throw &quot;Response Status: $($response.StatusDescription)&quot;
+   }
+   
+   $global:ftpOutputCache = (Receive-Stream $response.GetResponseStream())
+   $list = $global:ftpOutputCache -replace &quot;(?:.|\n)*&lt;PRE&gt;\s+((?:.*|\n)+)\s+&lt;/PRE&gt;(?:.|\n)*&quot;,'$1' -split &quot;`n&quot;
+   $( foreach($line in $list | ? { $_ }) {
+      [DateTime]$date, [string]$length, [string]$url, [string]$name, $null = $line -split ' + | &lt;A HREF=&quot;|&quot;&gt;|&lt;/A&gt;'
+      
+      New-Object PSObject -Property @{ 
+         LastWriteTime = $date
+         FullName      = $path.trim().trim('/') + '/' + $url
+         Length        = $(if($length -eq (($length -as [int]) -as [string])) { [int]$length } else { $null })
+         Type          = $(if($length -eq (($length -as [int]) -as [string])) { &quot;File&quot; } else { $length })
+         Name          = $name
+      }
+   } # Note: I put a (fake) &quot;Huddled.FtpItemInfo&quot; type name on. You can use that for format.ps1xml
+   ) | Sort Type | %{ $_.PSTypeNames.Insert(0, &quot;Huddled.FtpItemInfo&quot;); $_ } | Write-Output  
+}
+
+
+
+function Receive-Stream {
+#.Synopsis
+#  Read a stream to the end and close it
+#.Description
+#  Will read from a byte stream and output a string or a file
+#.Param reader
+#  The stream to read from
+#.Param fileName
+#  A file to write to. If this parameter is provided, the function will output to file
+#.Param encoding
+#  The text encoding, if you want to override the default.
+param( [System.IO.Stream]$reader, $fileName, $encoding = [System.Text.Encoding]::GetEncoding( $null ) )
+   
+   if($fileName) {
+      $writer = new-object System.IO.FileStream $fileName, &quot;Create&quot;
+   } else {
+      [string]$output = &quot;&quot;
+   }
+       
+   [byte[]]$buffer = new-object byte[] 4096
+   [int]$total = [int]$count = 0
+   do
+   {
+      $count = $reader.Read($buffer, 0, $buffer.Length)
+      if($fileName) {
+         $writer.Write($buffer, 0, $count)
+      } else {
+         $output += $encoding.GetString($buffer, 0, $count)
+      }
+   } while ($count -gt 0)
+
+   $reader.Close()
+   if(!$fileName) { $output }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Read-Choice - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Read-Choice</h1>
+<h3><a href="//scripts/2893.ps1">download</a> - <a href="//scripts/1871.md">parent</a></h3>
+<p>Just a little wrapper for PromptForChoice</p>
+<pre><code class="language-posh"># function Read-Choice {
+
+#.Synopsis
+#  Prompt the user for a choice, and return the (0-based) index of the selected item
+#.Parameter Message
+#  This is the prompt that will be presented to the user. Basically, the question you're asking.
+#.Parameter Choices
+#  An array of strings representing the choices (or menu items), with optional ampersands (&amp;) in them to mark (unique) characters which can be used to select each item.
+#.Parameter ChoicesWithHelp
+#  A Hashtable where the keys represent the choices (or menu items), with optional ampersands (&amp;) in them to mark (unique) characters which can be used to select each item, and the values represent help text to be displayed to the user when they ask for help making their decision.
+#.Parameter Default
+#  The (0-based) index of the menu item to select by default (defaults to zero).
+#.Parameter MultipleChoice
+#  Prompt the user to select more than one option. This changes the prompt display for the default PowerShell.exe host to show the options in a column and allows them to choose multiple times.
+#  Note: when you specify MultipleChoice you may also specify multiple options as the default!
+#.Parameter Caption
+#  An additional caption that can be displayed (usually above the Message) as part of the prompt
+#.Parameter Passthru
+#  Causes the Choices objects to be output instead of just the indexes
+#.Example
+#  Read-Choice &quot;WEBPAGE BUILDER MENU&quot;  &quot;&amp;Create Webpage&quot;,&quot;&amp;View HTML code&quot;,&quot;&amp;Publish Webpage&quot;,&quot;&amp;Remove Webpage&quot;,&quot;E&amp;xit&quot;
+#.Example
+#  [bool](Read-Choice &quot;Do you really want to do this?&quot; &quot;&amp;No&quot;,&quot;&amp;Yes&quot; -Default 1)
+#  
+#  This example takes advantage of the 0-based index to convert No (0) to False, and Yes (1) to True. It also specifies YES as the default, since that's the norm in PowerShell.
+#.Example
+#  Read-Choice &quot;Do you really want to delete them all?&quot; @{&quot;&amp;No&quot;=&quot;Do not delete all files. You will be prompted to delete each file individually.&quot;; &quot;&amp;Yes&quot;=&quot;Confirm that you want to delete all of the files&quot;}
+#  
+#  Note that with hashtables, order is not guaranteed, so &quot;Yes&quot; will probably be the first item in the prompt, and thus will output as index 0.  Because of thise, when a hashtable is passed in, we default to Passthru output.
+[CmdletBinding(DefaultParameterSetName=&quot;HashtableWithHelp&quot;)]
+param(
+   [Parameter(Mandatory=$true, Position = 10, ParameterSetName=&quot;HashtableWithHelp&quot;)]
+   [Hashtable]$ChoicesWithHelp
+,   
+   [Parameter(Mandatory=$true, Position = 10, ParameterSetName=&quot;StringArray&quot;)]
+   [String[]]$Choices
+,
+   [Parameter(Mandatory=$False)]
+   [string]$Caption = &quot;Please choose!&quot;
+,  
+   [Parameter(Mandatory=$False, Position=0)]
+   [string]$Message = &quot;Choose one of the following options:&quot;
+,  
+   [Parameter(Mandatory=$False)]
+   [int[]]$Default  = 0
+,  
+   [Switch]$MultipleChoice
+,
+   [Switch]$Passthru
+)
+begin {
+   if($ChoicesWithHelp) { 
+      [System.Collections.DictionaryEntry[]]$choices = $ChoicesWithHelp.GetEnumerator() | %{$_}
+   }
+}
+process {
+   $Descriptions = [System.Management.Automation.Host.ChoiceDescription[]]( $(
+                     if($choices -is [String[]]) {
+                        foreach($choice in $choices) {
+                           New-Object System.Management.Automation.Host.ChoiceDescription $choice
+                        } 
+                     } else {
+                        foreach($choice in $choices) {
+                           New-Object System.Management.Automation.Host.ChoiceDescription $choice.Key, $choice.Value
+                        } 
+                     }
+                   ) )
+                   
+   # Passing an array as the $Default triggers multiple choice prompting.
+   if(!$MultipleChoice) { [int]$Default = $Default[0] }
+
+   [int[]]$Answer = $Host.UI.PromptForChoice($Caption,$Message,$Descriptions,$Default)
+
+   if($Passthru -or !($choices -is [String[]])) {
+      Write-Verbose &quot;$Answer&quot;
+      Write-Output  $Descriptions[$Answer]
+   } else {
+      Write-Output $Answer
+   }
+}
+
+# }
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

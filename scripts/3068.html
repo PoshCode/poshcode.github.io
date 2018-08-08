@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Alex Scoble">
+    <title>User Entitlement Auditor - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>User Entitlement Auditor</h1>
+<h3><a href="//scripts/3068.ps1">download</a></h3>
+<p>Script used to perform user entitlement audits based on an XML report containing local groups, members of the local groups and systems that house the local groups. The script joins that data to data containing users and global groups grabbed directly from AD using the Quest AD Cmdlets and outputs the final report in CSV. Sorry that not everything is documented as I'd like it to be.</p>
+<pre><code class="language-posh">$date = ( get-date ).ToString('yyyy-MM-dd-hh-mm')
+
+$inpath = &quot;C:\InputDir\&quot;
+
+$outpath = &quot;C:\Archive\&quot;
+
+$FileList = @(Get-Childitem $inpath)
+
+# Output CSV formatted report with members properly split up and unwanted domains/users removed:
+$ResultFile = [System.IO.Path]::GetTempFileName()
+
+$ADMembersOutfile = [System.IO.Path]::GetTempFileName()
+
+$ReportFile = &quot;C:\EntitlementsAuditProject\$date-UserEntitlementAuditTripWireFINALresult.csv&quot;
+
+# Wanted Local Groups
+$WantedLocals = @(&quot;Administrators&quot;,&quot;Users&quot;)
+
+# List of unwanted users to filter out:
+$BadUsers = @(&quot;(null)&quot;, &quot;&quot;) 
+
+# List of unwanted domains and system accounts to remove:
+$BadDomains = @(&quot;NT AUTHORITY&quot;,&quot;NT SERVICE&quot;) 
+
+# Master function that calls all other functions in order
+Function Main {
+
+	# Runs Split-Member function against Landesk output report and saves results to output file
+	Parse-XMLtoCSV $ResultFile
+	
+	# Runs function that joins the two CSV files based on commonalities in the domain members field
+	JoinCSVs $ResultFile $ADMembersOutfile $ReportFile
+
+# Ends Main function
+}
+
+# Function used to filter out unwanted Members. Function is called by Split-Member function
+Function Is-ValidMember([string] $membername) {
+
+	# Creates array based on splitting resultant Members field data further where backslashes &quot;\&quot; exist 
+    $parts = $membername.Split(&quot;\\&quot;)
+
+    # Logic operators used to filter out unwanted users and domains
+    $BadDomains -notcontains $parts[0] -and $BadUsers -notcontains $parts[$parts.Length - 1]
+    
+# Ends Is-ValidMember function
+}
+
+Function Is-ValidLocalGroup([string] $localgroupname) {
+
+	$WantedLocals -contains $localgroupname
+	
+}
+
+Function Parse-XMLtoCSV ([string] $outfile) {
+
+	$FileList | ForEach-Object {
+	
+		Foreach ($file in $FileList) {
+
+			[xml]$xml = Get-Content $inpath$file
+
+			$xml.ReportOutput.ReportBody.ReportSection | 
+
+			Foreach-Object { 
+
+				$system = $_.Name
+				
+				$_.ReportSection | 
+				
+				Foreach-Object {
+				
+					$group = $_.name
+					
+					$_.ReportSection.ReportSection.ReportSection | 
+					
+					Foreach-Object { 
+						
+						$_.String | 
+						
+						Foreach-Object {
+
+							If ($_.&quot;#TEXT&quot; -ne $null) {
+							
+								New-Object Object |
+								
+								Add-Member NoteProperty &quot;System&quot; $system -PassThru |
+								
+								Add-Member NoteProperty &quot;LocalGroup&quot; $group -PassThru |
+								
+								Add-Member NoteProperty &quot;LocalMembers&quot; $_.&quot;#TEXT&quot; -PassThru |
+								
+							}
+								
+						} 
+
+					} 
+						
+				}
+
+			} | Where-Object { Is-ValidMember $_.LocalMembers } | Export-Csv -NoTypeInformation $outfile
+
+		} 
+
+	Move-Item $inpath$file $outpath$file
+
+	}
+
+}
+
+# Function that pulls AD user and group data from domain controllers and outputs the data to a temp file. Function is called by JoinCSVs function
+Function GetADMembersofGroups ([string] $outfile2) {
+
+	# Quest AD cmdlet is used here to get all Global Security groups in AD and pipes out results to next part
+	Get-QADGroup -SearchRoot &quot;DC=dsl,DC=dittdsh,DC=org&quot; -GroupType &quot;Security&quot; `
+	-GroupScope &quot;Global&quot; | 
+	
+	# Starts ForEach-Object loop
+	ForEach-Object {
+		
+		# Sets up $NTAccount variable
+		$NTAccount = $_.NTAccountName
+		
+		# Sets up $Domain variable
+		$Domain = $_.Domain
+		
+		# Sets up GroupName variable
+		$GroupName =$_.Name
+		
+		# Sets up CatGroupName variable which concatenates $Domain and $GroupName system strings into one string for later use
+		$CatGroupName = [System.String]::Concat($Domain,$GroupName)
+		
+		# Quest AD cmdlet is used here to get all members of AD groups that were pulled above
+		Get-QADGroupMember -Identity $NTAccount -DontUseDefaultIncludedProperties -IncludedProperties `
+		&quot;SamAccountName&quot;,&quot;Name&quot;
+	
+	# Ends ForEach-Object loop, pipes results to next process and starts another ForEach-Object loop			
+	} | ForEach-Object {
+	
+		# Variable used to equate $curr to current point in CSV array. This is necessary for processing items in a class as &quot;$_&quot; is not allowed
+		$curr = $_
+		
+		# Uses New-Object to create a new class named Object and pipes results out for further processing so that properties can be added to the class
+   	 	New-Object Object |
+
+		# Adds property to Object class based on concatenated $Domain and $GroupName strings, changes column name to GlobalMembers and pipes results 
+		# out for further processing &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+		Add-Member NoteProperty &quot;GlobalMembers&quot; $CatGroupName -PassThru |
+
+		# Adds property to Object class based on Name column in input file, renames to Username and pipes results out for further processing 
+		# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+		Add-Member NoteProperty &quot;Username&quot; $curr.Name -PassThru |
+            
+		# Adds property to Object class based on SamAccountName column in input file, renames to LogonID and pipes results out for further processing 
+		# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+		Add-Member NoteProperty &quot;LogonID&quot; $curr.SamAccountName -PassThru |
+
+	# Ends Object class processing loop, sorts objects by GlobalMembers colum and exports out to another temp CSV file
+  	}  | Sort-Object {$_.GlobalMembers} | Export-Csv -NoTypeInformation $outfile2
+
+# Ends GetADMembersofGroups function
+}
+
+# Starts JoinCSVs function which joins the two temp files together based on the Domain Member columns in each file
+Function JoinCSVs ([string] $infile2, [string] $infile3, [string] $outfile3) {
+
+	# Sets up $csv1 variable to hold all of the CSV data from the first temp file
+	$csv1 = Import-Csv $infile2
+	
+	# Calls the GetADMembersofGroups function
+	GetADMembersofGroups $infile3
+	
+	# Sets up $csv2 variable to hold all of the CSV data from the second temp file
+	$csv2 = Import-Csv $infile3
+	
+	# Pipes data from first temp file into ForEach-Object loop
+	$csv1 | ForEach-Object { 
+		
+		# Variable used to equate $record to current point in CSV array. This is necessary for processing items in a class as &quot;$_&quot; is generally not allowed 
+		$record = $_ 
+		
+		# Sets up $matches variable which contains contents of second temp file ran through filter grabbing all matches of Domain Groups in both files
+		$matches = $csv2 | Where-Object {$_.GlobalMembers -eq $record.LocalMembers} 
+
+		# Starts if loop to process $matches variable where there are matches between the two files. Where no match is found, process is moved to else loop
+		if ($matches){ 
+		
+			# Pushes output of $matches variable through pipe and into a ForEach-Object loop
+			$matches | ForEach-Object{ 
+	
+				# Uses New-Object to create a new class named Object and pipes results out for further processing so that properties can be added to the class
+				New-Object Object |
+
+				# Adds property to Object class based on Username column from 2nd file and pipes results out for further processing 
+				# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+				Add-Member noteproperty Username $_.Username -PassThru |
+
+		   		# Adds property to Object class based on LogonID column from 2nd file and pipes results out for further processing 
+				# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+				Add-Member noteproperty LogonID $_.LogonID -PassThru |
+
+				# Adds property to Object class based on LocalMembers column from 1st file and pipes results out for further processing 
+				# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+				Add-Member noteproperty Members $record.LocalMembers -PassThru |
+
+				# Adds property to Object class based on Localgroup column from 1st file and pipes results out for further processing 
+				# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+				Add-Member noteproperty Localgroup $record.Localgroup -PassThru |
+
+				# Adds property to Object class based on System column from 1st file and pipes results out for further processing 
+				# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+				Add-Member noteproperty System $record.System -PassThru |
+			
+			# Ends ForEach-Object loop
+			} 
+		
+		# Ends if loop
+		} 
+
+		# starts else loop for lines in the files that don't match
+		else { 
+
+			# Uses New-Object to create a new class named Object and pipes results out for further processing so that properties can be added to the class
+			New-Object Object | 
+
+			# Adds property to Object class for Username column and pipes out a null result as a placeholder for the CSV file 
+			# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+			Add-Member noteproperty Username $null -PassThru |
+
+			# Adds property to Object class for LogonID column and pipes out a null result as a placeholder for the CSV file 
+			# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+			Add-Member noteproperty LogonID $null -PassThru |
+			
+			# Adds property to Object class based on LocalMembers column from first file and pipes out results
+			# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+			Add-Member noteproperty Members $_.LocalMembers -PassThru |
+			
+			# Adds property to Object class based on Localgroup column from first file and pipes out results
+			# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+			Add-Member noteproperty Localgroup $_.Localgroup -PassThru | 
+
+			# Adds property to Object class based on System column from first file and pipes out results
+			# &quot;-PassThru&quot; is necessary in order to get Add-Member to output results
+			Add-Member noteproperty System $_.System -PassThru | 
+
+		# Ends else loop
+		} 
+
+	# Ends ForEach-Object loop, pipes out results and exports them to the final result file
+	} | Export-Csv -NoTypeInformation $outfile3 
+	
+	# Removes the first temp file
+	Remove-Item -Force $infile2
+	
+	# Removes the second temp file
+	Remove-Item -Force $infile3
+
+# Ends JoinCSVs function
+}
+
+# Starts Main function, which is when the script runs completely
+. Main
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

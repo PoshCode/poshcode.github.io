@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Steele Stenger">
+    <title>Office Pass SaveAs - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Office Pass SaveAs</h1>
+<h3><a href="//scripts/5084.ps1">download</a> - <a href="//scripts/5080.md">parent</a></h3>
+<p>Use known password cache to open and save unprotected copies of documents.</p>
+<ul>
+<li>work in progress
+added *.pptx
+added *.pdf - requires ghostscript</li>
+</ul>
+<pre><code class="language-posh">$ErrorActionPreference = &quot;SilentlyContinue&quot;
+
+CLS
+
+# Paths
+$encrypted_path = &quot;C:\Password_Recovery\Encrypted&quot;
+$decrypted_Path = &quot;c:\Password_Recovery\Decrypted\&quot;
+$original_Path = &quot;c:\Password_Recovery\Originals\&quot;
+$password_Path = &quot;c:\Password_Recovery\Passwords\Passwords.txt&quot;
+
+# Load Password Cache
+$arrPasswords = Get-Content -Path $password_Path
+
+# Load File List
+$arrFiles = Get-ChildItem $encrypted_path 
+
+# Create counter to display progress
+[int] $count = ($arrfiles.count -1)
+
+# Loop through each file
+$arrFiles| % {
+    $file  = get-item -path $_.fullname 
+    # Display current file
+    write-host &quot;Processing&quot; $file.name -f &quot;DarkYellow&quot;
+    write-host &quot;Items remaining: &quot; $count `n
+
+    # Word docx
+    if ($file.Extension -eq &quot;.docx&quot;) {
+
+    # Loop through password cache
+        $arrPasswords | % {
+            $passwd = $_
+            
+            # New Word Object
+            $WordObj = $null
+            $WordObj = New-Object -ComObject Word.Application
+            $WordObj.Visible = $false
+            $WordObj.Options.WarnBeforeSavingPrintingSendingMarkup = $false
+
+            # Attempt to open file
+            $WordDoc = $WordObj.Documents.Open($file.fullname, $null, $false, $null, $passwd, $passwd)
+            $WordDoc.Activate()
+            $content = $null
+            $content = $WordDoc.content
+
+            # if password is correct - Save new file without password to $decrypted_Path
+            if ($content -ne $null) {
+                write-host &quot;opened &quot; -f &quot;Yellow&quot;
+                $WordDoc.Password=$null
+                $savePath = $decrypted_Path+$file.Name
+                write-host &quot;Decrypted: &quot; $file.Name -f &quot;DarkGreen&quot;
+                $WordDoc.SaveAs([ref]$savePath)
+            # Close document and Application
+                $WordDoc.Close()
+                $WordObj.Application.Quit()
+
+            # Move original file to $original_Path
+                move-item $file.fullname -Destination $original_Path -Force
+                }
+            else {
+            # Close document and Application
+                $WordDoc.Close()
+                $WordObj.Application.Quit()
+            }
+        }
+    }
+    # Excel xlsx
+    elseif ($file.Extension -eq &quot;.xlsx&quot;) {
+
+    # Loop through password cache
+        $arrPasswords | % {
+            $passwd = $_
+            
+            # New Excel Object
+            $ExcelObj = $null
+            $ExcelObj = New-Object -ComObject Excel.Application
+            $ExcelObj.Visible = $false
+
+            # Attempt to open file
+            $Workbook = $ExcelObj.Workbooks.Open($file.fullname,1,$false,5,$passwd)
+            $Workbook.Activate()
+
+            # if password is correct - Save new file without password to $decrypted_Path
+                if ($Workbook.Worksheets.count -ne 0) {
+                    $Workbook.Password=$null
+                    $savePath = $decrypted_Path+$file.Name
+                    write-host &quot;Decrypted: &quot; $file.Name -f &quot;DarkGreen&quot;
+                    $Workbook.SaveAs($savePath)
+            # Close document and Application
+                    $ExcelObj.Workbooks.close()
+                    $ExcelObj.Application.Quit()
+
+            # Move origanl file to $original_Path
+                    move-item $file.fullname -Destination $original_Path -Force
+                }
+                else {
+            # Close document and Application
+                    $ExcelObj.Close()
+                    $ExcelObj.Application.Quit()
+                }
+        }
+
+    }
+    
+    elseif ($file.Extension -eq &quot;.pptx&quot;) {
+
+    # Loop through password cache
+    
+    $arrPasswords | % {
+        $passwd = $_
+
+        # New Powerpoint Object
+        $objPPT = New-Object -ComObject Powerpoint.Application
+
+        # Attempt to open file
+        $Presentation = $objPPT.ProtectedViewWindows.Open($file, $passwd)
+
+        if ($presentation.application -ne $null) {
+        # if password is correct - Enable Edit Mode
+            $openPresentationWithPasswords = $Presentation.Edit(&quot;ModifyPassword&quot;)
+        # Remove Password
+            $openPresentationWithPasswords.Password = $null
+
+        #Save new file to $decrypted_Path
+            $savePath = $decrypted_Path+$file.Name
+            write-host $savepath -f &quot;yellow&quot;
+            $openPresentationWithPasswords.SaveAs($savePath)
+            write-host &quot;Decrypted: &quot; $file.Name -f &quot;DarkGreen&quot;
+
+         # Close document and Application
+            $openPresentationWithPasswords.Close()
+            $objPPT.Quit()
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($openPresentationWithPasswords) | out-null
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($presentation) | out-null
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($objPPT) | out-null
+
+        # Move origanl file to $original_Path
+            move-item $file.fullname -Destination $original_Path -Force
+        }
+
+        else {
+        # Close document and Application
+            $objPPT.Quit()
+             [System.Runtime.Interopservices.Marshal]::ReleaseComObject($openPresentationWithPasswords) | out-null
+             [System.Runtime.Interopservices.Marshal]::ReleaseComObject($objPPT) | out-null
+        }
+    }
+}
+
+if ($file.Extension -eq &quot;.pdf&quot;) {
+
+    # Loop through password cache
+    $arrPasswords | % {
+        $passwd = $_
+            
+        # Path to GhostScript installation
+        $ghostScriptPath = &quot;C:\Program Files\gs\gs9.14\bin\gswin32.exe&quot;
+        
+        $savePath = $decrypted_Path+$file.Name
+
+        # arguments
+        $args = '-q', '-dSAFER', '-dBATCH', '-dNOPAUSE', '-sDEVICE=pdfwrite', '-sFONTPATH=%windir%/fonts;xfonts;.', &quot;-sPDFPassword=$passwd&quot;, '-dPDFSETTINGS=/prepress', '-dPassThroughJPEGImages=true', &quot;-sOutputFile=$savePath&quot;, $file.FullName
+        
+        # Attempt to Decrypt Document
+        &amp; $ghostScriptPath $args 
+        # need get-job wait-job # but not time to leave for day
+        sleep 2
+        Get-Process -name gswin32 
+
+        # Move original file to $original_Path
+        if (test-path -path $savePath) {
+            move-item $file.fullname -Destination $original_Path -Force
+        }
+    }
+    # Kill GhostScript processes from failed password attempts
+
+    Get-Process -name gswin32 | % {tskill $_.id} | out-null
+}
+$count--
+# Next File
+}
+
+Write-host &quot;`n Complete&quot; -f &quot;Green&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

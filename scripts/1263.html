@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>PowerOAuth 1.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PowerOAuth 1.0</h1>
+<h3><a href="//scripts/1263.ps1">download</a></h3>
+<p>This is the <em>first</em> raw release, supports OAuth via Installed Application Authentication (a modified form of OAuth where the consumer fetches access tokens using a username and password instead of a request token).</p>
+<p>I'm just trying to get myself started on the whole &quot;release early, release often&quot; thing, and to stack up a bunch of things that I've been meaning to blog about for awhile.</p>
+<pre><code class="language-posh">#requires -Version 2.0
+#requires -Module HttpRest -Version 1.2
+# http`://poshcode.org/1262
+Set-StrictMode -Version 2.0
+$null = [Reflection.Assembly]::LoadWithPartialName('System.Web')
+$safeChars = [char[]]'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~'
+
+function Get-OAuthBase {
+#.Synopsis
+#  Get the basic OAuth Authorization values
+#.Parameter ConsumerKey
+#  The OAuth Consumer Key
+#.Parameter AccessToken
+#  The OAuth Access token
+#.ReturnValue
+#  A HashTable containing the key-value pairs needed for further requests, including the oauth_consumer_key, oauth_signature_method, oauth_timestamp, oauth_nonce, oauth_version, and optionally, the oauth_token.
+PARAM( 
+   [Parameter(Mandatory=$true)]$ConsumerKey
+,  [Parameter(Mandatory=$false)]$AccessToken 
+)
+END {
+   @{ 
+      oauth_consumer_key      = Format-OAuth $ConsumerKey
+      oauth_signature_method  = 'HMAC-SHA1' # The signature method the Consumer used to sign the request
+      oauth_timestamp         = [int]((Get-Date).ToUniversalTime() - (Get-Date 1/1/1970)).TotalSeconds
+      oauth_nonce             = [guid]::NewGuid().GUID -replace '-'
+      oauth_version           = '1.0' # OPTIONAL: If present, value MUST be 1.0
+   } + $(if($AccessToken){ @{oauth_token = $AccessToken } } else { @{} }) # $FFAccessToken.oauth_token
+}}
+
+function Format-OAuth {
+#.Synopsis 
+#  UrlEncode, but with upper-case hex
+#.Parameter value
+#  The text to encode
+PARAM([Parameter(ValueFromPipeline=$true)][string]$value)
+PROCESS {
+   $result = New-Object System.Text.StringBuilder
+   foreach($c in $value.ToCharArray()){
+      if($safeChars -notcontains $c) {
+         $null = $result.Append( ('%{0:X2}' -f [int]$c) )
+      } else {
+         $null = $result.Append($c)
+      }
+   }
+   write-output $result.ToString()
+}}
+
+function ConvertTo-Hashtable {
+#.Synopsis
+#  Convert a query string into a hashtable
+#.Parameter string
+#  The query string to convert
+#.Parameter PairSeparator
+#  The string separating each set of key=value pairs
+#.Parameter KeyValueSeparator
+#  The string separating the keys from the values
+#.ReturnValue
+#  The hashtable created from reading the query string
+PARAM(
+   [Parameter(ValueFromPipeline=$true, Position=0, Mandatory=$true)]
+   [String]
+   $string
+,
+   [Parameter(Position=1)]
+   [String]
+   $PairSeparator = '&amp;'
+,  
+   [Parameter(Position=2)]
+   [String]
+   $KeyValueSeparator = '='
+)
+PROCESS {
+   $result = @{}
+   foreach($w in $string.split($pairSeparator) ) {
+      $k,$v = $w.split($KeyValueSeparator,2)
+      $result.Add($k,$v)
+   }
+   write-output $result
+}
+}
+
+function ConvertFrom-Hashtable {
+#.Synopsis
+#  Convert a hashtable into a query string
+#.Description
+#  Converts a hashtable into a query string by joining the keys to the values, and then joining all the pairs together
+#.Parameter values
+#  The hashtable to convert
+#.Parameter PairSeparator
+#  The string used to concatenate the sets of key=value pairs, defaults to &quot;&amp;&quot;
+#.Parameter KeyValueSeparator
+#  The string used to concatenate the keys to the values, defaults to &quot;=&quot;
+#.ReturnValue
+#  The query string created by joining keys to values and then joining them all together into a single string
+PARAM(
+   [Parameter(ValueFromPipeline=$true, Position=0, Mandatory=$true)]
+   [Hashtable]
+   $Values
+,
+   [Parameter(Position=1)]
+   [String]
+   $pairSeparator = '&amp;'
+,  
+   [Parameter(Position=2)]
+   [String]
+   $KeyValueSeparator = '='
+,
+   [string[]]$Sort
+)
+PROCESS {
+   [string]::join($pairSeparator, @(
+      if($Sort) {
+         foreach( $kv in $Values.GetEnumerator() | Sort $Sort) {
+            if($kv.Name) {
+               '{0}{1}{2}' -f $kv.Name, $KeyValueSeparator, $kv.Value
+            }
+         }
+      } else {
+         foreach( $kv in $Values.GetEnumerator()) {
+            if($kv.Name) {
+               '{0}{1}{2}' -f $kv.Name, $KeyValueSeparator, $kv.Value
+            }
+         }
+      }
+   ))
+}}
+
+function ConvertTo-OAuthSignatureBase {
+#.Synopsis
+#  An internal function to build up the string needed for the OAuth Signature
+PARAM(
+   [Parameter(Mandatory=$true)]
+   [Uri]
+   $Uri
+,
+   [Parameter(Mandatory=$false)]
+   [hashtable]
+   $Parameters =@{}
+,
+   [Parameter(Mandatory=$false)]
+   [ValidateSet(&quot;POST&quot;, &quot;GET&quot;, &quot;PUT&quot;, &quot;DELETE&quot;, &quot;HEAD&quot;, &quot;OPTIONS&quot;)]
+   [string]
+   $Verb = &quot;GET&quot;
+#  ,
+   #  [System.Management.Automation.PSCredential]
+   #  $Credential
+)
+BEGIN {
+   trap { continue }
+   if(!$Uri.IsAbsoluteUri) {
+      $Uri= Join-Url $global:url $Uri
+      Write-Verbose &quot;Relative URL, appending to $($global:url) to get: $Uri&quot;
+   }
+}
+END {
+      $normalizedUrl = (&quot;{0}://{1}&quot; -f $Uri.Scheme, $Uri.Host).ToLower()
+      if (!(($Uri.Scheme -eq &quot;http&quot; -and $Uri.Port -eq 80) -or ($Uri.Scheme -eq &quot;https&quot; -and $Uri.Port -eq 443)))
+      {
+          $normalizedUrl += &quot;:&quot; + $Uri.Port
+      }
+      
+      $normalizedUrl += $Uri.AbsolutePath
+      write-output $normalizedUrl
+
+      if($Uri.Query) { 
+         $Parameters += $(ConvertTo-Hashtable $Uri.Query.trim(&quot;?&quot;))
+      }
+      $normalizedRequestParameters = Format-OAuth (ConvertFrom-Hashtable $Parameters -Sort &quot;Name&quot;,&quot;Value&quot;)
+      
+      ## DEBUG  Write-Host $normalizedRequestParameters -fore yellow
+      write-output $normalizedRequestParameters
+      
+      $result = New-Object System.Text.StringBuilder
+      $null = $result.AppendFormat(&quot;{0}&amp;&quot;, $verb.ToUpper() )
+      $null = $result.AppendFormat(&quot;{0}&amp;&quot;, $(Format-OAuth $normalizedUrl) )
+      $null = $result.AppendFormat(&quot;{0}&quot;, $normalizedRequestParameters)
+
+      ## DEBUG  Write-Host $result.ToString() -fore cyan
+      write-output $result.ToString();
+   }
+}
+
+function Get-OAuthSignature {
+#.Synopsis
+#  An internal function to calculate the OAuth Signature using the HMAC-SHA1 algorithm
+#.Parameter Verb
+#  The HTTP verb which will be invoked is the first part of the OAuth Signature string (defaults to GET)
+#.Parameter Uri
+#  The URI which will be queried is the second part of the OAuth Signature string
+#.Parameter Parameters
+#  All of the parameters which will be passed (regardless of how they will be passed) in hashtable format. The OAuth Base Authorization parameters are not included here, they will be set by this function
+#.Parameter ConsumerKey
+#  The OAuth Consumer Key (a key specific to the application requesting access)
+#.Parameter ConsumerSecret
+#  The OAuth Consumer Secret (the secret part of the application's consumer key shouldn't be given to end users)
+#.Parameter AccessToken
+#  The OAuth Access Token (if you're already authenticated)
+#.Parameter ConsumerSecret
+#  The OAuth Access Secret (the secret part of the access token, if you're already authenticated)
+PARAM( 
+   [Parameter(Mandatory=$true)]
+   [Uri]
+   $Uri
+,
+   [Parameter(Mandatory=$false)]
+   [hashtable]
+   $Parameters =@{}
+,
+   [Parameter(Mandatory=$true)]
+   [string]
+   $ConsumerKey = &quot;key&quot;
+, 
+   [Parameter(Mandatory=$true)]
+   [string]
+   $ConsumerSecret = &quot;secret&quot;
+, 
+   [Parameter(Mandatory=$false)]
+   [string]
+   $AccessToken = &quot;&quot;
+, 
+   [Parameter(Mandatory=$false)]
+   [string]
+   $AccessSecret = &quot;&quot;
+, 
+   [Parameter(Mandatory=$false)]
+   [ValidateSet(&quot;POST&quot;, &quot;GET&quot;, &quot;PUT&quot;, &quot;DELETE&quot;, &quot;HEAD&quot;, &quot;OPTIONS&quot;)]
+   [string]
+   $Verb = &quot;GET&quot;
+#  ,
+   #  [System.Management.Automation.PSCredential]
+   #  $Credential
+)
+END {
+   @($Parameters.Keys) | % {
+      $Parameters.$_ = @($Parameters.$_) | %{ Format-OAuth $_ }
+   }
+
+   $Parameters += Get-OAuthBase $ConsumerKey $AccessToken
+
+   $url, $query, $sigbase = ConvertTo-OAuthSignatureBase -Uri $Uri -Parameters $Parameters -Verb $Verb 
+   Write-Verbose $sigbase
+
+   Write-Output $url, $Parameters
+   $sha = new-object System.Security.Cryptography.HMACSHA1
+   $sha.Key =  [System.Text.Encoding]::Ascii.GetBytes( ('{0}&amp;{1}' -f $(Format-OAuth $ConsumerSecret),$(Format-OAuth $AccessSecret)) )
+
+   Write-Output $([Convert]::ToBase64String( $sha.ComputeHash( [System.Text.Encoding]::Ascii.GetBytes( $sigbase ) ) ))
+}}
+
+function Invoke-OAuthHttp {
+#.Synopsis
+#  The primary OAuth function
+#.Parameter Uri
+#  The URI which will be invoked against
+#.Parameter Parameters
+#  All of the additional parameters which will be passed (regardless of how they will be passed) in hashtable format. Obviously the OAuth Base access parameters are not included here, they will be set by this function
+#.Parameter ConsumerKey
+#  The OAuth Consumer Key (a key specific to the application requesting access)
+#.Parameter ConsumerSecret
+#  The OAuth Consumer Secret (the secret part of the application's consumer key shouldn't be given to end users)
+#.Parameter AccessToken
+#  The OAuth Access Token (if you're already authenticated)
+#.Parameter ConsumerSecret
+#  The OAuth Access Secret (the secret part of the access token, if you're already authenticated)
+#.Parameter Verb
+#  The HTTP verb which will be invoked (defaults to GET)
+PARAM(
+   [Parameter(Mandatory=$true)]
+   [Uri]
+   $Uri
+,
+   [Parameter(Mandatory=$false)]
+   [HashTable]
+   $Parameters =@{}
+,
+   [Parameter(Mandatory=$true)]
+   [string]
+   $ConsumerKey = &quot;key&quot;
+, 
+   [Parameter(Mandatory=$true)]
+   [string]
+   $ConsumerSecret = &quot;secret&quot;
+, 
+   [Parameter(Mandatory=$false)]
+   [string]
+   $AccessToken = &quot;&quot;
+, 
+   [Parameter(Mandatory=$false)]
+   [string]
+   $AccessSecret = &quot;&quot;
+, 
+   [Parameter(Mandatory=$false)]
+   [ValidateSet(&quot;POST&quot;, &quot;GET&quot;, &quot;PUT&quot;, &quot;DELETE&quot;, &quot;HEAD&quot;, &quot;OPTIONS&quot;)]
+   [string]
+   $Verb = &quot;GET&quot;
+)
+END {
+   $parameters.format = &quot;xml&quot;
+
+   if($AccessToken -and $AccessSecret) {
+      $script:url, $script:Headers, $script:sig = Get-OAuthSignature -Uri $Uri -Parameters $Parameters `
+                                                -ConsumerKey    $ConsumerKey    `
+                                                -ConsumerSecret $ConsumerSecret `
+                                                -AccessToken    $AccessToken    `
+                                                -AccessSecret   $AccessSecret   `
+                                                -Verb $Verb.ToUpper()
+   } else {
+      $script:url, $script:Headers, $script:sig = Get-OAuthSignature -Uri $Uri -Parameters $Parameters `
+                                                -ConsumerKey    $ConsumerKey    `
+                                                -ConsumerSecret $ConsumerSecret `
+                                                -Verb $Verb.ToUpper()
+   }
+   
+   $Headers += @{ oauth_signature = Format-OAuth $sig }
+   $Parameters.Keys | %{ $Headers.Remove($_) }
+   $WithHeader = @{ Authorization=&quot;OAuth {0}`&quot;&quot; -f $(ConvertFrom-Hashtable $Headers &quot;`&quot;, &quot; &quot;=`&quot;&quot;) }
+   switch($Verb) {
+      &quot;POST&quot; {
+         $plug = Get-DreamPlug $Uri.AbsoluteUri -Headers $WithHeader
+         $script:result = Invoke-Http &quot;POST&quot; -Plug $plug -Content ([HashTable]$Parameters) | Receive-Http Xml
+      }
+      &quot;GET&quot; {
+         $plug = Get-DreamPlug $Uri.AbsoluteUri -Headers $WithHeader -With $Parameters
+         $script:result = Invoke-Http &quot;GET&quot; -Plug $plug | Receive-Http Xml   
+      }
+   }
+   ## Freakydeaky magic pulls an access hashtable out of it's hat
+   if(!$AccessToken -and $result.html -and $result.html -match &quot;oauth_token_secret&quot;) {
+      $result.html | ConvertTo-Hashtable
+   } else {
+      $result
+   }
+}
+}
+
+# http`://oauth.net/core/1.0#auth_step3
+#
+# A good place to practice: http`://term.ie/oauth/example/
+#
+# The reason I started playing:  http`://friendfeed.com/api/documentation
+#                                http`://friendfeed.com/api/applications/6a3c26fe1af047bb9553b3098bee5867
+#
+# One other resource I found helpful (I had to make a few enhancements to HttpRest):
+# http`://blog.developer.mindtouch.com/2009/08/05/async-io-dream-vs-parallel-extensions/
+# And thanks to http`://oauth.googlecode.com/svn/code/csharp/
+# And thanks to http`://oauth.googlecode.com/svn/code/python/oauth/
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

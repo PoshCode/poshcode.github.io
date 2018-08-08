@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Bill Barry">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/3238.ps1">download</a></h3>
+<p>CruiseControl.Net build script template with detailed logging via the CCNETListenerFile</p>
+<pre><code class="language-posh">Param(
+	[string]$CCNetListenerFile = $null,
+	[string]$MyComputerName = [System.Environment]::MachineName,
+	[string]$Config='Debug',
+	[int]$CCNetLogQueueLength = 10
+	[switch]$NoBuild,
+	[string]$SpecificVdir = $null
+)
+# usage from ccnet will be something like this:
+#...
+#&lt;powershell&gt;
+#&lt;scriptDirectory&gt;iphi&lt;/scriptDirectory&gt;
+#&lt;script&gt;deploy.ps1&lt;/script&gt;
+#&lt;executable&gt;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&lt;/executable&gt;
+#&lt;dynamicValues&gt;
+#  &lt;replacementValue property=&quot;buildArgs&quot;&gt;
+#    &lt;format&gt;-CCNetListenerFile {0}&lt;/format&gt;
+#    &lt;parameters&gt;
+#      &lt;namedValue name=&quot;$CCNetListenerFile&quot; value=&quot;Default&quot; /&gt;
+#    &lt;/parameters&gt;
+#  &lt;/replacementValue&gt;
+#&lt;/dynamicValues&gt;                    
+#&lt;/powershell&gt;
+#...
+
+[Environment]::CurrentDirectory=(Get-Location -PSProvider FileSystem).ProviderPath
+
+# The CCNetListenerFile is an xml file used by ccnet to list what is going on during the build in details
+function CCNetListenerLog( $q ) {
+	if($CCNetListenerFile -ne '' -and $CCNetListenerFile -ne $null) { 
+		$stream = [System.IO.StreamWriter] $CCNetListenerFile
+		$stream.AutoFlush = $true;
+		$stream.WriteLine(&quot;&lt;data&gt;&quot;)
+		foreach( $item in $q ) {
+			$stream.WriteLine($item)
+		}
+		$stream.WriteLine(&quot;&lt;/data&gt;&quot;)
+		$stream.Close()
+	}
+}
+
+$q = New-Object System.Collections.Queue
+function LogBuildPoint( [string]$text ) {
+	if( $q.Count -ge $CCNetLogQueueLength ) {
+		# store in temp var so there is no output, can probably do this better ...
+		$old = $q.Dequeue();
+	}
+	$stamp = [System.DateTime]::Now.ToString(&quot;yyyy-MM-dd hh:mm:ss&quot;);
+	$item = &quot;&lt;Item Time='$stamp' Data='$text' /&gt;&quot;
+
+	$q.Enqueue( $item );
+	#use write-host because otherwise this becomes included in the function output, not necessarily written to the screen
+	#also this write-host causes the message to be put in the build log when run from ccnet
+	Write-Host $text 
+	if($CCNetListenerFile -ne '' -and $CCNetListenerFile -ne $null) { 
+		CCNetListenerLog $q 
+	}
+}
+
+#push directory (and update the environment variable so that relative paths work as expected without &quot;.\&quot;)
+function pd( [string]$location ) {
+	Push-Location $location;
+	[Environment]::CurrentDirectory=(Get-Location -PSProvider FileSystem).ProviderPath;
+}
+#pop directory
+function ppd() {
+	Pop-Location
+	[Environment]::CurrentDirectory=(Get-Location -PSProvider FileSystem).ProviderPath;
+}
+
+function Build() {
+	#you can log a repetative task and estimate when it will finish like this:
+	$total = ($repetition_object | Measure-Object).Count
+	$num = 0
+	$startTime = [System.DateTime]::Now
+	$repetition_object | % {
+		$_ | RepetitiveTask
+		
+		$num++
+		$curTime = [System.DateTime]::Now
+		$percent = ($num / $total)
+		$expected = ($startTime + (New-Object TimeSpan (($curTime - $startTime).Ticks / $percent))).ToShortTimeString()
+		LogBuildPoint &quot;Finished $num out of $total, expect to complete at: $expected&quot;		
+	}
+}
+
+#useful if you want to call this from the CLI to declare the functions
+if(!$NoBuild) {
+	Build
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

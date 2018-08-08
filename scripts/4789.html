@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Victor Vogelpoel">
+    <title>Measure-ScriptCode - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Measure-ScriptCode</h1>
+<h3><a href="//scripts/4789.ps1">download</a></h3>
+<p>Measure-ScriptCode calculates some code metrics like the number of lines-of-code, comments, functions from script or module files it is fed. The script is PowerShell 3 or later only because of use of AST (Abstract Syntax Tree).</p>
+<p>Currently it calculates the following metrics:</p>
+<pre><code>Number of Lines of Code,
+Number of Comments, while multi-line comments are counted as one,
+Number of Functions, filters and workflow functions
+Number of files, module and manifest files
+Total number of Lines, words and characters. 
+</code></pre>
+<p>The command returns a custom object with the calculated metrics:</p>
+<p>Files                : 189
+Modules              : 8
+Manifests            : 8
+CodeLines            : 11704
+Comments             : 3823
+Functions            : 262
+Workflows            : 8
+Filters              : 1
+Characters           : 559350
+Lines                : 18773
+Words                : 67540</p>
+<p>If you like to learn more, see my blogpost about this command at http://blog.victorvogelpoel.nl/2014/01/12/powershell-measure-scriptcode-calculating-script-code-metrics/</p>
+<pre><code class="language-posh"># Measure-ScriptCode.ps1
+# Return metrics about the script and module files
+# PowerShell 3 is required as Abstract Syntax Trees are used.
+# Jan 2014
+# If this works, Victor Vogelpoel &lt;victor.vogelpoel@macaw.nl&gt; wrote this.
+# If it doesn't, I don't know who wrote this.
+# Blogpost at http://blog.victorvogelpoel.nl/2014/01/12/powershell-measure-scriptcode-calculating-script-code-metrics/
+
+#requires -version 3
+Set-PSDebug -Strict
+Set-StrictMode -Version Latest
+
+function Measure-ScriptCode
+{
+	[CmdletBinding()]
+	param
+	(
+	  [Parameter(Mandatory=$true, Position=1, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true, HelpMessage=&quot;One or more PS1 or PSM1 files to calculate code metrics for&quot;)]
+	  [Alias('PSPath', 'Path')]
+	  [string[]]$ScriptFile
+	)
+	
+	begin
+	{
+		$files 			= 0
+		$modules 		= 0
+		$manifests 		= 0
+	
+		$lines 			= 0
+		$words 			= 0
+		$characters		= 0
+		$codeLines 		= 0
+		$comments 		= 0
+		$functions		= 0
+		$workflows 		= 0
+		$filters 		= 0
+		$parseErrors	= 0
+	}
+
+	process
+	{
+		foreach ($file in $ScriptFile)
+		{
+			if ($file -like &quot;*.ps1&quot;) { $files++ }
+			if ($file -like &quot;*.psm1&quot;) { $modules++ }
+			if ($file -like &quot;*.psd1&quot;) { $manifests++ }
+			
+			$fileContentsArray	= Get-Content -Path $file
+			
+			if ($fileContentsArray)
+			{
+				# First, measure basic metrics
+				$measurement 		= $fileContentsArray | Measure-Object -Character -IgnoreWhiteSpace -Word -Line
+				$lines 			+= $measurement.Lines
+				$words 			+= $measurement.Words
+				$characters 		+= $measurement.Characters				
+		
+				$tokenAst			= $null
+				$parseErrorsAst		= $null
+				# Use the PowerShell 3 file parser to create the scriptblock AST, tokens and error collections
+				$scriptBlockAst		= [System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$tokenAst, [ref]$parseErrorsAst)
+
+				# Get the number of comment lines and comments on the end of a code line
+				$comments		+= @($tokenAst | where { $_.Kind -eq &quot;Comment&quot; } ).Length 
+				
+				# Calculate the 'lines of code': any line not containing comment or commentblock and not an empty or whitespace line.
+				# Remove comment tokens from the tokenAst, remove all double newlines and count all the newlines (minus 1)
+				$prevTokenIsNewline	= $false
+				$codeLines 		+= @($tokenAst | select -ExpandProperty Kind |  where { $_ -ne &quot;comment&quot; } | where {
+											if ($_ -ne &quot;NewLine&quot; -or (!$prevTokenIsNewline))
+											{
+												$_
+											}
+											$prevTokenIsNewline = ($_ -eq &quot;NewLine&quot;)
+										} | where { $_ -eq &quot;NewLine&quot; }).Length-1
+				
+				$parseErrors 		+= @($parseErrorsAst).Length
+
+				if ($scriptBlockAst -ne $null)
+				{
+					# Find all functions, filters and workflows in the AST, including nested functions
+					$functionAst 	= $scriptBlockAst.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst]}, $true)
+
+					# Count the specific implementation: 'function', 'filter' or 'workflow'
+					$functions 	+= @($functionAst | where { (!$_.IsFilter) -and (!$_.IsWorkflow) }).Length
+					$filters	+= @($functionAst | where { $_.IsFilter }).Length
+					$workflows	+= @($functionAst | where { $_.IsWorkflow }).Length
+				}
+			}
+		}
+	}
+
+	end
+	{
+		return [PSCustomObject]@{
+			Files 		= $files
+			Modules 	= $modules
+			Manifests	= $manifests
+
+			CodeLines	= $codeLines
+			Comments 	= $comments
+			Functions 	= $functions
+			Workflows	= $workflows
+			Filters		= $filters
+
+			ParseErrors	= $parseErrors
+			Characters 	= $characters
+			Lines 		= $lines
+			Words		= $words
+		}
+	}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

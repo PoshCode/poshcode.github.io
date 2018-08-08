@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>Add-SqlTable - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Add-SqlTable</h1>
+<h3><a href="//scripts/3535.ps1">download</a> - <a href="//scripts/3295.md">parent</a></h3>
+<p>Creates a SQL Server table from a DataTable using SMO.</p>
+<pre><code class="language-posh">try {add-type -AssemblyName &quot;Microsoft.SqlServer.ConnectionInfo, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot; -EA Stop}
+catch {add-type -AssemblyName &quot;Microsoft.SqlServer.ConnectionInfo&quot;}
+
+try {add-type -AssemblyName &quot;Microsoft.SqlServer.Smo, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot; -EA Stop} 
+catch {add-type -AssemblyName &quot;Microsoft.SqlServer.Smo&quot;} 
+
+####################### 
+function Get-SqlType 
+{ 
+    param([string]$TypeName) 
+ 
+    switch ($TypeName)  
+    { 
+        'Boolean' {[Data.SqlDbType]::Bit} 
+        'Byte[]' {[Data.SqlDbType]::VarBinary} 
+        'Byte'  {[Data.SQLDbType]::VarBinary} 
+        'Datetime'  {[Data.SQLDbType]::DateTime} 
+        'Decimal' {[Data.SqlDbType]::Decimal} 
+        'Double' {[Data.SqlDbType]::Float} 
+        'Guid' {[Data.SqlDbType]::UniqueIdentifier} 
+        'Int16'  {[Data.SQLDbType]::SmallInt} 
+        'Int32'  {[Data.SQLDbType]::Int} 
+        'Int64' {[Data.SqlDbType]::BigInt} 
+        'UInt16'  {[Data.SQLDbType]::SmallInt} 
+        'UInt32'  {[Data.SQLDbType]::Int} 
+        'UInt64' {[Data.SqlDbType]::BigInt} 
+        'Single' {[Data.SqlDbType]::Decimal}
+        default {[Data.SqlDbType]::VarChar} 
+    } 
+     
+} #Get-SqlType
+
+####################### 
+&lt;# 
+.SYNOPSIS 
+Creates a SQL Server table from a DataTable 
+.DESCRIPTION 
+Creates a SQL Server table from a DataTable using SMO. 
+.EXAMPLE 
+$dt = Invoke-Sqlcmd2 -ServerInstance &quot;Z003\R2&quot; -Database pubs &quot;select *  from authors&quot;; Add-SqlTable -ServerInstance &quot;Z003\R2&quot; -Database pubscopy -TableName authors -DataTable $dt 
+This example loads a variable dt of type DataTable from a query and creates an empty SQL Server table 
+.EXAMPLE 
+$dt = Get-Alias | Out-DataTable; Add-SqlTable -ServerInstance &quot;Z003\R2&quot; -Database pubscopy -TableName alias -DataTable $dt 
+This example creates a DataTable from the properties of Get-Alias and creates an empty SQL Server table. 
+.NOTES 
+Add-SqlTable uses SQL Server Management Objects (SMO). SMO is installed with SQL Server Management Studio and is available 
+as a separate download: http://www.microsoft.com/downloads/details.aspx?displaylang=en&amp;FamilyID=ceb4346f-657f-4d28-83f5-aae0c5c83d52 
+Version History 
+v1.0   - Chad Miller - Initial Release 
+v1.1   - Chad Miller - Updated documentation
+v1.2   - Chad Miller - Add loading Microsoft.SqlServer.ConnectionInfo
+v1.3   - Chad Miller - Added error handling
+v1.4   - Chad Miller - Add VarCharMax and VarBinaryMax handling
+v1.5   - Chad Miller - Added AsScript switch to output script instead of creating table
+v1.6   - Chad Miller - Updated Get-SqlType types
+#&gt; 
+function Add-SqlTable 
+{ 
+ 
+    [CmdletBinding()] 
+    param( 
+    [Parameter(Position=0, Mandatory=$true)] [string]$ServerInstance, 
+    [Parameter(Position=1, Mandatory=$true)] [string]$Database, 
+    [Parameter(Position=2, Mandatory=$true)] [String]$TableName, 
+    [Parameter(Position=3, Mandatory=$true)] [System.Data.DataTable]$DataTable, 
+    [Parameter(Position=4, Mandatory=$false)] [string]$Username, 
+    [Parameter(Position=5, Mandatory=$false)] [string]$Password, 
+    [ValidateRange(0,8000)] 
+    [Parameter(Position=6, Mandatory=$false)] [Int32]$MaxLength=1000,
+    [Parameter(Position=7, Mandatory=$false)] [switch]$AsScript
+    ) 
+ 
+ try {
+    if($Username) 
+    { $con = new-object (&quot;Microsoft.SqlServer.Management.Common.ServerConnection&quot;) $ServerInstance,$Username,$Password } 
+    else 
+    { $con = new-object (&quot;Microsoft.SqlServer.Management.Common.ServerConnection&quot;) $ServerInstance } 
+     
+    $con.Connect() 
+ 
+    $server = new-object (&quot;Microsoft.SqlServer.Management.Smo.Server&quot;) $con 
+    $db = $server.Databases[$Database] 
+    $table = new-object (&quot;Microsoft.SqlServer.Management.Smo.Table&quot;) $db, $TableName 
+ 
+    foreach ($column in $DataTable.Columns) 
+    { 
+        $sqlDbType = [Microsoft.SqlServer.Management.Smo.SqlDataType]&quot;$(Get-SqlType $column.DataType.Name)&quot; 
+        if ($sqlDbType -eq 'VarBinary' -or $sqlDbType -eq 'VarChar') 
+        { 
+            if ($MaxLength -gt 0) 
+            {$dataType = new-object (&quot;Microsoft.SqlServer.Management.Smo.DataType&quot;) $sqlDbType, $MaxLength}
+            else
+            { $sqlDbType  = [Microsoft.SqlServer.Management.Smo.SqlDataType]&quot;$(Get-SqlType $column.DataType.Name)Max&quot;
+              $dataType = new-object (&quot;Microsoft.SqlServer.Management.Smo.DataType&quot;) $sqlDbType
+            }
+        } 
+        else 
+        { $dataType = new-object (&quot;Microsoft.SqlServer.Management.Smo.DataType&quot;) $sqlDbType } 
+        $col = new-object (&quot;Microsoft.SqlServer.Management.Smo.Column&quot;) $table, $column.ColumnName, $dataType 
+        $col.Nullable = $column.AllowDBNull 
+        $table.Columns.Add($col) 
+    } 
+ 
+    if ($AsScript) {
+        $table.Script()
+    }
+    else {
+        $table.Create()
+    }
+}
+catch {
+    $message = $_.Exception.GetBaseException().Message
+    Write-Error $message
+}
+  
+} #Add-SqlTable
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

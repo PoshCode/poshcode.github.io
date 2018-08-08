@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Makovec">
+    <title>SMS hierarchy in Visio - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SMS hierarchy in Visio</h1>
+<h3><a href="//scripts/941.ps1">download</a></h3>
+<p>The script smsDiagram draws your SMS 2003 hierarchy in Visio 2003. Script itself is commented in my blog at http://powershell-cz.blogspot.com/2009/03/smsdiagram-draw-your-sms-hierarchy-with.html</p>
+<pre><code class="language-posh"># Name   : smsDiagram.ps1
+# Author : David &quot;Makovec&quot; Moravec
+# Web    : http://www.powershell.cz
+# Email  : powershell.cz@googlemail.com
+# Twitter: makovec
+#
+# Description: Draw SMS 2003 hierarchy in Visio
+#
+# Version: 1.0
+# History:
+#  v0.1 - (add) Alan's vDiagram functions
+#         (add) WMI query
+#  v0.2 - (add) -server parameter
+#         (add) -textInfo parameter
+#         (add) Primary/Secondary 
+#  v0.3 - (add) Visio drawing
+#         (add) -debug parameter
+#  v0.4 - (change) working with $x, $y to fine tune shapes
+#         (add) save final Visio file
+#  v1.0 - (changed) script renamed to smsDiagram
+# 
+# Usage: smsDiagram.ps1 -server czsms01
+#          - Draw SMS hierarchy in Visio
+#        smsDiagram.ps1 -server czsms01 -textInfo
+#          - Print SMS hierarchy to console
+#
+#################################################################
+
+param (
+	$server = $(throw &quot;You must enter server name.&quot;),
+	[switch]$debug,
+	[switch]$textInfo
+)
+
+# $debug set - enable messages
+if ($debug) {
+	$DebugPreference = &quot;Continue&quot;
+	Write-Debug &quot;Debugging enabled.&quot;
+}
+
+###############################################################################
+########################################################## FUNCTIONS DEFINITION
+###############################################################################
+
+#                                                      Function Add-VisioObject
+###############################################################################
+function Add-VisioObject ($mastObj, $item) {
+ 	Write-Debug &quot;fnc(Add-VisioObject) $($item.SiteCode) - $($item.ServerName)&quot;
+	Write-Host &quot;Adding $($item.SiteCode) - $($item.ServerName)&quot;
+	
+	# Drop the selected stencil on the active page, with the coordinates x, y
+  	$shpObj = $pagObj.Drop($mastObj, $script:x, $script:y)
+	
+	# Enter text for the object
+  	$shpObj.Characters.Text = $item.SiteCode
+	
+	#Return the visioobject to be used
+	return $shpObj
+ } # function Add-VisioObject
+
+#                                                  Function Connect-VisioObject
+###############################################################################
+function Connect-VisioObject ($firstObj, $secondObj)
+{
+	$shpConn = $pagObj.Drop($pagObj.Application.ConnectorToolDataObject, 0, 0)
+
+	# Connect its Begin to the 'From' shape:
+	$connectBegin = $shpConn.CellsU(&quot;BeginX&quot;).GlueTo($firstObj.CellsU(&quot;PinX&quot;))
+	
+	# Connect its End to the 'To' shape:
+	$connectEnd = $shpConn.CellsU(&quot;EndX&quot;).GlueTo($secondObj.CellsU(&quot;PinX&quot;))
+		
+} # function Connect-VisioObject
+
+#                                                  Function Print-TextHierarchy
+###############################################################################
+function Print-TextHierarchy {
+param (
+	$inputSrv,
+	$level
+)
+
+$downLevelSites = $servers |? {$_.ReportingSiteCode -eq $inputSrv.SiteCode}
+$level += 1
+$space = &quot; &quot;*$level*2
+
+if ($downLevelSites -ne $null) {	
+	foreach ($i in $downLevelSites) {
+		Write-Host $space -NoNewLine
+		if ($i.Type -eq 2) {
+			$text = &quot;$($i.SiteCode) (P)&quot;
+		}
+		else {
+			$text = &quot;$($i.SiteCode)&quot;
+		}
+		
+		Write-Host $text
+		Print-TextHierarchy $i $level
+	} # foreach $downLevelSites
+}
+else {
+	# empty block
+} # else
+} # function Print-TextHierarchy
+
+#                                                  Function Draw-VisioHierarchy
+###############################################################################
+function Draw-VisioHierarchy {
+param (
+	$VSobjParent,
+	$inputSrv
+)
+
+# Type of server (primary/secondary)
+if ($inputSrv.Type -eq 2) {
+	# Primary server
+	$DrawObj = $PrimaryObj
+}
+else {
+	# Secondary server
+	$DrawObj = $SecondaryObj
+}		
+
+$VSobjCurr = Add-VisioObject $DrawObj $inputSrv
+
+if ($VSobjParent -ne $null) {
+	Connect-VisioObject $VSobjParent $VSobjCurr
+}
+
+$downLevelSites = $servers |? {$_.ReportingSiteCode -eq $inputSrv.SiteCode}
+
+if ($downLevelSites -ne $null) {
+	$script:y -= 1.5
+	foreach ($i in $downLevelSites) {
+		$script:x += 1
+		Draw-VisioHierarchy $VSobjCurr $i
+	} # foreach $downLevelSites
+	$script:x -= 1
+}
+else {
+	# Move secondary servers x-axis tam
+	$script:x += 1	
+	$script:y += 1.5	
+} # else
+$script:y -= 1.5
+if ($inputSrv.Type -eq 2) {
+	$script:x -= ($offset*$downLevelSites.Count)-1
+}
+$script:x -= $offset
+} # function Draw-VisioHierarchy
+
+###############################################################################
+########################################################################## MAIN
+###############################################################################
+
+#                                                            Load info from WMI
+###############################################################################
+
+# Site code
+$siteCode = (Get-WmiObject -ComputerName $server -Namespace root/sms `
+	-Class SMS_ProviderLocation -Filter &quot;ProviderForLocalSite='True'&quot;).SiteCode
+# SMS Namespace path
+$SMSWMINamespace = 'root/sms/site_'+$siteCode
+
+# List of children servers from SMS_Site class
+$servers = Get-WmiObject -ComputerName $server -Namespace $SMSWMINamespace -Class SMS_Site | `
+	Select ReportingSiteCode, SiteCode, ServerName, Type | `
+	Sort ReportingSiteCode, SiteCode
+
+# For testing at home use exported objects
+#$servers = Import-Clixml ./SMSsvr_t.xml | Sort ReportingSiteCode, SiteCode
+
+# Set central server as object
+$centralSMSServer = $servers[0]
+
+# Do you want text representation to the console ?
+if ($textInfo) {
+	Write-Host &quot;$($centralSMSServer.SiteCode) (P)&quot;
+	Print-TextHierarchy $centralSMSServer 0
+	return
+}
+
+#                                                         Prepare Visio objects
+###############################################################################
+
+# Create an instance of Visio and create an empty document 
+$AppVisio = New-Object -ComObject Visio.Application
+$docsObj = $AppVisio.Documents
+$DocObj = $docsObj.Add(&quot;Detailed Network Diagram.vst&quot;)
+
+# Set the active page
+$pagsObj = $AppVisio.ActiveDocument.Pages
+$pagObj = $pagsObj.Item(1)
+
+# Select stencils to drop
+$stnObj = $AppVisio.Documents.Item(&quot;SERVER_M.VSS&quot;)
+
+# Set server types shapes
+$PrimaryObj = $stnObj.Masters.Item(&quot;Database Server&quot;)
+$SecondaryObj =  $stnObj.Masters.Item(&quot;Server&quot;)
+
+# Set coordinates for first object
+$script:x = 1
+$script:y = 8
+$offset = 1
+
+Draw-VisioHierarchy $null $centralSMSServer 
+
+# Resize to fit page
+$pagObj.ResizeToFitContents()
+
+$SaveFile = [system.Environment]::GetFolderPath('MyDocuments') + &quot;\My_smsDiagram.vsd&quot;
+$DocObj.SaveAs($SaveFile) | Out-Null
+Write-Output &quot;Document saved as $SaveFile&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

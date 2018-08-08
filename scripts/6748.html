@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Galadriann">
+    <title>Check Server Health - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Check Server Health</h1>
+<h3><a href="//scripts/6748.ps1">download</a> - <a href="//scripts/820.md">parent</a></h3>
+<p>ping-computer is not a standard Powershell command...  replace line 54 with if (test-connection $srv -count 1).protocolAddress</p>
+<pre><code class="language-posh">########################################################
+# Created by Brian English 
+#   Brian.English@charlottefl.com
+#   eddiephoenix@gmail.com
+# 
+# for Charlotte County Government
+# No warranty suggested or implied
+########################################################
+# Purpose: Check Server Service Health
+########################################################
+# Notes:   For checking Vmware to work you must have the VMWare ToolKit for windows installed
+#          For checking Citrix to work you must have the MPSSDK intalled
+#          For checking DNS to work you must have dcdiag in your path
+########################################################
+#input params
+param($Server)
+#################
+#other variables
+#################
+$GLOBAL:priority=&quot;normal&quot;
+$FreePercent = 5
+$date = date
+#################
+
+#turn off error handling
+#$SavedEA=$Global:ErrorActionPreference 
+#$Global:ErrorActionPreference=&quot;SilentlyContinue&quot; 
+
+$inAry = @($input)
+if($inAry.count -gt 0)
+{$server = $inary}
+
+
+#############
+function checkSystem()
+{ $status = &quot;`nChecking Server Systems&quot;    
+  
+  for($i = 0; $i -lt @($Server).count; $i++ ) 
+  { $srv = @($Server)[$i]
+    $checkVMWare = $false
+    $checkDNS = $false
+    $checkDHCP = $false
+    $checkShares = $false
+    $checkExc = $false
+    $checkCitrix = $false
+    $checkIIS = $false
+    
+    write-progress &quot;Checking Server Systems: $srv &quot;-&gt; -perc ($i * (100/@($Server).count))
+    
+    $status += &quot;`n***$srv***&quot;
+    $errcnt = 0
+    $error.clear()
+    
+    @@if((test-connection &quot;$srv&quot; -count 1).protocoladdress -ne &quot;&quot;)
+    {
+      if((gwmi -computername $srv win32_computersystem).dnshostname -ne $srv -or (gwmi -computername $srv win32_computersystem).name -ne $srv)
+      { $status += &quot;`n`t! ServerName does not match&quot;
+        $errcnt += 1
+      }
+    
+      foreach($drive in(gwmi win32_logicaldisk -computername $srv | where{$_.Drivetype -like &quot;3&quot;}))
+      { if((($drive.freespace/1gb)/($drive.size/1gb) * 100 ) -lt $FreePercent)
+        { $status += &quot;`n`t! Drive: &quot; + $drive.deviceid + &quot; Free Space: &quot; + ($drive.freespace/ 1GB) + &quot;GB&quot;
+          $priority = &quot;high&quot;
+          $errcnt += 1
+        }
+      }
+      
+      foreach($svc in(gwmi win32_service -computername $srv | where{$_.StartMode -like &quot;Auto&quot; -and $_.name -ne &quot;SysmonLog&quot;}))
+      { if($svc.state -ne &quot;Running&quot;)
+        { $status += &quot;`n`t! Service: &quot; + $svc.DisplayName + &quot; is &quot; + $svc.state
+          $errcnt += 1 
+        }
+        if($svc.name -eq &quot;vpxd&quot; -and $svc.state -eq &quot;Running&quot;)
+        {$checkVMWare = $true}
+        if($svc.name -eq &quot;DNS&quot; -and $svc.state -eq &quot;Running&quot;)
+        {$checkDNS = $true}
+        if($svc.name -eq &quot;DHCPServer&quot; -and $svc.state -eq &quot;Running&quot;)
+        {$checkDHCP = $true}
+        if($svc.name -eq &quot;lanmanserver&quot; -and $svc.state -eq &quot;Running&quot;)
+        {$checkShares = $true}
+        if($svc.name -eq &quot;MSExchangeIS&quot; -and $svc.state -eq &quot;Running&quot;)
+        {$checkExc = $true}
+        if($svc.name -eq &quot;cpsvc&quot; -and $svc.state -eq &quot;Running&quot;)
+        {$checkCitrix = $true}
+        if($svc.name -eq &quot;IISADMIN&quot; -and $svc.state -eq &quot;Running&quot;)
+        {$checkIIS = $true}
+      }
+          
+      if($checkVMWare)
+      { $vi = get-esx $srv
+        
+        $status += &quot;`nHosts&quot;    
+        foreach($vmh in get-vmhost)
+        { if($vmh.state -ne &quot;Connected&quot;)
+          { $status += &quot;`n`t! Host: &quot; + $vmh.Name + &quot;; State: &quot; + $vmh.state  }
+        }
+        
+        $status += &quot;`nVMs&quot;
+        $vms = (get-vm -server $vi)      
+        $greenvms = 0
+        
+        $status += &quot;`n`tTotal VMs: &quot; + $vms.count
+        $status += &quot;`n`tVMs powered Off: &quot; + ($vms | where{$_.PowerState -eq &quot;PoweredOff&quot;}).count
+        $status += &quot;`n`tVMs powered On: &quot; + ($vms | where{$_.PowerState -eq &quot;PoweredOn&quot;}).count
+            
+        foreach($vm in ($vms | where{$_.PowerState -eq &quot;PoweredOn&quot;}))
+        { $vmv = get-view $vm.id
+          
+          if($vmv.Overallstatus -ne &quot;green&quot; -or $vmv.configstatus -ne &quot;green&quot;) # -or $vmv.guestheartbeatstatus -ne &quot;green&quot;)
+          { $status += &quot;`n`t`t&quot; + $vm.name + &quot; Overall: &quot; + $vmv.overallStatus
+            $status += &quot;`n`t`t&quot; + $vm.name + &quot; Config: &quot; + $vmv.configStatus
+            $status += &quot;`n`t`t&quot; + $vm.name + &quot; Heartbeat: &quot; + $vmv.GuestHeartbeatStatus
+            
+            foreach($alrm in $vmv.triggeredAlarmState)
+            { $av = get-view $alrm.alarm
+              $status += &quot;`n`t`t &quot; + $vm.name + &quot; Triggered: &quot; + $av.info.Name
+            }
+            $priority = &quot;high&quot;
+          }
+          else
+          {$greenvms += 1}              
+        }#for
+        $status += &quot;`n`tGreen VMs: &quot; + $greenvms + &quot;`n&quot;
+      }
+      
+      if($checkDNS)
+      { foreach($ln in (dcdiag /test:DNS /s:$srv /v))
+        { if( $ln -like &quot;*warning:*&quot; -or $ln -like &quot;*error:*&quot;) 
+          {$status += &quot;`n`t&quot; + $ln.trim()}
+        }
+        foreach($ln in (dcdiag /test:CheckSecurityError /s:$srv /v))
+        { if($ln -like &quot;*warning:*&quot; -or $ln -like &quot;*error:*&quot;) 
+          {$status += &quot;`n`t&quot; + $ln.trim()}
+        }
+      }#checkdns
+      
+      if($checkDHCP)
+      {
+        ##########################
+        #add code to check DHCP data
+      }#checkDHCP
+      
+      if($checkShares)
+      { foreach($share in (gwmi win32_share -computername $srv | where {$_.status -ne &quot;OK&quot;}))
+        { $status += &quot;`n`t! Share: &quot; + $share.Name + &quot; is &quot; + $share.status
+          $errcnt += 1
+        }      
+      }#checkShares
+      
+      if($checkExc)
+      { foreach($exc in (gwmi ExchangeConnectorState -namespace &quot;root\cimv2\applications\exchange&quot; -computername $srv | where {$_.IsUp -ne $true}))
+        { $status += &quot;`n`t! Exchange Connector: &quot; + $exc.Name + &quot; is DOWN&quot;
+          $errcnt += 1
+        }
+        
+        foreach($exc in (gwmi ExchangeQueue -namespace &quot;root\cimv2\applications\exchange&quot; -computername $srv | where {$_.NumberOfMessages -gt 1}))
+        { $status += &quot;`n`t! Exchange Queue: &quot; + $exc.QueueName + &quot; has &quot; + $exc.NumberofMessages
+          $errcnt += 1
+        }
+        
+        foreach($exc in (gwmi Exchange_Logon -namespace &quot;root\microsoftexchangev2&quot; -computername $srv | where {$_.Latency -gt 60000}))
+        { $status += &quot;`n`t! Exchange Logons: &quot; + $exc.MailboxDisplayName + &quot; in Store &quot; + $exc.StoreName + &quot; has a latency of &quot; + $exc.Latency
+          $errcnt += 1
+        }
+        
+      }#checkExc
+      
+      if($checkCitrix)
+      { $mfserver = New-Object -com &quot;MetaframeCom.MetaFrameServer&quot;
+        $mfserver.initialize(6,$srv)
+        $status += &quot;`n`t Sesion Count &quot; + $mfserver.SessionCount
+        
+        switch($mfserver.WinServerObject.EnableLogon)
+        {
+          &quot;0&quot; { $status += &quot;`n`t! Not Allowing Connections&quot;
+                $errcnt += 1
+              }
+          &quot;1&quot; {}
+        }
+      }#checkCitrix
+      
+      if($checkIIS)
+      { $pathToTest = &quot;\\$srv\c$\windows\system32\inetsrv\metabase.xml&quot;
+        if(test-path $pathToTest)
+        { $mb=[xml](get-content $pathToTest)
+        
+          $WebSites = $mb.configuration.MBProperty.IIsWebServer 
+          $WebVDirs = $mb.configuration.MBProperty.IIsWebVirtualDir
+          
+          If(!($mb.configuration.MBProperty.IIsWebService.Custom | where {$_.name -eq &quot;ServerComment&quot;}).value) 
+          { $WebServerName = &quot;[UNKNOWN]&quot;  } 
+          Else 
+          { $WebServerName = ($mb.configuration.MBProperty.IIsWebService.Custom | where {$_.name -eq &quot;ServerComment&quot;}).value }
+          
+          If($WebServerName -ne $srv) 
+          { $status += &quot;`n`t! WebServer Name Mismatch $WebServerName, $srv&quot;  
+            $errcnt += 1
+          }
+        
+          ForEach ($Site in $WebSites) 
+          { if($Site.ServerComment -notlike &quot;Allows*&quot;)
+            { $sitePath = &quot;$srv&quot; + ($site.location -replace &quot;/LM&quot;,&quot;&quot;)
+              $siteState = ([ADSI](&quot;IIS://$sitepath&quot;)).serverstate
+              if($siteState -ne &quot;2&quot;)
+              { switch($sitestate)
+                { &quot;1&quot; {$siteState = &quot;starting&quot;}
+                  &quot;2&quot; {$siteState = &quot;started&quot;}
+                  &quot;3&quot; {$siteState = &quot;stopping&quot;}
+                  &quot;4&quot; {$siteState = &quot;stopped&quot;}
+                  &quot;5&quot; {$siteState = &quot;pausing&quot;}
+                  &quot;6&quot; {$siteState = &quot;paused&quot;}
+                  &quot;7&quot; {$siteState = &quot;continuing&quot;}
+                }
+                $status += &quot;`n`t! &quot; + $Site.ServerComment + &quot; is not running: state &quot; + $sitestate
+                $errcnt += 1
+              }
+            }
+          }
+        
+        }   
+        else
+        { $status += &quot;`n`t! Unable to verify IIS Metabase&quot;
+          $errcnt += 1
+        }
+      }#checkIIS
+    }
+    else
+    { $status += &quot;`n`t! Server Unreachable&quot;
+      $errcnt += 1
+    }
+    
+    if($error[0])
+    { $status += &quot;`n`t Errors Occured: &quot;
+      foreach($err in $error)
+      { $status += &quot;`n`t`!&quot; + $err }
+    } 
+    elseif($errCnt -eq 0)
+    {$status += &quot;`n***$srv*** Healthy&quot; }
+    else
+    {$status += &quot;`n***$srv*** Unhealthy&quot;}
+    $status
+    $status = &quot;&quot;
+  }#for
+}#checkSystem
+#############
+
+########################################################
+#Execute script
+############
+
+checkSystem 
+########################################################
+#reset error handling
+#$Global:ErrorActionPreference=$SavedEA
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="rfoust">
+    <title>Atlassian Jira Interface - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Atlassian Jira Interface</h1>
+<h3><a href="//scripts/751.ps1">download</a></h3>
+<p>This is a set of Powershell functions to interface with the Atlassian Jira bug/issue tracking software using a WSDL interface.</p>
+<pre><code class="language-posh"># jirafunctions.ps1
+#
+# Note: Some functions are incomplete/untested. Be sure to TEST before placing in production!!
+#
+# Dot-source this script to connect to jira and initialize the functions.
+# Ex: PS C:\scripts\jira&gt; . .\jirafunctions.ps1
+# Ex: PS C:\scripts\jira&gt; get-JiraReport
+#
+# Connects to Jira and initializes several functions that can be
+# used to interface with Jira.
+#
+# Author: Robbie Foust (rfoust@duke.edu)
+# Last Modified: December 26, 2008
+#
+# connect-webservice script written by Lee Holmes (http://www.leeholmes.com/guide)
+# and slightly modified by Robbie Foust.
+#
+
+$global:jiraURL = &quot;https://server.yourdomain.com/jira/rpc/soap/jirasoapservice-v2?wsdl&quot;
+
+function global:connect-jira ($wsdlLocation)
+{
+	##############################################################################
+	##
+	## Connect-WebService.ps1
+	##
+	## From Windows PowerShell, The Definitive Guide (O'Reilly)
+	## by Lee Holmes (http://www.leeholmes.com/guide)
+	##
+	## Connect to a given web service, and create a type that allows you to
+	## interact with that web service.
+	##
+	## Example:
+	##
+	##     $wsdl = &quot;http://terraserver.microsoft.com/TerraService2.asmx?WSDL&quot;
+	##     $terraServer = Connect-WebService $wsdl
+	##     $place = New-Object Place
+	##     $place.City = &quot;Redmond&quot;
+	##     $place.State = &quot;WA&quot;
+	##     $place.Country = &quot;USA&quot;
+	##     $facts = $terraserver.GetPlaceFacts($place)
+	##     $facts.Center
+	##############################################################################
+#	param(
+#	    [string] $wsdlLocation = $(throw &quot;Please specify a WSDL location&quot;),
+#	    [string] $namespace,
+#	    [Switch] $requiresAuthentication)
+
+	## Create the web service cache, if it doesn't already exist
+	if(-not (Test-Path Variable:\Lee.Holmes.WebServiceCache))
+	{
+	    ${GLOBAL:Lee.Holmes.WebServiceCache} = @{}
+	}
+
+	## Check if there was an instance from a previous connection to
+	## this web service. If so, return that instead.
+	$oldInstance = ${GLOBAL:Lee.Holmes.WebServiceCache}[$wsdlLocation]
+	if($oldInstance)
+	{
+	    $oldInstance
+	    return
+	}
+
+	## Load the required Web Services DLL
+	[void] [Reflection.Assembly]::LoadWithPartialName(&quot;System.Web.Services&quot;)
+
+	## Download the WSDL for the service, and create a service description from
+	## it.
+	$wc = new-object System.Net.WebClient
+
+	if($requiresAuthentication)
+	{
+	    $wc.UseDefaultCredentials = $true
+	}
+
+	$wsdlStream = $wc.OpenRead($wsdlLocation)
+
+	## Ensure that we were able to fetch the WSDL
+	if(-not (Test-Path Variable:\wsdlStream))
+	{
+	    return
+	}
+
+	$serviceDescription =
+	    [Web.Services.Description.ServiceDescription]::Read($wsdlStream)
+	$wsdlStream.Close()
+
+	## Ensure that we were able to read the WSDL into a service description
+	if(-not (Test-Path Variable:\serviceDescription))
+	{
+	    return
+	}
+
+	## Import the web service into a CodeDom
+	$serviceNamespace = New-Object System.CodeDom.CodeNamespace
+	if($namespace)
+	{
+	    $serviceNamespace.Name = $namespace
+	}
+
+	$codeCompileUnit = New-Object System.CodeDom.CodeCompileUnit
+	$serviceDescriptionImporter = 
+	    New-Object Web.Services.Description.ServiceDescriptionImporter
+	$serviceDescriptionImporter.AddServiceDescription(
+	    $serviceDescription, $null, $null)
+	[void] $codeCompileUnit.Namespaces.Add($serviceNamespace)
+	[void] $serviceDescriptionImporter.Import(
+	    $serviceNamespace, $codeCompileUnit)
+
+	## Generate the code from that CodeDom into a string
+	$generatedCode = New-Object Text.StringBuilder
+	$stringWriter = New-Object IO.StringWriter $generatedCode
+	$provider = New-Object Microsoft.CSharp.CSharpCodeProvider 
+	$provider.GenerateCodeFromCompileUnit($codeCompileUnit, $stringWriter, $null)
+
+	## Compile the source code.
+	$references = @(&quot;System.dll&quot;, &quot;System.Web.Services.dll&quot;, &quot;System.Xml.dll&quot;)
+	$compilerParameters = New-Object System.CodeDom.Compiler.CompilerParameters 
+	$compilerParameters.ReferencedAssemblies.AddRange($references)
+	$compilerParameters.GenerateInMemory = $true
+
+	$compilerResults = 
+	    $provider.CompileAssemblyFromSource($compilerParameters, $generatedCode)
+
+	## Write any errors if generated.         
+	if($compilerResults.Errors.Count -gt 0) 
+	{ 
+	    $errorLines = &quot;&quot; 
+	    foreach($error in $compilerResults.Errors) 
+	    { 
+		$errorLines += &quot;`n`t&quot; + $error.Line + &quot;:`t&quot; + $error.ErrorText 
+	    } 
+
+	    Write-Error $errorLines
+	    return 
+	}
+	## There were no errors.  Create the webservice object and return it.
+	else 
+	{
+	    ## Get the assembly that we just compiled 
+	    $assembly = $compilerResults.CompiledAssembly
+
+	    ## Find the type that had the WebServiceBindingAttribute. 
+	    ## There may be other &quot;helper types&quot; in this file, but they will 
+	    ## not have this attribute
+	    $type = $assembly.GetTypes() |
+		Where-Object { $_.GetCustomAttributes(
+		    [System.Web.Services.WebServiceBindingAttribute], $false) }
+
+	    if(-not $type)
+	    {
+		Write-Error &quot;Could not generate web service proxy.&quot;
+		return
+	    }
+
+	    ## Create an instance of the type, store it in the cache,
+	    ## and return it to the user.
+	    $instance = $assembly.CreateInstance($type)
+
+	    ## Many services that support authentication also require it on the
+	    ## resulting objects
+	    if($requiresAuthentication)
+	    {
+		if(@($instance.PsObject.Properties | 
+		    where { $_.Name -eq &quot;UseDefaultCredentials&quot; }).Count -eq 1)
+		{
+		    $instance.UseDefaultCredentials = $true
+		}
+	    }
+	    
+	    ${GLOBAL:Lee.Holmes.WebServiceCache}[$wsdlLocation] = $instance
+
+	    $instance
+	}
+}
+
+
+function global:get-JiraServerInfo
+	{
+	$jira.GetServerInfo($jiraAuthID)
+	}
+
+
+function global:get-JiraIssueType
+	{
+	$jira.GetIssueTypes($jiraAuthID)
+	}
+
+function global:get-JiraSubtaskIssueType
+	{
+	$jira.GetSubtaskIssueTypes($jiraAuthID)
+	}
+
+function global:get-JiraStatus
+	{
+	$jira.GetStatuses($jiraAuthID)
+	}
+
+function global:get-JiraPriority
+	{
+	$jira.GetPriorities($jiraAuthID)
+	}
+
+function global:get-JiraResolution
+	{
+	$jira.GetResolutions($jiraAuthID)
+	}
+
+function global:get-JiraReport
+	{
+	$jira.GetSavedFilters($jiraAuthID)
+	}
+
+function global:get-JiraProject
+	{
+	$jira.GetProjects($jiraAuthID)
+	}
+
+function global:get-JiraComment ($issueKey)
+	{
+	$jira.GetComments($jiraAuthID,$issueKey)
+	}
+
+function global:new-JiraComment ($issueKey, $comment)
+	{
+	$jiraComment = new-object RemoteComment
+	$jiraComment.body = $comment
+
+	$jira.AddComment($jiraAuthID, $issueKey, $jiraComment)
+	}
+
+function global:export-JiraReport ($reportNumber)
+	{
+	$jira.GetIssuesFromFilter($jiraAuthID, $reportNumber)
+	}
+
+# needs work
+function global:update-JiraIssue ([string]$issueKey)
+	{
+	
+	$jira.UpdateIssue($jiraAuthID,$issueKey,$placeholder)
+	} 
+
+# needs work
+function global:set-JiraIssueStatus ($issueKey,$actionID,$placeholder)
+	{
+	$jira.ProgressWorkflowAction($jiraAuthID,$issueKey,$actionID,$placeholder)
+	}
+
+function global:get-JiraIssue ($issueKey)
+	{
+	$jira.GetIssue($jiraAuthID, $issueKey)
+	}
+
+function global:new-JiraIssue ($project, $type, $summary, $description)
+	{
+	$jiraIssue = new-object RemoteIssue
+	$jiraIssue.project = $project
+	$jiraIssue.type = $type
+	$jiraIssue.summary = $summary
+	$jiraIssue.description = $description
+
+	$newIssue = $jira.CreateIssue($jiraAuthID, $jiraIssue)
+	
+	$newIssue
+	}
+
+function global:disconnect-jira
+	{
+	$jira.logout($jiraAuthID)
+	}
+
+
+$global:jira = connect-jira $jiraURL
+
+if (!$credential)
+	{
+	$global:credential = get-credential
+	}
+
+$BSTR = [System.Runtime.InteropServices.marshal]::SecureStringToBSTR($credential.Password)
+$global:jiraAuthID = $jira.login($credential.UserName.TrimStart(&quot;\&quot;),[System.Runtime.InteropServices.marshal]::PtrToStringAuto($BSTR))
+[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR);
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

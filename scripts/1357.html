@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Vadims Podans">
+    <title>CertMgmt pack - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>CertMgmt pack</h1>
+<h3><a href="//scripts/1357.ps1">download</a></h3>
+<p>these two functions provide basic local certificate store management features.</p>
+<pre><code class="language-posh">#####################################################################
+# CertMgmtPack.ps1
+# Version 0.51
+#
+# Digital certificate management pack
+#
+# Vadims Podans (c) 2009
+# http://www.sysadmins.lv/
+#####################################################################
+#requires -Version 2.0
+
+function Import-Certificate {
+&lt;#
+.Synopsis
+	Imports digital certificates to Certificate Store from files
+.Description
+	Improrts digital certificates to Certificate Store from various types of
+	certificates files, such .CER, .DER, .PFX (password required), .P7B.
+.Parameter Path
+	Specifies the path to certificate file
+.Parameter Password
+	Specifies password to PFX/PKCS#12 file only. For other certificate types
+	is not required. 
+	
+	Note: this parameter must be passed as SecureString.
+.Parameter Storage
+	Specifies place in Sertificate Store for certificate. For user certificates
+	(default) you MAY specify 'User' and importing certificate will be stored
+	in CurrentUser Certificate Store. For computer certificates you MUST specify
+	'Computer' and importing certificates will be stored in LocalMachine Certificate
+	Store.
+.Parameter Container
+	Specifies container within particular Certificate Store location. Container may
+	be one of AuthRoot/CA/Disallowed/My/REQUEST/Root/SmartCardRoot/Trust/TrustedPeople/
+	TrustedPublisher/UserDS. These containers represent MMC console containers
+	as follows:
+	AddressBook			-	AddressBook
+	AuthRoot			-	Third-Party Root CAs
+	CA					-	Intermediate CAs
+	Disallowed			-	Untrused Certificates
+	My					-	Personal
+	REQUEST				-	Certificate Enrollment Requests
+	Root				-	Trusted Root CAs
+	SmartCardRoot		-	Smart Card Trusted Roots
+	Trust				-	Enterprise Trust
+	TrustedPeople		-	Trusted People
+	TrustedPublishers	-	Trusted Publishers
+	UserDS				-	Active Directory User Object
+.Parameter Exportable
+	Marks imported certificates private key as exportable. May be used only for PFX
+	files only. If this switch is not presented for PFX files, after importing you
+	will not be able to export this certificate with private key again.
+.Parameter StrongProtection
+	Enables private key strong protection that requires user password each time
+	when certificate private key is used. Not available for computer certificates,
+	because computers certificates are used under LocalSystem account and here is
+	no UI for user to type password.
+.Outputs
+	This command provide a simple message if the export is successful.
+#&gt;
+[CmdletBinding()]
+	param (
+		[Parameter(Mandatory = $true, ValueFromPipeline = $true, Position = 0)]
+		[string]$Path,
+		[Parameter(Position = 1)]
+		[System.Security.SecureString]$Password,
+		[Parameter(Position = 2)]
+		[string][ValidateSet(&quot;CurrentUser&quot;, &quot;LocalMachine&quot;)]$Storage = &quot;CurrentUser&quot;,
+		[string][ValidateSet(&quot;AddressBook&quot;, &quot;AuthRoot&quot;, &quot;CA&quot;, &quot;Disallowed&quot;, &quot;My&quot;, &quot;REQUEST&quot;,
+			&quot;Root&quot;, &quot;SmartCardRoot&quot;, &quot;Trust&quot;, &quot;TrustedPeople&quot;, &quot;TrustedPublisher&quot;, &quot;UserDS&quot;)]$Container = &quot;My&quot;,
+		[switch]$Exportable,
+		[switch]$StrongProtection
+	)
+	if (!(Resolve-Path $Path)) {throw &quot;Looks like your specified certificate file doesn't exist&quot;}
+	$file = gi $Path -Force -ErrorAction Stop
+	$certs = New-Object system.security.cryptography.x509certificates.x509certificate2
+	switch ($Storage) {
+		&quot;CurrentUser&quot; {$flags = &quot;UserKeySet&quot;}
+		&quot;LocalMachine&quot; {$flags = &quot;MachineKeySet&quot;}
+	}
+	switch -regex ($file.Extension) {
+	&quot;.CER|.DER&quot; {$certs.Import($file.FullName, $null, $flags)}
+	&quot;.PFX&quot; {
+			if (!$password) {throw &quot;For PFX files password is required.&quot;}
+			if ($StrongProtection -and $Storage -eq &quot;Computer&quot;) {
+				throw &quot;You cannot use Private Key Strong Protection for computer certificates!&quot;
+			}
+			if ($Exportable) {$flags = $flags + &quot;, Exportable&quot;}
+			if ($StrongProtection) {$flags = $flags + &quot;, UserProtected&quot;}
+			$certs.Import($file.FullName, $password, $flags)
+		}
+	&quot;.P7B|.SST&quot; {
+			$certs = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2Collection
+			$certs.Import([System.IO.File]::ReadAllBytes($file.FullName))
+		}
+	default {throw &quot;Looks like your specified file is not a certificate file&quot;}
+	}
+	$store = New-Object system.security.cryptography.X509Certificates.X509Store $Container, $Storage
+	$store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+	$certs | %{$store.Add($_)}
+	if ($?) {Write-Host -ForegroundColor Green Certificate file`: $file.fullname was successfully added to $Container container}
+	$store.Close()
+}
+
+function Export-Certificate {
+&lt;#
+.Synopsis
+	Exports digital certificates to file Certificate Store.
+.Description
+	Exports digital certificates from Certificate Store to various types of certificate
+	file such .CER, .DER, .PFX (password required), .P7B or .SST (serializd store).
+.Parameter Path
+	Specifies the path to certificate storing folder
+.Parameter Type
+	Specifies type of imported certificate. May be one of CERT/PFX/PKCS#12/P7B/PKCS#7.
+.Parameter Password
+	Specifies a password for PFX files and used only if type is specified as PFX/PKCS#12.
+	
+	Note: password must be supplied as SecureString.
+.Parameter Storage
+	Specifies place in Sertificate Store for certificate. For user certificates
+	(default) you MAY specify 'User' to export certificates from CurrentUser Certificate Store.
+	For computer certificates you MUST specify 'Computer' to export certificates from
+	LocalMachine Certificate Store.
+.Parameter Container
+	Specifies container within particular Certificate Store location. Container may
+	be one of AuthRoot/CA/Disallowed/My/REQUEST/Root/SmartCardRoot/Trust/TrustedPeople/
+	TrustedPublisher/UserDS. These containers represent MMC console containers
+	as follows:
+	AddressBook			-	AddressBook
+	AuthRoot			-	Third-Party Root CAs
+	CA					-	Intermediate CAs
+	Disallowed			-	Untrused Certificates
+	My					-	Personal
+	REQUEST				-	Certificate Enrollment Requests
+	Root				-	Trusted Root CAs
+	SmartCardRoot		-	Smart Card Trusted Roots
+	Trust				-	Enterprise Trust
+	TrustedPeople		-	Trusted People
+	TrustedPublishers	-	Trusted Publishers
+	UserDS				-	Active Directory User Object
+.EXAMPLE
+
+.Outputs
+	This command doesn't provide any output, except errors.
+.Link
+#&gt;
+[CmdletBinding()]
+	param (
+		[Parameter(Position = 0)]
+		[string]$Path,
+		[Parameter(Mandatory = $true, Position = 1)]
+		[string][ValidatePattern(&quot;Cert|Pfx|pkcs12|pkcs7|SST&quot;)]$Type,
+		[Parameter(Position = 2)]
+		[System.Security.SecureString]$Password,
+		[Parameter(Position = 3)]
+		[string][ValidateSet(&quot;CurrentUser&quot;, &quot;LocalMachine&quot;)]$Storage = &quot;CurrentUser&quot;,
+		[Parameter(ValueFromPipeline = $true, Position = 4)]
+		[string][ValidateSet(&quot;AddressBook&quot;, &quot;AuthRoot&quot;, &quot;CA&quot;, &quot;Disallowed&quot;, &quot;My&quot;, &quot;REQUEST&quot;,
+			&quot;Root&quot;, &quot;SmartCardRoot&quot;, &quot;Trust&quot;, &quot;TrustedPeople&quot;, &quot;TrustedPublisher&quot;, &quot;UserDS&quot;)]$Container = &quot;My&quot;,
+		[string]$Thumbprint,
+		[string]$Subject,
+		[string]$Issuer,
+		[string]$SerialNumber,
+		[string]$NotAfter,
+		[string]$NotBefore,
+		[switch]$DeleteKey,
+		[switch]$Recurse
+	)
+	
+	if (!(Test-Path $Path)) {
+		New-Item -ItemType directory -Path $Path -Force -ErrorAction Stop
+	}
+	if ((Resolve-Path $Path).Provider.Name -ne &quot;FileSystem&quot;) {
+		throw &quot;Spicifed path is not recognized as filesystem path. Try again&quot;
+	}
+	if ($Recurse) {
+		function dirx ($Storage) {
+			dir cert:\$Storage -Recurse | ?{!$_.PsIsContainer}
+		}
+	} else {
+		function dirx ($Storage, $Container) {
+			dir cert:\$Storage\$Container
+		}
+	}
+	# îïðåäåëåíèå, ÷òî äëÿ PFX ñåðòèôèêàòîâ óêàçàí ïàðîëü
+	if ($Type -eq 'pkcs12') {$Type = &quot;PFX&quot;}
+	if ($Type -eq 'SST') {$Type = &quot;SerializedStore&quot;}
+	if ($Type -eq &quot;PFX&quot; -and !$Password) {throw &quot;For PFX files password is required.&quot;}
+	# êîíâåðòàöèÿ ïðåäâàðèòåëüíûõ çíà÷åíèé àðãóìåíòîâ â êîíå÷íûå çíà÷åíèÿ è òèïû
+	# .NET êëàññîâ
+	$Type = [System.Security.Cryptography.X509Certificates.X509ContentType]::$Type
+	if ($NotAfter) {$NotAfter = [datetime]::ParseExact($NotAfter, &quot;dd.MM.yyy&quot;, $null)}
+	if ($NotBefore) {$NotBefore = [datetime]::ParseExact($NotBefore, &quot;dd.MM.yyy&quot;, $null)}
+	# ïðîâåðêà îñíîâíûõ êðèòåðèåâ)
+	if ($Thumbprint) {$certs = @(dirx | ?{$_.Thumbprint -like &quot;*$Thumbprint*&quot;})}
+	elseif ($Subject) {$certs = @(dirx | ?{$_.Subject -like &quot;*$Subject*&quot;})}
+	elseif ($Issuer) {$certs = @(dirx | ?{$_.Issuer -like &quot;*$Issuer*&quot;})}
+	elseif ($SerialNumber) {$certs = @(dirx | ?{$_.SerialNumber -like &quot;*$SerialNumber*&quot;})}
+	elseif ($NotAfter -and !$NotBefore) {$certs = @(dirx | ?{$_.NotAfter -lt $NotAfter})}
+	elseif (!$NotAfter -and $NotBefore) {$certs = @(dirx | ?{$_.NotBefore -gt $NotBefore})}
+	elseif ($NotAfter -and $NotBefore) {$certs = @(dirx | ?{$_.NotAfter -lt $NotAfter `
+		-and $_.NotBefore -gt $NotBefore})}
+	else {$certs = @(dirx)}
+	if ($certs.Count -eq 0) {Write-Warning &quot;Sorry, we unable to find certificates that correspond your filter :(&quot;; return}
+	switch -regex ($Type) {
+	&quot;Cert&quot; {
+			foreach ($cert in $certs) {
+				[void]($cert.Subject -match 'CN=([^,]+)')
+				$CN = $matches[1] -replace '[\\/:\*?`&quot;&lt;&gt;|]', ''
+				$bytes = $cert.Export($type)
+				$base64Data = [System.Convert]::ToBase64String($bytes)
+				Set-Content -LiteralPath $(Join-Path $Path ($CN + &quot;_&quot; + $cert.Thumbprint + &quot;.cer&quot;)) -Value $base64Data
+			}
+		}
+	&quot;PFX&quot; {
+			foreach ($cert in $certs) {
+				[void]($cert.Subject -match 'CN=([^,]+)')
+				$CN = $matches[1] -replace '[\\/:\*?`&quot;&lt;&gt;|]', ''
+				$bytes = $cert.Export($Type, $Password)
+				[System.IO.File]::WriteAllBytes($(Join-Path $Path ($CN + &quot;_&quot; + $cert.Thumbprint + &quot;.pfx&quot;)), $bytes)
+				if ($DeleteKey) {
+					$tempcert = $cert.Export(&quot;Cert&quot;)
+					$store = New-Object system.security.cryptography.X509Certificates.X509Store $container, $Storage
+					$store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+					$store.Remove($cert)
+					$store.Add($tempcert)
+					$store.Close()
+				}
+			}
+		}
+	&quot;Pkcs7|SerializedStore&quot; {
+			# ñîçäà¸ì îáúåêò ìàññèâà x509Certificate2 îáúåêòîâ
+			$certcol = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2Collection
+			# äîáàâëÿåì âñå ñåðòèôèêàòû èç $certs â ýòîò ìàññèâ
+			$certs | %{[void]$certcol.Add($_)}
+			# ýêñïîðòèðóåì ýòîò ìàññèâ â áàéòîâûé ìàññèâ
+			$bytes = $certcol.Export($Type)
+			# çàïèñûâàåì ìàññèâ áàéòîâ â p7b ôàéë
+			if ($Type -eq &quot;Pkcs7&quot;) {$ext = &quot;.p7b&quot;} else {$ext = &quot;.sst&quot;}
+			[System.IO.File]::WriteAllBytes($(&quot;ExportedCertificates&quot; + $ext, $bytes))
+		}
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

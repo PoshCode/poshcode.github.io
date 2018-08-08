@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Kenneth C Mazie">
+    <title>WSUS-Purge.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>WSUS-Purge.ps1</h1>
+<h3><a href="//scripts/2551.ps1">download</a></h3>
+<p>This PowerShell script is a conversion of a VB script I use to clear out leftover files from Windows Update on XP.  It works on XP, Vista, Win7 and Win2k8 with a few caveates.  Any OS above the Vista  level has changes to the way installs and updates are stored.  Please see this excellent article for more info: http://www.winvistaclub.com/f16.html and also the one linked to the bottom of that article.</p>
+<pre><code class="language-posh">#==================================================================================================
+#              File Name : WSUS-Purge.ps1
+#        Original Author : Kenneth C. Mazie (kcmjr)
+#            Description : As written it will clear out files left over from Windows Updates.
+#                        :
+#                  Notes : Normal operation is with no command line options. This PowerShell script
+#                        :  is a conversion of a VB script I use to clear out leftover files from
+#                        :  Windows Update on XP.  It works on XP, Vista, Win7 and Win2k8 with a 
+#                        :  few caveates.  Any OS above the Vista level has changes to the way 
+#                        :  installs and updates are stored.  Please see this excellent article for 
+#                        :  more info: http://www.winvistaclub.com/f16.html and also the one linked
+#                        :  to the bottom of that article.
+#                        : 
+#              Operation : The script will automatically run with elevated priviledge.  It detects
+#                        :  the OS being used as well as the folder it is being executed from.  It 
+#                        :  looks for an existing scheduled task to run itself and if not found 
+#                        :  creates one.  Once run it will ruthlessly remove most folders named 
+#                        :  &quot;$ntuninstall...$&quot; in &quot;C:\Windows&quot; (on XP) as well as the associated 
+#                        :  registry keys in &quot;HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\&quot;
+#                        :  (on XP) and the files stored in &quot;C:\Windows\SoftwareDistribution\Download&quot;
+#                        :  (all OS vers).  All KB log files are also removed from &quot;C:\windows&quot;.  OS 
+#                        :  version is also detected and noted in the output (included for future use).
+#                        :
+#                        :  All destructive operations are disabled by default.  Comment out the 
+#                        :   &quot;-whatif&quot; statements to enable active processing.  Tested on XP and Win7.
+#                        :
+#               Warnings : Use of this script will gain you disk space on C: but will make
+#                        :   uninstalling of patches nearly impossible.  See below.
+#                        :
+#	           Legal : Public Domain.  Modify and redistribute freely.  No rights reserved.
+#              	         : SCRIPT PROVIDED &quot;AS IS&quot; WITHOUT WARRANTIES OR GUARANTEES OF ANY KIND.
+#                        : USE AT YOUR OWN RISK. NO TECHNICAL SUPPORT PROVIDED.
+#                        :   
+#         Last Update by : Kenneth C. Mazie 
+#        Version History : v1.0 - 12-08-10 - Original 
+#         Change History : v2.0 - 12-09-10 - Added options to automatically set a scheduled task to
+#                        :   run the script on a random day and time.
+#
+#==================================================================================================
+
+Clear-Host
+$ErrorActionPreference = &quot;SilentlyContinue&quot;
+$rand = New-Object  System.Random
+
+#--[ Execute with admin priviledge ]--
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = new-object Security.Principal.WindowsPrincipal $identity
+if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)  -eq $false) {
+  $Args = '-noprofile -nologo -executionpolicy bypass -file &quot;{0}&quot;' -f $MyInvocation.MyCommand.Path
+  Start-Process -FilePath 'powershell.exe' -ArgumentList $Args -Verb RunAs
+  exit
+}
+write-host &quot;Running with Admin Privileges&quot;
+#Read-Host &quot;PRESS ENTER&quot;
+
+#--[ Get script folder ]--
+function Get-ParentFolderOfThisScript
+{
+    $ParentProcessInvocation = Get-Variable MyInvocation -Scope 1
+    $InvocationInfo = $ParentProcessInvocation.Value
+    $CommandInfo = $InvocationInfo.MyCommand
+    $FullPathToThisScript = $CommandInfo.Path
+    Split-Path $FullPathToThisScript -parent
+}
+
+#--[ Create the scheduled task ]--
+Function Create-ScheduledTask
+{
+param(
+	[string]$ComputerName = &quot;localhost&quot;,
+	[string]$RunAsUser = &quot;System&quot;,
+	[string]$RunLevel = &quot;HIGHEST&quot;,
+	[string]$TaskName = &quot;WSUS-Purge&quot;,
+	[string]$TaskRun = &quot;'powershell.exe -nologo -noninteractive -file $scriptpath\WSUS-Purge.ps1'&quot;,
+#	[string]$TaskRun = &quot;powershell.exe -nologo -noninteractive -command `&quot;&amp; {$scriptpath\WSUS-Purge.ps1}`&quot;&quot;,
+	[string]$Schedule = &quot;Weekly&quot;,
+	[string]$Modifier = &quot;second&quot;,
+	[string]$Days = (($Array = &quot;SUN&quot;,&quot;MON&quot;,&quot;TUE&quot;,&quot;WED&quot;,&quot;THU&quot;,&quot;FRI&quot;,&quot;SAT&quot; ) | Get-Random),
+	[string]$Months = '&quot;MAR,JUN,SEP,DEC&quot;',
+	[string]$StartTime = &quot;$(&quot;{0:D2}&quot; -f $rand.next(0,23)):$(&quot;{0:D2}&quot; -f $rand.next(0,59))&quot;,
+	[string]$EndTime = &quot;02:00&quot;,
+	[string]$Interval = &quot;60&quot;	
+	)
+ Write-Host &quot;Creating new task...&quot;
+ write-host &quot;Time set to $time...&quot;
+ Write-Host &quot;Day set to $Days...&quot;
+ #$Command = &quot;schtasks.exe /create /s $ComputerName /ru $RunAsUser /tn $TaskName /tr $TaskRun /sc $Schedule /mo $Modifier /d $Days /m $Months /st $StartTime /et $EndTime /ri $Interval /F&quot;
+ if ($($os.version.Split(&quot;.&quot;)[0]) -ge 6){
+ #--[ Run for Vista and higher ]--
+ $Command = &quot;schtasks.exe /create /s $ComputerName /ru $RunAsUser /rp $RunAsPwd /rl $RunLevel /tn $TaskName /tr $TaskRun /d $Days /sc $Schedule /st $StartTime /F&quot;
+} else {
+ #--[ Remove runlevel option for 2003 and lower ]--
+ $Command = &quot;schtasks.exe /create /s $ComputerName /ru $RunAsUser /rp $RunAsPwd /tn $TaskName /tr $TaskRun /d $Days /sc $Schedule /st $StartTime /F&quot;
+}
+ Invoke-Expression $Command
+ Clear-Variable Command -ErrorAction SilentlyContinue
+ }
+
+#--[ Manage Scheduled Task ]--
+$scriptpath = Get-ParentFolderOfThisScript
+$time = &quot;$(&quot;{0:D2}&quot; -f $rand.next(0,23)):$(&quot;{0:D2}&quot; -f $rand.next(0,59))&quot;
+if ($task = Schtasks.exe /query /s &quot;localhost&quot; /v /FO CSV | select-string -pattern â€œWSUS-Purgeâ€) {
+Write-Host &quot;Task already exists...&quot;
+} else {
+Create-ScheduledTask -StartTime $($time)
+}
+
+#--[ Get Windows version ]--
+switch ($os.version)
+  {
+    &quot;5.1.2600&quot; {Write-Host &quot;Running on Windows XP&quot;}
+    &quot;5.2.3790&quot; {Write-Host &quot;Running on Windows Server 2003&quot;}
+	&quot;6.0.6000&quot; {Write-Host &quot;Running on Windows Vista&quot;}
+	&quot;6.0.6001&quot; {Write-Host &quot;Running on Windows Server 2008&quot;}
+    &quot;6.1.7600&quot; {Write-Host &quot;Running on Windows 7 or Server 2008 R2&quot;}
+    default {&quot;The operating system could not be determined.&quot;}
+  }
+
+#--[ Get %windir% environemnt variable ]--
+$windir = [System.Environment]::ExpandEnvironmentVariables(&quot;%WINDIR%&quot;)
+#--[ Alternate format ]-- #$windir = $env:windir
+
+#--[ Read existing patch folders in %windir% ]--
+$dirs = Get-ChildItem $windir -Force | Where-Object { $_.PSIsContainer } | Select-Object Name | Where-Object {$_.Name -like &quot;`$ntuninstallkb*&quot; -or $_.Name -like &quot;$ntuninstallq&quot;} 
+if ($dirs.count -gt 0) {
+  write-host $dirs.count &quot; patches to process&quot;
+  foreach ($dir in $dirs) {
+
+    $patch = ($($dir.Name).Remove(0,12)).Replace(&quot;$&quot;, &quot;&quot;)
+    Write-Host &quot;Processing &quot; $patch
+  
+    #--[ Delete the registry key ]--
+    Remove-Item -Path &quot;HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\$patch&quot; -recurse -Force -whatif
+      #--[ Alternate format ]-- #Get-ChildItem -path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall | Where-Object {$_.PSChildName -eq $patch } | Remove-Item -Force -WhatIf 
+
+    #--[ Delete the uninstall folder ]--
+    Remove-Item &quot;$windir\$($dir.name)&quot; -recurse -Force -whatif
+      #--[ Alternate format ]-- #Get-ChildItem -path $windir | Where-Object {$_.PSChildName -eq $($dir.name)} | Remove-Item -Force -WhatIf 
+}} else {
+  write-host &quot;No C:\Windows patch folders to process...&quot;
+}
+
+#--[ Remove left over KB log files ]--
+write-host &quot;Removing patch logs...&quot;
+Remove-Item &quot;$windir\kb*.log&quot; -recurse -Force -whatif
+
+#--[ Remove items stored in the C:|windows\SoftwareDistribution\Download folder ]--
+write-host &quot;Purging downloaded patches...&quot;
+Get-childitem $windir\SoftwareDistribution\Download\* -recurse | remove-item -recurse -force -whatif 
+
+#--[ Remove items stored in the C:|windows\Installer folder.  Disabled by default.  May cause applications to malfunction. ]--
+#Get-childitem $windir\Installer\* -recurse | remove-item -recurse -force  -whatif 
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

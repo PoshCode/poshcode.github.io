@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="William Wang">
+    <title>Staff SQL Server DBA - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Staff SQL Server DBA</h1>
+<h3><a href="//scripts/4282.ps1">download</a></h3>
+<p>Reboot a cluste or stand-alone server. For cluster, reboot each node one by one. Verify that RDP works for each server, verify all SQL Server instances can be connected, and all databases are in healthy state. Send email with the result of rebooting. The script works for Windows Server 2003 and later versions. This script requires Powershell3.0.</p>
+<pre><code class="language-posh">#========================================================================
+#Credits to http://poshcode.org/2886 as I leveraged some functions
+#Please modify parameters in Email-RebootResult
+#
+#========================================================================
+
+#========================================================================
+#START: Initialization
+param ($system)
+
+cls
+$Error.Clear()
+$ErrorActionPreference = &quot;Stop&quot;
+
+[System.Reflection.Assembly]::LoadWithPartialName('Microsoft.SqlServer.SMO') | out-null
+
+function Email-RebootResult
+{
+	param($subject)
+	$emailrecipients = &quot;&quot;
+	$emailfrom = &quot;&quot;
+	$emailserver = &quot;&quot;
+
+	Send-MailMessage -to $emailrecipients -from $emailfrom -smtpserver $emailserver -Subject $subject -attachment $log
+}
+
+function Write-RebootLog
+{
+	param($log, $msg, $errormsg)
+	$now = (get-date).tostring('yyyy-MM-dd HH:mm:ss -')
+	&quot;$now $msg&quot; | out-file -FilePath $log -Append
+	Write-Host &quot;$now $msg&quot;
+	if ($errormsg)
+	{
+		$errormsg | Out-File -FilePath $log -Append
+		Write-Host $errormsg
+	}
+}
+function Get-ClusterNode
+{
+    param($cluster)
+    
+    gwmi -class MSCluster_Node -namespace &quot;root\mscluster&quot; -computername $cluster -Authentication PacketPrivacy | add-member -pass NoteProperty Cluster $cluster
+
+} #Get-ClusterNode
+
+function Get-ClusterGroup
+{
+    param($cluster)
+
+    gwmi -class MSCluster_ResourceGroup -namespace &quot;root\mscluster&quot; -computername $cluster -Authentication PacketPrivacy | add-member -pass NoteProperty Cluster $cluster  | 
+    add-member -pass ScriptProperty Node `
+    { gwmi -namespace &quot;root\mscluster&quot; -computerName $this.Cluster -Authentication PacketPrivacy -query &quot;ASSOCIATORS OF {MSCluster_ResourceGroup.Name='$($this.Name)'} WHERE AssocClass = MSCluster_NodeToActiveGroup&quot; | Select -ExpandProperty Name } |
+    add-member -pass ScriptProperty PreferredNodes `
+    { @(,(gwmi -namespace &quot;root\mscluster&quot; -computerName $this.Cluster -Authentication PacketPrivacy -query &quot;ASSOCIATORS OF {MSCluster_ResourceGroup.Name='$($this.Name)'} WHERE AssocClass = MSCluster_ResourceGroupToPreferredNode&quot; | Select -ExpandProperty Name)) }
+
+} #Get-ClusterGroup
+
+function Get-SQLInstance
+{
+    param($system, $isCluster)
+    
+	if ($isCluster)
+	{
+		$instances = (gwmi -class &quot;MSCluster_Resource&quot; -namespace &quot;root\mscluster&quot; -computername $system  -Authentication PacketPrivacy | where {$_.type -eq &quot;SQL Server&quot;} | Select @{n='Cluster';e={$cluster}}, Name, State, @{n='VirtualServerName';e={$_.PrivateProperties.VirtualServerName}}, @{n='InstanceName';e={$_.PrivateProperties.InstanceName}}, `
+	    @{n='ServerInstance';e={(&quot;{0}\{1}&quot; -f $_.PrivateProperties.VirtualServerName,$_.PrivateProperties.InstanceName).TrimEnd('\')}}, `
+	    @{n='Node';e={$(gwmi -namespace &quot;root\mscluster&quot; -computerName $system -Authentication PacketPrivacy -query &quot;ASSOCIATORS OF {MSCluster_Resource.Name='$($_.Name)'} WHERE AssocClass = MSCluster_NodeToActiveResource&quot; | Select -ExpandProperty Name)}}).VirtualServerName
+	}
+	else
+	{
+		$instances = (Get-WmiObject win32_service -ComputerName $system | where {$_.displayname -like &quot;SQL Server (*)&quot; -and $_.startmode -eq &quot;Auto&quot;}).name
+		$instances = $instances.replace(&quot;MSSQL$&quot;, &quot;$system\&quot;)
+		$instances = $instances.replace(&quot;MSSQLSERVER&quot;, &quot;$system&quot;)
+	}
+    
+	return $instances
+} #Get-SQLInstance
+
+function Verify-AllSQLInstances
+{
+	param($system, $isCluster, $log)
+	
+	try
+	{
+		Write-RebootLog $log &quot;Getting all SQL instances&quot;
+		$instances = Get-SQLInstance $system $isCluster
+		Write-RebootLog $log &quot;$system has the following SQL instances:&quot; $instances
+	}
+	catch
+	{
+		Write-RebootLog $log &quot;Collecting SQL instance names failed with the following error: &quot; $Error[0]
+		throw &quot;Collecting SQL instance names failed!&quot;
+	}
+
+	foreach ($sql in $instances)
+	{
+		try
+		{
+			$sqlinstance = New-Object Microsoft.SqlServer.Management.Smo.server($sql)
+			$sqlinstance.Refresh()
+			Write-RebootLog $log &quot;SQL instance $sqlinstance can be connected successfully&quot;
+			$db = $sqlinstance.Databases.Item(&quot;master&quot;)
+			$ds = $db.ExecuteWithResults(&quot;select name, state_desc from sys.databases where state &gt; 2&quot;)
+			$t = $ds.Tables[0]
+			if ($t.Rows.Count -ne 0)
+			{
+			   Foreach ($r in $t.Rows)
+			   {
+				  	Write-RebootLog $log &quot;SQL Instance $sqlinstance has the following databases in problematic state&quot;
+					$name = $r.Item($t.Columns[0]) 
+					$state = $r.Item($t.Columns[1])
+					Write-RebootLog $log &quot;Database $name is in $state state&quot;
+			   }
+			   throw &quot;database $name is in $state state&quot;
+			}
+			else
+			{
+				Write-RebootLog $log &quot;All databases on $sqlinstance are healthy&quot;
+			}
+		}
+		catch
+		{
+			Write-RebootLog $log &quot;SQL instance $sqlinstance has the following error:&quot; $error[0]
+		}
+	}
+}#Verify-AllSQLInstances
+
+$log = &quot;C:\temp\Reboot-$system.log&quot; #Create a cluster reboot log
+if (Test-Path $log)
+{
+	remove-item $log -ErrorAction SilentlyContinue
+}
+
+try
+{
+	$PSComputerName  = (Get-WMIObject -Class Win32_OperatingSystem -ComputerName $system).PSComputerName
+}
+catch
+{
+	Write-RebootLog $log &quot;Connecting WMI for $system failed with the following error: &quot; $Error
+	Email-RebootResult &quot;Reboot-Alert: Get-WMIObject failed for $system, probably due to firewall issue&quot;
+	break;
+}
+$isCluster = ($system -ne $PSComputerName)
+
+#END: Initialization
+#========================================================================
+
+
+#========================================================================
+#START: Reboot each node of the given cluster
+
+try
+{
+	if ($isCluster)
+	{
+		Write-RebootLog $log &quot;Start rebooting the cluster $system&quot;
+		$servers = (get-clusternode -cluster $system | select name | sort name).name
+		Write-RebootLog $log &quot;The following nodes were found in the cluster $system&quot; $servers
+		Write-RebootLog $log &quot;Rebooting each node in cluster $system one by one&quot;
+	}
+	else
+	{
+		Write-RebootLog $log &quot;Start rebooting the stand-alone server $system&quot;
+		$servers = $system
+	}
+	
+	foreach($server in $servers)
+	{
+		Write-RebootLog $log &quot;$server is rebooting&quot;
+		#Restart computer and wait until Wmi is up, Timeout after 15 mininutes
+		restart-computer -computername $server -Wait -Timeout 900 -For Wmi -force -ErrorAction Stop
+		Write-RebootLog $log &quot;$server is back&quot;
+		
+		#================================================================
+		#START: Verify RDP
+		$rdpTimeout = 150
+		$rdpInterval = 30
+		$rdpMaxCheckCount = $rdpTimeout/$rdpInterval
+		$checkcount = 0
+		while ($checkcount -le $rdpMaxCheckCount)
+		{
+			try
+			{
+				$checkcount++
+				Write-RebootLog $log &quot;Verifying $server can be connected over port 3389 (RDP)&quot;
+				$rdp = New-Object System.Net.Sockets.TCPClient -ArgumentList $server,3389
+				Write-RebootLog $log &quot;Verified $server can be connected over port 3389 (RDP)&quot;
+				break
+			}
+			catch
+			{
+				if ($checkcount -le $rdpMaxCheckCount)
+				{
+					Write-RebootLog $log &quot;RDP Verification failed, try again after $rdpInterval seconds&quot;
+					start-sleep -seconds 30
+					$Error.Remove($Error[0])
+				}
+				else
+				{
+					Write-RebootLog $log &quot;$server cannnot be connected over port 3389 (RDP)&quot;
+					break
+				}
+			}
+		}
+		#END: Verify RDP
+		#================================================================
+	}
+}
+
+catch
+{
+	Write-RebootLog $log &quot;The system $system was not rebooted successfully with the following error:&quot; $error
+	Write-RebootLog $log &quot;Script terminated due to the above error!&quot;
+	Email-RebootResult &quot;Reboot-Alert: The system $system was not rebooted successfully, script terminated&quot;
+	break
+}
+
+#END: Reboot each node of the given cluster
+#========================================================================
+
+
+#========================================================================
+#START: For cluster, rebalance and verify each group is running on its preferred node.
+#START: For both cluster and stand-alone server, verify all instances are healthy
+
+try
+{
+	if ($isCluster)
+	{
+		#========================================================================
+		#START: Rebalance groups so that every group runs on its preferred node
+
+		try
+		{
+			Write-RebootLog $log &quot;Rebalancing groups so that each group runs on its preferred node&quot;
+			$clustergroup = get-clustergroup -cluster $system
+
+			foreach($group in $clustergroup)
+			{
+				try
+				{
+					#if the group is not running on its preferred node, move the group to its preferred node.
+					$currentnode = $group.node
+					if ($group.PreferredNodes.count -gt 0)
+					{
+						$preferrednode = $group.PreferredNodes[0]
+					}
+					$groupname = $group.Name
+					if ($preferrednode -ne $null -and $currentnode -ne $preferrednode)
+					{
+						Write-RebootLog $log &quot;Moving group $groupname from $currentnode to its preferred node $preferrednode&quot;
+						$group.MoveToNewNode($preferrednode, 120)
+					}
+					
+					#bring the group online
+					$group.BringOnline(120)
+				}
+				catch
+				{
+					Write-RebootLog $log &quot;Moving group $groupname failed with the following error:&quot; $error[0]
+				}
+
+			}
+		}
+		catch
+		{
+			Write-RebootLog $log &quot;Rebalancing cluster groups failed with the following error:&quot; $error[0]
+		}
+		
+		#END: Rebalance groups so that every group runs on its preferred node
+		#========================================================================
+
+
+		#========================================================================
+		#START: Verify that each group is running on its preferred node and each SQL instance can be connected
+		try
+		{
+			$clustergroup = get-clustergroup -cluster $system
+			
+			foreach($group in $clustergroup)
+			{
+				try
+				{
+					$currentnode = $group.node
+					if ($group.PreferredNodes.count -gt 0)
+					{
+						$preferrednode = $group.PreferredNodes[0]
+					}
+					$groupname = $group.Name
+					$groupstate = $group.State
+					#Notify DBA for each of the following situations:
+						#a. the group is not online
+						#b. the group is not running on its preferred node 
+						#c. SQL cannot be connected
+
+					#verify the group is online
+					if ($groupstate -ne 0)
+					{
+						Write-RebootLog $log &quot;Group $groupname cannot be brought online&quot;
+						throw &quot;Group $groupname cannot be brought online&quot;
+					}
+					else
+					{
+						Write-RebootLog $log &quot;Group $groupname has been brought online&quot;
+					}
+					
+					#verify the group is running on its preferred node
+					
+					if ($preferrednode -ne $null)
+					{
+						if ($preferrednode -ne $currentnode)
+						{
+							Write-RebootLog $log &quot;Group $groupname is not running on its preferred node&quot;
+							throw &quot;Group $groupname is not running on its preferred node&quot;
+						}
+						else
+						{
+							Write-RebootLog $log &quot;Group $groupname is running on its preferred node $preferrednode&quot;
+						}
+					}
+				}
+				catch
+				{
+					Write-RebootLog $log &quot;Group $groupname encountered the following error:&quot; $error[0]
+				}
+			}
+		}
+		catch
+		{
+			Write-RebootLog $log &quot;Verifying cluster failed with the following error:&quot; $error[0]
+		}
+		#END: Verify that each group is running on its preferred node and each SQL instance can be connected
+		#========================================================================
+	}
+	
+	Verify-AllSQLInstances $system $isCluster $log
+}
+
+finally
+{
+	if ($Error.Count -eq 0)
+	{
+		Write-RebootLog $log &quot;The system $system was rebooted successfully&quot;
+		Email-RebootResult &quot;Reboot-Confirmation: The system $system was rebooted successfully&quot;
+	}
+	else
+	{
+		Write-RebootLog $log &quot;The reboot of system $system encountered some issues&quot;
+		Email-RebootResult &quot;Reboot-Alert: The reboot of system $system encountered some issues&quot;
+	}
+}
+
+#END: For cluster, rebalance and verify each group is running on its preferred node.
+#END: For both cluster and stand-alone server, verify all instances are healthy
+#========================================================================
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

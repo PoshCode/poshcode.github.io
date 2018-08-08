@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>loaded drivers - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>loaded drivers</h1>
+<h3><a href="//scripts/5643.cs">download</a> - <a href="//scripts/5642.md">parent</a></h3>
+<pre><code class="language-csharp">using System;
+using System.Text;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
+
+[assembly: AssemblyCompany(&quot;greg zakharov&quot;)]
+[assembly: AssemblyCopyright(&quot;Copyright (C) 2014 greg zakharov&quot;)]
+[assembly: AssemblyCulture(&quot;&quot;)]
+[assembly: AssemblyDescription(&quot;Loaded drivers viewer&quot;)]
+[assembly: AssemblyTitle(&quot;drvlist&quot;)]
+[assembly: AssemblyVersion(&quot;1.1.0.0&quot;)]
+[assembly: CLSCompliant(true)]
+
+namespace DriversList {
+  internal sealed class AssemblyInfo {
+    internal Type a;
+    internal AssemblyInfo() { a = typeof(Program); }
+    
+    internal String Copyright {
+      get {
+        return ((AssemblyCopyrightAttribute)Attribute.GetCustomAttribute(
+            a.Assembly, typeof(AssemblyCopyrightAttribute)
+        )).Copyright;
+      }
+    }
+    
+    internal String Description {
+      get {
+        return ((AssemblyDescriptionAttribute)Attribute.GetCustomAttribute(
+            a.Assembly, typeof(AssemblyDescriptionAttribute)
+        )).Description;
+      }
+    }
+    
+    internal String Title {
+      get {
+        return ((AssemblyTitleAttribute)Attribute.GetCustomAttribute(
+            a.Assembly, typeof(AssemblyTitleAttribute)
+        )).Title;
+      }
+    }
+    
+    internal String Version {
+      get { return a.Assembly.GetName().Version.ToString(2); }
+    }
+  } //AssemblyInfo
+  
+  internal sealed class Program {
+    static IntPtr GetProcAddress(String dll, String fun) {
+      Type UnsafeNativeMethods = Assembly
+          .GetAssembly(typeof(Regex))
+          .GetType(&quot;Microsoft.Win32.UnsafeNativeMethods&quot;);
+      
+      MethodInfo GetModuleHandle = UnsafeNativeMethods.GetMethod(&quot;GetModuleHandle&quot;);
+      MethodInfo GetProcAddress  = UnsafeNativeMethods.GetMethod(&quot;GetProcAddress&quot;);
+      
+      HandleRef href = new HandleRef(
+          new IntPtr(), (IntPtr)GetModuleHandle.Invoke(null, new Object[] {dll})
+      );
+      
+      return (IntPtr)GetProcAddress.Invoke(null, new Object[] {href, fun});
+    } //GetProcAddress
+    
+    static IntPtr LoadLibrary(String dll) {
+      return (IntPtr)Assembly
+          .GetAssembly(typeof(Regex))
+          .GetType(&quot;Microsoft.Win32.SafeNativeMethods&quot;)
+          .GetMethod(&quot;LoadLibrary&quot;)
+          .Invoke(null, new Object[] {dll});
+    } //LoadLibrary
+    
+    static Boolean FreeLibrary(IntPtr dll) {
+      MethodInfo FreeLibrary = Assembly
+          .GetAssembly(typeof(Regex))
+          .GetType(&quot;Microsoft.Win32.SafeNativeMethods&quot;)
+          .GetMethod(&quot;FreeLibrary&quot;);
+      
+      HandleRef href = new HandleRef(new IntPtr(), dll);
+      
+      return (Boolean)FreeLibrary.Invoke(null, new Object[] {href});
+    } //FreeLibrary
+    
+    delegate Int32 GetDeviceDriverBaseNameDelegate(
+        UInt32        ImageBase,
+        StringBuilder lpBaseName,
+        Int32         nSize
+    );
+    
+    [return: MarshalAs(UnmanagedType.Bool)]
+    delegate Boolean EnumDeviceDriversDelegate(
+        [MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U4)]
+        [In][Out] UInt32[] lpImageBase,
+        UInt32             cb,
+        [MarshalAs(UnmanagedType.U4)]
+        out UInt32         lpcbNeeded
+    );
+    
+    static void Main() {
+      IntPtr   ptr, module = IntPtr.Zero;
+      Boolean  res;
+      UInt32   BytesNeeded, ArraySize, SizeBytes;
+      UInt32[] ImageBase;
+      
+      AssemblyInfo ai = new AssemblyInfo();
+      Console.WriteLine(&quot;{0} v{1} - {2}\n{3}\n&quot;, ai.Title, ai.Version, ai.Description, ai.Copyright);
+      
+      module = LoadLibrary(&quot;psapi.dll&quot;);
+      
+      ptr = (ptr = GetProcAddress(&quot;kernel32.dll&quot;, &quot;EnumDeviceDrivers&quot;)) != IntPtr.Zero ? ptr : GetProcAddress(
+          &quot;psapi.dll&quot;, &quot;EnumDeviceDrivers&quot;
+      );
+      EnumDeviceDriversDelegate EnumDeviceDrivers =
+          (EnumDeviceDriversDelegate)Marshal.GetDelegateForFunctionPointer(
+              ptr, typeof(EnumDeviceDriversDelegate)
+      );
+      
+      ptr = (ptr = GetProcAddress(&quot;kernel32.dl&quot;, &quot;GetDeviceDriverBaseNameA&quot;)) != IntPtr.Zero ? ptr : GetProcAddress(
+          &quot;psapi.dll&quot;, &quot;GetDeviceDriverBaseNameA&quot;
+      );
+      GetDeviceDriverBaseNameDelegate GetDeviceDriverBaseName =
+          (GetDeviceDriverBaseNameDelegate)Marshal.GetDelegateForFunctionPointer(
+              ptr, typeof(GetDeviceDriverBaseNameDelegate)
+      );
+      
+      res = EnumDeviceDrivers(null, 0, out BytesNeeded);
+      if (!res || BytesNeeded == 0) {
+        Console.WriteLine(&quot;Could not enumerate drivers.&quot;);
+        FreeLibrary(module);
+        return;
+      }
+      
+      ArraySize = BytesNeeded / 4;
+      SizeBytes = BytesNeeded;
+      ImageBase = new UInt32[ArraySize];
+      
+      if (!EnumDeviceDrivers(ImageBase, SizeBytes, out BytesNeeded)) {
+        Console.WriteLine(&quot;EnumDeviceDrivers failed.&quot;);
+        FreeLibrary(module);
+        return;
+      }
+      
+      Console.WriteLine(&quot;ImageBase  Driver\n{0}  {1}&quot;, new String('-', 9), new String('-', 7));
+      StringBuilder sb = new StringBuilder(1000);
+      for (Int32 i = 0; i &lt; ArraySize; i++) {
+        if (GetDeviceDriverBaseName(ImageBase[i], sb, sb.Capacity) != 0) {
+          Console.WriteLine(&quot;0x{0:X8} {1}&quot;, (UInt32)ImageBase[i], sb.ToString());
+        }
+      }
+      
+      FreeLibrary(module);
+    }
+  } //Program
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

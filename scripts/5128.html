@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Read-Choice - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Read-Choice</h1>
+<h3><a href="//scripts/5128.ps1">download</a> - <a href="//scripts/5127.md">parent</a></h3>
+<p>A little wrapper for PromptForChoice - this version is a major change to be much pickier.
+Not backwards compatible.</p>
+<pre><code class="language-posh">
+function Read-Choice {
+   &lt;#
+      .Synopsis
+         Prompt the user for a choice, and return the (0-based) index of the selected item
+      .Example
+         Read-Choice -Prompt &quot;WEBPAGE BUILDER MENU&quot;  &quot;&amp;Create Webpage&quot;,&quot;&amp;View HTML code&quot;,&quot;&amp;Publish Webpage&quot;,&quot;&amp;Remove Webpage&quot;,&quot;E&amp;xit&quot;
+      .Example
+         [bool](Read-Choice &quot;Do you really want to do this?&quot; &quot;&amp;No&quot;,&quot;&amp;Yes&quot; -Default 1)
+        
+         This example takes advantage of the 0-based index to convert No (0) to False, and Yes (1) to True. It also specifies YES as the default, since that's the norm in PowerShell.
+      .Example
+         Read-Choice &quot;Do you really want to delete them all?&quot; @{label=&quot;&amp;Yes&quot;; Help=&quot;Confirm that you want to delete all of the files&quot;},@{Label=&quot;&amp;No&quot;; Help=&quot;Do not delete all files. You will be prompted to delete each file individually.&quot;}
+        
+         Specifies the labels and help text explicitly using hashtables.
+      .Example
+         $Env:PSModulePath -Split ';' | Read-Choice -Passthru | Get-Item
+
+         Pipes paths into Read-Choice to use as selections, and passes through the selected path to Get-Item
+      .Example
+         Get-Process | Where { $_.VM -gt 500MB } | Read-Choice -Multi -Label ProcessName -Value Id -Help { if($_.Path) { $_.Path } else { $_.ProcessName + &quot; (&quot; + $_.ID + &quot;)&quot; } }
+         
+         An advanced example dealing with pipeline input. In this example we're taking processes and rendering the name as the labels, and showing the path (or process name and ID) as help, and RETURNING the process Id of the selected processes
+   #&gt;
+   [CmdletBinding(DefaultParameterSetName=&quot;InputObject&quot;)]
+   param(
+      # An array of choices (or menu items), with optional ampersands (&amp;) in them to mark (unique) characters which can be used to select each item.
+      # Can be an array of strings which are used as labels, or objects (or hashtables) with properties for Name (Name or Label or Key) and Help (Help or Expression or Value)
+      [Parameter(Mandatory=$False, ParameterSetName=&quot;InputObject&quot;, ValueFromPipeline = $true)]
+      [Object]$InputObject,
+
+      # This is the prompt that will be presented to the user. Basically, the question you're asking.
+      [Parameter(Mandatory=$False, Position=0)]
+      [string]$Prompt = &quot;Choose one of the following options:&quot;,
+
+      # An array of choices (or menu items), with optional ampersands (&amp;) in them to mark (unique) characters which can be used to select each item.
+      # Can be an array of strings which are used as labels, or objects (or hashtables) with properties for Name (Name or Label or Key) and Help (Help or Expression or Value)
+      [Parameter(Mandatory=$true, Position=1, ParameterSetName=&quot;Choices&quot;)]
+      [Array]$Choices,  
+
+      # The name of a property of the InputObject to be used as the Label text.
+      # NOTE: this parameter is ValueFromPipelineByPropertyName and you can use a scriptblock to calculate something based on the InputObject
+      [Parameter(Mandatory=$false, ParameterSetName=&quot;InputObject&quot;, ValueFromPipelineByPropertyName = $true)]
+      [Alias(&quot;Name&quot;)]
+      [String]$Label,
+
+      # The name of a property of the InputObject to be used as the Help text.
+      # NOTE: this parameter is ValueFromPipelineByPropertyName and you can use a scriptblock to calculate something based on the InputObject
+      [Parameter(Mandatory=$false, ParameterSetName=&quot;InputObject&quot;, ValueFromPipelineByPropertyName = $true)]
+      [String]$Help,
+
+      # The name of a property of the InputObject to be used as the Value for output.
+      # If -Value is set, it forces -Passthru (since there's no other reason to use Value)
+      # NOTE: this parameter is ValueFromPipelineByPropertyName and you can use a scriptblock to calculate something based on the InputObject
+      [Parameter(Mandatory=$false, ParameterSetName=&quot;InputObject&quot;, ValueFromPipelineByPropertyName = $true)]
+      [String]$Value,
+
+      # An additional caption that can be displayed (usually above the Prompt) as part of the prompt. Defaults to &quot;Please choose!&quot;
+      [Parameter(Mandatory=$False)]
+      [string]$Title = &quot;Please choose!&quot;,
+
+      # The (0-based) index of the menu item to select by default (defaults to zero).
+      [Parameter(Mandatory=$False)]
+      [int[]]$Default  = 0,
+
+      # Prompt the user to select more than one option. This changes the prompt display for the default PowerShell.exe host to show the options in a column and allows them to choose multiple times.
+      # Note: when you specify MultipleChoice you may also specify multiple options as the default!
+      [Switch]$MultipleChoice,
+
+      # Assume options aren't currently sorted or labelled, and sort them by the key letter we choose
+      # Setting -Sorted forces -Passthru (since otherwise there's no way to tell what they selected)
+      [Switch]$Sorted,
+
+      # Causes the Choices objects to be output instead of just the indexes
+      [Switch]$Passthru
+   )
+   begin { 
+      $ChoiceDescriptions = @() 
+      $Output = @()
+      if($PSCmdlet.ParameterSetName -eq &quot;Choices&quot;) {
+         $ChoiceDescriptions = $(
+            foreach($choice in $Choices) {
+               if($Choice -is [System.Collections.IDictionary]) {
+                  foreach($Key in $Choice.Keys) {
+                     if(&quot;Label&quot; -like &quot;${Key}*&quot; -or &quot;Name&quot; -like &quot;${Key}*&quot;) { 
+                        $Name = $Choice.$Key
+                     } elseif (&quot;Help&quot; -like &quot;${Key}*&quot; -or &quot;Value&quot; -like &quot;${Key}*&quot; -or &quot;Expression&quot; -like &quot;${Key}*&quot;) {
+                        $Value = $Choice.$Key
+                     } else {
+                        Write-Error &quot;The key $Key is not valid. Expected `&quot;Label`&quot; and `&quot;Help`&quot;&quot;
+                     }
+                  }
+                  if($Name -and $Value) {
+                     New-Object System.Management.Automation.Host.ChoiceDescription $Name, $Value
+                  } else {
+                     Write-Error &quot;The parameter $Choice is not valid. Expected `&quot;Label`&quot; and `&quot;Help`&quot; keys.&quot;
+                  }
+               } else {
+                  New-Object System.Management.Automation.Host.ChoiceDescription &quot;$Choice&quot;, &quot;$Choice&quot;
+               }
+               $Output += $Choice
+            }
+         )
+      }
+      
+      # Set calculated* variables true if the parameter is a scriptblock to calculate
+      $CalculatedLabel = $PSBoundParameters.ContainsKey('Label') -and !$Label
+      $CalculatedHelp  = $PSBoundParameters.ContainsKey('Help') -and !$Help
+      $CalculatedValue = $PSBoundParameters.ContainsKey('Value') -and !$Value
+
+      if($PSBoundParameters.ContainsKey('Value')) {
+         $Passthru = $True
+      }
+   }
+   process {
+      if($PSCmdlet.ParameterSetName -eq 'InputObject') {
+         $Output   += if($CalculatedValue) { $Value } elseif($Value -and $InputObject.$Value) { $InputObject.$Value } elseif($Value) { $Value } else { $InputObject }
+         $LabelText = if($CalculatedLabel) { $Label } elseif($Label -and $InputObject.$Label) { $InputObject.$Label } elseif($Label) { $Label } else { &quot;$InputObject&quot; }
+         $HelpText  = if($CalculatedHelp)  { $Help  } elseif($Help -and $InputObject.$Help)   { $InputObject.$Help  } elseif($Help)  { $Help  } else { $LabelText } 
+
+         if($LabelText -and $HelpText) {
+            $ChoiceDescriptions += New-Object System.Management.Automation.Host.ChoiceDescription $LabelText, $HelpText
+         }
+      }
+   }
+   end {
+      if(@($ChoiceDescriptions).Count -eq 0) {
+         Write-Error &quot;There were no choices generated, no input&quot;
+         return
+      } elseif (@($ChoiceDescriptions).Count -eq 1) {
+         return $Output
+      }
+
+
+      [string[]]$Labels = $ChoiceDescriptions | % { $_.Label }
+      # Try making unique keys for the labels:
+      $Keys = @()
+      # If they already have a key
+      for($l =0; $l -lt $Labels.Count; $l++) {
+         if($Labels[$l].IndexOf('&amp;') -ge 0) {
+            $Keys += $Labels[$l][($Labels[$l].IndexOf('&amp;')+1)]
+         }
+      }
+      # Otherwise pick the first letter that's not a key
+      for($l =0; $l -lt $Labels.Count; $l++) {
+         if($Labels[$l].IndexOf('&amp;') -lt 0) {
+            for($i = 0; $i -lt $Labels[$l].Length; $i++) {
+               if($Keys -notcontains $Labels[$l][$i]) {
+                  $Keys += $Labels[$l][$i]
+                  $Labels[$l] = $Labels[$l].Insert($i,'&amp;')
+                  $ChoiceDescriptions[$l] = New-Object System.Management.Automation.Host.ChoiceDescription $Labels[$l], $ChoiceDescriptions[$l].HelpMessage
+                  break
+               }
+            }
+         }
+      }
+      # Otherwise, add a number or a letter
+      for($l =0; $l -lt $Labels.Count; $l++) {
+         if($Labels[$l].IndexOf('&amp;') -lt 0) {
+            foreach($i in 49..57+66..90) {
+               if($Keys -notcontains [string][char]$i) {
+                  $Keys += [string][char]$i
+                  $Labels[$l] = '{0}(&amp;{1})' -f $Labels[$l], ([string][char]$i)
+                  $ChoiceDescriptions[$l] = New-Object System.Management.Automation.Host.ChoiceDescription $Labels[$l], $ChoiceDescriptions[$l].HelpMessage
+                  break
+               }
+            }
+         }
+      }
+      if($ChoiceDescriptions.Length -gt 34 -and $Labels -notmatch '&amp;') {
+         Write-Warning &quot;There are too many choices, some may be unpickable!&quot;
+      }
+
+      if($Sorted) {
+         $Passthru = $True
+         $Max = 1000
+         $Indexes = $Labels | %{ if(($amp = $_.IndexOf('&amp;')) -lt 0) { ($Max++) } else { [int][byte][char]&quot;$($_[($amp+1)])&quot;.ToUpperInvariant() } }
+         [Array]::Sort($Indexes.Clone(), $Output)
+         [Array]::Sort($Indexes, $ChoiceDescriptions)
+      }
+
+      # Passing an array as the $Default triggers multiple choice prompting.
+      if(!$MultipleChoice) { [int]$Default = $Default[0] }
+
+      [int[]]$Answer = $Host.UI.PromptForChoice($Title,$Prompt,$ChoiceDescriptions,$Default)
+
+      if($Passthru) {
+         Write-Verbose &quot;$Answer&quot;
+         Write-Output  $Output[$Answer]
+      } else {
+         Write-Output $Answer
+      }
+   }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

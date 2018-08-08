@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>FileCop - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>FileCop</h1>
+<h3><a href="//scripts/4100.ps1">download</a></h3>
+<p>What is a FileCop? It's a script that shows extended data of files such as hashes, streams and etc. in compact GUI style. Note that script has been tested on Win2K3, so I do not have any idea about its workability on other systems. Please, let me know about bugs.</p>
+<pre><code class="language-posh">$nul = &quot;&lt;NULL&gt;&quot;
+$sec = &quot;MD5&quot;, &quot;SHA1&quot;, &quot;SHA256&quot;, &quot;SHA384&quot;, &quot;SHA512&quot;, &quot;RIPEMD160&quot;
+
+##################################################################################################
+
+function Add-RootsTree {
+  [IO.Directory]::GetLogicalDrives() | % {
+    $nod = New-Object Windows.Forms.TreeNode
+    $nod = $tvRoots.Nodes.Add($_)
+    $nod.Nodes.Add($nul)
+  }
+}
+
+function Show-ExceptMessage([string]$msg) {
+  [Windows.Forms.MessageBox]::Show($msg, $frmMain.Text,
+                 [Windows.Forms.MessageBoxButtons]::OK,
+            [Windows.Forms.MessageBoxIcon]::Exclamation
+  )
+}
+
+function Add-Folders {
+  $_.Node.Nodes.Clear()
+
+  try {
+    foreach ($i in [IO.Directory]::GetDirectories($_.Node.FullPath)) {
+      $node = $_.Node.Nodes.Add([IO.Path]::GetFileName($i))
+      $node.Nodes.Add($nul)
+    }
+  }
+  catch { Show-ExceptMessage $_.Exception.Message }
+}
+
+function Add-Files {
+  try {
+    foreach ($i in [IO.Directory]::GetFiles($_.Node.FullPath)) {
+      $node = $_.Node.Nodes.Add([IO.Path]::GetFileName($i))
+      $node.Tag = &quot;File&quot;
+      $node.ImageIndex = 1
+    }
+  }
+  catch {}
+}
+
+function Format-String([string]$par) {
+  if ($par -eq &quot;&quot;) { 'n/a' }
+  else { $par }
+}
+
+function Get-Checksum([string]$alg, [string]$obj) {
+  ([Security.Cryptography.HashAlgorithm]::Create($alg).ComputeHash(
+    [IO.File]::ReadAllBytes($obj)
+  ) | % {&quot;{0:x2}&quot; -f $_}) -as [string] -replace &quot; &quot;, &quot;&quot;
+}
+
+function Get-Image([string]$img) {
+  [Drawing.Image]::FromStream((New-Object IO.MemoryStream(($$ = `
+              [Convert]::FromBase64String($img)), 0, $$.Length)))
+}
+
+function Clear-Output {
+  $lblName.Text = [String]::Empty
+  $lblAttr.Text = [String]::Empty
+  $lblSign.Text = [String]::Empty
+  $lblBorn.Text = [String]::Empty
+  $lblAccs.Text = [String]::Empty
+  $lblWrit.Text = [String]::Empty
+  $lblSize.Text = [String]::Empty
+  $lblType.Text = [String]::Empty
+  $lblPubl.Text = [String]::Empty
+  $lblDesc.Text = [String]::Empty
+  $lblProd.Text = [String]::Empty
+  $lblVers.Text = [String]::Empty
+  $lblOriN.Text = [String]::Empty
+  $lblIntN.Text = [String]::Empty
+  $lblCopy.Text = [String]::Empty
+  $lblComm.Text = [String]::Empty
+}
+
+##################################################################################################
+
+$tvRoots_AfterSelect= {
+  $lstStrm.Items.Clear()
+  $lstHash.Items.Clear()
+
+  if ($_.Node.Tag -eq 'File') {
+    $fi = [IO.FileInfo]($_.Node.FullPath)
+    if (Test-Path $fi.FullName) {
+      $lblName.Text = $fi.FullName
+      $lblAttr.Text = $fi.Attributes
+      $lblSign.Text = (Get-AuthenticodeSignature $fi.FullName).Status
+      $lblBorn.Text = $fi.CreationTime
+      $lblAccs.Text = $fi.LastAccessTime
+      $lblWrit.Text = $fi.LastWriteTime
+      $lblSize.Text = $fi.Length
+      $lblType.Text = (New-Object -com Scripting.FileSystemObject).GetFile($fi.FullName).Type
+
+      $vi = [Diagnostics.FileVersionInfo]::GetVersionInfo($fi.FullName)
+      $lblPubl.Text = (Format-String $vi.CompanyName)
+      $lblDesc.Text = (Format-String $vi.FileDescription)
+      $lblProd.Text = (Format-String $vi.ProductName)
+      $lblVers.Text = (Format-String $vi.ProductVersion)
+      $lblOriN.Text = (Format-String $vi.OriginalFileName)
+      $lblIntN.Text = (Format-String $vi.InternalName)
+      $lblCopy.Text = (Format-String $vi.LegalCopyright)
+      $lblComm.Text = (Format-String $vi.Comments)
+
+      try {
+        [IO.Streams]::Dump($fi.FullName).Split(&quot;;&quot;) | % {
+          $itm = $lstStrm.Items.Add($_.Split(&quot; &quot;)[0])
+          $itm.SubItems.Add($_.Split(&quot; &quot;)[1])
+          $itm.SubItems.Add($_.Split(&quot; &quot;)[2])
+        }
+      }
+      catch {}
+
+      $sec | % {
+        $itm = $lstHash.Items.Add($_)
+
+        if ($fi.Length -ne 0) {
+          $itm.SubItems.Add((Get-Checksum $_ $fi.FullName))
+        }
+        else { $itm.SubItems.Add('n/a') }
+      }
+    }
+    else { Clear-Output; $lblName.Text = 'File does not exist or has been moved' }
+  }
+  else { Clear-Output }
+}
+
+$tvRoots_BeforeExpand= {
+  Add-Folders
+  Add-Files
+}
+
+$mnuUpdt_Click= {
+  $tvRoots.Nodes.Clear()
+  $lstStrm.Items.Clear()
+  $lstHash.Items.Clear()
+  Clear-Output
+  $sbPanel.Text = &quot;Refreshed at &quot; + (Get-Date -f 'HH:mm:ss')
+  Add-RootsTree
+}
+
+$mnuSBar_Click= {
+  $toggle =! $mnuSBar.Checked
+  $mnuSbar.Checked = $toggle
+  $sbPanel.Visible = $toggle
+}
+
+$frmMain_load= {
+  Add-RootsTree
+  $sbPanel.Text = &quot;Ready&quot;
+}
+
+##################################################################################################
+
+$code = @'
+using System;
+using System.IO;
+using System.ComponentModel;
+using System.Collections.Generic;
+using Microsoft.Win32.SafeHandles;
+using System.Runtime.InteropServices;
+
+namespace IO {
+  [StructLayout(LayoutKind.Sequential, Pack = 1)]
+  struct Win32StreamID {
+    public StreamType dwStreamId;
+    public int dwStreamAttributes;
+    public long Size;
+    public int dwStreamNameSize;
+  }
+
+  public enum StreamType {
+    Unknown = 0,
+    Data,
+    ExternalData,
+    SecurityData,
+    AlternateData,
+    Link,
+    PropertyData,
+    ObjectId,
+    ReparseData,
+    SparseDock,
+    TransactionData
+  }
+
+  struct StreamInfo {
+    public StreamInfo(string name, StreamType type, long size) {
+      Name = name;
+      Type = type;
+      Size = size;
+    }
+    public readonly string Name;
+    public readonly StreamType Type;
+    public readonly long Size;
+  }
+
+  internal static class WinAPI {
+    [DllImport(&quot;kernel32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BackupRead(SafeFileHandle hFile, IntPtr lpBuffer,
+                        uint nNumberOfBytesToRead, out uint lpNumberOfBytesRead,
+                                    [MarshalAs(UnmanagedType.Bool)] bool bAbort,
+                          [MarshalAs(UnmanagedType.Bool)] bool bProcessSecurity,
+                                                          ref IntPtr lpContext);
+
+    [DllImport(&quot;kernel32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BackupSeek(SafeFileHandle hFile, uint dwLowBytesToSeek,
+                                   uint dwHighBytesToSeek, out uint lpdwLowByteSeeked,
+                                   out uint lpdwHighByteSeeked, ref IntPtr lpContext);
+
+    public static IEnumerable&lt;StreamInfo&gt; GetStreams(FileInfo file) {
+      const int buff = 4096;
+
+      using (FileStream fs = file.OpenRead()) {
+        IntPtr context = IntPtr.Zero;
+        IntPtr buffer = Marshal.AllocHGlobal(buff);
+
+        try {
+          while (true) {
+            uint numRead;
+            if (!BackupRead(fs.SafeFileHandle, buffer,
+              (uint)Marshal.SizeOf(typeof(Win32StreamID)), out numRead,
+              false, true, ref context)) throw new Win32Exception();
+
+            if (numRead &gt; 0) {
+              Win32StreamID stream = (Win32StreamID)Marshal.PtrToStructure(buffer,
+                                                           typeof(Win32StreamID));
+              string name = null;
+              if (stream.dwStreamNameSize &gt; 0) {
+                if (!BackupRead(fs.SafeFileHandle, buffer, (uint)Math.Min(buff,
+                                         stream.dwStreamNameSize), out numRead,
+                                            false, true, ref context)) throw new Win32Exception();
+                name = Marshal.PtrToStringUni(buffer, (int)numRead / 2);
+              }
+
+              yield return new StreamInfo(name, stream.dwStreamId, stream.Size);
+
+              if (stream.Size &gt; 0) {
+                uint lo, hi;
+                BackupSeek(fs.SafeFileHandle, uint.MaxValue,
+                 int.MaxValue, out lo, out hi, ref context);
+              }
+            }
+            else break;
+          }
+        }
+        finally {
+          Marshal.FreeHGlobal(buffer);
+          uint numRead;
+          if (!BackupRead(fs.SafeFileHandle, IntPtr.Zero, 0,
+                   out numRead, true, false, ref context)) throw new Win32Exception();
+        }
+      }
+    }
+  }
+
+  public static class Streams {
+    public static string Dump(string file) {
+      List&lt;StreamInfo&gt; streams =
+        new List&lt;StreamInfo&gt;(WinAPI.GetStreams(new FileInfo(file)));
+
+      string res = &quot;&quot;;
+      foreach (StreamInfo stream in streams) {
+        res += (stream.Name != null ? stream.Name : &quot;&lt;Unnamed&gt;&quot;) +
+                      &quot; &quot; + stream.Type + &quot; &quot; + stream.Size + &quot;;&quot;;
+      }
+
+      return res;
+    }
+  }
+}
+'@
+
+##################################################################################################
+
+function frmMain_Show {
+  Add-Type -AssemblyName System.Windows.Forms
+  [Windows.Forms.Application]::EnableVisualStyles()
+
+  Add-Type $code
+  $ico = [Drawing.Icon]::ExtractAssociatedIcon(($PSHome + '\powershell.exe'))
+
+  $frmMain = New-Object Windows.Forms.Form
+  $mnuMain = New-Object Windows.Forms.MainMenu
+  $mnuFile = New-Object Windows.Forms.MenuItem
+  $mnuUpdt = New-Object Windows.Forms.MenuItem
+  $mnuExit = New-Object Windows.Forms.MenuItem
+  $mnuView = New-Object Windows.Forms.MenuItem
+  $mnuTCol = New-Object Windows.Forms.MenuItem
+  $mnuSBar = New-Object Windows.Forms.MenuItem
+  $mnuHelp = New-Object Windows.Forms.MenuItem
+  $mnuInfo = New-Object Windows.Forms.MenuItem
+  $scSplt1 = New-Object Windows.Forms.SplitContainer
+  $scSplt2 = New-Object Windows.Forms.SplitContainer
+  $tvRoots = New-Object Windows.Forms.TreeView
+  $lblL_01 = New-Object Windows.Forms.Label
+  $lblL_02 = New-Object Windows.Forms.Label
+  $lblL_03 = New-Object Windows.Forms.Label
+  $lblL_04 = New-Object Windows.Forms.Label
+  $lblL_05 = New-Object Windows.Forms.Label
+  $lblL_06 = New-Object Windows.Forms.Label
+  $lblL_07 = New-Object Windows.Forms.Label
+  $lblL_08 = New-Object Windows.Forms.Label
+  $lblL_09 = New-Object Windows.Forms.Label
+  $lblL_10 = New-Object Windows.Forms.Label
+  $lblL_11 = New-Object Windows.Forms.Label
+  $lblL_12 = New-Object Windows.Forms.Label
+  $lblL_13 = New-Object Windows.Forms.Label
+  $lblL_14 = New-Object Windows.Forms.Label
+  $lblL_15 = New-Object Windows.Forms.Label
+  $lblL_16 = New-Object Windows.Forms.Label
+  $lblName = New-Object Windows.Forms.Label
+  $lblAttr = New-Object Windows.Forms.Label
+  $lblSign = New-Object Windows.Forms.Label
+  $lblBorn = New-Object Windows.Forms.Label
+  $lblAccs = New-Object Windows.Forms.Label
+  $lblWrit = New-Object Windows.Forms.Label
+  $lblSize = New-Object Windows.Forms.Label
+  $lblType = New-Object Windows.Forms.Label
+  $lblPubl = New-Object Windows.Forms.Label
+  $lblDesc = New-Object Windows.Forms.Label
+  $lblProd = New-Object Windows.Forms.Label
+  $lblVers = New-Object Windows.Forms.Label
+  $lblOriN = New-Object Windows.Forms.Label
+  $lblIntN = New-Object Windows.Forms.Label
+  $lblCopy = New-Object Windows.Forms.Label
+  $lblComm = New-Object Windows.Forms.Label
+  $lstStrm = New-Object Windows.Forms.ListView
+  $chSName = New-Object Windows.Forms.ColumnHeader
+  $chSType = New-Object Windows.Forms.ColumnHeader
+  $chSSize = New-Object Windows.Forms.ColumnHeader
+  $lstHash = New-Object Windows.Forms.ListView
+  $chHType = New-Object Windows.Forms.ColumnHeader
+  $chHData = New-Object Windows.Forms.ColumnHeader
+  $imgList = New-Object Windows.Forms.ImageList
+  $sbPanel = New-Object Windows.Forms.StatusBar
+  #
+  #mnuMain
+  #
+  $mnuMain.MenuItems.AddRange(@($mnuFile, $mnuView, $mnuHelp))
+  #
+  #mnuFile
+  #
+  $mnuFile.MenuItems.AddRange(@($mnuUpdt, $mnuExit))
+  $mnuFile.Text = &quot;&amp;File&quot;
+  #
+  #mnuUpdt
+  #
+  $mnuUpdt.Shortcut = &quot;F5&quot;
+  $mnuUpdt.Text = &quot;&amp;Refresh&quot;
+  $mnuUpdt.Add_Click($mnuUpdt_Click)
+  #
+  #mnuExit
+  #
+  $mnuExit.Shortcut = &quot;CtrlX&quot;
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click({$frmMain.Close()})
+  #
+  #mnuView
+  #
+  $mnuView.MenuItems.AddRange(@($mnuTCol, $mnuSBar))
+  $mnuView.Text = &quot;&amp;View&quot;
+  #
+  #mnuTCol
+  #
+  $mnuTCol.Shortcut = &quot;CtrlC&quot;
+  $mnuTCol.Text = &quot;&amp;Collapse Tree&quot;
+  $mnuTCol.Add_Click({$tvRoots.CollapseAll()})
+  #
+  #mnuSBar
+  #
+  $mnuSBar.Checked = $true
+  $mnuSBar.Text = &quot;Toggle Status &amp;Bar&quot;
+  $mnuSBar.Add_Click($mnuSBar_Click)
+  #
+  #mnuHelp
+  #
+  $mnuHelp.MenuItems.AddRange(@($mnuInfo))
+  $mnuHelp.Text = &quot;&amp;Help&quot;
+  #
+  #mnuInfo
+  #
+  $mnuInfo.Text = &quot;About...&quot;
+  $mnuInfo.Add_Click({frmInfo_Show})
+  #
+  #scSplt1
+  #
+  $scSplt1.Dock = &quot;Fill&quot;
+  $scSplt1.Orientation = &quot;Horizontal&quot;
+  $scSplt1.Panel1.Controls.Add($scSplt2)
+  $scSplt1.Panel2.Controls.Add($lstHash)
+  $scSplt1.Panel1MinSize = 450
+  $scSplt1.SplitterDistance = 90
+  $scSplt1.SplitterWidth = 1
+  #
+  #scSplt2
+  #
+  $scSplt2.Dock = &quot;Fill&quot;
+  $scSplt2.Panel1.Controls.Add($tvRoots)
+  $scSplt2.Panel2.Controls.AddRange(@($lblL_01, $lblL_02, $lblL_03, $lblL_04, $lblL_05, `
+        $lblL_06, $lblL_07, $lblL_08, $lblL_09, $lblL_10, $lblL_11, $lblL_12, $lblL_13, `
+        $lblL_14, $lblL_15, $lblL_16, $lblName, $lblAttr, $lblSign, $lblBorn, $lblAccs, `
+        $lblWrit, $lblSize, $lblType, $lblPubl, $lblDesc, $lblProd, $lblVers, $lblOriN, `
+        $lblIntN, $lblCopy, $lblComm, $lstStrm))
+  $scSplt2.Panel1MinSize = 43
+  $scSplt2.SplitterDistance = 43
+  $scSplt2.SplitterWidth = 1
+  #
+  #tvRoots
+  #
+  $tvRoots.Dock = &quot;Fill&quot;
+  $tvRoots.ImageList = $imgList
+  $tvRoots.Select()
+  $tvRoots.SelectedImageIndex = 2
+  $tvRoots.Add_AfterSelect($tvRoots_AfterSelect)
+  $tvRoots.Add_BeforeExpand($tvRoots_BeforeExpand)
+  #
+  #lblL_01
+  #
+  $lblL_01.Location = New-Object Drawing.Point(8, 13)
+  $lblL_01.Width = 80
+  $lblL_01.Text = &quot;Full Name:&quot;
+  #
+  #lblL_02
+  #
+  $lblL_02.Location = New-Object Drawing.Point(8, 35)
+  $lblL_02.Width = 80
+  $lblL_02.Text = &quot;Attributes:&quot;
+  #
+  #lblL_03
+  #
+  $lblL_03.Location = New-Object Drawing.Point(8, 57)
+  $lblL_03.Width = 80
+  $lblL_03.Text = &quot;Signed:&quot;
+  #
+  #lblL_04
+  #
+  $lblL_04.Location = New-Object Drawing.Point(8, 79)
+  $lblL_04.Width = 80
+  $lblL_04.Text = &quot;Creation:&quot;
+  #
+  #lblL_05
+  #
+  $lblL_05.Location = New-Object Drawing.Point(8, 101)
+  $lblL_05.Width = 80
+  $lblL_05.Text = &quot;Last Access:&quot;
+  #
+  #lblL_06
+  #
+  $lblL_06.Location = New-Object Drawing.Point(8, 123)
+  $lblL_06.Width = 80
+  $lblL_06.Text = &quot;Last Write:&quot;
+  #
+  #lblL_07
+  #
+  $lblL_07.Location = New-Object Drawing.Point(8, 145)
+  $lblL_07.Width = 80
+  $lblL_07.Text = &quot;Size:&quot;
+  #
+  #lblL_08
+  #
+  $lblL_08.Location = New-Object Drawing.Point(8, 167)
+  $lblL_08.Width = 80
+  $lblL_08.Text = &quot;Shell Type:&quot;
+  #
+  #lblL_09
+  #
+  $lblL_09.Location = New-Object Drawing.Point(8, 189)
+  $lblL_09.Width = 80
+  $lblL_09.Text = &quot;Publisher:&quot;
+  #
+  #lblL_10
+  #
+  $lblL_10.Location = New-Object Drawing.Point(8, 211)
+  $lblL_10.Width = 80
+  $lblL_10.Text = &quot;Description:&quot;
+  #
+  #lblL_11
+  #
+  $lblL_11.Location = New-Object Drawing.Point(8, 233)
+  $lblL_11.Width = 80
+  $lblL_11.Text = &quot;Product:&quot;
+  #
+  #lblL_12
+  #
+  $lblL_12.Location = New-Object Drawing.Point(8, 255)
+  $lblL_12.Width = 80
+  $lblL_12.Text = &quot;Version:&quot;
+  #
+  #lblL_13
+  #
+  $lblL_13.Location = New-Object Drawing.Point(8, 277)
+  $lblL_13.Width = 80
+  $lblL_13.Text = &quot;Original Name:&quot;
+  #
+  #lblL_14
+  #
+  $lblL_14.Location = New-Object Drawing.Point(8, 299)
+  $lblL_14.Width = 80
+  $lblL_14.Text = &quot;Internal Name:&quot;
+  #
+  #lblL_15
+  #
+  $lblL_15.Location = New-Object Drawing.Point(8, 321)
+  $lblL_15.Width = 80
+  $lblL_15.Text = &quot;Copyright:&quot;
+  #
+  #lblL_16
+  #
+  $lblL_16.Location = New-Object Drawing.Point(8, 343)
+  $lblL_16.Width = 80
+  $lblL_16.Text = &quot;Comment:&quot;
+  #
+  #lblName
+  #
+  $lblName.BorderStyle = &quot;Fixed3D&quot;
+  $lblName.Location = New-Object Drawing.Point(91, 11)
+  $lblName.Size = New-Object Drawing.Size(461, 20)
+  $lblName.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblAttr
+  #
+  $lblAttr.BorderStyle = &quot;Fixed3D&quot;
+  $lblAttr.Location = New-Object Drawing.Point(91, 33)
+  $lblAttr.Size = New-Object Drawing.Size(461, 20)
+  $lblAttr.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblSign
+  #
+  $lblSign.BorderStyle = &quot;Fixed3D&quot;
+  $lblSign.Location = New-Object Drawing.Point(91, 55)
+  $lblSign.Size = New-Object Drawing.Size(461, 20)
+  $lblSign.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblBorn
+  #
+  $lblBorn.BorderStyle = &quot;Fixed3D&quot;
+  $lblBorn.Location = New-Object Drawing.Point(91, 77)
+  $lblBorn.Size = New-Object Drawing.Size(461, 20)
+  $lblBorn.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblAccs
+  #
+  $lblAccs.BorderStyle = &quot;Fixed3D&quot;
+  $lblAccs.Location = New-Object Drawing.Point(91, 99)
+  $lblAccs.Size = New-Object Drawing.Size(461, 20)
+  $lblAccs.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblWrit
+  #
+  $lblWrit.BorderStyle = &quot;Fixed3D&quot;
+  $lblWrit.Location = New-Object Drawing.Point(91, 121)
+  $lblWrit.Size = New-Object Drawing.Size(461, 20)
+  $lblWrit.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblSize
+  #
+  $lblSize.BorderStyle = &quot;Fixed3D&quot;
+  $lblSize.Location = New-Object Drawing.Point(91, 143)
+  $lblSize.Size = New-Object Drawing.Size(461, 20)
+  $lblSize.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblType
+  #
+  $lblType.BorderStyle = &quot;Fixed3D&quot;
+  $lblType.Location = New-Object Drawing.Point(91, 165)
+  $lblType.Size = New-Object Drawing.Size(461, 20)
+  $lblType.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblPubl
+  #
+  $lblPubl.BorderStyle = &quot;Fixed3D&quot;
+  $lblPubl.Location = New-Object Drawing.Point(91, 187)
+  $lblPubl.Size = New-Object Drawing.Size(461, 20)
+  $lblPubl.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblDesc
+  #
+  $lblDesc.BorderStyle = &quot;Fixed3D&quot;
+  $lblDesc.Location = New-Object Drawing.Point(91, 209)
+  $lblDesc.Size = New-Object Drawing.Size(461, 20)
+  $lblDesc.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblProd
+  #
+  $lblProd.BorderStyle = &quot;Fixed3D&quot;
+  $lblProd.Location = New-Object Drawing.Point(91, 231)
+  $lblProd.Size = New-Object Drawing.Size(461, 20)
+  $lblProd.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblVers
+  #
+  $lblVers.BorderStyle = &quot;Fixed3D&quot;
+  $lblVers.Location = New-Object Drawing.Point(91, 253)
+  $lblVers.Size = New-Object Drawing.Size(461, 20)
+  $lblVers.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblOriN
+  #
+  $lblOriN.BorderStyle = &quot;Fixed3D&quot;
+  $lblOriN.Location = New-Object Drawing.Point(91, 275)
+  $lblOriN.Size = New-Object Drawing.Size(461, 20)
+  $lblOriN.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblIntN
+  #
+  $lblIntN.BorderStyle = &quot;Fixed3D&quot;
+  $lblIntN.Location = New-Object Drawing.Point(91, 297)
+  $lblIntN.Size = New-Object Drawing.Size(461, 20)
+  $lblIntN.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblCopy
+  #
+  $lblCopy.BorderStyle = &quot;Fixed3D&quot;
+  $lblCopy.Location = New-Object Drawing.Point(91, 319)
+  $lblCopy.Size = New-Object Drawing.Size(461, 20)
+  $lblCopy.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lblComm
+  #
+  #$lblComm.Anchor = &quot;Left, Top, Right&quot;
+  $lblComm.BorderStyle = &quot;Fixed3D&quot;
+  $lblComm.Location = New-Object Drawing.Point(91, 341)
+  $lblComm.Size = New-Object Drawing.Size(461, 20)
+  $lblComm.TextAlign = &quot;MiddleLeft&quot;
+  #
+  #lstStrm
+  #
+  $lstStrm.Columns.AddRange(@($chSName, $chSType, $chSSize))
+  $lstStrm.FullRowSelect = $true
+  $lstStrm.Location = New-Object Drawing.Point(8, 367)
+  $lstStrm.Size = New-Object Drawing.Size(545, 80)
+  $lstStrm.View = &quot;Details&quot;
+  #
+  #chSName
+  #
+  $chSName.Text = &quot;Stream Name&quot;
+  $chSName.Width = 150
+  #
+  #chSType
+  #
+  $chSType.Text = &quot;Stream Type&quot;
+  $chSType.TextAlign = &quot;Right&quot;
+  $chSType.Width = 150
+  #
+  #chSSize
+  #
+  $chSSize.Text = &quot;Stream Size&quot;
+  $chSSize.Width = 75
+  #
+  #lstHash
+  #
+  $lstHash.Columns.AddRange(@($chHType, $chHData))
+  $lstHash.Dock = &quot;Fill&quot;
+  $lstHash.FullRowSelect = $true
+  $lstHash.ShowItemToolTips = $true
+  $lstHash.View = &quot;Details&quot;
+  #
+  #chHType
+  #
+  $chHType.Text = &quot;Hash&quot;
+  $chHType.TextAlign = &quot;Right&quot;
+  $chHType.Width = 90
+  #
+  #chHData
+  #
+  $chHData.Text = &quot;Data&quot;
+  $chHData.Width = 679
+  #
+  #imgList
+  #
+  $i_1, $i_2, $i_3 | % { $imgList.Images.Add((Get-Image $_)) }
+  #
+  #sbPanel
+  #
+  $sbPanel.SizingGrip = $false
+  #
+  #frmMain
+  #
+  $frmMain.ClientSize = New-Object Drawing.Size(790, 550)
+  $frmMain.Controls.AddRange(@($scSplt1, $sbPanel))
+  $frmMain.FormBorderStyle = &quot;FixedSingle&quot;
+  $frmMain.Icon = $ico
+  $frmMain.MaximizeBox = $false
+  $frmMain.Menu = $mnuMain
+  $frmMain.StartPosition = &quot;CenterScreen&quot;
+  $frmMain.Text = &quot;FileCop [&quot; + [Security.Principal.WindowsIdentity]::GetCurrent().Name + &quot;]&quot;
+  $frmMain.Add_Load($frmMain_Load)
+
+  [void]$frmMain.ShowDialog()
+}
+
+##################################################################################################
+
+function frmInfo_Show {
+  $frmInfo = New-Object Windows.Forms.Form
+  $pbImage = New-Object Windows.Forms.PictureBox
+  $lblName = New-Object Windows.Forms.Label
+  $lblCopy = New-Object Windows.Forms.Label
+  $btnExit = New-Object Windows.Forms.Button
+  #
+  #pbImage
+  #
+  $pbImage.Location = New-Object Drawing.Point(16, 16)
+  $pbImage.Size = New-Object Drawing.Size(32, 32)
+  $pbImage.SizeMode = &quot;StretchImage&quot;
+  #
+  #lblName
+  #
+  $lblName.Font = New-Object Drawing.Font(&quot;Microsoft Sans Serif&quot;, 8, [Drawing.FontStyle]::Bold)
+  $lblName.Location = New-Object Drawing.Point(53, 19)
+  $lblName.Size = New-Object Drawing.Size(360, 18)
+  $lblName.Text = &quot;FileCop v2.01&quot;
+  #
+  #lblCopy
+  #
+  $lblCopy.Location = New-Object Drawing.Point(67, 37)
+  $lblCopy.Size = New-Object Drawing.Size(360, 23)
+  $lblCopy.Text = &quot;(C) 2011-2013 greg zakharov gregzakh@gmail.com&quot;
+  #
+  #btnExit
+  #
+  $btnExit.Location = New-Object Drawing.Point(135, 67)
+  $btnExit.Text = &quot;OK&quot;
+  #
+  #frmInfo
+  #
+  $frmInfo.AcceptButton = $btnExit
+  $frmInfo.CancelButton = $btnExit
+  $frmInfo.ClientSize = New-Object Drawing.Size(350, 110)
+  $frmInfo.ControlBox = $false
+  $frmInfo.Controls.AddRange(@($pbImage, $lblName, $lblCopy, $btnExit))
+  $frmInfo.ShowInTaskBar = $false
+  $frmInfo.StartPosition = &quot;CenterScreen&quot;
+  $frmInfo.Text = &quot;About...&quot;
+  $frmInfo.Add_Load({$pbImage.Image = $ico.ToBitmap()})
+
+  [void]$frmInfo.ShowDialog()
+}
+
+##################################################################################################
+
+$i_1 = &quot;/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nI&quot; + `
+       &quot;CIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMj&quot; + `
+       &quot;IyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAARABYDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQE&quot; + `
+       &quot;AAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEI&quot; + `
+       &quot;I0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4e&quot; + `
+       &quot;XqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6e&quot; + `
+       &quot;rx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ&quot; + `
+       &quot;3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZH&quot; + `
+       &quot;SElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6w&quot; + `
+       &quot;sPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD2vUL4x3f2bzpYdqK4MK&quot; + `
+       &quot;B3csWGACD0CknAJ+mDmk+tX9rDIRZyXYQEqWhmjdhjoQIiuffIH07V/EUs+n6xbaiLW4ng2BCIE3sCBIOR/wA&quot; + `
+       &quot;DH5H8cu48WTSQSRrpGrZZSB/ox9PrXkVq2JhVlyxbXTTT8jqjCDS1X3nZabqMOp2nnw7lwxSSNxho3HVWHYii&quot; + `
+       &quot;sXwUk/2DUbma3ltxd6jNPGky7W2NjGR26UV6lNuUE5KzOaSSbsdLRRRViCiiigD/2Q==&quot;
+
+$i_2 = &quot;/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nI&quot; + `
+       &quot;CIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMj&quot; + `
+       &quot;IyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAASABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQE&quot; + `
+       &quot;AAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEI&quot; + `
+       &quot;I0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4e&quot; + `
+       &quot;XqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6e&quot; + `
+       &quot;rx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ&quot; + `
+       &quot;3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZH&quot; + `
+       &quot;SElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6w&quot; + `
+       &quot;sPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD2gSWscJmuppVzLIMiV8&quot; + `
+       &quot;cM3YHgACq8WoxpfbIpfMtZHCgksxVuBjkf3uOvcdOaydZgvr6zRLBAxMlyjls4H7zHb8aybXTdSPiTTpLmOSO&quot; + `
+       &quot;J3WNsoeTH86ln/jYhOTgZ7Dito04OHM5a9jmnWqKooRjdaanayaNpcsjSSabZu7kszNApJJ6knFOg0nTraZZo&quot; + `
+       &quot;NPtYpV+68cKqw7dQKKKxOk//2Q==&quot;
+
+$i_3 = &quot;/9j/4AAQSkZJRgABAQEAYABgAAD/4QAWRXhpZgAASUkqAAgAAAAAAAAAAAD/2wBDAAgGBgcGBQgHBwcJCQgKD&quot; + `
+       &quot;BQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDR&quot; + `
+       &quot;gyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAANAAg&quot; + `
+       &quot;DASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9&quot; + `
+       &quot;AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdIS&quot; + `
+       &quot;UpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxM&quot; + `
+       &quot;XGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgc&quot; + `
+       &quot;ICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYk&quot; + `
+       &quot;NOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUl&quot; + `
+       &quot;ZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADA&quot; + `
+       &quot;MBAAIRAxEAPwDtvDfjq4XxvqXhzUBLPG9/OlpKql2jw7fI2OdmBwf4e/y/dK63RPC1jol/qOoRjzb6/nklkmY&quot; + `
+       &quot;cqrOWCL6AcZ9SMnsAVlRjOMbTZ6GZVsNVrKWHjZWV/N9Xbp/TP//Z&quot;
+
+##################################################################################################
+
+frmMain_Show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Huajun Gu">
+    <title>New-XVM - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-XVM</h1>
+<h3><a href="//scripts/3614.ps1">download</a> - <a href="//scripts/3613.md">parent</a></h3>
+<p>This is a script which I have used to prepare my lab environment with Hyper-V 3.0. I have tested it in Windows Server 2012 RC.
+I will verify it again after upgrading my lab to Windows Server 2012 RTM.</p>
+<p>You may extend this script to support more configurations.
+I know MemoryStartupBytes and BootDevice are not enough. There are a lot of new features in Hyper-V 3.0, right? :)
+Like Bandwidith Management, DHCP Guard, Root Guard and so on.</p>
+<p>Note: I haven't tried to run this script against a remote Hyper-V 3.0 server because I only upgrade one of my test machine to Windows Server 2012 RC.</p>
+<pre><code class="language-posh">#Examples
+
+&lt;#
+New-XVM -Name &quot;WS2012-TestServer01&quot; -SwitchName &quot;Switch(192.168.2.0/24)&quot; -VhdType NoVHD
+New-XVM -Name &quot;WS2012-TestServer02&quot; -SwitchName &quot;Switch(192.168.2.0/24)&quot; -VhdType ExistingVHD -VhdPath 'D:\vhds\WS2012-TestServer02.vhdx'
+New-XVM -Name &quot;WS2012-TestServer03&quot; -SwitchName &quot;Switch(192.168.2.0/24)&quot; -VhdType NewVHD
+New-XVM -Name &quot;WS2012-TestServer04&quot; -SwitchName &quot;Switch(192.168.2.0/24)&quot; -VhdType NewVHD -DiskType Fixed -DiskSize 1GB
+New-XVM -Name &quot;WS2012-TestServer05&quot; -SwitchName &quot;Switch(192.168.2.0/24)&quot; -VhdType NewVHD -DiskType Dynamic
+New-XVM -Name &quot;WS2012-TestServer06&quot; -SwitchName &quot;Switch(192.168.2.0/24)&quot; -VhdType Differencing -ParentVhdPath 'D:\vhds\Windows Server 2012 RC Base.vhdx'
+New-XVM -Name &quot;WS2012-TestServer07&quot; -SwitchName &quot;Switch(192.168.2.0/24)&quot; -VhdType NewVHD -Configuration @{&quot;MemoryStartupBytes&quot;=1GB;&quot;BootDevice&quot;=&quot;LegacyNetworkAdapter&quot;}
+#&gt;
+
+Function New-XVM
+{
+    [cmdletbinding()]
+    Param
+    (
+        [Parameter(Mandatory=$false,Position=1)]
+        [string]$ComputerName=$env:COMPUTERNAME,        
+        [Parameter(Mandatory=$true,Position=2)]
+        [string]$Name,
+        [Parameter(Mandatory=$true,Position=3)]
+        [string]$SwitchName,
+        [Parameter(Mandatory=$true,Position=4)]
+        [ValidateSet(&quot;NoVHD&quot;,&quot;ExistingVHD&quot;,&quot;NewVHD&quot;,&quot;Differencing&quot;)]
+        [string]$VhdType,
+        [Parameter(Mandatory=$false,Position=5)]
+        [hashtable]$Configuration
+    )
+    DynamicParam
+    {
+        Switch ($VhdType) {
+            &quot;ExistingVHD&quot; {
+                $attributes = New-Object System.Management.Automation.ParameterAttribute
+                $attributes.ParameterSetName = &quot;_AllParameterSets&quot;
+                $attributes.Mandatory = $true
+                $attributeCollection = New-Object -Type System.Collections.ObjectModel.Collection[System.Attribute]
+                $attributeCollection.Add($attributes)
+                $vhdPath = New-Object -Type System.Management.Automation.RuntimeDefinedParameter(&quot;VhdPath&quot;, [String], $attributeCollection)
+                $paramDictionary = New-Object -Type System.Management.Automation.RuntimeDefinedParameterDictionary
+                $paramDictionary.Add(&quot;VhdPath&quot;,$vhdPath)
+                return $paramDictionary
+            }
+            &quot;NewVHD&quot; {
+                $attributes = New-Object System.Management.Automation.ParameterAttribute
+                $attributes.ParameterSetName = &quot;_AllParameterSets&quot;
+                $attributes.Mandatory = $false
+                $attributeCollection = New-Object -Type System.Collections.ObjectModel.Collection[System.Attribute]
+                $attributeCollection.Add($attributes)
+                $diskType = New-Object -Type System.Management.Automation.RuntimeDefinedParameter(&quot;DiskType&quot;, [String], $attributeCollection)
+                $paramDictionary = New-Object -Type System.Management.Automation.RuntimeDefinedParameterDictionary
+                $paramDictionary.Add(&quot;DiskType&quot;,$diskType)
+                $attributes = New-Object System.Management.Automation.ParameterAttribute
+                $attributes.ParameterSetName = &quot;_AllParameterSets&quot;
+                $attributes.Mandatory = $false
+                $attributeCollection = New-Object -Type System.Collections.ObjectModel.Collection[System.Attribute]
+                $attributeCollection.Add($attributes)
+                $diskSize = New-Object -Type System.Management.Automation.RuntimeDefinedParameter(&quot;DiskSize&quot;, [uint64], $attributeCollection)
+                $paramDictionary.Add(&quot;DiskSize&quot;,$diskSize)
+                return $paramDictionary
+            }
+            &quot;Differencing&quot; {
+                $attributes = New-Object System.Management.Automation.ParameterAttribute
+                $attributes.ParameterSetName = &quot;_AllParameterSets&quot;
+                $attributes.Mandatory = $true
+                $attributeCollection = New-Object -Type System.Collections.ObjectModel.Collection[System.Attribute]
+                $attributeCollection.Add($attributes)
+                $parentVhdPath = New-Object -Type System.Management.Automation.RuntimeDefinedParameter(&quot;ParentVhdPath&quot;, [String], $attributeCollection)
+                $paramDictionary = New-Object -Type System.Management.Automation.RuntimeDefinedParameterDictionary
+                $paramDictionary.Add(&quot;ParentVhdPath&quot;,$parentVhdPath)
+                return $paramDictionary
+            }
+        }
+    }
+    Begin
+    {
+        Try
+        {
+            $vmHost = Get-VMHost -ComputerName $ComputerName -ErrorAction:Stop
+        }
+        Catch
+        {
+            $PSCmdlet.ThrowTerminatingError($Error[0])
+        }
+        $defaultVirtualHardDiskPath = $vmHost.VirtualHardDiskPath
+    }
+    Process
+    {
+        $validConfigNames = &quot;MemoryStartupBytes&quot;,&quot;BootDevice&quot;
+        $configParams = @()
+        Switch ($VhdType) {
+            &quot;NoVHD&quot; {
+                $newVhdPath = $null
+            }
+            &quot;ExistingVHD&quot; {
+                $newVhdPath = $vhdPath.Value
+            }
+            &quot;NewVhd&quot; {
+                if (-not $diskType.IsSet) {$diskType.Value = &quot;Dynamic&quot;}
+                if (-not $diskSize.IsSet) {$diskSize.Value = 127GB}
+                $newVhdPath = Join-Path -Path $defaultVirtualHardDiskPath -ChildPath &quot;$Name.vhdx&quot;
+                Switch ($diskType.Value) {
+                    &quot;Fixed&quot; {
+                        $vhdFile = New-VHD -Fixed -SizeBytes $diskSize.Value -Path $newVhdPath -ErrorAction Stop
+                    }
+                    &quot;Dynamic&quot; {
+                        $vhdFile = New-VHD -Dynamic -SizeBytes $diskSize.Value -Path $newVhdPath -ErrorAction Stop
+                    }
+                }
+            }
+            &quot;Differencing&quot; {
+                $newVhdPath = Join-Path -Path $defaultVirtualHardDiskPath -ChildPath &quot;$Name.vhdx&quot;
+                $vhdFile = New-VHD -Differencing -ParentPath $parentVhdPath.Value -Path $newVhdPath -ErrorAction Stop
+            }
+        }
+        if ($vhdFile -ne $null) {
+            Try
+            {
+                $command = &quot;New-VM -ComputerName $ComputerName -Name '$Name' -SwitchName '$SwitchName' -VHDPath '$($vhdFile.Path)'&quot;
+            }
+            Catch
+            {
+                $PSCmdlet.WriteError($Error[0])
+                Remove-Item -Path $vhdFile.Path
+            }
+        } else {
+            $command = &quot;New-VM -ComputerName $ComputerName -Name '$Name' -SwitchName '$SwitchName' -NoVHD&quot;
+        }
+        if ($Configuration -ne $null) {
+            foreach ($configName in $Configuration.Keys.GetEnumerator()) {
+                if ($validConfigNames -contains $configName) {
+                    $configParams += &quot;-$configName&quot; + &quot; &quot; + $Configuration[$configName]
+                }
+            }
+            $configParams = $configParams -join &quot; &quot;
+        }
+        if ($configParams.Count -eq 0) {
+            $command += &quot; -ErrorAction Stop&quot;
+        } else {
+            $command += &quot; $configParams -ErrorAction Stop&quot;        
+        }
+        Invoke-Expression -Command $command
+    }
+    End {}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

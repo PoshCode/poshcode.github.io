@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="xavier">
+    <title>Get-CoolingMode - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-CoolingMode</h1>
+<h3><a href="//scripts/6706.ps1">download</a></h3>
+<p>https://github.com/gregzakh/alt-ps/blob/master/diag/Get-CoolingMode.ps1</p>
+<pre><code class="language-posh">function Import-FromDll {
+  &lt;#
+    .SYNOPSIS
+        Allows to invoke some WinAPI functions without using Add-Type
+        cmdlet.
+    .DESCRIPTION
+        This is possible due to reflection and Func and Action delegates.
+        Import-FromDll uses GetModuleHandle and GetProcAddress functions
+        stored into Microsoft.Win32.Win32Native type of mscorlib.dll
+    .PARAMETER Module
+        Library module name (DLL). Note that it should be currently loaded
+        by host, to check this:
+        
+       (ps -Is $PID).Modules | ? {$_.FileName -notmatch '(\.net|assembly)'}
+    .PARAMETER Signature
+        Signatures storage which presented as a hashtable.
+    .EXAMPLE
+        $kernel32 = Import-FromDll kernel32 -Signature @{
+          CreateHardLinkW = [Func[[Byte[]], [Byte[]], IntPtr, Boolean]]
+          GetCurrentProcessId = [Func[Int32]]
+        }
+        
+        $kernel32.GetCurrentProcessId.Invoke()
+        This will return value which is equaled $PID variable.
+        
+        $kernel32.CreateHardLinkW.Invoke(
+          [Text.Encoding]::Unicode.GetBytes('E:\to\target.ext'),
+          [Text.Encoding]::Unicode.GetBytes('E:\from\source.ext'),
+          [IntPtr]::Zero
+        )
+        Establishes a hard link between an existing file and a new file.
+    .OUTPUTS
+        Hashtable
+    .NOTES
+        Author: greg zakharov
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true, Position=0)]
+    [ValidateNotNullOrEmpty()]
+    [String]$Module,
+    
+    [Parameter(Mandatory=$true, Position=1)]
+    [ValidateNotNull()]
+    [Hashtable]$Signature
+  )
+  
+  begin {
+    function script:Get-ProcAddress {
+      [OutputType([Hashtable])]
+      param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [ValidateNotNullOrEmpty()]
+        [String]$Module,
+        
+        [Parameter(Mandatory=$true, Position=1)]
+        [ValidateNotNull()]
+        [String[]]$Function
+      )
+      
+      begin {
+        [Object].Assembly.GetType(
+          'Microsoft.Win32.Win32Native'
+        ).GetMethods(
+          [Reflection.BindingFlags]40
+        ) | Where-Object {
+          $_.Name -cmatch '\AGet(ProcA|ModuleH)'
+        } | ForEach-Object {
+          Set-Variable $_.Name $_
+        }
+        
+        if (($mod = $GetModuleHandle.Invoke(
+          $null, @($Module)
+        )) -eq [IntPtr]::Zero) {
+          throw New-Object InvalidOperationException(
+            'Could not find specified module.'
+          )
+        }
+      }
+      process {}
+      end {
+        $table = @{}
+        foreach ($f in $Function) {
+          if (($$ = $GetProcAddress.Invoke(
+            $null, @($mod, $f)
+          )) -ne [IntPtr]::Zero) {
+            $table.$f = $$
+          }
+        }
+        $table
+      }
+    }
+    
+    function private:New-Delegate {
+      param(
+        [Parameter(Mandatory=$true, Position=0)]
+        [ValidateScript({$_ -ne [IntPtr]::Zero})]
+        [IntPtr]$ProcAddress,
+        
+        [Parameter(Mandatory=$true, Position=1)]
+        [ValidateNotNull()]
+        [Type]$Prototype,
+        
+        [Parameter(Position=2)]
+        [ValidateNotNullOrEmpty()]
+        [Runtime.InteropServices.CallingConvention]
+        $CallingConvention = 'StdCall'
+      )
+      
+      $method = $Prototype.GetMethod('Invoke')
+      
+      $returntype = $method.ReturnType
+      $paramtypes = $method.GetParameters() |
+                          Select-Object -ExpandProperty ParameterType
+      
+      $holder = New-Object Reflection.Emit.DynamicMethod(
+        'Invoke', $returntype, $(
+          if (!$paramtypes) { $null } else { $paramtypes }
+        ), $Prototype
+      )
+      $il = $holder.GetILGenerator()
+      if ($paramtypes) {
+        0..($paramtypes.Length - 1) | ForEach-Object {
+          $il.Emit([Reflection.Emit.OpCodes]::Ldarg, $_)
+        }
+      }
+      
+      switch ([IntPtr]::Size) {
+        4 { $il.Emit([Reflection.Emit.OpCodes]::Ldc_I4, $ProcAddress.ToInt32()) }
+        8 { $il.Emit([Reflection.Emit.OpCodes]::Ldc_I8, $ProcAddress.ToInt64()) }
+      }
+      $il.EmitCalli(
+        [Reflection.Emit.OpCodes]::Calli, $CallingConvention, $returntype,
+        $(if (!$paramtypes) { $null } else { $paramtypes })
+      )
+      $il.Emit([Reflection.Emit.OpCodes]::Ret)
+      
+      $holder.CreateDelegate($Prototype)
+    }
+  }
+  process {}
+  end {
+    $scope, $fname = @{}, (Get-ProcAddress $Module $Signature.Keys)
+    foreach ($key in $fname.Keys) {
+      $scope[$key] = New-Delegate $fname[$key] $Signature[$key]
+    }
+    $scope
+  }
+}
+
+function Get-CoolingMode {
+  &lt;#
+    .SYNOPSIS
+        Gets the current system cooling mode.
+    .NOTES
+        Author: greg zakharov
+  #&gt;
+  begin {
+    $ntdll = Import-FromDll ntdll -Signature @{
+      NtPowerInformation = [Func[Int32, IntPtr, Int32, IntPtr, Int32, Int32]]
+    }
+
+    $sz = 0x10 # sizeof(SYSTEM_POWER_INFORMATION)
+    $COOLING_MODE = @('PO_TZ_ACTIVE', 'PO_TZ_PASSIVE', 'PO_TZ_INVALID_MODE')
+  }
+  process {
+    try {
+      $spi = [Runtime.InteropServices.Marshal]::AllocHGlobal($sz)
+
+      if ($ntdll.NtPowerInformation.Invoke(
+        12, [IntPtr]::Zero, 0, $spi, $sz
+      ) -ne 0) {
+        throw New-Object InvalidOperationException(
+          'Could not retrieve current cooling mode.'
+        )
+      }
+
+      $COOLING_MODE[[Runtime.InteropServices.Marshal]::ReadByte($spi, 0xC)]
+    }
+    catch { Write-Verbose $_ }
+    finally {
+      if ($spi) { [Runtime.InteropServices.Marshal]::FreeHGlobal($spi) }
+    }
+  }
+  end {}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

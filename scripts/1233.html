@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-XML - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-XML</h1>
+<h3><a href="//scripts/1233.ps1">download</a></h3>
+<p>This is a first stab at creating a little DSL to generate XML. Note that I used System.Linq.XML (and output an XDocument) instead of the old XmlDocument... This means you have to have .Net 3.5 (LINQ) installed. It also means that if you want to be able to use the output via PowerShell's magic XML dot-notation, you have to cast it to XmlDocument, just write: @[xml]$xml = New-XML ...@</p>
+<pre><code class="language-posh">###  A first stab at the worlds simplest DSL:
+###  How to generate XML from PowerShell, in code instead of string-substitution
+
+$xlr8r = [type]::gettype(&quot;System.Management.Automation.TypeAccelerators&quot;)  
+$xlinq = [Reflection.Assembly]::Load(&quot;System.Xml.Linq, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089&quot;)
+$xlinq.GetTypes() | ? { $_.IsPublic -and !$_.IsSerializable -and $_.Name -ne &quot;Extensions&quot; } | % {
+   $xlr8r::Add( $_.Name, $_.FullName )
+}
+
+function New-Xml {
+   Param([String]$root)
+   New-Object XDocument (New-Object XDeclaration &quot;1.0&quot;,&quot;utf-8&quot;,&quot;no&quot;),(
+      New-Object XElement $(
+         $root
+         #  foreach($ns in $namespace){
+            #  $name,$url = $ns -split &quot;:&quot;,2
+            #  New-Object XAttribute ([XNamespace]::Xmlns + $name),$url
+         #  }
+         while($args) {
+            $attrib, $value, $args = $args
+            if($attrib -is [ScriptBlock]) {
+               &amp;$attrib
+            } elseif ( $value -is [ScriptBlock] -and &quot;-Content&quot;.StartsWith($attrib)) {
+               &amp;$value
+            } elseif ( $value -is [XNamespace]) {
+               New-Object XAttribute ([XNamespace]::Xmlns + $attrib.TrimStart(&quot;-&quot;)),$value
+            } else {
+               New-Object XAttribute $attrib.TrimStart(&quot;-&quot;), $value
+            }
+         }
+      ))
+}
+
+function New-Element {
+   Param([String]$tag)
+   New-Object XElement $(
+      $tag
+      while($args) {
+         $attrib, $value, $args = $args
+         if($attrib -is [ScriptBlock]) {
+            &amp;$attrib
+         } elseif ( $value -is [ScriptBlock] -and &quot;-Content&quot;.StartsWith($attrib)) {
+            &amp;$value
+         } elseif ( $value -is [XNamespace]) {
+               New-Object XAttribute ([XNamespace]::Xmlns + $attrib.TrimStart(&quot;-&quot;)),$value
+         } else {
+            New-Object XAttribute $attrib.TrimStart(&quot;-&quot;), $value
+         }
+      }
+   )
+}
+Set-Alias xe New-Element
+
+
+####################################################################################################
+###### EXAMPLE SCRIPT: 
+# [XNamespace]$dc = &quot;http://purl.org/dc/elements/1.1&quot;
+#
+# $xml = New-Xml rss -dc $dc -atom $atom -content $content -version &quot;2.0&quot; {
+#    xe channel {
+#       xe title {&quot;Test RSS Feed&quot;}
+#       xe link {&quot;http`://HuddledMasses.org&quot;}
+#       xe description {&quot;An RSS Feed generated simply to demonstrate my XML DSL&quot;}
+#       xe ($dc + &quot;language&quot;) {&quot;en&quot;}
+#       xe ($dc + &quot;creator&quot;) {&quot;Jaykul@HuddledMasses.org&quot;}
+#       xe ($dc + &quot;rights&quot;) {&quot;Copyright 2009, CC-BY&quot;}
+#       xe ($dc + &quot;date&quot;) {(Get-Date -f u) -replace &quot; &quot;,&quot;T&quot;}
+#       xe item {
+#          xe title {&quot;The First Item&quot;}
+#          xe link {&quot;htt`p://huddledmasses.org/new-site-new-layout-lost-posts/&quot;}
+#          xe guid -isPermaLink true {&quot;http`://huddledmasses.org/new-site-new-layout-lost-posts/&quot;}
+#          xe description {&quot;Ema Lazarus' Poem&quot;}
+#          xe pubDate  {(Get-Date 10/31/2003 -f u) -replace &quot; &quot;,&quot;T&quot;}
+#       }
+#    }
+# }
+#
+# $xml.ToString()
+#
+####### OUTPUT: (NOTE: I added the space in the http: to paste it here -- those aren't in the output)
+# &lt;rss xmlns:dc=&quot;http ://purl.org/dc/elements/1.1&quot; version=&quot;2.0&quot;&gt;
+#   &lt;channel&gt;
+#     &lt;title&gt;Test RSS Feed&lt;/title&gt;
+#     &lt;link&gt;http ://HuddledMasses.org&lt;/link&gt;
+#     &lt;description&gt;An RSS Feed generated simply to demonstrate my XML DSL&lt;/description&gt;
+#     &lt;dc:language&gt;en&lt;/dc:language&gt;
+#     &lt;dc:creator&gt;Jaykul@HuddledMasses.org&lt;/dc:creator&gt;
+#     &lt;dc:rights&gt;Copyright 2009, CC-BY&lt;/dc:rights&gt;
+#     &lt;dc:date&gt;2009-07-26T00:50:08Z&lt;/dc:date&gt;
+#     &lt;item&gt;
+#       &lt;title&gt;The First Item&lt;/title&gt;
+#       &lt;link&gt;http ://huddledmasses.org/new-site-new-layout-lost-posts/&lt;/link&gt;
+#       &lt;guid isPermaLink=&quot;true&quot;&gt;http ://huddledmasses.org/new-site-new-layout-lost-posts/&lt;/guid&gt;
+#       &lt;description&gt;Ema Lazarus' Poem&lt;/description&gt;
+#       &lt;pubDate&gt;2003-10-31T00:00:00Z&lt;/pubDate&gt;
+#     &lt;/item&gt;
+#   &lt;/channel&gt;
+# &lt;/rss&gt;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

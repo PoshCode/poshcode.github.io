@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Leon Scheltema">
+    <title>Step-01b-vCenter-Permiss - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Step-01b-vCenter-Permiss</h1>
+<h3><a href="//scripts/5662.ps1">download</a></h3>
+<p>Import vCenter roles and permissions into a new vCenter</p>
+<pre><code class="language-posh">###
+# Purpose        : Import vCenter roles and permissions into a new vCenter.
+# Created        : 18/08/2010
+# Author         : VMware Community, namely Alan Renouf and Luc Dekens
+# Pre-requisites : Source file vcenter-permissions.xml
+###
+
+# Parameters
+$VC1 = &quot;new vCenter&quot;
+
+# Functions
+function New-Role
+{
+    param($name, $privIds)
+    Begin{}
+    Process{
+
+        $roleId = $authMgr.AddAuthorizationRole($name,$privIds)
+    }
+    End{
+        return $roleId
+    }
+}
+
+function Set-Permission
+{
+param(
+[VMware.Vim.ManagedEntity]$object,
+[VMware.Vim.Permission]$permission
+)
+Begin{}
+Process{
+    $perms = $authMgr.SetEntityPermissions($object.MoRef,@($permission))
+}
+End{
+    return
+}
+}
+
+# Connect to vCenter server
+Connect-VIServer &quot;$VC1&quot;
+
+# Main
+# Create hash table with the current roles
+$authMgr = Get-View AuthorizationManager
+$roleHash = @{}
+$authMgr.RoleList | % {
+    $roleHash[$_.Name] = $_.RoleId
+}
+
+# Read XML file
+$XMLfile = &quot;d:\documents\vcenter-permissions.xml&quot;
+$vInventory = [xml]&quot;&lt;dummy/&gt;&quot;
+$vInventory.Load($XMLfile)
+
+# Define Xpaths for the roles and the permissions
+$XpathRoles = &quot;Inventory/Roles/Role&quot;
+$XpathPermissions = &quot;Inventory/Permissions/Permission&quot;
+
+# Create custom roles
+$vInventory.SelectNodes($XpathRoles) | % {
+    if(-not $roleHash.ContainsKey($_.Name)){
+        $privArray = @()
+        $_.Privilege | % {
+            $privArray += $_.Name
+        }
+        $roleHash[$_.Name] = (New-Role $_.Name $privArray)
+    }
+}
+
+# Set permissions
+$vInventory.SelectNodes($XpathPermissions) | % {
+    $perm = New-Object VMware.Vim.Permission
+    $perm.group = &amp;{if ($_.Group -eq &quot;true&quot;) {$true} else {$false}}
+    $perm.principal = $_.Principal
+    $perm.propagate = &amp;{if($_.Propagate -eq &quot;true&quot;) {$true} else {$false}}
+    $perm.roleId = $roleHash[$_.Role]
+
+    $EntityName = $_.Entity.Replace(&quot;(&quot;,&quot;\(&quot;).Replace(&quot;)&quot;,&quot;\)&quot;)
+    $EntityName = $EntityName.Replace(&quot;[&quot;,&quot;\[&quot;).Replace(&quot;]&quot;,&quot;\]&quot;)
+    $EntityName = $EntityName.Replace(&quot;{&quot;,&quot;\{&quot;).Replace(&quot;}&quot;,&quot;\}&quot;)
+
+    $entity = Get-View -ViewType $_.EntityType -Filter @{&quot;Name&quot;=(&quot;^&quot; + $EntityName + &quot;$&quot;)}
+    Set-Permission $entity $perm
+}
+
+# Disconnect from vCenter server
+Disconnect-VIServer -server &quot;$VC1&quot; -Force -Confirm:$false
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

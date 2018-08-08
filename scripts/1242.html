@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="MakcoH">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/1242.ps1">download</a></h3>
+<p>PowerShell script for gathering remote PC information</p>
+<pre><code class="language-posh">################################################################
+#																
+# PC Info v1.0 for SNOS(http://www.snos.ru/)
+# (c)2009 by MakcoH(http://twitter.com/MakcoH)
+# Script gathers information about remote PC using SCCM and WMI
+#
+################################################################
+
+# Get the path to Program Files and IE to load SCCM report that shows 
+# PC name by User name
+$pr = [system.environment]::GetFolderPath(&quot;ProgramFiles&quot;)
+$ie = $pr + &quot;\Internet Explorer\iexplore.exe&quot;
+$ie = '&quot;' + $ie + '&quot;' + &quot; https://sccm/SMSReporting/Reports.asp?ReportId=423&quot;
+Invoke-Command -ScriptBlock {cmd /c $ie}
+
+# File information saves on the Desktop
+$pr = [system.environment]::GetFolderPath(&quot;Desktop&quot;)
+$o = $pr + &quot;\info.txt&quot;
+
+# Get the PC Name and input it
+$comp = read-host &quot;Input PC Name for gathering information: &quot;
+
+# Let's ping it to know that it's alive :)
+$tt = &quot;ping $comp&quot;
+$ping = Invoke-Command -ScriptBlock {cmd /c $tt}
+if($ping -match &quot;Answer*&quot;){					# Maybe string &quot;Answer*&quot; is incorrect. I use Russian version of Windows :) 
+
+# this line is for separating blocks of different pc information
+$t = &quot;-&quot; * 25
+
+# WMI Classes for getting right information
+$cInfo = Get-WmiObject win32_ComputerSystem -computername $comp
+$OSInfo = Get-WmiObject win32_OperatingSystem -computername $comp
+$ServInfo = Get-WmiObject win32_Service -computername $comp
+$DiskInfo = Get-WmiObject Win32_LogicalDisk -computername $comp
+
+## -----------------------------------------------------------------------
+
+$t | Out-File $o
+
+out-file -InputObject &quot;PC Information [ $(Get-Date) ]&quot; -FilePath $o -Append
+$t | Out-File $o -Append
+
+out-file -InputObject &quot;PC name: $($cInfo.Name)&quot; -FilePath $o -Append
+# out-file -InputObject &quot;PC IP: $($ipInfo.IPAddress[0])&quot; -FilePath $o -Append
+
+# Gets information from command ping. Also may be incorrect because of localization
+out-file -InputObject &quot;PC IP: $($ping[7]) $($ping[9])&quot; -FilePath $o -Append
+
+$t | Out-File $o -Append
+out-file -InputObject &quot;Username: $($OSInfo.RegisteredUser)&quot; -FilePath $o -Append
+out-file -InputObject &quot;Domain: $($cInfo.Domain)&quot; -FilePath $o -Append
+out-file -InputObject &quot;PC model: $($cInfo.Manufacturer) $($cInfo.Model)&quot; -FilePath $o -Append
+
+out-file -InputObject &quot;OS Version: $($OSInfo.caption) $($OSInfo.CSDVersion)&quot; -FilePath $o -Append
+$mem = $cInfo.TotalPhysicalMemory / (1024 *1024)
+$t | Out-File $o -Append
+out-file -InputObject &quot;RAM: $mem Mb&quot; -FilePath $o -Append
+out-file -InputObject &quot;&quot; -FilePath $o -Append
+out-file -InputObject &quot;Logical disks: &quot; -FilePath $o -Append
+$DiskInfo | foreach { Out-File -InputObject &quot;On $($_.DeviceID)($($_.FileSystem)) is free $($($_.FreeSpace)/(1024*1024)) Mb&quot; -FilePath $o -Append}
+
+$t | Out-File $o -Append
+out-file -InputObject &quot;Printers:&quot; -FilePath $o -Append
+Get-WmiObject Win32_Printer | foreach{ 
+if($_.Default -eq $true){
+ $cap = $_.caption + &quot;(default)&quot;
+ if($_.network -eq $true){$cap = $cap + &quot;(network)&quot;}
+ Out-File -InputObject ($cap) -FilePath $o -Append
+ } else { 
+  $cap = $_.caption
+  if($_.network -eq $true){$cap = $cap + &quot;(network)&quot;}
+  Out-File -InputObject $cap -FilePath $o -Append
+  }
+}
+$t | Out-File $o -Append
+out-file -InputObject &quot;Applications:&quot; -FilePath $o -Append
+out-file -InputObject &quot;Internet Explorer Version: $((([wmiclass]&quot;\root\default:stdRegProv&quot;).GetStringValue(2147483650,&quot;SOFTWARE\Microsoft\Internet Explorer\&quot;,&quot;Version&quot;)).sValue)&quot; -FilePath $o -Append
+
+# Get Antivirus Information
+$AntiVirusExist = 0
+$ServInfo | foreach {
+ if($_.Description -like &quot;*Eset*&quot;){
+  $AntiVirusExist = 1
+  $cap = &quot;Service Nod32: $($_.Name)&quot;
+  if($_.state -eq &quot;Running&quot;){ $cap = $cap + &quot;(running)&quot;}
+  out-file -InputObject $cap -FilePath $o -Append
+ }
+ 
+ if($_.Description -like &quot;*Avast*&quot;){
+  $AntiVirusExist = 1
+  $cap = &quot;Service Avast: $($_.Name)&quot;
+  if($_.state -eq &quot;Running&quot;){ $cap = $cap + &quot;(running)&quot;}
+  out-file -InputObject $cap -FilePath $o -Append
+ }
+ 
+ if($_.Description -like &quot;*Forefront*&quot;){
+  $AntiVirusExist = 1
+  $cap = &quot;Service Forefront: $($_.Name)&quot;
+  if($_.state -eq &quot;Running&quot;){ $cap = $cap + &quot;(running)&quot;}
+  out-file -InputObject $cap -FilePath $o -Append
+ }
+}
+
+if($AntiVirusExist -eq 0){
+ out-file -InputObject &quot;Antivirus not detected. Check services:&quot; -FilePath $o -Append
+ $t | Out-File $o -Append
+ $servinfo | ft name,startmode,state,status | Out-File $o -Append
+ $t | Out-File $o -Append
+ }
+}
+
+# if ping isn't successful then input all ping information to file 
+else
+{
+ $ping | Out-File $o
+}
+# open this file with notepad
+notepad $o
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

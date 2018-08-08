@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="gesizem">
+    <title>Get-ServiceAccounts - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-ServiceAccounts</h1>
+<h3><a href="//scripts/502.ps1">download</a></h3>
+<p>Script will help discover any service accounts that are currently being used.  I have been using this script for about a month in production.  While your mileage may vary this script is strictly read only, thus -confirm, and -whatif are not supported.</p>
+<p>V.1	Initial Build
+V.1.1	Optimized GWMI query
+V.1.2	Added logic to record the cause of a failed query</p>
+<pre><code class="language-posh">#requires -pssnapin PSCX
+#Author:     Glenn Sizemore gesize@get-admin.com
+#Purpose:    Scan a remote system for any services running under a non standard account.
+#            Standard accounts would be considered, NT AUTHORITY\NetworkService, 
+#            NT AUTHORITY\LocalService, LocalSystem, or .\ASPNET
+#            
+#Usage:      PS &gt; Get-ServiceAccounts [-Target &lt;string&gt;] [-Path &lt;string&gt;] [-verbose] [-Credential &lt;PSCredential Object&gt; ]
+#            
+#            -Target(optional)  
+#                  can be either a string or an array of strings.
+#            -Path(optional)    
+#                 Path to an item containing a list of Targets
+#            -Verbose(optional) 
+#                 turns on verbose logging to the console
+#            -Credential(optional) 
+#                  should only be used with V2, uses alternate credentials when 
+#                querying target for services.
+#
+#Returns:    PSCustom Object
+#
+#Example:    Get-ServiceAccounts -Target &quot;host1&quot;,&quot;host2&quot;,&quot;host3&quot; -Path &quot;C:\temp\otherhosts.txt&quot; -verbose
+#            
+#            this command will combined the targets: host1, host2, and host3 with all targets located in 
+#            the file otherhost.txt, and scan all of them for unique service accounts.
+#
+
+param($target,
+[string]$Path,
+[switch]$verbose,
+[System.Management.Automation.PSCredential]$credential = ($null)
+)
+begin 
+{
+    # Create an empty object to hold all service accounts found.
+    $SvcAccounts = @()
+
+    #Save the current $ErrorActionPreference so we can restore it.
+    $ErrActionSave = $ErrorActionPreference 
+    $Verbosesave = $VerbosePreference
+    $warningSave = $WarningPreference
+
+    #If a PSCredential is supplied then wmi query will be ran under that account.
+    if ($credential)
+    {
+        Write-Host &quot;there is a known bug using -credential in V1...&quot;
+        $gwmiquery = {Get-WmiObject -Class Win32_Service -ComputerName $computer -Credential $credential `
+            -property name, startname, caption, StartMode `
+            -filter 'NOT Startname LIKE &quot;%NT AUTHORITY%&quot; AND NOT Startname LIKE &quot;LocalSystem&quot; AND NOT Startname LIKE &quot;ASPNET&quot;'}
+    }
+    else
+    {
+        $gwmiquery = {Get-WmiObject -Class Win32_Service -ComputerName $computer -property name, startname, caption, StartMode `
+            -filter 'NOT Startname LIKE &quot;%NT AUTHORITY%&quot; AND NOT Startname LIKE &quot;LocalSystem&quot; AND NOT Startname LIKE &quot;ASPNET&quot;'}
+    }
+
+    if ($Verbose) {$VerbosePreference = &quot;Continue&quot;; $WarningPreference = &quot;Continue&quot;}
+
+    #Workhorse...
+    function ProcessTarget ($computer) 
+    {
+        $obj = @()
+
+        #Set ErrorAction to silent... we'll handle the error's ourselves.
+        $ErrorActionPreference = &quot;SilentlyContinue&quot; 
+
+        Write-Verbose &quot;querying $computer ...&quot;
+
+        #call the Query from above.
+        $services = &amp;$gwmiquery 
+
+        #set erroraction back there sould be no error's from here on out.
+        $ErrorActionPreference = $ErrActionSave 
+
+        Write-Verbose &quot; $($services.count) services located on $computer using &quot;
+        foreach ($service in $Services)
+        {
+
+            # If there was an error while attempting the gwmi call, there will be only one error.
+            # We check that error to help annotate why we were unsuccessful.
+            switch -regex ($Error[0].Exception) 
+            {
+                &quot;The RPC server is unavailable&quot;
+                {
+                    Write-warning &quot;RPC Unavailable on $computer&quot;
+                    $obj += &quot;&quot; | Select @{e={$computer};n='Target'},@{e={&quot;RPC_Unavalable&quot;};n='SvcName'}
+                    continue
+                } 
+                #vista
+                &quot;Access denied&quot;
+                {
+                    Write-warning &quot;Access Denied on $computer&quot;
+                    $obj += &quot;&quot; | Select @{e={$computer};n='Target'},@{e={&quot;Access_Denied&quot;};n='SvcName'}
+                    continue
+                }
+                #XP/Server 2k3
+                &quot;Access is denied&quot;
+                {
+                    Write-warning &quot;Access Denied on $computer&quot;
+                    $obj += &quot;&quot; | Select @{e={$computer};n='Target'},@{e={&quot;Access_Denied&quot;};n='SvcName'}
+                    continue
+                }
+                $null 
+                {
+                    $obj += &quot;&quot; | Select @{e={$computer};n='Target'},
+                    @{e={$service.name };n='SvcName'},
+                    @{e={$service.startname };n='SvcAcccount'},
+                    @{e={$service.caption };n='SvcDes'},
+                    @{e={$service.StartMode };n='StartMode'}
+                } 
+            }
+            $Error.clear()
+        }
+        return $obj
+    } 
+}
+process 
+{
+    $Targets = @()
+    if ($Path){$Targets = Get-Content $Path}
+    if ($Target){$Targets += $target}
+
+    foreach ($computer in $Targets) 
+    {
+        ping-host -HostName $computer -Count 1 -Quiet -Timeout 1| Where-Object { $_.loss -ne 100} | `
+        ForEach-Object {$SvcAccounts += ProcessTarget $_.host}
+    }
+
+}
+End 
+{
+    $ErrorActionPreference = $ErrActionSave
+    $VerbosePreference = $Verbosesave
+    $WarningPreference = $warningSave
+    Write-Output $SvcAccounts
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

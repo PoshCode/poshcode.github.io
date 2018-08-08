@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Ranjith">
+    <title>New-Exch2010NlbCluster - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-Exch2010NlbCluster</h1>
+<h3><a href="//scripts/2333.ps1">download</a> - <a href="//scripts/1868.md">parent</a></h3>
+<p>Script to create a NLB-cluster for the CAS/HUB-roles in Exchange Server 2010.
+For more details, see the following blog-post: http://blog.powershell.no/2010/05/21/script-to-create-a-nlb-cluster-for-the-cas-role-in-exchange-server-2010</p>
+<pre><code class="language-posh">###########################################################################
+#
+# NAME: New-Exch2010NlbCluster.ps1
+#
+# AUTHOR: Jan Egil Ring
+# EMAIL: jer@powershell.no
+#
+# COMMENT: Script to create a NLB-cluster for the CAS/HUB-roles in Exchange Server 2010.
+#          For more details, see the following blog-post: http://blog.powershell.no/2010/05/21/script-to-create-a-nlb-cluster-for-the-cas-role-in-exchange-server-2010
+#
+# You have a royalty-free right to use, modify, reproduce, and
+# distribute this script file in any way you find useful, provided that
+# you agree that the creator, owner above has no warranty, obligations,
+# or liability for such use.
+#
+# VERSION HISTORY:
+# 1.0 20.05.2010 - Initial release
+#
+###########################################################################
+
+#Importing Microsoft`s PowerShell-module for administering NLB Clusters
+Import-Module NetworkLoadBalancingClusters
+
+#Variables for creating the new cluster
+$ClusterFqdn = Read-Host &quot;Enter FQDN for the new cluster&quot;
+$InterfaceName = Read-Host &quot;Enter interface name for NLB-adapter&quot;
+$ClusterPrimaryIP = Read-Host &quot;Enter cluster primary IP&quot;
+$ClusterPrimaryIPSubnetMask = Read-Host &quot;Enter subnetmask for cluster primary IP&quot;
+
+Write-Host &quot;Choose cluster operation mode&quot;
+Write-Host &quot;1 - Unicast&quot;
+Write-Host &quot;2 - Multicast&quot;
+Write-Host &quot;3 - IGMP Multicast&quot;
+switch (Read-Host &quot;Enter the number for your chosen operation mode&quot;)
+{
+1 {$OperationMode = &quot;unicast&quot;}
+2 {$OperationMode = &quot;multicastcast&quot;}
+3 {$OperationMode = &quot;igmpmulticast&quot;}
+default {Write-Warning &quot;Invalid option, choose '1', '2' or '3'&quot;;return}
+}
+
+$MSExchangeRPCPort = Read-Host &quot;Enter static port configured for Microsoft Exchange RPC (MAPI)&quot;
+$MSExchangeABPort = Read-Host &quot;Enter static port configured for Microsoft Exchange Address book service&quot;
+
+#Creating new cluster
+Write-Host &quot;Creating NLB Cluster...&quot; -ForegroundColor yellow
+New-NlbCluster -ClusterName $ClusterFqdn -InterfaceName $InterfaceName -ClusterPrimaryIP $ClusterPrimaryIP -SubnetMask $ClusterPrimaryIPSubnetMask -OperationMode $OperationMode
+
+#Removing default port rule for the new cluster
+Write-Host &quot;Removing default port rule...&quot; -ForegroundColor yellow
+Get-NlbClusterPortRule -HostName . | Remove-NlbClusterPortRule -Force
+
+#Adding port rules for Exchange Server 2010 CAS (SMTP, http, POP3, RPC, IMAP4, https, static port for MSExchangeRPC and MSExchangeAB)
+Write-Host &quot;Adding port rules for Exchange Server 2010 CAS&quot; -ForegroundColor yellow
+Add-NlbClusterPortRule -Protocol Tcp -Mode Multiple -Affinity Single -StartPort 25 -EndPort 25 -InterfaceName $InterfaceName | Out-Null
+Write-Host &quot;Added port rule for SMTP (tcp 25)&quot; -ForegroundColor yellow
+Add-NlbClusterPortRule -Protocol Tcp -Mode Multiple -Affinity Single -StartPort 80 -EndPort 80 -InterfaceName $InterfaceName | Out-Null
+Write-Host &quot;Added port rule for http (tcp 80)&quot; -ForegroundColor yellow
+Add-NlbClusterPortRule -Protocol Tcp -Mode Multiple -Affinity Single -StartPort 110 -EndPort 110 -InterfaceName $InterfaceName | Out-Null
+Write-Host &quot;Added port rule for POP3 (tcp 110)&quot; -ForegroundColor yellow
+Add-NlbClusterPortRule -Protocol Tcp -Mode Multiple -Affinity Single -StartPort 135 -EndPort 135 -InterfaceName $InterfaceName | Out-Null
+Write-Host &quot;Added port rule for RPC (tcp 135)&quot; -ForegroundColor yellow
+Add-NlbClusterPortRule -Protocol Tcp -Mode Multiple -Affinity Single -StartPort 143 -EndPort 143 -InterfaceName $InterfaceName | Out-Null
+Write-Host &quot;Added port rule for IMAP4 (tcp 143)&quot; -ForegroundColor yellow
+Add-NlbClusterPortRule -Protocol Tcp -Mode Multiple -Affinity Single -StartPort 443 -EndPort 443 -InterfaceName $InterfaceName | Out-Null
+Write-Host &quot;Added port rule for https (tcp 443)&quot; -ForegroundColor yellow
+Add-NlbClusterPortRule -Protocol Tcp -Mode Multiple -Affinity Single -StartPort $MSExchangeRPCPort -EndPort $MSExchangeRPCPort -InterfaceName $InterfaceName | Out-Null
+Write-Host &quot;Added port rule for MSExchange RPC (tcp $MSExchangeRPCPort)&quot; -ForegroundColor yellow
+Add-NlbClusterPortRule -Protocol Tcp -Mode Multiple -Affinity Single -StartPort $MSExchangeABPort -EndPort $MSExchangeABPort -InterfaceName $InterfaceName | Out-Null
+Write-Host &quot;Added port rule for MSExchange Address Book service (tcp $MSExchangeABPort)&quot; -ForegroundColor yellow
+
+#Adding additional cluster nodes based on user input
+Write-Warning &quot;Before adding additional nodes, make sure that NLB are installed and the NLB-adapter are configured with a static IP-address on the remote node&quot;
+$additionalnodes = Read-Host &quot;Add additional nodes to the cluster? Y/N&quot;
+if ($additionalnodes -like &quot;y&quot;){
+do {
+$NodeFqdn = Read-Host &quot;Enter FQDN for the additional node&quot;
+$NewNodeInterface = Read-Host &quot;Enter interface name for NLB-adapter on the additional node&quot;
+Write-Host &quot;Adding cluster node $NodeFqdn&quot; -ForegroundColor yellow
+Get-NlbCluster -HostName . | Add-NlbClusterNode -NewNodeName $NodeFqdn -NewNodeInterface $NewNodeInterface
+$additionalnodes = Read-Host &quot;Add additional nodes to the cluster? Y/N&quot;
+} until ($additionalnodes -like &quot;n&quot;) 
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

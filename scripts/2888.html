@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Nathan Linley">
+    <title>Get-ADSite-byIP - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-ADSite-byIP</h1>
+<h3><a href="//scripts/2888.ps1">download</a></h3>
+<p>This script takes an IPv4 address (optionally with subnet mask or mask length) and searches the subnets in active directory from most significant to least significant.  Which ever subnet matches the IP address first will be returned in distinguished name format.  If no subnets match, the script will return Subnet_not_assigned</p>
+<pre><code class="language-posh">#get-site-byIP, ipv4
+#written by Nathan Linley
+# http://myitpath.blogspot.com
+
+
+	Param(
+		[Parameter(Mandatory=$true,HelpMessage=&quot;IP Address&quot;)][validatepattern('^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')]$ip,
+		[Parameter(Mandatory=$false,HelpMessage=&quot;Netmask&quot;)]$nmask,
+		[Parameter(Mandatory=$false,HelpMessage=&quot;Mask length&quot;)][validaterange(0,32)][int]$nmlength
+	)
+
+function check-ipformat([string]$ip) {
+	#check for a properly formated IPv4 address being provided.  Future update can include Ipv6 regex
+		if (-not ($ip -match &quot;^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$&quot;)) {
+			write-error &quot;The Ip address provided: $ip  is not a valid IPv4 address format&quot;
+			return $false
+		} else { 
+			$octetsegments = $ip.split(&quot;.&quot;)
+			
+			#Check the values of the ip address format to ensure it is between 0 and 255
+			foreach ($octet in $octetsegments) {
+				if ([int]$octet -lt 0 -or [int]$octet -gt 254) {
+					return $false
+				}
+			}
+			return $true 
+		}
+}
+
+
+function get-networkID ([string]$ipaddr, [string]$subnetmask) {
+	
+
+	if (-not (&amp;check-ipformat $ipaddr)) {
+		Write-Host -ForegroundColor &quot;yellow&quot; &quot;IP address provided is not a valid IPv4 address format&quot;
+		Write-Host
+		return $null
+	}
+	
+	if (-not (&amp;check-subnetformat $subnetmask)) {
+		Write-Host -ForegroundColor &quot;yellow&quot; &quot;Subnet mask provided is not a valid format&quot;
+		Write-Host
+		return $null
+	}
+	
+	$ipoctets = $ipaddr.split(&quot;.&quot;)
+	$subnetoctets = $subnetmask.split(&quot;.&quot;)
+	$result = &quot;&quot;
+	
+	for ($i = 0; $i -lt 4; $i++) {
+		$result += $ipoctets[$i] -band $subnetoctets[$i]
+		$result += &quot;.&quot;
+	}
+	$result = $result.substring(0,$result.length -1)
+	return $result
+	
+}
+	
+function check-subnetformat([string]$subnet) {
+	if (-not ($subnet -match &quot;^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$&quot;)) {
+		Write-Error &quot;The subnet mask provided does not match IPv4 format&quot;
+		return $false
+	} else {
+		$octetsegments = $subnet.split(&quot;.&quot;)
+		#Check each octet from last to first.  If an octet does not contain 0, check to see
+		#if it is valid octet value for subnet masks.  Then check to make sure that all preceeding
+		#octets are 255
+		$foundmostsignficant = $false
+		for ($i = 3; $i -ge 0; $i--) {
+			if ($octetsegments[$i] -ne 0) {
+				if ($foundmostsignificant -eq $true -and $octetsegments[$i] -ne 255) {
+					Write-Error &quot;The subnet mask has an invalid value&quot;
+					return $false
+				} else {
+					if ((255,254,252,248,240,224,192,128) -contains $octetsegments[$i]) {
+						$foundmostsignficant = $true
+					} else {
+						Write-Error &quot;The subnet mask has an invalid value&quot;
+						return $false
+					} 
+					
+				}
+			}
+		}
+		return $true
+	}
+}
+	
+function get-subnetMask-byLength ([int]$length) {
+	if ($length -eq $null -or $length -gt 32 -or $length -lt 0) {
+		Write-Error &quot;get-subnetMask-byLength: Invalid subnet mask length provided.  Please provide a number between 0 and 32&quot;
+		return $null
+	}
+	
+	switch ($length) {
+	 &quot;32&quot; { return &quot;255.255.255.255&quot; }
+	 &quot;31&quot; { return &quot;255.255.255.254&quot; }
+	 &quot;30&quot; { return &quot;255.255.255.252&quot; }
+	 &quot;29&quot; { return &quot;255.255.255.248&quot; }
+	 &quot;28&quot; { return &quot;255.255.255.240&quot; }
+	 &quot;27&quot; { return &quot;255.255.255.224&quot; }
+	 &quot;26&quot; { return &quot;255.255.255.192&quot; }
+	 &quot;25&quot; { return &quot;255.255.255.128&quot; }
+	 &quot;24&quot; { return &quot;255.255.255.0&quot; }
+	 &quot;23&quot; { return &quot;255.255.254.0&quot; }
+	 &quot;22&quot; { return &quot;255.255.252.0&quot; }
+	 &quot;21&quot; { return &quot;255.255.248.0&quot; }
+	 &quot;20&quot; { return &quot;255.255.240.0&quot; }
+	 &quot;19&quot; { return &quot;255.255.224.0&quot; }
+	 &quot;18&quot; { return &quot;255.255.192.0&quot; }
+	 &quot;17&quot; { return &quot;255.255.128.0&quot; }
+	 &quot;16&quot; { return &quot;255.255.0.0&quot; }
+	 &quot;15&quot; { return &quot;255.254.0.0&quot; }
+	 &quot;14&quot; { return &quot;255.252.0.0&quot; }
+	 &quot;13&quot; { return &quot;255.248.0.0&quot; }
+	 &quot;12&quot; { return &quot;255.240.0.0&quot; }
+	 &quot;11&quot; { return &quot;255.224.0.0&quot; }
+	 &quot;10&quot; { return &quot;255.192.0.0&quot; }
+	 &quot;9&quot; { return &quot;255.128.0.0&quot; }
+	 &quot;8&quot; { return &quot;255.0.0.0&quot; }
+	 &quot;7&quot; { return &quot;254.0.0.0&quot;}
+	 &quot;6&quot; { return &quot;252.0.0.0&quot;}
+	 &quot;5&quot; { return &quot;248.0.0.0&quot;}
+	 &quot;4&quot; { return &quot;240.0.0.0&quot;}
+	 &quot;3&quot; { return &quot;224.0.0.0&quot;}
+	 &quot;2&quot; { return &quot;192.0.0.0&quot;}
+	 &quot;1&quot; { return &quot;128.0.0.0&quot;}
+	 &quot;0&quot; { return &quot;0.0.0.0&quot;}
+	
+	}
+	
+}
+
+function get-MaskLength-bySubnet ([string]$subnet) {
+	if ($subnet -eq $null -or (-not(&amp;check-subnetformat $subnet))) {
+		Write-Error &quot;Invalid subnet passed to get-MaskLength-bySubnet in networklib&quot;
+		return $null
+	}
+	
+	switch ($subnet) {
+	&quot;255.255.255.255&quot; {return 32}
+	&quot;255.255.255.254&quot; {return 31}
+	&quot;255.255.255.252&quot; {return 30}
+	&quot;255.255.255.248&quot; {return 29}
+	&quot;255.255.255.240&quot; {return 28}
+	&quot;255.255.255.224&quot; {return 27}
+	&quot;255.255.255.192&quot; {return 26}
+	&quot;255.255.255.128&quot; {return 25}
+	&quot;255.255.255.0&quot;  {return 24}
+	&quot;255.255.254.0&quot;  {return 23}
+	&quot;255.255.252.0&quot;  {return 22}
+	&quot;255.255.248.0&quot;  {return 21}
+	&quot;255.255.240.0&quot; {return 20}
+	&quot;255.255.224.0&quot; {return 19}
+	&quot;255.255.192.0&quot; {return 18}
+	&quot;255.255.128.0&quot; {return 17}
+	&quot;255.255.0.0&quot;  {return 16}
+	&quot;255.254.0.0&quot; {return 15}
+	&quot;255.252.0.0&quot; {return 14}
+	&quot;255.248.0.0&quot; {return 13}
+	&quot;255.240.0.0&quot; {return 12}
+	&quot;255.224.0.0&quot; {return 11}
+	&quot;255.192.0.0&quot; {return 10}
+	&quot;255.128.0.0&quot; {return 9}
+	&quot;255.0.0.0&quot; {return 8}
+	&quot;254.0.0.0&quot; {return 7}
+	&quot;252.0.0.0&quot; {return 6}
+	&quot;248.0.0.0&quot; {return 5}
+	&quot;240.0.0.0&quot;  {return 4}
+	&quot;224.0.0.0&quot; {return 3}
+	&quot;192.0.0.0&quot; {return 2}
+	&quot;128.0.0.0&quot; {return 1}
+	&quot;0.0.0.0&quot;  {return 0}
+	
+	}
+
+}
+	
+	$forest = [System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest()
+	$mytopleveldomain = $forest.schema.name
+	$mytopleveldomain = $mytopleveldomain.substring($mytopleveldomain.indexof(&quot;DC=&quot;))
+	$mytopleveldomain = &quot;LDAP://cn=subnets,cn=sites,cn=configuration,&quot; + $mytopleveldomain
+	$de = New-Object directoryservices.DirectoryEntry($mytopleveldomain)
+	$ds = New-Object directoryservices.DirectorySearcher($de)
+	$ds.propertiestoload.add(&quot;cn&quot;) &gt; $null
+	$ds.propertiestoLoad.add(&quot;siteobject&quot;) &gt; $null
+	
+	$startMaskLength = 32
+	
+	#we can take network masks in both length and full octet format.  
+	#We need to use both.  LDAP searches
+	#use length, and network ID generation is by full octet format.
+	
+	if ($nmask -ne $null -or $nmlength -ne $null) {
+		if ($nmask -ne $null) {
+			if (-not(&amp;check-subnetformat $nmask)) {
+				Write-Error &quot;Subnet provided is not a valid subnet&quot;
+				exit
+			} else {
+				$startmasklength = &amp;get-MaskLength-bySubnet $nmask
+			}
+		}
+	
+	}
+	
+	for ($i = $startMaskLength; $i -ge 0; $i--) {
+		#loop through netmasks from /32 to /0 looking for a subnet match in AD
+		
+		#Go through all masks from longest to shortest
+		$mask = &amp;get-subnetMask-byLength $i
+		$netwID = &amp;get-networkID $ip $mask
+		
+		#ldap search for the network
+		$ds.filter = &quot;(&amp;(objectclass=subnet)(objectcategory=subnet)(cn=&quot; + $netwID + &quot;/&quot; + $i + &quot;))&quot;
+		$fu = $ds.findone()
+		if ($fu -ne $null) {
+			
+			#if a match is found, return it since it is the longest length (closest match)
+			Write-Verbose &quot;Found Subnet in AD at site:&quot;
+			$result = $fu.properties.siteobject
+			return $result
+		}
+		$fu = $null
+	}
+	
+	#if we have arrived at this point, the subnet does not exist in AD
+	
+	return &quot;Subnet_NOT_Assigned&quot;
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

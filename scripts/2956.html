@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chris Cmolik">
+    <title>Get Old Outlook Events - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get Old Outlook Events</h1>
+<h3><a href="//scripts/2956.ps1">download</a></h3>
+<p>This powershell script gets all outlook events that haven't been modified in three months and are recurring.
+Good for auditing use of conference rooms for meetings that are still scheduled in outlook, but don't necessarily happen.
+Works best if run as a resource account.</p>
+<pre><code class="language-posh"># Copyright (c) 2011, Chris Cmolik &lt;chris@chriscmolik.com&gt;
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#     * Redistributions of source code must retain the above copyright
+#       notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * Neither the name of the &lt;organization&gt; nor the
+#       names of its contributors may be used to endorse or promote products
+#       derived from this software without specific prior written permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS &quot;AS IS&quot; AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL &lt;COPYRIGHT HOLDER&gt; BE LIABLE FOR ANY
+# DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# software, even if advised of the possibility of such damage
+
+
+# get-old-outlook-events.ps1
+# powershell script to retrieve all appointments that haven't been modified in the past three months using the outlook object model
+param ( [datetime] $rangestart = [datetime]::now.addmonths(-3)
+		, [datetime] $rangeend   = [datetime]::now)
+
+$outlook = new-object -comobject outlook.application
+#dictionary to hold users and their events
+$dict =@{}
+# labeling report
+&quot;running report for {0}...&quot; -f [environment]::username
+
+# needed because `n makes too much sense...
+
+
+# ensure we are logged into a session
+	$session = $outlook.session
+$session.logon()
+
+# folder for events in outlook = 9
+	$apptitems = $session.getdefaultfolder(9).items
+	$apptItems.Sort(&quot;[Start]&quot;)
+#$apptItems.IncludeRecurrences = $true
+	$restriction = &quot;[End] &gt;= '{0}' AND [Start] &lt;= '{1}' AND [IsRecurring] = TRUE&quot; -f $rangeStart.ToString(&quot;g&quot;), $rangeEnd.ToString(&quot;g&quot;)
+
+foreach($appt in $apptItems.Restrict($restriction))
+{ 
+	if ($appt.GetRecurrencePattern().PatternEndDate -gt $rangeEnd -and $appt.GetRecurrencePattern().PatternStartDate -lt $rangeStart ) 
+	{
+		$payload = &quot;&quot;
+			$payload += &quot;Event title: {0}`n&quot; -f $appt.Subject
+
+			$payload += &quot;Event's recurring began on: {0:MM/dd/yy}`n&quot; -f [DateTime]$appt.GetRecurrencePattern().PatternStartDate
+# Get recurrence pattern
+			$recPattern = $appt.GetRecurrencePattern()
+			switch($recPattern.RecurrenceType)
+			{
+				0 { &quot;Recurs Daily.&quot; }
+				1 {
+					if($recPattern.interval -eq 1)
+					{
+						switch($recPattern.DayOfWeekMask)
+						{
+							1 {
+								$payload += &quot;Occurs every Sunday.`n&quot;
+							}
+							2 {
+								$payload += &quot;Occurs every Monday.`n&quot;
+							}
+							4 {
+								$payload += &quot;Occurs every Tuesday.`n&quot;
+							}
+							8 { 
+								$payload += &quot;Occurs every Wednesday.`n&quot;
+							}
+							16 {
+								$payload += &quot;Occurs every Thursday.`n&quot;
+							}
+							32 {
+								$payload += &quot;Occurs every Friday.`n&quot;
+							}
+							64 {
+								$payload += &quot;Occurs every Saturday.`n&quot;
+							}
+						}
+					}
+					else
+					{
+						switch($recPattern.DayOfWeekMask){
+							1 {
+								$payload += &quot;Occurs every {0} weeks on Sunday.`n&quot; -f $recPattern.interval
+							}
+							2 {
+								$payload += &quot;Occurs every {0} weeks on Monday.`n&quot; -f $recPattern.interval
+							}
+							4 {
+								$payload += &quot;Occurs every {0} weeks on Tuesday.`n&quot; -f $recPattern.interval
+							}
+							8 { 
+								$payload +=&quot;Occurs every {0} weeks on Wednesday.`n&quot; -f $recPattern.interval
+							}
+							16 {
+								$payload +=&quot;Occurs every {0} weeks on Thursday.`n&quot; -f $recPattern.interval
+							}
+							32 {
+								$payload +=&quot;Occurs every {0} weeks on Friday.`n&quot; -f $recPattern.interval
+							}
+							64 {
+								$payload +=&quot;Occurs every {0} weeks on Saturday.`n&quot; -f $recPattern.interval
+							}
+						}
+					}
+
+				}
+				2 {
+					switch($recPattern.Instance){
+						1 { $instance = &quot;first&quot; }
+						2 { $instance = &quot;second&quot; }
+						3 { $instance = &quot;third&quot; }
+						4 { $instance = &quot;fourth&quot; }
+						5 { $instance = &quot;fifth&quot; }
+						6 { $instance = &quot;sixth&quot; }
+
+
+					}
+					switch($recPattern.DayOfWeekMask) 
+					{
+						1 { $strDay = &quot;Sunday&quot; }
+						2 { $strDay = &quot;Monday&quot; }
+						4 { $strDay = &quot;Tuesday&quot; }
+						8 { $strDay = &quot;Wednesday&quot; }
+						16 { $strDay = &quot;Thursday&quot; }
+						32 { $strDay = &quot;Friday&quot; }
+						64 { $strDay = &quot;Saturday&quot; }
+
+					}
+					$int = $recPattern.Interval
+						if ($int -eq 1) 
+						{
+							$payload += &quot;Occurs on the {0} {1} of each month.`n&quot; -f $instance, $strDay
+						}
+						else 
+						{
+							$payload +=&quot;Occurs on the {0} {1} every {2} months`n&quot; -f $instance, $strDay, $int
+						}	
+				}
+				3 {	
+					if($recPattern.interval -eq 1) {
+						$payload +=&quot;Recurs each month`n&quot;
+					}
+					else {
+						$payload +=&quot;Recurs every {0} month`n&quot; -f $recPattern.interval
+					}
+
+					switch($recPattern.Instance){
+						1 { $instance = &quot;first&quot; }
+						2 { $instance = &quot;second&quot; }
+						3 { $instance = &quot;third&quot; }
+						4 { $instance = &quot;fourth&quot; }
+						5 { $instance = &quot;fifth&quot; }
+						6 { $instance = &quot;sixth&quot; }
+
+
+					}
+					switch($recPattern.DayOfWeekMask) 
+					{
+						1 { $strDay = &quot;Sunday&quot; }
+						2 { $strDay = &quot;Monday&quot; }
+						4 { $strDay = &quot;Tuesday&quot; }
+						8 { $strDay = &quot;Wednesday&quot; }
+						16 { $strDay = &quot;Thursday&quot; }
+						32 { $strDay = &quot;Friday&quot; }
+						64 { $strDay = &quot;Saturday&quot; }
+
+					}
+					$payload +=&quot;Occurs on the {0} {1} of the month `n&quot; -f $instance, $strDay
+				}
+				5 { 
+					$a = new-object system.globalization.datetimeformatinfo
+						$month = $a.MonthNames[$recPattern.MonthOfYear+1]
+						$payload += &quot;Occurs each year on {0} {1}`n&quot; -f $month, $recPattern.DayofMonth
+				}
+				6 {
+
+					switch($recPattern.Instance){
+						1 { $instance = &quot;first&quot; }
+						2 { $instance = &quot;second&quot; }
+						3 { $instance = &quot;third&quot; }
+						4 { $instance = &quot;fourth&quot; }
+						5 { $instance = &quot;fifth&quot; }
+						6 { $instance = &quot;sixth&quot; }
+
+
+					}
+					switch($recPattern.DayOfWeekMask) 
+					{
+						1 { $strDay = &quot;Sunday&quot; }
+						2 { $strDay = &quot;Monday&quot; }
+						4 { $strDay = &quot;Tuesday&quot; }
+						8 { $strDay = &quot;Wednesday&quot; }
+						16 { $strDay = &quot;Thursday&quot; }
+						32 { $strDay = &quot;Friday&quot; }
+						64 { $strDay = &quot;Saturday&quot; }
+
+					}	
+					$a = new-object system.globalization.datetimeformatinfo
+						$month = $a.MonthNames[$recPattern.MonthOfYear+1]
+						$payload +=&quot;Occurs on the {0} {1} of {2} each year`n&quot; -f $recPattern.Instance, $strDay, $month			
+
+
+
+				}
+
+			}
+		$payload += &quot;From: {0:hh:mm tt} - {1:hh:mm tt}`n&quot; -f [DateTime]$recPattern.StartTime, [DateTime]$recPattern.EndTime
+			if ($dict.ContainsValue($appt.Organizer)) {
+
+				$dict.Set_Item($appt.Organizer, ($dict[$appt.Organizer] += $payload))
+			}
+			else {
+				$dict.Set_Item($appt.Organizer, $payload)
+			}
+
+	}
+}
+
+$outlook = $session = $null;
+foreach ($e in $dict.GetEnumerator()) {
+	&quot;Person: {0}`n&quot; -f $e.Name 
+		&quot;Events:`n{0}&quot; -f $e.Value
+		&quot;--------------------------`n`n&quot; 
+}
+&quot;End report for {0}`n----------------------&quot; -f[Environment]::UserName 
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

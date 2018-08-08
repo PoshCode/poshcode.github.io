@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jon Webster">
+    <title>Enable-MailboxJunkEmail. - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Enable-MailboxJunkEmail.</h1>
+<h3><a href="//scripts/830.ps1">download</a></h3>
+<p>Enable Server Side Junk E-mail filtering for Exchange 2007 mailboxes</p>
+<pre><code class="language-posh">@@# Author: Jon Webster
+@@# Name: Enable-MailboxJunkEmail
+@@# Created: 1/27/2009
+#
+# Version: 1.0
+# History: 1.0 01/27/2009 Initial version
+
+param(
+	$Identity,
+	[string]$CasURL,
+	[string]$User,
+	[string]$Password,
+	$DomainController,
+	[switch]$help
+)
+	
+BEGIN
+{
+	Function Usage
+	{
+		Write-Host @'
+Enable Server Side Junk E-mail filtering through Outlook Web Access
+`n
+Usage:
+	Enable-MailboxJunkEmail -Identity &lt;string&gt; -CasURL &lt;string&gt; -User &lt;string&gt; -Password &lt;string&gt; -DomainController &lt;string&gt;
+`n
+Parameters:
+	Identity: The Identity of mailbox who's server side Junk E-mail you want to enable.
+	CasURL: The (OWA) Client Access Server Address of the exchange server you want to use.
+	User: The fullaccess user's 'username' connecting to the mailbox that you want to change.
+	Password: The fullaccess user's 'password' connecting to the mailbox that you want to change.
+	DomainController: The fully qualified domain name (FQDN) of the domain controller that you want to use.
+`n
+Example:
+	Enable-MailboxJunkEmail -Identity &quot;john.doe@consoto.com&quot; -CasURL &quot;mail.consoto.com&quot; -User &quot;CONSOTO\Administrator&quot; -Password &quot;AdminPassword!&quot;
+'@
+	}
+	
+	if($help -or $args -contains &quot;-?&quot;)
+	{
+		Usage
+		return
+	}
+	
+	Function ValidateParams
+	{
+		# These required parameters are not passed via pipeline
+		# $Identity
+		$ErrorMessage = &quot;&quot;
+		
+		if(!$CasURL) {
+			$ErrorMessage += &quot;Missing parameter: The -CasURL parameter is required. Please pass a valid Client Access Server Url`n&quot;
+		}
+		
+		if(!$User) {
+			$ErrorMessage += &quot;Missing parameter: The -User parameter is required. Please pass a valid Username for OWA mailbox authentication`n&quot;
+		}
+		
+		if(!$Password) {
+			$ErrorMessage += &quot;Missing parameter: The -Password parameter is required. Please pass a valid password for OWA mailbox authentication`n&quot;
+		}
+		
+		if($ErrorMessage)
+		{
+			throw $ErrorMessage
+			break
+		}
+	}
+	
+	Function ValidatePipeline
+	{
+		if($_)
+		{
+			$ErrorMessage = &quot;&quot;
+			if(!$_.Identity)
+			{
+				$ErrorMessage += &quot;Missing Pipeline property: The Identity property is required.&quot;
+			} else {
+				Set-Variable -Name Identity -Scope 1 -Value $_.Identity
+			}
+			
+			if($ErrorMessage)
+			{
+				throw $ErrorMessage
+				break
+			}
+		}
+	}
+
+	Function UpdateJunk
+	{
+		param ([string]$mbMailbox)
+	
+		$xmlstr = &quot;&lt;params&gt;&lt;fEnbl&gt;1&lt;/fEnbl&gt;&lt;/params&gt;&quot;
+		$req.Open(&quot;POST&quot;, &quot;https://&quot; + $CasURL + &quot;/owa/&quot; + $mbMailbox + &quot;/ev.owa?oeh=1&amp;ns=JunkEmail&amp;ev=Enable&quot;, $False)
+		$req.setRequestHeader(&quot;Content-Type&quot;, &quot;text/xml; charset=&quot;&quot;UTF-8&quot;&quot;&quot;)
+		$req.setRequestHeader(&quot;Content-Length&quot;, $xmlstr.Length)
+		$req.Send($xmlstr)
+
+		Write-Debug $req.status
+		Write-Debug $req.GetAllResponseHeaders()
+
+		if($req.status -ne 200)
+		{
+			Write-Error $req.responsetext
+			return
+		}
+	
+		if($req.responsetext -match &quot;name=lngFrm&quot;)
+		{
+			Write-Host &quot;Mailbox has not been logged onto before via OWA&quot;
+	
+			$pattern = &quot;&lt;option selected value=&quot;&quot;(.*?)&quot;&quot;&gt;&quot;
+			$matches = [regex]::Matches($req.responsetext,$pattern)
+			if($matches.count -eq 2)
+			{
+				$lcidarry = $matches[0].Groups[1].Value
+				Write-Debug $lcidarry
+				$tzidarry = $matches[1].Groups[1].Value
+				Write-Debug $tzidarry
+				$pstring = &quot;lcid=&quot; + $lcidarry + &quot;&amp;tzid=&quot; + $tzidarry
+				$req.Open(&quot;POST&quot;, &quot;https://&quot; + $CasURL + &quot;/owa/&quot; + $mbMailbox + &quot;/lang.owa&quot;, $False)
+				$req.setRequestHeader(&quot;Content-Type&quot;, &quot;application/x-www-form-urlencoded&quot;)
+				$req.setRequestHeader(&quot;Content-Length&quot;, $pstring.Length)
+				# not required?
+				#$req.setRequestHeader(&quot;cookie&quot;, $reqCadata) # Error here
+				$req.send($pstring)
+				if($req.responsetext -match &quot;errMsg&quot;)
+				{
+					# Permission Error
+					Write-Error &quot;Authentication Error&quot;
+				} else {
+					Write-Debug $req.status
+					if($req.status -eq 200 -and $req.responsetext -notmatch &quot;errMsg&quot;)
+					{ 
+						Write-Host &quot;Trying to update the Junk E-mail setting again.&quot;
+						UpdateJunk($mbMailbox)
+						Write-Host &quot;Removing OWA Language and Timezone settings...&quot;
+
+						&amp;{
+							# We'll get a warning if no properties were modified.
+							# That warning means replication hasn't occurred yet.
+							$warningPreference = &quot;Stop&quot;
+							$script:count = 0
+							$loop = $true
+							while($loop)
+							{
+								$loop = $false
+								Set-Mailbox $mbMailbox -Languages $null -DomainController $DomainController
+								trap {
+									
+									if($script:count -lt 5)
+									{
+										# Try for up to 20 seconds
+										Write-Debug &quot;Unable to Reset Languages trying again in 5 seconds.&quot;
+										Sleep 5
+										Set-Variable -Name loop -Scope 1 -Value $true
+										$script:count++
+									} else { Write-Debug &quot;Failed.&quot; }
+									continue
+								}
+							}
+							$warningPreference = &quot;Continue&quot;
+						}
+					} else {
+						Write-Warning &quot;Failed to set Default OWA settings&quot;
+					}
+				}
+			} else {
+				Write-Warning &quot;Script failed to retrieve default values&quot;
+			}
+		Write-Host &quot;Junk E-Mail setting Changed Successfully&quot;
+		}
+	}
+	ValidateParams
+}
+PROCESS
+{
+	ValidatePipeline
+
+	$mbx = Get-Mailbox -Identity $Identity -DomainController $DomainController -ErrorAction SilentlyContinue
+	if(!$mbx) {throw &quot;Invalid Mailbox specified: $Identity&quot;}
+	
+	$szXml = &quot;destination=https://&quot; + $CasURL + &quot;/owa/&amp;flags=0&amp;username=&quot; + $User
+	$szXml = $szXml + &quot;&amp;password=&quot; + $Password + &quot;&amp;SubmitCreds=Log On&amp;forcedownlevel=0&amp;trusted=0&quot;
+	
+	$req = New-Object -COMObject &quot;MSXML2.ServerXMLHTTP.6.0&quot;
+	$req.Open(&quot;POST&quot;, &quot;https://&quot; + $CasURL + &quot;/owa/auth/owaauth.dll&quot;, $False)
+	$req.SetOption(2, 13056)
+	$req.Send($szXml)
+	
+	Write-Debug $req.GetAllResponseHeaders()
+	if($req.responsetext -match &quot;wrng&quot;)
+	{
+		Write-Error &quot;The user name or password that you entered is not valid. Try entering it again.&quot;
+		return;
+	}
+
+	UpdateJunk($mbx.PrimarySMTPAddress)	
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

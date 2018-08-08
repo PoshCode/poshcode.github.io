@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="LazyWinAdmin">
+    <title>Get-LocalGroupAllMembers - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-LocalGroupAllMembers</h1>
+<h3><a href="//scripts/3847.ps1">download</a></h3>
+<p>The following functions query a localgroup on the localhost or a remote computer and gather all the local and domain members (direct and nested,users and groups).
+By Default, if you do not specify any parameter, the function will query the Localhost and the Localgroup &quot;Administrators&quot;.</p>
+<pre><code class="language-posh"># ############################################################################# 
+# NAME: FUNCTION-Get-LocalGroupAllMembers.ps1 
+#  
+# AUTHOR:	Francois-Xavier Cat 
+# DATE:		2012/12/27 
+# EMAIL:	fxcat@lazywinadmin.com
+# WEBSITE:	LazyWinAdmin.com
+# TWiTTER:	@lazywinadm
+#  
+# COMMENT:	The following functions will gather all the local and domain members (direct or nested)
+# 			By Default the function will query the Localhost and the Group Administrators.
+
+# REQUIRE:	Quest Active Directory
+# USAGE:	Get-LocalGroupAllMembers -ComputerName SERVER01 -GroupName &quot;Administrators&quot;
+# 
+# VERSION HISTORY 
+# 1.0 2012.12.27 Initial Version. 
+#
+# ############################################################################# 
+
+# Function to get LOCAL Group Member(s)
+#	Members can be from the Local Machine or from the Domain.
+#	Also, this function does not look for nested membership on local group(local group member of another local group)
+#	since it is not supported by Microsoft (even if you can do it via net.exe, the permission won't work)
+#	http://technet.microsoft.com/en-us/library/ee681621(v=ws.10).aspx
+Function global:Get-LocalGroupMembership {
+	[Cmdletbinding()]
+	Param (
+		[Parameter(ValueFromPipelineByPropertyName=$true,ValueFromPipeline=$true)]
+		[string]$ComputerName = $env:COMPUTERNAME,
+		
+		[string]$GroupName = &quot;Administrators&quot;
+		)
+	
+	# Create the array that will contains all the output of this function
+	$Output = @()
+	
+	# Get the members for the group and computer specified
+	$Group = [ADSI]&quot;WinNT://$ComputerName/$GroupName&quot; 
+	$Members = @($group.psbase.Invoke(&quot;Members&quot;))
+
+	# Format the Output
+	$Members | foreach {
+		$name = $_.GetType().InvokeMember(&quot;Name&quot;, 'GetProperty', $null, $_, $null)
+		$class = $_.GetType().InvokeMember(&quot;Class&quot;, 'GetProperty', $null, $_, $null)
+		$path = $_.GetType().InvokeMember(&quot;ADsPath&quot;, 'GetProperty', $null, $_, $null)
+		
+		# Find out if this is a local or domain object
+		if ($path -like &quot;*/$ComputerName/*&quot;){
+			$Type = &quot;Local&quot;
+			}
+		else {$Type = &quot;Domain&quot;
+		}
+		
+		$Details = &quot;&quot; | Select ComputerName,Account,Class,Group,Path,Type
+		$Details.ComputerName = $ComputerName
+		$Details.Account = $name
+		$Details.Class = $class
+        $Details.Group = $GroupName
+		$details.Path = $path
+		$details.Type = $type
+		
+		# Send the current result to the $output variable
+		$output = $output + $Details
+	}
+	# Finally show the Output to the user.
+	$output
+}
+
+# Function to get DOMAIN Group Member(s)
+#	This function allow to dig into Active Directory to get all the members (direct or nested)
+#	Members can only be from the Domain.
+function global:Get-DomainGroupMembership {
+	param ($GroupName,$ComputerName)
+	#$ComputerName parameter here is only used for information purpose, to show in the output
+	
+	# Create the array that will contains all the output of this function
+	$Output = @()
+	
+	# Check the current members of $GroupName
+	$Members = $GroupName | Get-QADGroupMember
+	
+	# Check the Count of $members
+	$MembersCount = $Members.count
+
+	# If there is at least 1 member, do the following
+	if ($MembersCount -gt 0){
+		foreach ($member in $Members){
+			switch ($Member.type){
+				&quot;user&quot;{
+					# Return the user information
+					$Details = &quot;&quot; | Select ComputerName,Account,Class,Group,Domain,type,path
+					$Details.ComputerName = $ComputerName
+					$Details.Account = $member.name
+					$Details.Class = $Member.type
+					$Details.Group = $GroupName
+					$details.domain = $member.domain.name
+					$details.type = &quot;Domain&quot;
+					$Details.path = $Member.CanonicalName
+					$output = $output + $Details
+                }#Switch user
+				&quot;group&quot;{
+					# Return the group object information
+					$Details = &quot;&quot; | Select ComputerName,Account,Class,Group,Domain,type,path
+					$Details.ComputerName = $ComputerName
+					$Details.Account = $member.name
+					$Details.Class = $Member.type
+					$Details.Group = $GroupName
+					$details.domain = $member.domain.name
+					$details.type = &quot;Domain&quot;
+					$Details.path = $Member.CanonicalName
+					$output = $output + $Details
+					# Return the members of the current group
+					Get-DomainGroupMembership -GroupName $Member.name -ComputerName $ComputerName
+				}#Switch group
+			}#switch ($Member.type)
+		}#foreach ($member in $Members)
+	}#if ($MembersCount -gt 0)
+	#Finally show the output
+	$Output
+}#end function Get-DomainGroupMembership
+
+# Function to Get LOCAL and DOMAIN member(s) information
+#	LOCAL Group Membership information is handled by the function Get-LocalGroupMembership
+#	DOMAIN Group Membership information is handled by the function Get-DomainGroupMembership
+function global:Get-LocalGroupAllMembers {
+	param (
+        [parameter(ValueFromPipeline=$true)]
+	    [string]$ComputerName = &quot;$env:computername&quot;,
+        [string]$GroupName = &quot;Administrators&quot;
+	)
+# Create the array that will contains all the output of this function
+$Output = @()
+
+# Get the local administrators for the current ComputerName using the function declared 
+#	earlier: Get-LocalGroupMembership
+$LocalAdministrators = Get-LocalGroupMembership -ComputerName $ComputerName -GroupName $GroupName
+
+# Let's now get information about each members, and members of members, etc...
+foreach ($admin in $LocalAdministrators){
+
+    # L O C A L #
+    #	Local User
+    if (($admin.Type -like &quot;Local&quot;) -and ($admin.class -like &quot;User&quot;)){
+        $Details = &quot;&quot; | Select ComputerName,Account,Class,Group,Type,Path
+        $Details.ComputerName = $admin.ComputerName
+        $Details.Account = $admin.account
+        $Details.Class = $admin.class
+        $Details.Group = $admin.group
+        $Details.Type = $admin.type
+        $Details.Path = $admin.path
+        $output = $output + $Details
+
+    }
+    #	Local Group
+    if (($admin.type -like &quot;Local&quot;) -and ($admin.class -like &quot;group&quot;)){
+        # Return the local group information before checking its members
+        $Details = &quot;&quot; | Select ComputerName,Account,Group,Domain                        
+        $Details.ComputerName = $admin.ComputerName
+        $Details.Account = $admin.account
+        $Details.Class = $admin.class
+        $Details.Group = $admin.group
+        $Details.type = $admin.type
+        $Details.path = $admin.path
+        $output = $output + $Details
+		# Return the members of the current Local Group
+        $localgroup = Get-LocalGroupMembership -GroupName $admin.account -ComputerName $ComputerName
+        
+        # If There is at least 1 member, do the following
+        if ($localgroup.count -gt 0) {
+            foreach ($localMember in $localgroup){
+                $Details = &quot;&quot; | Select ComputerName,Account,Class,Group,Type,Path                       
+                $Details.Account = $localMember.account
+                $Details.Group = $admin.account # Here we are taking the name of the parent group
+                $Details.ComputerName = $localMember.ComputerName
+                $Details.Class = $localMember.class
+                $Details.type = $localMember.type
+                $Details.path = $localMember.path
+                $output = $output + $Details
+                }#foreach
+            }#if
+    }#if (Get-LocalGroupMember -group $admin.account -ComputerName $ComputerName)
+
+    # D O M A I N #
+    if ($admin.type -like &quot;Domain&quot;){
+        # Get information about this object in the domain
+        #	Here we just want to know if it is an User or Group.
+        $ADObject = Get-QADObject $admin.account
+        
+        Switch ($ADObject.type) {
+        
+        	#	Domain User
+            &quot;user&quot; {
+                # Return the User information
+                $Details = &quot;&quot; | Select ComputerName,Account,Class,Group,Domain,type,path
+                $Details.ComputerName = $ComputerName
+                $Details.Account = $ADObject.name
+                $Details.Class = $ADObject.type
+                $Details.Group = $admin.group
+                $Details.domain = $ADObject.domain.name
+                $Details.Type = $admin.type
+                $Details.path = $ADObject.CanonicalName
+                $output = $output + $Details
+
+                }#user (switch)
+                
+            #	Domain Group
+            &quot;group&quot;{
+                # Return the Group information
+                $Details = &quot;&quot; | Select ComputerName,Account,Class,Group,Domain,type,path
+                $Details.ComputerName = $ComputerName
+                $Details.Account = $ADObject.name
+                $details.Class = $ADObject.type
+                $Details.Group = $admin.group
+                $Details.domain = $ADObject.domain.name
+                $Details.Type = $admin.type
+                $Details.path = $ADObject.CanonicalName
+                $output = $output + $Details
+                # Checking if the group has members, call the function declared ealier
+                # Get-DomainGroupMembership
+                Get-DomainGroupMembership -GroupName $ADObject.name -ComputerName $ComputerName
+            }#group (switch)
+        }#switch
+    }#if ($admin.domain -notlike &quot;$ComputerName&quot;){
+}#foreach ($admin in $LocalAdministrators){
+$output
+}#function global:Get-LocalGroupAllMembers
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

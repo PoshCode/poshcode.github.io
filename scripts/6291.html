@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="AlphaSun">
+    <title>List All Local Admins - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>List All Local Admins</h1>
+<h3><a href="//scripts/6291.ps1">download</a> - <a href="//scripts/6290.md">parent</a></h3>
+<p>This script will list the local administrators of all accessible PCs on a network, save the results to an Excel spreadsheet (via Excel COM objects, so a local installation of Excel is required), and email the log file to an array of recipients. Also included in the results are the IP address and Serial number of the PC. Lines to be customized are: 4, 5, 9, 10, 11, 25, 75, 77, and 117</p>
+<pre><code class="language-posh">Import-Module ActiveDirectory
+
+# Folder to save result file to
+$SaveTo = &quot;\\server\share\folder&quot;
+$BaseFilename = &quot;Local Admin Group Members.xlsx&quot;
+	# The current date and time will be prepended to the BaseFilename
+
+# Exchange settings
+$SMTP = &quot;Exch-Srvr&quot;
+$Recipients = @(&quot;Someone@anywhere.com&quot;, &quot;SomeoneElse@anywhere.com&quot;, &quot;Nobody@anywhere.com&quot;, &quot;Anonymouse@somewhere-else.com&quot;)
+$Sender = &quot;DeadPool@chimichanga.com&quot;
+
+# Create a new Excel object using COM
+$Excel = New-Object -ComObject Excel.Application
+$Excel.visible = $False
+
+# Counter variable for rows
+$i = 1
+
+# WMI Class variables
+$WMI_CSP = &quot;Win32_ComputerSystemProduct&quot;
+
+# Set up a directory search for all computer objects in the current domain
+# Exclude several Organizational Units from the search scope
+$ExcludeOUs=([adsisearcher]'(&amp;(objectCategory=Organizationalunit)(!ou=Domain Controllers)(!ou=Servers))').FindAll()
+foreach($ou in $ExcludeOUs)
+{
+	$searcher=[adsisearcher]'(&amp;(objectCategory=computer))'
+	$searcher.searchScope=&quot;Subtree&quot;
+	$searcher.searchRoot=$ou.Path
+	$Results = $searcher.FindAll()
+
+# Create spreadsheet
+$intRow = 1
+
+$Excel = $Excel.Workbooks.Add()
+$Sheet = $Excel.Worksheets.Item(1)
+
+# Create column headers
+$Sheet.Cells.Item($intRow,1)  = &quot;Hostname&quot;
+$Sheet.Cells.Item($intRow,1).Font.Bold = $True
+$Sheet.Cells.Item($intRow,1).HorizontalAlignment = -4108
+$Sheet.Columns.Item('a').ColumnWidth = 14
+
+$Sheet.Cells.Item($intRow,2)  = &quot;IP Address&quot;
+$Sheet.Cells.Item($intRow,2).Font.Bold = $True
+$Sheet.Cells.Item($intRow,2).HorizontalAlignment = -4108
+$Sheet.Columns.Item('b').ColumnWidth = 11
+
+$Sheet.Cells.Item($intRow,3) = &quot;Serial Number&quot;
+$Sheet.Cells.Item($intRow,3).Font.Bold = $True
+$Sheet.Cells.Item($intRow,3).HorizontalAlignment = -4108
+$Sheet.Columns.Item('c').ColumnWidth = 16
+
+$Sheet.Cells.Item($intRow,4) = &quot;Local Administrators&quot;
+$Sheet.Cells.Item($intRow,4).Font.Bold = $True
+$Sheet.Cells.Item($intRow,4).HorizontalAlignment = -4108
+$Sheet.Columns.Item('d').ColumnWidth = 50
+
+# Parse the search results
+foreach ($objResult in $Results)	{
+	$intRow++
+
+	$objComputer = $objResult.Properties
+	[string]$computer = $objComputer.name
+	Write-Host -ForegroundColor White &quot;     Pinging $computer...&quot;
+	$pingStatus = Get-WMIObject Win32_PingStatus -Filter &quot;Address = '$computer'&quot;
+	$ipAddress = $pingStatus.ProtocolAddress
+	if($pingStatus.StatusCode -eq 0)	{
+		$Serial = Get-WMIObject $WMI_CSP -ComputerName $computer  |  Select IdentifyingNumber
+		$_Serial = $Serial.IdentifyingNumber
+
+		$members =[ADSI]&quot;WinNT://$Computer/Administrators&quot;
+		$members = @($members.psbase.Invoke(&quot;Members&quot;))
+		$_Members = $members | ?{$_ -notlike &quot;administrator&quot; -and $_ -notlike &quot;Domain Admins&quot;} | foreach {
+			$_.GetType().InvokeMember(&quot;Name&quot;, 'GetProperty', $null, $_, $null), &quot;, &quot;
+		} | ?{$_ -notlike &quot;administrator&quot; -and $_ -notlike &quot;Domain Admins&quot;}
+
+
+		# Output Minimal information to Console &amp; Complete information to XLS file (Successful Ping)
+		Write-Host -ForegroundColor Green &quot;Reply received from $computer ($ipAddress)&quot;
+		Write-Host &quot;&quot;
+		$Sheet.Cells.Item($intRow, 1)   = $computer
+		$Sheet.Cells.Item($intRow, 2)   = $ipAddress
+		$Sheet.Cells.Item($intRow, 3)   = $_Serial
+		$Sheet.Cells.Item($intRow, 4)   = &quot;$_Members&quot;
+
+	}
+	else	{
+		# Output Minimal information to Console &amp; Minimal information to XLS file (Unsuccessful Ping)
+		Write-Host -ForegroundColor Red &quot;No Reply received from $computer ....................[SKIPPED]&quot;
+		Write-Host &quot;&quot;
+
+
+		$Sheet.Cells.Item($intRow, 1)   = $computer
+		$Sheet.Cells.Item($intRow, 2)   = &quot;HOST NOT ONLINE&quot;
+
+		$Sheet.Cells.Item($intRow, 3)   = &quot;---&quot;
+		$Sheet.Cells.Item($intRow, 3).HorizontalAlignment = -4108
+		
+		$Sheet.Cells.Item($intRow, 4)   = &quot;---&quot;
+		$Sheet.Cells.Item($intRow, 4).HorizontalAlignment = -4108
+	}
+}
+}
+
+# Resize columns based on data size
+$Sheet.UsedRange.EntireColumn.AutoFit()
+
+# Save and close the spreadsheet. Name with the date and time.
+$Date = Get-Date -UFormat &quot;%Y%m%d&quot;
+$DateTime = Get-Date -UFormat &quot;%Y%m%d.%H%M&quot;
+$Excel.SaveAs(&quot;$SaveTo\$DateTime $BaseFilename&quot;)
+$Excel.Close()
+
+# Send file to static recipients list.
+Send-MailMessage -From $Sender -To $Recipients -Subject &quot;$Date - Local Admin Accounts&quot; -Attachments &quot;$SaveTo\$DateTime $BaseFilename&quot; -SMTP &quot;$SMTP&quot; -Body &quot;The attached report ($DateTime $BaseFilename) lists the accounts that have local administrator access. This file has also been saved to:  $SaveTo\$DateTime $BaseFilename&quot;
+
+Clear
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

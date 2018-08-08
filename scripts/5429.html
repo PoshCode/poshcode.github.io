@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="skourlatov">
+    <title>Get-WindowsProductGUI - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-WindowsProductGUI</h1>
+<h3><a href="//scripts/5429.ps1">download</a></h3>
+<p>Function to retrieve windows product info from registry with GUI
+Function Get-WindowsProductGUI is the GUI for Get-WindowsProduct</p>
+<pre><code class="language-posh">Add-Type -AssemblyName 'PresentationFramework'
+
+Function Get-WindowsProduct ## ver 1.02a
+{
+    function DecodeDigitalPID([byte[]]$digitalProductId)
+    {
+        $base24 = 'BCDFGHJKMPQRTVWXY2346789'
+        $cryptedStringLength = 24
+        $decryptionLength    = 14
+        $decryptedKey = [string]::Empty
+
+        [bool]$containsN = ($digitalProductId[$decryptionLength] -shr 3) -band 1
+        [byte]$digitalProductId[$decryptionLength] = $digitalProductId[$decryptionLength] -band 0xF7
+
+        for ($i = $cryptedStringLength; $i -ge 0; $i--)
+        {
+            $digitMapIndex = 0
+            for ($j = $decryptionLength; $j -ge 0; $j--)
+            {
+                [int]$digitMapIndex = $digitMapIndex -shl 8 -bxor $digitalProductId[$j]
+                [byte]$digitalProductId[$j] = [Math]::Truncate($digitMapIndex / $base24.Length)
+                [int]$digitMapIndex = $digitMapIndex % $base24.Length
+            }
+            $decryptedKey = $decryptedKey.Insert(0, $base24[$digitMapIndex])
+        }
+
+        if ($containsN)
+        {
+            $firstCharIndex = 0
+            for ($index = 0; $index -lt $cryptedStringLength; $index++)
+            {
+                if ($decryptedKey[0] -ne $base24[$index]) { continue }
+                $firstCharIndex = $index; break
+            }
+            $decryptedKey = $decryptedKey.Remove(0, 1).Insert($firstCharIndex,'N')
+        }
+
+        for ($t = 20; $t -ge 5; $t -= 5) { $decryptedKey = $decryptedKey.Insert($t, '-') }
+
+        return $decryptedKey
+    }
+
+    $regKey = Get-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion'
+    return [PSCustomObject]@{
+        Version        = [Environment]::OSVersion.VersionString
+        Edition        = $regKey.EditionID
+        Type        = switch ([Environment]::Is64BitOperatingSystem) { $true {'x86-64'}; $false {'x86-32'}}
+        ProductID    = $regKey.ProductId
+        ProductKey    = DecodeDigitalPID($regKey.DigitalProductId[0x34..0x42])
+        ## 1970-01-01 :: UTC + seconds value from registry
+        Installed    = [DateTime]::FromBinary(0x089F7FF5F7B58000).AddSeconds($regKey.InstallDate).ToLocalTime().ToString('r').Substring(5,20)
+    }
+}
+
+New-Variable -Option 'Constant' -Name 'prod_xaml' -Value ([xml]@&quot;
+&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;!-- XAML Code - Imported from Visual Studio Express WPF Application --&gt;
+&lt;Window
+    xmlns=&quot;http://schemas.microsoft.com/winfx/2006/xaml/presentation&quot;
+    xmlns:x=&quot;http://schemas.microsoft.com/winfx/2006/xaml&quot;
+    ResizeMode=&quot;NoResize&quot; WindowStyle=&quot;None&quot; BorderThickness=&quot;0&quot;
+    Background=&quot;#FFF0F0F0&quot; WindowStartupLocation=&quot;CenterScreen&quot;
+    SizeToContent=&quot;Width&quot; Height=&quot;245&quot; Title=&quot;OS Details&quot;
+    Topmost=&quot;False&quot; FontSize=&quot;14&quot;&gt;
+
+    &lt;Grid Margin=&quot;0,0,0,0&quot;&gt;
+        &lt;Label
+            Width=&quot;440&quot; Height=&quot;30&quot; Margin=&quot;0,0,0,0&quot;
+            VerticalAlignment=&quot;Top&quot; HorizontalAlignment=&quot;Center&quot;
+            HorizontalContentAlignment=&quot;Center&quot; Content=&quot;Operating System Details&quot;
+            FontWeight=&quot;Bold&quot; Name=&quot;mainLabel&quot;
+        /&gt;
+        &lt;Button
+            Width=&quot;30&quot; Height=&quot;30&quot; Margin=&quot;410,0,0,0&quot; BorderThickness=&quot;0&quot;
+            VerticalAlignment=&quot;Top&quot; HorizontalAlignment=&quot;Left&quot;
+            Foreground=&quot;White&quot; Background=&quot;#FFC35A50&quot;
+            FontWeight=&quot;Bold&quot; FontSize=&quot;20&quot; Content=&quot;X&quot;
+            Cursor=&quot;Hand&quot; ToolTip=&quot;Close Window&quot; Name=&quot;btnExit&quot;
+        /&gt;
+        &lt;Label Margin=&quot;0,35,0,0&quot; Content=&quot;Version&quot; Name=&quot;lblVersion&quot;/&gt;
+        &lt;Label Margin=&quot;0,70,0,0&quot; Content=&quot;Edition&quot; Name=&quot;lblEdition&quot;/&gt;
+        &lt;Label Margin=&quot;0,105,0,0&quot; Content=&quot;Type&quot; Name=&quot;lblType&quot;/&gt;
+        &lt;Label Margin=&quot;0,140,0,0&quot; Content=&quot;Product ID&quot; Name=&quot;lblProductID&quot;/&gt;
+        &lt;Label Margin=&quot;0,175,0,0&quot; Content=&quot;Product Key&quot; Name=&quot;lblProductKey&quot;/&gt;
+        &lt;Label Margin=&quot;0,210,0,0&quot; Content=&quot;Installed&quot; Name=&quot;lblInstalled&quot;/&gt;
+        &lt;TextBox Margin=&quot;115,35,0,0&quot; Name=&quot;txtVersion&quot;/&gt;
+        &lt;TextBox Margin=&quot;115,70,0,0&quot; Name=&quot;txtEdition&quot;/&gt;
+        &lt;TextBox Margin=&quot;115,105,0,0&quot; Name=&quot;txtType&quot;/&gt;
+        &lt;TextBox Margin=&quot;115,140,0,0&quot; Name=&quot;txtProductID&quot;/&gt;
+        &lt;TextBox Margin=&quot;115,175,0,0&quot; Name=&quot;txtProductKey&quot;/&gt;
+        &lt;TextBox Margin=&quot;115,210,0,0&quot; Name=&quot;txtInstalled&quot;/&gt;
+    &lt;/Grid&gt;
+&lt;/Window&gt;
+&quot;@)
+
+Function Get-WindowsProductGUI
+{
+    $syncHash = [Hashtable]::Synchronized(@{})
+    $rsHash   = [Hashtable]::Synchronized(@{})
+    $rsHash.Runspace = [RunspaceFactory]::CreateRunspace()
+    $rsHash.Runspace.ApartmentState,$rsHash.Runspace.ThreadOptions = 'STA','ReuseThread'
+    $rsHash.Runspace.Open()
+    $rsHash.Runspace.SessionStateProxy.SetVariable(&quot;syncHash&quot;,$syncHash)
+    $rsHash.Runspace.SessionStateProxy.SetVariable(&quot;rsHash&quot;,$rsHash)
+    $syncHash.xaml = $prod_xaml
+
+##    Getting values
+    $os = Get-WindowsProduct
+    $syncHash.Data = New-Object string[](6)
+        $syncHash.Data[0] = $os.Version
+        $syncHash.Data[1] = $os.Edition
+        $syncHash.Data[2] = $os.Type
+        $syncHash.Data[3] = $os.ProductId
+        $syncHash.Data[4] = $os.ProductKey
+        $syncHash.Data[5] = $os.Installed
+
+    $psCmd = [PowerShell]::Create().AddScript({
+
+    ##    Read XAML
+        $reader = New-Object -TypeName Xml.XmlNodeReader -ArgumentList $syncHash.xaml
+        $Form = [Windows.Markup.XamlReader]::Load($reader)
+    ##    Make finalizers
+        $Form.Add_Closed({
+            $rshash.PowerShell.Dispose()
+
+            [GC]::Collect()
+            [GC]::WaitForPendingFinalizers()
+        })
+    ##    Store Form Objects In PowerShell
+        $labels  = New-Object Collections.Generic.List[Windows.Controls.Label]
+        $txtblks = New-Object Collections.Generic.List[Windows.Controls.TextBox]
+        $syncHash.xaml.SelectNodes(&quot;//*[@Name]&quot;) | foreach {
+
+            $element = $Form.FindName($_.Name)
+            switch -Regex ($_.Name)
+            {
+                     'lbl*' {  $labels.Add($element) }
+                     'txt*' { $txtblks.Add($element) }
+                  'btnExit' {  $btnExit  = $element  }
+                'mainLabel' {  $lblMain  = $element  }
+            }
+        }
+    ##    add an event handler to allow the window to be dragged using the left mouse button
+        $eventHandler_LeftButtonDown = [Windows.Input.MouseButtonEventHandler]{ $Form.DragMove() }
+        $lblMain.add_MouseLeftButtonDown($eventHandler_LeftButtonDown)
+    ##    Paint elements with color
+        $color_shading = {
+            $lblMain.Background = '#FF45A6ED'
+            $labels  | ForEach-Object -Process { $_.Background = '#FFA5D3F5' }
+            $txtblks | ForEach-Object -Process { $_.Background = '#FFFFF0BB' }
+        }
+        $monochrome_shading = {
+            $lblMain.Background = '#FF8D8D8D'
+            $labels  | ForEach-Object -Process { $_.Background = '#FFC7C7C7' }
+            $txtblks | ForEach-Object -Process { $_.Background = '#FFF0F0F0' }
+        }
+    ##    Add events to Form Objects
+        $btnExit.add_Click({ $Form.Close() })
+    ##    Make the mouse act like something is happening
+        $btnExit.add_MouseEnter({ &amp; $monochrome_shading })
+    ##    Switch back to regular mouse
+        $btnExit.add_MouseLeave({ &amp; $color_shading })
+    ##    Initialize form
+        for ($i = 0; $i -lt $labels.Count; $i++)
+        {
+            $tb,$lb = $txtblks[$i],$labels[$i]
+
+            $tb.IsReadOnly = $true 
+            $tb.Text = $syncHash.Data[$i]
+            $tb.Width,$lb.Width = 320,110
+            $tb.Height = $lb.Height = 30
+            $tb.TextWrapping = [Windows.TextWrapping]::Wrap
+            @($tb,$lb) | foreach {
+                $_.VerticalAlignment = [Windows.VerticalAlignment]::Top
+                $_.HorizontalAlignment = [Windows.HorizontalAlignment]::Left
+            }
+        }
+        &amp; $color_shading
+    ##    Shows the form
+        $Form.ShowDialog()
+    })
+
+    $psCmd.Runspace = $rsHash.Runspace
+    [void]$psCmd.BeginInvoke()
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Steve Jarvi">
+    <title>Security group monitor - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Security group monitor</h1>
+<h3><a href="//scripts/3509.ps1">download</a> - <a href="//scripts/3496.md">parent</a></h3>
+<p>This script takes a list of Active Directory security group membership from XML, checks a baseline, and emails results.  Code can be taken from this to create the baseline XML as well.  Thanks to Andrew M. for fixing empty group membership bug.</p>
+<p>-Steve</p>
+<pre><code class="language-posh">#Get group membership for a list of security 
+#groups and export to an XML for comparison 
+#against baseline.
+#
+
+$script:WorkingDirectory = split-path $myinvocation.Mycommand.Definition -parent
+
+
+Function Re-Baseline
+{
+#First, declare array and hashtable.
+$securitygroups = @()
+$table = @{}
+#Import Security Group list from XML and add to &quot;securitygroups&quot; array.
+$securitygroupsxml = [XML] (gc &quot;$script:WorkingDirectory\sg.xml&quot;)
+$securitygroups += $securitygroupsxml.objs.S
+#Get membership for each group
+foreach($securitygroup in $securitygroups){
+$dom = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain() 
+$root = [ADSI] &quot;LDAP://$($dom.Name)&quot;
+$searcher = New-Object System.DirectoryServices.DirectorySearcher $root
+$searcher.filter = &quot;(&amp;(objectCategory=group)(objectClass=group)(sAMAccountName=$securitygroup))&quot; 
+$group = $searcher.findone()
+
+$table += @{&quot;$securitygroup&quot;= $group.properties.member}
+}
+#Export hashtable to XML.  So nice.
+$table | export-clixml $script:WorkingDirectory\baseline.xml
+}
+
+
+
+
+#
+#First, declare hashtable.
+$comparetable = @{}
+
+#Import Security Group list from XML and add to &quot;securitygroups&quot; array.
+$securitygroupsxml = [XML] (gc &quot;$script:WorkingDirectory\sg.xml&quot;)
+$securitygroups = $securitygroupsxml.objs.S
+
+#Get membership for each group and create a compare table.
+foreach($securitygroup in $securitygroups){
+	$dom = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+	$root = [ADSI] &quot;LDAP://$($dom.Name)&quot;
+	$searcher = New-Object System.DirectoryServices.DirectorySearcher $root
+	$searcher.filter = &quot;(&amp;(objectCategory=group)(objectClass=group)(sAMAccountName=$securitygroup))&quot;
+	$group = $searcher.findone()
+	$comparetable += @{&quot;$securitygroup&quot;= $group.properties.member}
+}
+
+#Export hashtable to XML.  So nice.
+$comparetable | export-clixml &quot;$script:WorkingDirectory\compare.xml&quot;
+
+#Import baseline XML to hashtable.
+$baselinetable = @{}
+$baselinetable += import-clixml &quot;$script:WorkingDirectory\baseline.xml&quot;
+
+#Import baseline XML to hashtable.
+$comparetable = @{}
+$comparetable += import-clixml &quot;$script:WorkingDirectory\compare.xml&quot;
+
+#Compare respective Keys and Values for $comparetable against
+#$baselinetable and get differences.
+$passtoemailsubuser = @()
+$passtoemailbody = @()
+foreach($securitygroup in $securitygroups) {
+
+	
+		
+		If($comparetable.&quot;$securitygroup&quot; -eq $NULL)
+		{
+			If($baselinetable.&quot;$securitygroup&quot; -eq $NULL)
+			{
+				(get-date).tostring() + &quot; - Security Group $securitygroup is empty in the compare and the baseline&quot; &gt;&gt; $script:WorkingDirectory\log.txt
+			}
+			Else
+			{
+			foreach($entry in $baselinetable.&quot;$securitygroup&quot;)
+			{$passtoemailbody += &quot;`r&quot; + $entry + &quot; &quot; + &quot;`r`r&quot; + &quot;***WAS REMOVED FROM***: &quot; + &quot;`r`r&quot; + $securitygroup + &quot;`r`r&quot;}
+			$passtoemailbody += &quot;`r&quot; + $securitygroup + &quot; &quot; + &quot;`r`r&quot; + &quot;in AD contains no more objects&quot; + &quot;`r`r&quot;
+			(get-date).tostring() + &quot; - $securitygroup in AD contains no more objects&quot; &gt;&gt; $script:WorkingDirectory\log.txt
+			}
+		}
+	
+		Else
+		{
+		$baseline = @($baselinetable.&quot;$securitygroup&quot;)
+		$compare = @($comparetable.&quot;$securitygroup&quot;)
+		$results = Compare-Object $baseline $compare
+		foreach($result in $results){
+			if (($result.equals.isinstance -eq $true) -and ($result.sideindicator -eq &quot;=&gt;&quot;)) {$passtoemailbody += &quot;`r&quot; + $result.inputobject + &quot; &quot; + &quot;`r`r&quot; + &quot;***WAS ADDED TO***: &quot; + &quot;`r`r&quot; + $securitygroup + &quot;`r`r&quot;
+            $user = $result.inputobject
+            $searcher.filter = &quot;(&amp;(objectCategory=person)(objectClass=user)(distinguishedname=$user))&quot;
+            $user = $searcher.FindOne()
+            $passtoemailsubuser += $user.properties.samaccountname
+            $mod = $true
+            }
+			if (($result.equals.isinstance -eq $true) -and ($result.sideindicator -eq &quot;&lt;=&quot;)) {$passtoemailbody += &quot;`r&quot; + $result.inputobject + &quot; &quot; + &quot;`r`r&quot; + &quot;***WAS REMOVED FROM***: &quot; + &quot;`r`r&quot; + $securitygroup + &quot;`r`r&quot;
+            $user = $result.inputobject
+            $searcher.filter = &quot;(&amp;(objectCategory=person)(objectClass=user)(distinguishedname=$user))&quot;
+            $user = $searcher.FindOne()
+            $passtoemailsubuser += $user.properties.samaccountname
+            $mod = $true
+            }}
+}
+}
+
+
+if ($mod -eq $true) {
+	$from = New-Object System.Net.Mail.MailAddress &quot;from@address.com&quot; 
+	$to =   New-Object System.Net.Mail.MailAddress &quot;to@address.com&quot; 
+	$message = new-object  System.Net.Mail.MailMessage $from, $to 
+	$message.Subject = &quot;The following accounts were involved in a security group modification: $passtoemailsubuser&quot; 
+	$message.Body = &quot;Note the following security group modification information: `r`r $passtoemailbody&quot;
+	$server = &quot;SMTPSERVERNAME&quot; 
+	$client = new-object system.net.mail.smtpclient $server
+	$client.port = 125
+	$client.Send($message)
+	foreach($entry in $passtoemailbody)
+	{(get-date).tostring() + &quot; - &quot; + $Entry &gt;&gt; $script:WorkingDirectory\Log.txt}
+	(get-date).tostring() + &quot; - Group Membership compare has been baselined&quot; &gt;&gt; $script:WorkingDirectory\log.txt
+	re-baseline	
+	}
+else { 
+	$from = New-Object System.Net.Mail.MailAddress &quot;from@address.com&quot; 
+	$to =   New-Object System.Net.Mail.MailAddress &quot;to@address.com&quot; 
+	$message = new-object  System.Net.Mail.MailMessage $from, $to 
+	$message.Subject = &quot;No modifications to the audited security groups have been made.&quot; 
+	$message.Body = &quot;No modifications to the audited security groups have been made.&quot;
+	$server = &quot;SMTPSERVERNAME&quot; 
+	$client = new-object system.net.mail.smtpclient $server
+	$client.port = 125
+	$client.Send($message)
+	&quot;No Changes have been made&quot;
+	}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

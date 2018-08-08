@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Geoffrey Guynn">
+    <title>Get-Software Function - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-Software Function</h1>
+<h3><a href="//scripts/3186.ps1">download</a></h3>
+<p>I was having a great deal of difficulty in properly enumerating software applications on remote machines, so I wrote this function to help ease the problem somewhat. Among the many methods of gathering this information that are available, I had the most success using the &quot;SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall&quot; registry key as an information source. In order to use this function, the Powershell instance must support .Net 4.0 or greater, which is fairly straightforward if you follow these instructions.</p>
+<ol>
+<li>Open notepad and copy the below text exactly as shown into the document.</li>
+</ol>
+<?xml version="1.0"?>
+<configuration>
+	<startup useLegacyV2RuntimeActivationPolicy="true">
+		<supportedRuntime version="v4.0.30319"/>
+		<supportedRuntime version="v2.0.50727"/>
+	</startup>
+</configuration>
+<ol start="2">
+<li>Save this document as c:\windows\System32\WindowsPowerhsell\v1.0\Powershell.exe.config (or c:\windows\System32\WindowsPowerhsell\v1.0\Powershell_ise.exe.config)</li>
+<li>Reload powershell and type the following command: $PsVersionTable.clrVersion (It should show Major version 4 if .Net 4 is supported.)</li>
+</ol>
+<p>Take note that this release does not contain error checking functions that my production version uses, I removed references to these functions in order to provide a good starting function for others to use. If you have any errors with this code, please contact me and I will resolve them as soon as possible.</p>
+<pre><code class="language-posh">Function Get-Software{
+    &lt;#
+    .SYNOPSIS
+        Gets the software applications on a remote computer.
+    .DESCRIPTION
+        This function interrogates the remote registry for installed software products.
+        It then returns an array of powershell objects that can be sorted and parsed.
+        
+        Optionally, you can provide a product name that will filter applications based on
+        displayname before they are returned, thus reducing the typing needed to get specific results.
+    .PARAMETER computer
+        The name of the computer to retrieve a software list from.
+    .PARAMETER product
+        The partial name of a software application to search for.
+    .INPUTS
+    .OUTPUTS
+    .NOTES
+        Name: Get-Software
+        Author: Geoffrey Guynn
+        DateCreated 9 Aug 2011
+    .EXAMPLE
+        Get-Software -computer &quot;computer&quot; -name &quot;Adobe&quot;
+        Returns all instances of Adobe software on the computer.
+    #&gt;
+
+    [cmdletbinding(
+        SupportsShouldProcess = $True,
+        DefaultParameterSetName = &quot;process&quot;,
+        ConfirmImpact = &quot;low&quot;
+    )]
+    param(
+        [ValidateNotNullOrEmpty()]
+        [string]$Computer
+        ,
+        [string]$Product
+    )
+    #Get Architechture Type of the system
+    $OSArch = (Gwmi -computer $Computer win32_operatingSystem).OSArchitecture
+    if ($OSArch -like &quot;*64*&quot;) {$Architectures = @(&quot;32bit&quot;,&quot;64bit&quot;)}
+    else {$Architectures = @(&quot;32bit&quot;)}
+    #Create an array to capture program objects.
+    $arApplications = @()
+    foreach ($Architecture in $Architectures){
+        #We have a 64bit machine, get the 32 bit software.
+        if ($Architecture -like &quot;*64*&quot;){
+            #Define the entry point to the registry.
+            $strSubKey = &quot;SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall&quot;
+            $SoftArchitecture = &quot;32bit&quot;
+            $RegViewEnum = [Microsoft.Win32.RegistryView]::Registry64
+        }
+        #We have a 32bit machine, use the 32bit registry provider.
+        elseif ($Architectures -notcontains &quot;64bit&quot;){
+            #Define the entry point to the registry.
+            $strSubKey = &quot;SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall&quot;
+            $SoftArchitecture = &quot;32bit&quot;
+            $RegViewEnum = [Microsoft.Win32.RegistryView]::Registry32
+        }
+        #We have &quot;64bit&quot; in our array, capture the 64bit software.
+        else{
+            #Define the entry point to the registry.
+            $strSubKey = &quot;SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall&quot;
+            $SoftArchitecture = &quot;64bit&quot;
+            $RegViewEnum = [Microsoft.Win32.RegistryView]::Registry64
+        }
+        #The standard routine to get software.
+        #************************************************************************
+        #Create a remote registry connection to the server.
+        $remRegistry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey('LocalMachine', $Computer, $RegViewEnum)
+        #Open the entry point.
+        $remKey = $remRegistry.OpenSubKey($strSubKey)
+        #Get all subkeys that exist in the entry point.
+        $remSoftware = $remKey.GetSubKeyNames()
+        #Loop through the applications and capture data.
+        foreach ($remApplication in $RemSoftware){
+            $remProgram = $remRegistry.OpenSubKey(&quot;$strSubKey\\$remApplication&quot;)
+            $strDisplayName = $remProgram.GetValue(&quot;DisplayName&quot;)
+            if ($strDisplayName){
+                #Get a list of all available properties for the program.
+                $arProperties = $remProgram.GetValueNames()
+                #Create a custom object for this program.
+                $objApplication = New-Object System.Object
+                #Write-Host &quot;`n&quot;
+                foreach ($strProperty in $arProperties){
+                    #Get the value associated with the current property.
+                    $strValue = [string]($remProgram.GetValue($strProperty))
+                    if ($strValue){
+                        #If the property has a value but no name, then it is the default property.
+                        if (!$strProperty){
+                            $objApplication | Add-Member -type NoteProperty -Name &quot;(Default)&quot; -Value $strValue
+                        }
+                        #The property has a value and a name, assign them both as a new property on the object.
+                        else{
+                            $objApplication | Add-Member -type NoteProperty -Name ([string]$strProperty) -Value $strValue
+                        }
+                    }
+                    #Write-Host $strValue &quot;: &quot; $remProgram.GetValue($strValue)
+                }
+                #Add a final property to denote the software architecture type.
+                $objApplication | Add-Member -type NoteProperty -Name &quot;Architecture&quot; -Value $SoftArchitecture
+                #Add the last application to the array of programs.
+                $arApplications += $objApplication
+            }
+        }
+    }
+    if ($Product){
+        $objApplication = $arApplications | ? {$_.DisplayName -Like &quot;*$Product*&quot;} | Sort-Object -property Architecture,DisplayName
+        return $objApplication
+    }
+    #Sort the array by each object's Architecture and DisplayName.
+    $arApplications = $arApplications | Sort-Object -property Architecture,DisplayName
+    return $arApplications
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

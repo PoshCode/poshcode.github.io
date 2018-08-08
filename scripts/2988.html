@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Brad Blaylock">
+    <title>SetDefaultPrinter.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SetDefaultPrinter.ps1</h1>
+<h3><a href="//scripts/2988.ps1">download</a></h3>
+<p>Set a printer as default  for any user who has ever logged onto any given computer in a domain.</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+    Sets the Default Printer for any user on any machine in active directory.
+.DESCRIPTION
+    Search AD for Computername; Select User Account and Printer and make that printer the default
+	printer for that user on that computer.
+.PARAMETER Hostnme
+	This parameter is required and should reflect the computer name (or names) you wish to inventory.
+	This is basically a search criteria because the first thing the script will do is search Active
+	Directory for computer names matching this input.  
+.NOTES
+    Author:  	Brad Blaylock
+	Version:	3.2
+    Date:    	October 3, 2011
+	Contact:	brad.blaylock@gmail.com
+    Details:  	This Script accepts an AD Query (Computername) in the form of an entire computer name
+			or partial computername as in sbcomp* or *2471wk1 and will find any listed computers
+			that match the criteria in AD.  This list will be presented to the user.  The user will 
+			select the computer they are needing, and click [LOAD].  Load will find all user accounts
+			that have ever had a profile on that computer; Load will also list all printers installed
+			on that computer.  The user will then select the user account and printer and click
+			[Set Default].  SetDefault will make the selected printer default for the selected user
+			on the selected computer.  
+				3.0		-If the selected user is not logged into the selected computer at the time, SetDefault 
+						will Load the selected user's NTUSER.DAT registry Hive and make the selected changes offline.
+				3.2		-Added Current User Display
+	Issues:  	None Discovered as of Yet.
+}	
+#&gt;
+#~~~~~~~~Global \ Script Variables~~~~~~#
+$Script:ping = new-object System.Net.NetworkInformation.Ping
+$Script:tcpClient = New-Object System.Net.Sockets.TcpClient
+$Script:Search = New-Object DirectoryServices.DirectorySearcher([ADSI]â€œâ€)
+$Script:hku = 2147483651
+$Script:hklm = 2147483650
+$Script:UserPath = &quot;SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList&quot;
+$Script:PrinterPath = &quot;Software\Microsoft\Windows NT\CurrentVersion\Print\Printers&quot;
+$Script:domain = $env:USERDOMAIN
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#~~~~~~~~~~~CUSTOM FUNCTIONS~~~~~~~~~~~~#
+function Test-Alive($comp) {
+	$stat=$ping.Send(&quot;$comp&quot;)
+	$reply = $stat.status
+	trap {
+		$False
+		continue;
+	}	
+    if($reply -eq &quot;Success&quot;) {$True}
+}
+function Ping-Port([string]$server, [int]$port) { 
+	trap {  
+		$False 
+		continue; 
+	} 
+	$tcpClient.Connect($server,$port) 
+	if ($tcpClient.Connected) {$True} 
+} 
+Function ADSearch {
+	$Input = $Args[0]
+	$Search.filter = â€œ(&amp;(objectClass=Computer)(Name=$Input))â€
+	$Results = $Search.Findall()
+	foreach ($i in $Results)
+	{
+		$Item = $i.properties
+		$lbxServers.Items.Add(&quot;$($Item.cn)&quot;)
+	}
+}
+function LoadUsers {
+	$UserWMI = [WMIClass]&quot;\\$Computer\root\default:stdRegProv&quot;
+	$Accounts = $UserWMI.EnumKey($hklm,$UserPath)
+	foreach ($Account in $Accounts.snames) {
+			$User = $UserWMI.GetStringValue($hklm,&quot;$UserPath\$Account&quot;,&quot;ProfileImagePath&quot;)
+			$UserName = ($User.svalue).split(&quot;\&quot;)[2]
+			$cbxUserAccount.Items.Add($Username)
+	}
+    $currentuser = (gwmi win32_ComputerSystem -computername $Computer | select UserName).UserName
+    $tbxCurrentUser.Text = $currentuser
+
+}
+Function LoadPrinters {
+	$PrinterWMI = [WMIClass]&quot;\\$Computer\root\default:stdRegProv&quot;
+	$Printers = $PrinterWMI.EnumKey($hklm,$PrinterPath)
+	foreach ($Printer in $Printers.snames) {
+			$Print = $PrinterWMI.GetStringValue($hklm,&quot;$PrinterPath\$Printer&quot;,&quot;Name&quot;)
+			$PrinterName = $Print.svalue
+			$cbxPrinter.Items.Add($PrinterName)
+	}
+}
+Function SetWithLocalRegHive {
+#&lt;#
+		#Test OS Version (2000, XP or Vista\7\8)  
+	$ostest = (gwmi win32_operatingsystem -computername $Computer | select Version | %{$_ -replace &quot;@{Version=&quot;, &quot;&quot;} | %{$_ -replace &quot;}&quot;, &quot;&quot;})
+	$tbxStatus.ForeColor = [System.Drawing.Color]::FromArgb(255,69,139,0)
+	Switch -wildcard ($ostest) {
+        &quot;5.0*&quot; {$tbxStatus.Text = &quot;Windows 2000&quot;; $profileroot = &quot;Documents and Settings&quot;}
+        &quot;5.1*&quot; {$tbxStatus.Text = &quot;Windows XP&quot;; $profileroot = &quot;Documents and Settings&quot;}
+        &quot;6.0*&quot; {$tbxStatus.Text = &quot;Windows Vista&quot;; $profileroot = &quot;Users&quot; }
+        &quot;6.1*&quot; {$tbxStatus.Text = &quot;Windows 7&quot;; $profileroot = &quot;Users&quot;}
+    }
+	Reg Load HKLM\TemporaryHive \\$Computer\C$\$profileroot\$UserName\NTUSER.DAT
+	$LocalDefPrinter = (New-Object -ComObject Wscript.shell).RegRead(&quot;HKLM\TemporaryHive\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\Device&quot;)
+    $localDetailsTest = Test-Path &quot;HKLM\TemporaryHive\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Devices&quot;
+    If (!$LocalDetailsTest) {
+        $tbxStatus.ForeColor = [System.Drawing.Color]::FromArgb(255,255,64,64)
+		$tbxStatus.Text = &quot;Incomplete User Profile&quot;
+    }
+    Else {
+	    $LocalDefPrinterDetails = (New-Object -ComObject Wscript.Shell).RegRead(&quot;HKLM\TemporaryHive\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Devices\$PrinterName&quot;)
+	    $LocalDefaultPrinter = ($LocalDefPrinter).split(&quot;,&quot;)[0]
+	    $Localspool = ($LocalDefPrinterDetails).split(&quot;,&quot;)[0]
+	    $LocalPort = ($LocalDefPrinterDetails).split(&quot;,&quot;)[1]
+	    $LocalNewDefPrinter = $PrinterName + &quot;,&quot; + $Localspool + &quot;,&quot; + $LocalPort            
+	    (New-Object -comobject Wscript.Shell).regWrite(&quot;HKLM\TemporaryHive\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows\Device&quot;, &quot;$LocalNewDefPrinter&quot;, &quot;REG_SZ&quot;)
+        Reg Unload HKLM\TemporaryHive
+	    $tbxStatus.Text = &quot;Default Printer Changed!&quot;
+    }	
+}
+Function SetDefaultPrinter { 
+    Get-service -ComputerName $Computer -Include 'RemoteRegistry' | Start-Service
+	$ntAccount = new-object System.Security.Principal.NTAccount($domain, $UserName) 
+	$sid = $ntAccount.Translate([System.Security.Principal.SecurityIdentifier]) 
+	$ActionPath = &quot;$sid\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Windows&quot;
+	$DevicesPath = &quot;$sid\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Devices&quot;
+	$ActionWMI = [WMIClass]&quot;\\$Computer\root\default:stdRegProv&quot;
+	$DefPrinter = $ActionWMI.GetStringValue($hku,&quot;$ActionPath&quot;,&quot;Device&quot;)
+    $DefPrinterDetails = $ActionWMI.GetStringValue($hku,&quot;$DevicesPath&quot;,&quot;$PrinterName&quot;)
+	$testRegKey = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey($hku,$Computer)
+	$testReg = $testRegKey.OpenSubKey(&quot;$sid&quot;)
+		If (!$testReg) {
+            SetWithLocalRegHive
+		}
+		Else {
+			$DefaultPrinter = ($DefPrinter.svalue).split(&quot;,&quot;)[0]
+			$spool = ($DefPrinterDetails.svalue).split(&quot;,&quot;)[0]
+			$Port = ($DefPrinterDetails.svalue).split(&quot;,&quot;)[1]
+			$NewDefPrinter = $PrinterName + &quot;,&quot; + $spool + &quot;,&quot; + $Port
+			$ActionWMI.SetStringValue($HKU,&quot;$ActionPath&quot;,&quot;Device&quot;,&quot;$NewDefPrinter&quot;) #SET THE DEFAULT PRINTER#
+			
+			$tbxStatus.ForeColor = [System.Drawing.Color]::FromArgb(255,69,139,0)
+			$tbxStatus.Text = &quot;Default Printer Changed!&quot;
+		}
+		$cbxUserAccount.ResetText()
+		$cbxPrinter.ResetText()
+}
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#Generated Form Function
+function GenerateForm {
+########################################################################
+# Code Generated By: SAPIEN Technologies PrimalForms (Community Edition) v1.0.8.0
+# Generated On: 2/28/2011 11:35 AM
+# Generated By: bwblaylock
+########################################################################
+
+#region Import the Assemblies
+[reflection.assembly]::loadwithpartialname(&quot;System.Drawing&quot;) | Out-Null
+[reflection.assembly]::loadwithpartialname(&quot;System.Windows.Forms&quot;) | Out-Null
+[reflection.assembly]::loadwithpartialname(&quot;System.Windows.Forms.VisualStyles&quot;) | Out-Null
+[System.Windows.Forms.Application]::EnableVisualStyles()
+#endregion
+
+#region Generated Form Objects
+$FrmMain = New-Object System.Windows.Forms.Form
+$pgbProgress = New-Object System.Windows.Forms.ProgressBar
+$lblPrinter = New-Object System.Windows.Forms.Label
+$lblUserAccount = New-Object System.Windows.Forms.Label
+$lblSearch = New-Object System.Windows.Forms.Label
+$btnSearch = New-Object System.Windows.Forms.Button
+$tbxSearch = New-Object System.Windows.Forms.TextBox
+$btnClose = New-Object System.Windows.Forms.Button
+$btnLoad = New-Object System.Windows.Forms.Button
+$tbxServer = New-Object System.Windows.Forms.TextBox
+$tbxStatus = New-Object System.Windows.Forms.TextBox
+$tbxCurrentUser = New-Object System.Windows.Forms.TextBox
+$lbxServers = New-Object System.Windows.Forms.ListBox
+$btnSetDefault = New-Object System.Windows.Forms.Button
+$cbxPrinter = New-Object System.Windows.Forms.ComboBox
+$cbxUserAccount = New-Object System.Windows.Forms.ComboBox
+$InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
+#endregion Generated Form Objects
+
+#----------------------------------------------
+#Generated Event Script Blocks
+#----------------------------------------------
+#Provide Custom Code for events specified in PrimalForms.
+$btnClose_OnClick= 
+{
+	$FrmMain.Close()
+}
+
+$lbxServers.add_SelectedIndexChanged({ 
+   	$tbxStatus.Text = $Null
+	$tbxStatus.Refresh()
+	$tbxServer.Text = $lbxServers.SelectedItem
+	$tbxServer.Refresh()
+    $tbxCurrentUser.Text = $null
+    $tbxCurrentUser.Refresh()
+    $cbxPrinter.Items.clear()
+    $cbxPrinter.Text = $null
+    $cbxPrinter.Refresh()
+    $cbxUserAccount.Items.clear()
+    $cbxUserAccount.Text = $null
+    $cbxUserAccount.Refresh()
+
+}) 
+
+$btnLoad_OnClick= 
+{
+	$tbxStatus.ForeColor = [System.Drawing.Color]::FromArgb(255,255,255,0)
+	$tbxStatus.Text = &quot;Loading...&quot;
+	$tbxStatus.Refresh()
+	$Computer = $tbxServer.Text
+	If (Test-Alive $Computer) {	
+		if ( (ping-port $Computer 135) -and (ping-port $Computer 445) ) {
+			LoadUsers $Computer
+			LoadPrinters $Computer
+			$tbxStatus.ForeColor = [System.Drawing.Color]::FromArgb(255,69,139,0)
+			$tbxStatus.Text = &quot;Ready...&quot;
+		}
+		Else { 
+			$tbxStatus.ForeColor = [System.Drawing.Color]::FromArgb(255,255,64,64)
+			$tbxStatus.Text = &quot;RPC Server Not Available&quot; 
+			}
+	}
+	Else { 
+		$tbxStatus.ForeColor = [System.Drawing.Color]::FromArgb(255,255,64,64)
+		$tbxStatus.Text = &quot;Server Offline&quot; 
+		}
+	$pgbProgress.Visible = $False
+}
+
+$btnSetDefault_OnClick= 
+{
+    $Script:Computer = $tbxServer.Text 
+	$Script:UserName = $cbxUserAccount.SelectedItem 
+	$Script:PrinterName = $cbxPrinter.SelectedItem
+	SetDefaultPrinter
+}
+
+$btnSearch_OnClick= 
+{
+	$lbxServers.Items.Clear()
+	$Criteria = $tbxSearch.Text
+	ADSearch $Criteria
+}
+
+$OnLoadForm_StateCorrection=
+{#Correct the initial state of the form to prevent the .Net maximized form issue
+	$FrmMain.WindowState = $InitialFormWindowState
+}
+
+#----------------------------------------------
+#region Generated Form Code
+#Main Form
+$FrmMain.CancelButton = $btnClose
+$FrmMain.BackColor = [System.Drawing.Color]::FromArgb(255,166,202,240)
+$FrmMain.Text = &quot;Set Default Printer&quot;
+$FrmMain.Name = &quot;FrmMain&quot;
+$FrmMain.KeyPreview = $True
+$FrmMain.DataBindings.DefaultDataSourceUpdateMode = 0
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 439
+$System_Drawing_Size.Height = 272
+$FrmMain.ClientSize = $System_Drawing_Size
+$FrmMain.AcceptButton = $btnSearch
+$FrmMain.FormBorderStyle = 2
+
+#Search Label
+$lblSearch.TabIndex = 0
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 100
+$System_Drawing_Size.Height = 14
+$lblSearch.Size = $System_Drawing_Size
+$lblSearch.Text = &quot;Search&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 13
+$System_Drawing_Point.Y = 9
+$lblSearch.Location = $System_Drawing_Point
+$lblSearch.DataBindings.DefaultDataSourceUpdateMode = 0
+$lblSearch.Name = &quot;lblSearch&quot;
+$FrmMain.Controls.Add($lblSearch)
+
+#Printer Label
+$lblPrinter.TabIndex = 0
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 100
+$System_Drawing_Size.Height = 12
+$lblPrinter.Size = $System_Drawing_Size
+$lblPrinter.Text = &quot;Printer:&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 258
+$System_Drawing_Point.Y = 185
+$lblPrinter.Location = $System_Drawing_Point
+$lblPrinter.DataBindings.DefaultDataSourceUpdateMode = 0
+$lblPrinter.Name = &quot;lblPrinter&quot;
+$FrmMain.Controls.Add($lblPrinter)
+
+#UserAccount Label
+$lblUserAccount.TabIndex = 0
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 100
+$System_Drawing_Size.Height = 13
+$lblUserAccount.Size = $System_Drawing_Size
+$lblUserAccount.Text = &quot;User Account:&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 259
+$System_Drawing_Point.Y = 145
+$lblUserAccount.Location = $System_Drawing_Point
+$lblUserAccount.DataBindings.DefaultDataSourceUpdateMode = 0
+$lblUserAccount.Name = &quot;lblUserAccount&quot;
+$FrmMain.Controls.Add($lblUserAccount)
+
+#Progress Bar
+$pgbProgress.DataBindings.DefaultDataSourceUpdateMode = 0
+$pgbProgress.BackColor = [System.Drawing.Color]::FromArgb(255,166,202,240)
+$pgbProgress.ForeColor = [System.Drawing.Color]::FromArgb(255,0,255,0)
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 191
+$System_Drawing_Size.Height = 8
+$pgbProgress.Size = $System_Drawing_Size
+$pgbProgress.Step = 1
+$pgbProgress.TabIndex = 0
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 246
+$System_Drawing_Point.Y = 105
+$pgbProgress.Location = $System_Drawing_Point
+$pgbProgress.Style = [System.Windows.Forms.ProgressBarStyle]::Marquee #2
+$pgbProgress.MarqueeAnimationSpeed = 50
+$pgbProgress.Visible = $False
+$pgbProgress.Name = &quot;pgbProgress&quot;
+$FrmMain.Controls.Add($pgbProgress)
+
+#Status Textbox
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 168
+$System_Drawing_Size.Height = 17
+$tbxStatus.Size = $System_Drawing_Size
+$tbxStatus.DataBindings.DefaultDataSourceUpdateMode = 0
+$tbxStatus.TextAlign = 2
+$tbxStatus.BorderStyle = 0
+$tbxStatus.Font = New-Object System.Drawing.Font(&quot;Microsoft Sans Serif&quot;,10,1,3,0)
+$tbxStatus.Name = &quot;tbxStatus&quot;
+$tbxStatus.BackColor = [System.Drawing.Color]::FromArgb(255,166,202,240)
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 259
+$System_Drawing_Point.Y = 88
+$tbxStatus.Location = $System_Drawing_Point
+$tbxStatus.TabIndex = 20
+$FrmMain.Controls.Add($tbxStatus)
+
+#Server Textbox
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 168
+$System_Drawing_Size.Height = 17
+$tbxServer.Size = $System_Drawing_Size
+$tbxServer.DataBindings.DefaultDataSourceUpdateMode = 0
+$tbxServer.TextAlign = 2
+$tbxServer.BorderStyle = 0
+$tbxServer.Font = New-Object System.Drawing.Font(&quot;Microsoft Sans Serif&quot;,10,1,3,1)
+$tbxServer.Name = &quot;tbxServer&quot;
+$tbxServer.BackColor = [System.Drawing.Color]::FromArgb(255,166,202,240)
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 259
+$System_Drawing_Point.Y = 32
+$tbxServer.Location = $System_Drawing_Point
+$tbxServer.TabIndex = 19
+$FrmMain.Controls.Add($tbxServer)
+
+#CurrentUser Textbox
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 168
+$System_Drawing_Size.Height = 17
+$tbxCurrentUser.Size = $System_Drawing_Size
+$tbxCurrentUser.DataBindings.DefaultDataSourceUpdateMode = 0
+$tbxCurrentUser.TextAlign = 2
+$tbxCurrentUser.BorderStyle = 0
+$tbxCurrentUser.Font = New-Object System.Drawing.Font(&quot;Microsoft Sans Serif&quot;,8,[Drawing.FontStyle]'Italic') #0,3,1)
+$tbxCurrentUser.Name = &quot;tbxCurrentUser&quot;
+$tbxCurrentUser.BackColor = [System.Drawing.Color]::FromArgb(255,166,202,240)
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 259
+$System_Drawing_Point.Y = 60
+$tbxCurrentUser.Location = $System_Drawing_Point
+$tbxCurrentUser.TabIndex = 20
+$FrmMain.Controls.Add($tbxCurrentUser)
+
+#Search Button
+$btnSearch.TabIndex = 2
+$btnSearch.Name = &quot;btnSearch&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 60
+$System_Drawing_Size.Height = 23
+$btnSearch.Size = $System_Drawing_Size
+$btnSearch.UseVisualStyleBackColor = $True
+$btnSearch.Text = &quot;Search&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 180
+$System_Drawing_Point.Y = 26
+$btnSearch.Location = $System_Drawing_Point
+$btnSearch.DataBindings.DefaultDataSourceUpdateMode = 0
+$btnSearch.add_Click($btnSearch_OnClick)
+$FrmMain.Controls.Add($btnSearch)
+
+#Load Button
+$btnLoad.TabIndex = 4
+$btnLoad.Name = &quot;btnLoad&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 60
+$System_Drawing_Size.Height = 23
+$btnLoad.Size = $System_Drawing_Size
+$btnLoad.UseVisualStyleBackColor = $True
+$btnLoad.Text = &quot;Load&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 310
+$System_Drawing_Point.Y = 120
+$btnLoad.Location = $System_Drawing_Point
+$btnLoad.DataBindings.DefaultDataSourceUpdateMode = 0
+$btnLoad.add_Click($btnLoad_OnClick)
+$FrmMain.Controls.Add($btnLoad)
+
+#Close Button
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 351
+$System_Drawing_Point.Y = 236
+$btnClose.Location = $System_Drawing_Point
+$btnClose.DataBindings.DefaultDataSourceUpdateMode = 0
+$btnClose.DialogResult = 2
+$btnClose.add_Click($btnClose_OnClick)
+$FrmMain.Controls.Add($btnClose)
+
+#SetDefault Button
+$btnSetDefault.TabIndex = 7
+$btnSetDefault.Name = &quot;btnSetDefault&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 75
+$System_Drawing_Size.Height = 23
+$btnSetDefault.Size = $System_Drawing_Size
+$btnSetDefault.UseVisualStyleBackColor = $True
+$btnSetDefault.Text = &quot;Set Default&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 259
+$System_Drawing_Point.Y = 236
+$btnSetDefault.Location = $System_Drawing_Point
+$btnSetDefault.DataBindings.DefaultDataSourceUpdateMode = 0
+$btnSetDefault.add_Click($btnSetDefault_OnClick)
+$FrmMain.Controls.Add($btnSetDefault)
+
+#Search Textbox
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 161
+$System_Drawing_Size.Height = 20
+$tbxSearch.Size = $System_Drawing_Size
+$tbxSearch.DataBindings.DefaultDataSourceUpdateMode = 0
+$tbxSearch.Name = &quot;tbxSearch&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 13
+$System_Drawing_Point.Y = 29
+$tbxSearch.Location = $System_Drawing_Point
+$tbxSearch.TabIndex = 1
+$FrmMain.Controls.Add($tbxSearch)
+$btnClose.TabIndex = 8
+$btnClose.Name = &quot;btnClose&quot;
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 75
+$System_Drawing_Size.Height = 23
+$btnClose.Size = $System_Drawing_Size
+$btnClose.UseVisualStyleBackColor = $True
+$btnClose.Text = &quot;Close&quot;
+
+#Servers Listbox
+#$lbxServers.UseCompatibleStateImageBehavior = $False
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 227
+$System_Drawing_Size.Height = 205
+$lbxServers.Size = $System_Drawing_Size
+$lbxServers.DataBindings.DefaultDataSourceUpdateMode = 0
+$lbxServers.Name = &quot;lbxServers&quot;
+#$lbxServers.View = 3
+$lbxServers.TabIndex = 3
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 13
+$System_Drawing_Point.Y = 55
+$lbxServers.Location = $System_Drawing_Point
+$FrmMain.Controls.Add($lbxServers)
+
+#Printer Combobox
+$cbxPrinter.FormattingEnabled = $True
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 168
+$System_Drawing_Size.Height = 21
+$cbxPrinter.Size = $System_Drawing_Size
+$cbxPrinter.DataBindings.DefaultDataSourceUpdateMode = 0
+$cbxPrinter.Name = &quot;cbxPrinter&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 258
+$System_Drawing_Point.Y = 200
+$cbxPrinter.Location = $System_Drawing_Point
+$cbxPrinter.TabIndex = 6
+$FrmMain.Controls.Add($cbxPrinter)
+
+#UserAccount Combobox
+$cbxUserAccount.FormattingEnabled = $True
+$System_Drawing_Size = New-Object System.Drawing.Size
+$System_Drawing_Size.Width = 168
+$System_Drawing_Size.Height = 21
+$cbxUserAccount.Size = $System_Drawing_Size
+$cbxUserAccount.DataBindings.DefaultDataSourceUpdateMode = 0
+$cbxUserAccount.Name = &quot;cbxUserAccount&quot;
+$System_Drawing_Point = New-Object System.Drawing.Point
+$System_Drawing_Point.X = 258
+$System_Drawing_Point.Y = 161
+$cbxUserAccount.Location = $System_Drawing_Point
+$cbxUserAccount.TabIndex = 5
+$FrmMain.Controls.Add($cbxUserAccount)
+
+#endregion Generated Form Code
+
+#Save the initial state of the form
+$InitialFormWindowState = $FrmMain.WindowState
+#Init the OnLoad event to correct the initial state of the form
+$FrmMain.add_Load($OnLoadForm_StateCorrection)
+#Show the Form
+$FrmMain.ShowDialog()| Out-Null
+
+} #End Function
+
+#Call the Function
+GenerateForm
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

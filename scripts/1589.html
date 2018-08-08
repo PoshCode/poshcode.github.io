@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jan Egil Ring">
+    <title>GPPreferencesPrinters - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>GPPreferencesPrinters</h1>
+<h3><a href="//scripts/1589.ps1">download</a></h3>
+<p>Contains a function for adding a shared printer connection, and a function for retrieving shared printer connections from a specified Group Policy Object.
+Requires the Group Policy Automation Engine from SDM Software, available from here (commercial product): http://www.sdmsoftware.com/group_policy_scripting.php
+Additional functions and parameters will later be added to the script module, i.e. Remove-GPPreferencesPrinter and Item-Level Targeting.
+Note that example usage for Item-Level Targeting are provided in the Group Policy Automation Engine User Manual.</p>
+<pre><code class="language-posh">###########################################################################&quot;
+#
+# NAME: GPPreferencesPrinters.psm1
+#
+# AUTHOR: Jan Egil Ring
+# BLOG: http://blog.crayon.no/blogs/janegil
+#
+# COMMENT: Script module for working with shared printer connections in Group Policy Preferences.
+#          Contains a function for adding a shared printer connection, and a function for retrieving shared printer connections from a specified GPO.
+#          Requires the Group Policy Automation Engine from SDM Software, available from here (commercial product): http://www.sdmsoftware.com/group_policy_scripting.php
+#          Additional functions and parameters will later be added to the script module, i.e. Remove-GPPreferencesPrinter and Item-Level Targeting.
+#          Note that example usage for Item-Level Targeting are provided in the Group Policy Automation Engine User Manual.
+#
+# You have a royalty-free right to use, modify, reproduce, and
+# distribute this script file in any way you find useful, provided that
+# you agree that the creator, owner above has no warranty, obligations,
+# or liability for such use.
+#
+# VERSION HISTORY:
+# 1.0 18.01.2010 - Initial release
+#
+###########################################################################&quot;
+
+#Imports the Group Policy Automation Engine from SDM Software
+Import-Module SDM-GroupPolicy
+
+function Add-GPPreferencesPrinter {
+################################################################
+#.Synopsis
+#  Adds a shared printer connection to the specified Group Policy`s User Preferences.
+#.Parameter GPOName
+#  The name to the Group Policy Object you want to add the shared printer connection to.
+################################################################
+param( [Parameter(Mandatory=$true)][string]$GPOName,[Parameter(Mandatory=$true)][string]$Printername,[Parameter(Mandatory=$true)][string]$Sharepath,[Parameter(Mandatory=$true)][string]$Action,[Parameter(Mandatory=$false)][string]$Default,[Parameter(Mandatory=$false)][string]$DefaulIfNoLocalPrinters)
+
+$domain = [System.DirectoryServices.ActiveDirectory.Domain]::getcurrentdomain() 
+$domainname = $domain.name
+$gpo = Get-SDMgpobject -gpoName &quot;gpo://$domainname/$GPOName&quot; -openByName
+$container = $gpo.GetObject(&quot;User Configuration/Preferences/Control Panel Settings/Printers/Shared printer&quot;)
+$add = $container.Settings.AddNew(&quot;$Printername&quot;)
+$add.put(&quot;Action&quot;,[GPOSDK.EAction]$Action)
+$add.put(&quot;Share path&quot;,$Sharepath)
+$add.put(&quot;Default&quot;,$Default)
+$add.put(&quot;Default if no local printers&quot;,$DefaulIfNoLocalPrinters)
+$add.Save()
+}
+
+function Get-GPPreferencesPrinter {
+################################################################
+#.Synopsis
+#  Enumerates and displays printer connections defined in the specified Group Policy`s User Preferences.
+#.Parameter GPOName
+#  The name to the Group Policy Object you want to get information from
+################################################################
+param(
+[Parameter(Mandatory=$true)]
+[string]$GPOName
+)
+
+$domain = [System.DirectoryServices.ActiveDirectory.Domain]::getcurrentdomain() 
+$domainname = $domain.name
+$gpo = Get-SDMgpobject -gpoName &quot;gpo://$domainname/$GPOName&quot; -openByName
+$container = $gpo.GetObject(&quot;User Configuration/Preferences/Control Panel Settings/Printers/Shared printer&quot;)
+$setting = $container.Settings
+$printers =  @()
+$count = $setting.Count
+$counter = $count; while($counter -ge 1) {$counter = $counter - 1 
+$printer = $Setting.Item($counter)
+foreach ($i in $printer) {
+$printerinfo = @{}
+$printerinfo.Name = $i.Name
+$printerinfo.Sharepath = ($setting.Item($counter)).Get(&quot;Share path&quot;)
+$printerinfo.Action = ($setting.Item($counter)).Get(&quot;Action&quot;)
+$printerinfo.SetDefault = ($setting.Item($counter)).Get(&quot;Default&quot;)
+$printerinfo.SetDefaulIfNoLocalPrinters = ($setting.Item($counter)).Get(&quot;Default if no local printers&quot;)
+$printers += $printerinfo
+}
+}
+$printers | Select-Object @{Name=&quot;Name&quot;; Expression = {$_.name}},@{Name=&quot;Sharepath&quot;; Expression = {$_.sharepath}},@{Name=&quot;Action&quot;; Expression = {$_.Action}},@{Name=&quot;SetDefault&quot;; Expression = {$_.SetDefault}},@{Name=&quot;SetDefaulIfNoLocalPrinters&quot;; Expression = {$_.SetDefaulIfNoLocalPrinters}} | ft Name,Sharepath,Action,SetDefault,SetDefaulIfNoLocalPrinters
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

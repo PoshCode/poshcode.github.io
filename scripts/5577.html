@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Brian H Madsen">
+    <title>Site and Lists + item - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Site and Lists + item</h1>
+<h3><a href="//scripts/5577.ps1">download</a> - <a href="//scripts/5576.md">parent</a></h3>
+<p>Iterate site, list and items and show permissions - only adds items with unique permissions to report
+Added $ParamObject for easier configuration of parameters needed</p>
+<pre><code class="language-posh">$ParamObject = new-object PSObject
+
+$ParamObject | Add-Member Noteproperty OutputFile &quot;C:\root\FarmPermissionReportByUser.csv&quot;
+$ParamObject | Add-Member Noteproperty UserToCheck &quot;es2\es2admin&quot;
+$ParamObject | Add-Member Noteproperty StartUrl &quot;http://goldfields&quot;
+
+function Check-List-Item-Permission([string]$webUrl, [string]$loginToCheck) {
+    [System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SharePoint&quot;) &gt; $null
+    $mySite = new-object Microsoft.SharePoint.SPSite($webUrl)
+    $myWeb = $mySite.openweb()
+    $myWebUsers = $myWeb.Users
+
+    foreach ($myWebUser in $myWebUsers) {        
+        foreach ($myList in $myWeb.lists) {
+            Write-Host &quot; ------------ LIST: &quot;, $myList.Title
+            $listItems = $myList.Items
+            foreach ($listItem in $listItems) {
+                Write-Host &quot; -------------- ITEM: &quot;, $listItem.Title, $listItem.Name
+                Write-Host &quot; -------------- UNIQUE PERMISSIONS: &quot;, $listItem.HasUniqueRoleAssignments
+                if ($listItem.HasUniqueRoleAssignments) {
+                    &quot;$($myweb.Url) `t Item `t $($listItem.Name)`t Permission `t $($mywebUser.LoginName)&quot; | Out-File $ParamObject.OutputFile -Append
+                }
+            }
+        }
+    }
+
+
+
+}
+
+function Check-Permission_SPWeb([string]$webURL, [string]$myLoginToCheck)
+{
+	[System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SharePoint&quot;) &gt; $null
+	$mysite = new-object Microsoft.SharePoint.SPSite($webURL)
+	$myweb = $mysite.openweb()
+	$mywebUsers = $myweb.Users
+
+	foreach($mywebUser in $mywebUsers)
+	{
+		if($mywebUser.LoginName -eq $myLoginToCheck)
+		{
+			$myPermissions = $myweb.Permissions
+			foreach($myPermission in $myPermissions)
+			{
+				if($mywebUser.ID -eq $myPermission.Member.ID)
+				{
+					Write-Host &quot;      ----------------------------- &quot;
+					Write-Host &quot; ---- WEB Url: &quot;, $webURL
+					Write-Host &quot; ---- WEB Has Unique Permission:&quot;, $myweb.HasUniqueRoleAssignments
+					Write-Host &quot; ---- User: &quot;, $mywebUser.LoginName, &quot; - Permissions: &quot;, $myPermission.PermissionMask.ToString()
+
+                    &quot;$($myweb.Url) `t List `t $($myweb.Title)`t $($myPermission.PermissionMask.ToString()) `t $($mywebUser.LoginName)&quot; | Out-File $ParamObject.OutputFile -Append
+
+					foreach ($role in $mywebUser.Roles)
+					{
+						if ($role.Type -ne [Microsoft.SharePoint.SPRoleType]::None)
+						{
+							Write-Host &quot; ---- Role: &quot;, $role.Type.ToString()
+						}
+					}
+					Write-Host &quot;      ----------------------------- &quot;
+				}
+			}
+			foreach($myList in $myweb.lists)
+			{
+				if($myList.HasUniqueRoleAssignments -eq $True)
+				{
+					$myListPermissions = $myList.Permissions
+					foreach($myListPermission in $myListPermissions)
+					{
+						if($mywebUser.ID -eq $myListPermission.Member.ID)
+						{
+							Write-Host &quot;            ----------------------------- &quot;
+							Write-Host &quot; ---------- LIST NAME: &quot;, $myList.Title
+							Write-Host &quot; ---------- LIST Has Unique Permission:&quot;, $myList.HasUniqueRoleAssignments
+							Write-Host &quot; ---------- User: &quot;, $mywebUser.LoginName, &quot; - Permissions: &quot;, $myListPermission.PermissionMask.ToString()
+
+                            &quot;$($myweb.Url) `t List `t $($myweb.Title)`t $($myListPermission.PermissionMask.ToString()) `t $($mywebUser.LoginName)&quot; | Out-File $ParamObject.OutputFile -Append
+
+							foreach ($roleAssignment in $myList.RoleAssignments)
+							{
+								if($mywebUser.ID -eq $roleAssignment.Member.ID)
+								{
+									foreach($mySPRoleDefinition in $roleAssignment.RoleDefinitionBindings)
+									{
+										if ($mySPRoleDefinition.Type -ne [Microsoft.SharePoint.SPRoleType]::None)
+										{
+											Write-Host &quot; ---------- Role: &quot;, $mySPRoleDefinition.Type.ToString()
+										}
+									}
+								}
+							}
+							Write-Host &quot;            ----------------------------- &quot;
+                            
+						}
+					}
+				}
+			}
+		}
+	}
+	foreach ($subweb in $myweb.GetSubwebsForCurrentUser())
+	{
+		Check-Permission_SPWeb $subweb.Url $myLoginToCheck
+    }
+	$myweb.Dispose()
+	$mysite.Dispose()
+}
+
+
+
+function ListUsers([string]$SiteCollectionURL, [string]$LoginToCheck)
+{
+	[System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SharePoint&quot;) &gt; $null
+	$site = new-object Microsoft.SharePoint.SPSite($SiteCollectionURL)
+	$web = $site.openweb()
+
+	$siteCollUsers = $web.SiteUsers
+
+	foreach($MyUser in $siteCollUsers)
+	{
+		if($MyUser.LoginName -eq $LoginToCheck)
+		{
+			Write-Host &quot; ------------------------------------- &quot;
+			Write-Host &quot;Site Collection URL:&quot;, $SiteCollectionURL
+			if($MyUser.IsSiteAdmin -eq $true)
+			{
+				Write-Host &quot;ADMIN: &quot;, $MyUser.LoginName
+                &quot;$($web.Url) `t Site `t $($web.Title)`t Administrator `t Administrator&quot; | Out-File $ParamObject.OutputFile -Append
+			}
+			else
+			{
+				Write-Host &quot;USER: &quot;, $MyUser.LoginName
+                &quot;$($web.Url) `t Site `t $($web.Title)`t User `t User&quot; | Out-File $ParamObject.OutputFile -Append
+			}
+            
+            #if ($web.Url -notcontains &quot;personal&quot;) {
+			    Check-Permission_SPWeb $web.Url $MyUser.LoginName
+            #}
+			Write-Host &quot; ------------------------------------- &quot;
+		}
+	}
+	
+	$web.Dispose()
+	$site.Dispose()
+}
+
+function ListUsersForAllCollections([string]$WebAppURL, [string]$LoginToCheck)
+{
+
+	[System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SharePoint&quot;) &gt; $null
+
+	$Thesite = new-object Microsoft.SharePoint.SPSite($WebAppURL)
+	$oApp = $Thesite.WebApplication
+
+	foreach ($Sites in $oApp.Sites)
+	{
+        #write-host $Sites.Url
+		
+        $mySubweb = $Sites.RootWeb
+		[string]$TempRelativeURL = $mySubweb.Url
+		ListUsers $TempRelativeURL $LoginToCheck
+
+        Write-Host &quot; --------------------&quot;
+        Check-List-Item-Permission $Sites.Url $LoginToCheck
+    }
+}
+
+function StartProcess()
+{
+	# Create the stopwatch
+	[System.Diagnostics.Stopwatch] $sw;
+	$sw = New-Object System.Diagnostics.StopWatch
+	$sw.Start()
+	cls
+	
+	ListUsersForAllCollections $ParamObject.StartUrl $ParamObject.UserToCheck
+
+	$sw.Stop()
+
+	# Write the compact output to the screen
+	write-host &quot;Login checked in Time: &quot;, $sw.Elapsed.ToString()
+}
+
+&quot;URL `t Site/List/Item `t Title `t PermissionType `t Permissions&quot; | out-file $ParamObject.OutputFile
+
+
+
+StartProcess
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

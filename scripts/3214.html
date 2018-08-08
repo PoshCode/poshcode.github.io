@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Nathan Linley">
+    <title>Compare-DellUpdates - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Compare-DellUpdates</h1>
+<h3><a href="//scripts/3214.ps1">download</a> - <a href="//scripts/3200.md">parent</a></h3>
+<p>This script will compare the bios/firmware/driver/OMSA versions of a remote server against the Dell SUU update package.  To use it, get a copy of the latest Dell SUU.  Inside the SUU file structure, look for catalog.xml in the repository.  This file will be read to determine the latest versions, and compare it to the currently installed versions on the remote machine (reporting any differences).  The output can be used to easily push updates as well, since the update file name is returned in the results.</p>
+<pre><code class="language-posh">#Requires -version 2
+#Author: Nathan Linley
+#Script: Computer-DellUpdates
+#Site: http://myitpath.blogspot.com
+#Date: 2/9/2012
+
+param(
+	[parameter(mandatory=$true)][ValidateScript({test-path $_ -pathtype 'leaf'})][string]$catalogpath,
+	[parameter(mandatory=$true,ValueFromPipeline=$true)][string]$server
+)
+
+function changedatacase([string]$str) {
+	#we need to change things like this:  subDeviceID=&quot;1f17&quot; to subDeviceID=&quot;1F17&quot;
+	#without changing case of the portion before the =
+	if ($str -match &quot;`=`&quot;&quot;) {
+		$myparts = $str.split(&quot;=&quot;)
+		$result = $myparts[0] + &quot;=&quot; + $myparts[1].toupper()
+		return $result
+	} else { return $str}
+}
+
+$catalog = [xml](get-Content $catalogpath)
+$oscodeid = &amp;{
+	$caption = (Get-WmiObject win32_operatingsystem -ComputerName $server).caption
+	if ($caption -match &quot;2003&quot;) {
+		if ($caption -match &quot;x64&quot;) { &quot;WX64E&quot; } else { &quot;WNET2&quot;}
+	} elseif ($caption -match &quot;2008 R2&quot;) { 
+		&quot;W8R2&quot; 
+	} elseif ($caption -match &quot;2008&quot; ) {
+			if ($caption -match &quot;x64&quot;) { 
+				&quot;WSSP2&quot; 
+			} else {
+				&quot;LHS86&quot;
+			}	
+	}
+}
+write-debug $oscodeid
+
+$systemID = (Get-WmiObject -Namespace &quot;root\cimv2\dell&quot; -query &quot;Select Systemid from Dell_CMInventory&quot; -ComputerName $server).systemid
+$model = (Get-WmiObject -Namespace &quot;root\cimv2\dell&quot; -query &quot;select Model from Dell_chassis&quot; -ComputerName $server).Model
+$model = $model.replace(&quot;PowerEdge&quot;,&quot;PE&quot;).replace(&quot;PowerVault&quot;,&quot;PV&quot;).split(&quot; &quot;)   #model[0] = Brand Prefix  #model[1] = Model #
+
+$devices = Get-WmiObject -Namespace &quot;root\cimv2\dell&quot; -Class dell_cmdeviceapplication -ComputerName $server
+foreach ($dev in $devices) {
+	$xpathstr = $parts = $version = &quot;&quot;
+	if ($dev.Dependent -match &quot;(version=`&quot;)([A-Z\d.-]+)`&quot;&quot;) { $version = $matches[2]	} else { $version = &quot;unknown&quot; }
+	$parts = $dev.Antecedent.split(&quot;,&quot;)
+	for ($i = 2; $i -lt 6; $i++) {
+		$parts[$i] = &amp;changedatacase $parts[$i]
+	}
+	$depparts = $dev.dependent.split(&quot;,&quot;)
+	$componentType = $depparts[0].substring($depparts[0].indexof('&quot;'))
+	Write-Debug $parts[1]
+	if ($dev.Antecedent -match 'componentID=&quot;&quot;') {
+		$xpathstr = &quot;//SoftwareComponent[@packageType='LWXP']/SupportedDevices/Device/PCIInfo&quot;
+		if ($componentType -match &quot;DRVR&quot;) {
+			$xpathstr += &quot;[@&quot; + $parts[2] + &quot; and @&quot; + $parts[3] + &quot;]/../../..&quot;
+			$xpathstr += &quot;/SupportedOperatingSystems/OperatingSystem[@osVendor=`'Microsoft`' and @osCode=`'&quot; + $osCodeID + &quot;`']/../..&quot;
+		} else {
+			$xpathstr += &quot;[@&quot; + $parts[2] + &quot; and @&quot; + $parts[3] + &quot; and @&quot; + $parts[4] + &quot; and @&quot; + $parts[5] + &quot;]/../../..&quot;
+			#$xpathstr += &quot;/SupportedSystems/Brand[@prefix=`'&quot; + $model[0] + &quot;`']/Model[@systemID=`'&quot; + $systemID + &quot;`']/../../..&quot;
+			$xpathstr += &quot;/ComponentType[@value='FRMW']/..&quot;
+			
+		}
+		$xpathstr += &quot;/ComponentType[@value=&quot; + $componentType + &quot;]/..&quot;
+	} else {
+		$xpathstr = &quot;//SoftwareComponent[@packageType='LWXP']/SupportedDevices/Device[@&quot;	
+		$xpathstr += $parts[0].substring($parts[0].indexof(&quot;componentID&quot;))
+		$xpathstr += &quot;]/../../SupportedSystems/Brand[@prefix=`'&quot; + $model[0] + &quot;`']/Model[@systemID=`'&quot;
+		$xpathstr += $systemID + &quot;`']/../../..&quot;
+	}
+	Write-Debug $xpathstr
+	
+	$result = Select-Xml $catalog -XPath $xpathstr |Select-Object -ExpandProperty Node
+	$result |Select-Object @{Name=&quot;Component&quot;;Expression = {$_.category.display.&quot;#cdata-section&quot;}},path,vendorversion,@{Name=&quot;currentversion&quot;; Expression = {$version}},releasedate,@{Name=&quot;Criticality&quot;; Expression={($_.Criticality.display.&quot;#cdata-section&quot;).substring(0,$_.Criticality.display.&quot;#cdata-section&quot;.indexof(&quot;-&quot;))}},@{Name=&quot;AtCurrent&quot;;Expression = {$_.vendorVersion -eq $version}}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="marcadamcarter">
+    <title>adv2 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>adv2</h1>
+<h3><a href="//scripts/2601.ps1">download</a> - <a href="//scripts/2600.md">parent</a></h3>
+<pre><code class="language-posh">
+#--------------------------------------------------------
+# Script  : Advanced2_2011.ps1
+# Author  : marc carter (marcadamcarter)
+# Date    : 4/5/2011
+# Keywords: PowerShell, Scripting Games
+# Comments:    
+# Expected Arguments: ADquery, Excel, textfile, &lt;device_name_or_ip&gt;
+# Examples:    .\Advanced2_2011.ps1 ADquery
+#              .\Advanced2_2011.ps1 Excel &lt;file_fullname&gt;
+#              .\Advanced2_2011.ps1 textfile &lt;file_fullname&gt;  -  File format: List of device names, one per line.
+#              .\Advanced2_2011.ps1 &lt;device_name_or_ip&gt;
+#--------------------------------------------------------
+
+
+
+#Begin Functions
+Function get-runningServices{
+#--------------------------------------------------------
+&lt;#   
+.SYNOPSIS   
+    Retrieves currently running Services and their Dependent services and reports on the dependent services status
+.DESCRIPTION 
+    Retrieves currently running Services and their Dependent services and reports on the dependent services status
+.PARAMETER server
+    Name of the server(s) you wish to query. 
+.NOTES   
+    Name: get-runningServices
+    Author: Marc Carter
+    DateCreated: 5APR2011
+.EXAMPLE  
+    get-ModuleInfo LOCALHOST
+     
+Description 
+------------ 
+Returns a formatted list of running Services and their dependancies. 
+#&gt;  
+[cmdletbinding( 
+    DefaultParameterSetName = 'server', 
+    ConfirmImpact = 'low' 
+)] 
+Param( 
+    [Parameter( 
+        Mandatory = $True, 
+        Position = 0, 
+        ParameterSetName = '', 
+        ValueFromPipeline = $True)] 
+        [string][ValidatePattern(&quot;.{2,}&quot;)]$server
+) 
+    Begin{
+        $ErrorActionPreference = &quot;SilentlyContinue&quot;
+        $array = @()
+    }
+
+    Process{
+        $isServer = get-OSVersion $server
+        #Test to see if running server OS
+        if($isServer){
+            get-service -ComputerName $server | where-object {$_.Status -eq &quot;Running&quot;} | Select-Object name | % {
+                $BaseServiceName = $_.Name
+                Get-Service -name $_.Name -DependentServices | Sort-Object Name | Select-Object Name, Status | % {
+                    #Group values into a custom object in order to output in table view.
+                    $tmpObj = New-Object Object
+                    $tmpObj | add-member -membertype noteproperty -name &quot;BaseServiceName&quot; -value $BaseServiceName
+                    $tmpObj | add-member -membertype noteproperty -name &quot;DependentName&quot; -value $_.Name
+                    $tmpObj | add-member -membertype noteproperty -name &quot;DependentStatus&quot; -value $_.Status
+                    #Append the object to the existing array.
+                    $array += $tmpObj
+                
+                }
+            }
+        }
+        else { &quot;Skipping $server (Not running Server OS)&quot; }
+    }
+    
+    End{
+        #Output results of the array and set both to $Null when done.
+        $array | ft @{Name='BaseServiceName';Expression={$_.BaseServiceName}; Align='Right';}, @{Name='DependentName';Expression={$_.DependentName};}, @{Name='DependentStatus';Expression={$_.DependentStatus};align='Left';} -auto
+        $array = $Null
+        $tmpObj = $Null
+    }
+}
+#--------------------------------------------------------
+#End function get-runningServices
+
+
+
+function get-listFromAD{
+#--------------------------------------------------------
+&lt;#  
+.SYNOPSIS  
+    Retrieves list of devices from active directory.
+.DESCRIPTION
+    Retrieves list of devices from active directory.
+Description
+------------
+Returns list of devices from AD query.
+#&gt;  
+   $strFilter = &quot;(&amp;(objectcategory=computer)(operatingsystem=Windows Server*))&quot;  #All Server OS
+   $props = &quot;cn&quot;
+   $dse = [ADSI]&quot;LDAP://rootdse&quot;
+   #$root = &quot;LDAP://&quot;+$dse.defaultNamingContext
+   $ds = New-Object DirectoryServices.DirectorySearcher([ADSI]$root,$strFilter,$props)
+   $ds.PageSize = 1000
+   $results = $ds.FindAll()
+   foreach($obj in $results){
+       $obj.properties.cn
+   }
+}
+#--------------------------------------------------------
+#End function get-listFromAD
+
+
+function get-OSVersion($computer){
+#--------------------------------------------------------
+    $os = Get-WmiObject -class Win32_OperatingSystem -computerName $computer 
+    Switch ($os.Version){ 
+        &quot;5.1.2600&quot; { $False } 
+        &quot;5.1.3790&quot; { $True } 
+        &quot;6.0.6001&quot; { 
+            if($os.ProductType -eq 1){ $False }
+            else{ $True }
+        }
+        &quot;6.1.7600&quot;{ 
+            if($os.ProductType -eq 1){ $False }
+            else{ $True }
+        }
+        DEFAULT { &quot;N/A&quot; } 
+    }
+} 
+#--------------------------------------------------------
+#End get-OSVersion 
+#End Functions
+
+
+
+#Main Script 
+#--------------------------------------------------------
+#If arguments are present, determine how to proceed.
+if($args){
+    &lt;#
+    If arguments exist, assume input from external sorce
+    .Expected: ADquery, Excel, Text, &lt;device_name_or_ip&gt;
+    
+    .Examples:  .\Advanced2_2011.ps1 ADquery
+                .\Advanced2_2011.ps1 Excel &lt;file_fullname&gt;
+                .\Advanced2_2011.ps1 textfile &lt;file_fullname&gt;  -  File format: List of device names, one per line.
+                .\Advanced2_2011.ps1 &lt;device_name_or_ip&gt;
+    #&gt;
+    switch($args[0].toLower()){
+        &quot;adquery&quot; {
+            foreach($device in get-listFromAD){
+                $device.toUpper()
+                get-runningServices $device
+            }
+        }
+        &quot;excel&quot; {
+            if(Test-Path $args[1]){
+                $xlCSV=6
+                $xls=$args[1]
+                $csv=$args[1] -replace(&quot;.xls&quot;,&quot;.csv&quot;)
+                $xl=New-Object -com &quot;Excel.Application&quot;
+                $wb=$xl.workbooks.open($xls)
+                $wb.SaveAs($csv,$xlCSV)
+                $xl.displayalerts=$False
+                $xl.quit()
+
+                Import-Csv $csv | Select-Object name | % {
+                    $_.name
+                    get-runningServices $_.name
+                }
+            }
+            else{
+                Write-Error &quot;`nInvalid path for $args[1]`nCheck the path and try again.&quot;
+            }
+            
+        }
+        &quot;textfile&quot; {
+            if(Test-Path $args[1]){
+                Get-Content -Path $args[1] | % {
+                    $_
+                    get-runningServices $_
+                }
+            }
+            else{
+                Write-Error &quot;`nInvalid path for $args[1]`nCheck the path and try again.&quot;
+            }
+        }
+        Default {
+            #Initiate the function taking the first argument (assume single server instance name).
+            get-runningServices $args[0]
+        }
+    }
+}
+else{ 
+    #Otherwise, initiate the function and prompt for device.
+    get-runningServices
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

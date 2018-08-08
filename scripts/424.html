@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>PerformanceHistory 2.52 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PerformanceHistory 2.52</h1>
+<h3><a href="//scripts/424.ps1">download</a> - <a href="//scripts/155.md">parent</a></h3>
+<p>Another modification to Get-PerformanceHistory to allow it to work in PowerShell 1.0 and still show averages.</p>
+<pre><code class="language-posh">##requires -version 2.0
+## Get-PerformanceHistory.ps1
+##############################################################################################################
+## Lets you see the amount of time recent commands in your history have taken
+## History:
+## v2.52 - added regex-based iteration counting to calculate averages
+## v2.51 - removed PsParser features to make it v1 compatible
+## v2.5 - added &quot;average&quot; calculation if the first thing in your command line is a range: 1..x
+## v2   - added measuring the scripts involved in the command, (uses Tokenizer)
+##      - adds a ton of parsing to make the output pretty
+##############################################################################################################
+# function Get-PerformanceHistory {
+param( [int]$count=1, [int[]]$id=@((Get-History -count 1| Select Id).Id) )
+
+## Removed to make this v1 compatible
+## $Parser = [System.Management.Automation.PsParser]
+function FormatTimeSpan($ts) {
+   if($ts.Minutes) {
+      if($ts.Hours) {
+         if($ts.Days) {
+            return &quot;{0:##}d {1:00}:{2:00}:{3:00}.{4:00000}&quot; -f $ts.Days, $ts.Hours, $ts.Minutes, $ts.Seconds, [int](100000 * ($ts.TotalSeconds - [Math]::Floor($ts.TotalSeconds)))
+         }
+         return &quot;{0:##}:{1:00}:{2:00}.{3:00000}&quot; -f $ts.Hours, $ts.Minutes, $ts.Seconds, [int](100000 * ($ts.TotalSeconds - [Math]::Floor($ts.TotalSeconds)))
+      }
+      return &quot;{0:##}:{1:00}.{2:00000}&quot; -f $ts.Minutes, $ts.Seconds, [int](100000 * ($ts.TotalSeconds - [Math]::Floor($ts.TotalSeconds)))
+   }
+   return &quot;{0:#0}.{1:00000}&quot; -f $ts.Seconds, [int](100000 * ($ts.TotalSeconds - [Math]::Floor($ts.TotalSeconds)))
+}
+
+# if there's only one id, then the count counts, otherwise we just use the ids
+# ... basically:    { 1..$count | % { $id += $id[-1]-1 }  }
+if($id.Count -eq 1) { $id = ($id[0])..($id[0]-($count-1)) } 
+
+# so we can call it with just the IDs
+Get-History -id $id | 
+ForEach {
+   $msr = $null
+   $cmd = $_
+   # default formatting values
+   $avg = 7; $len = 8; $count = 1
+   
+## Removed to make this v1 compatible
+##   $tok = $Parser::Tokenize( $cmd.CommandLine, [ref]$null )
+##   if( ($tok[0].Type -eq &quot;Number&quot;) -and 
+##       ($tok[0].Content -le 1) -and 
+##       ($tok[2].Type -eq &quot;Number&quot;) -and 
+##       ($tok[1].Content -eq &quot;..&quot;) )
+##   {
+##      $count = ([int]$tok[2].Content) - ([int]$tok[0].Content) + 1
+##   }
+##   
+##   $com = @( $tok | where {$_.Type -eq &quot;Command&quot;} | 
+##                     foreach { 
+##                        $Local:ErrorActionPreference = &quot;SilentlyContinue&quot;
+##                        get-command $_.Content 
+##                        $Local:ErrorActionPreference = $Script:ErrorActionPreference
+##                     } | 
+##                     where { $_.CommandType -eq &quot;ExternalScript&quot; } |
+##                     foreach { $_.Path } )
+##                     
+##   # If we actually got a script, measure it out
+##   if($com.Count -gt 0){
+##      $msr = Get-Content -path $com | Measure-Object -Line -Word -Char
+##   } else {
+      $msr = Measure-Object -in $cmd.CommandLine -Line -Word -Char
+##   }
+
+## V1 Averages:
+$min, $max = ([regex]&quot;^\s*(?:(?&lt;min&gt;\d+)\.\.(?&lt;max&gt;\d+)\s+\||for\s*\([^=]+=\s*(?&lt;min&gt;\d+)\s*;[^;]+\-lt\s*(?&lt;max&gt;\d+)\s*;[^;)]+\)\s*{)&quot;).match( $cmd.CommandLine ).Groups[1,2] | % { [int]$_.Value }
+$count = $max - $min
+if($count -le 0 ) { $count = 1 }
+   
+   &quot;&quot; | Select @{n=&quot;Id&quot;;        e={$cmd.Id}},
+               @{n=&quot;Duration&quot;;  e={FormatTimeSpan ($cmd.EndExecutionTime - $cmd.StartExecutionTime)}},
+               @{n=&quot;Average&quot;;   e={FormatTimeSpan ([TimeSpan]::FromTicks( (($cmd.EndExecutionTime - $cmd.StartExecutionTime).Ticks / $count) ))}},
+               # @{n=&quot;Lines&quot;;     e={$msr.Lines}},
+               # @{n=&quot;Words&quot;;     e={$msr.Words}},
+               # @{n=&quot;Chars&quot;;     e={$msr.Characters}},
+               # @{n=&quot;Type&quot;;      e={if($com.Count -gt 0){&quot;Script&quot;}else{&quot;Command&quot;}}},
+               @{n=&quot;Commmand&quot;;  e={$cmd.CommandLine}}
+} | 
+# I have to figure out what the longest time string is to make it look its best
+Foreach { 
+$avg = [Math]::Max($avg,$_.Average.Length);
+$len = [Math]::Max($len,$_.Duration.Length);  
+$_ } | Sort Id |
+Format-Table @{l=&quot;Duration&quot;;e={&quot;{0,$len}&quot; -f $_.Duration}},@{l=&quot;Average&quot;;e={&quot;{0,$avg}&quot; -f $_.Average}},Commmand -auto #Lines,Words,Chars,Type,
+#}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

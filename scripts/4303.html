@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="steelestengergm">
+    <title>User Search - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>User Search</h1>
+<h3><a href="//scripts/4303.ps1">download</a></h3>
+<p>Author:
+Steele Stenger
+steelestenger@gmail.com</p>
+<p>Search Active-Directory by First Name, Last Name, Fullname, or Email Address, Single-User or Multi-User mode
+Output results to Grid, select the results you want to export to csv</p>
+<p>Last updated:
+7/16/2013</p>
+<p>Requirements:
+Powershell 2.0+
+Showui 1.4</p>
+<p>Comments:
+Edit domain list at lines 29 and 99
+My first attempt at using showui :)</p>
+<pre><code class="language-posh"># Modules
+import-module showui
+Add-PSSnapin Quest.ActiveRoles.ADManagement
+
+# Functions
+function Find-User {
+param ($First, $Last, $Address)
+        # Domain list in distinguished name
+        $domains = @{
+            Fabrikam=&quot;dc=fabrikam,dc=com&quot;
+            AdventureWorks=&quot;dc=adventure-works,dc=com&quot;
+        }
+    [Array] $found = @() 
+
+# Single User Lookup
+            $First = $First.trim()
+            $Last = $Last.trim()
+            $Address = $Address.trim()
+
+# Single Email
+    if ($Address.length -gt 0) {
+        if ($Address.length -gt 0) {
+            foreach ($domain in $domains.values) {
+                $found += @(get-qaduser -Email $Address -IncludeAllProperties -SearchRoot $domain | select Domain, Firstname, LastName, samaccountname, email, AccountIsDisabled, LastLogon
+) 
+            }
+        }
+    }
+
+# Single Fullname
+    if (($First.length -gt 0) -and ($Last.length -gt 0)) {
+        if (($First -ne &quot;&quot;) -and ($Last -ne &quot;&quot;)) {
+            $fullname = &quot;$First $Last&quot;
+
+            foreach ($domain in $domains.values) {
+                $found += @(get-qaduser -Displayname $fullname -IncludeAllProperties -SearchRoot $domain | Select Domain, Firstname, LastName, samaccountname, email, AccountIsDisabled, LastLogon) 
+                $found.count | out-null
+            }
+        }
+    }
+
+# Single Firstname
+    elseif ($First -ne &quot;&quot;) {
+        if ($First.length -gt 0) {
+            foreach ($domain in $domains.values) {
+                $found += @(get-qaduser -FirstName $First -IncludeAllProperties -SearchRoot $domain | select Domain, Firstname, LastName, samaccountname, email, AccountIsDisabled, LastLogon)
+            }
+        }
+    }
+
+# Single Lastname
+    elseif ($Last -ne &quot;&quot;) {
+        if ($Last.length -gt 0) {
+            foreach ($domain in $domains.values) {
+                $found += @(get-qaduser -LastName $Last -IncludeAllProperties -SearchRoot $domain | Select Domain, Firstname, LastName, samaccountname, email, AccountIsDisabled, LastLogon)
+                }
+            }
+        }
+
+        $none = $null
+        if ($found.count -eq 0) {
+            $none = &quot;Your search did not return any results&quot;
+            return $none 
+        }
+        else {
+        # End of Single
+        return $found
+        }
+}
+
+# Multi User Lookup
+
+function Find-MultiUser {
+param ($multi)
+    [Array] $found = @()
+
+# Domain list
+    $domains = @{
+            Fabrikam=&quot;dc=fabrikam,dc=com&quot;
+            AdventureWorks=&quot;dc=adventure-works,dc=com&quot;
+        }
+        $users = @($multi.split(&quot;`n&quot;))
+
+# Processing User
+        $user = $null
+
+        foreach ($user in $users) {
+            $user = $user.trim()
+            write-host &quot;input: &quot; `t $user -f &quot;Green&quot; | out-null
+
+            if (($user.length -gt 0) -and ($user -ne &quot;&quot;)) {
+
+# Search Email
+                if ($user.contains('@')) {
+                    write-host &quot;Multi Email&quot; -f &quot;Green&quot; | out-null
+                    
+                    foreach ($domain in $domains.values){
+                        $found = $found + @(get-qaduser -Email $user -IncludeAllProperties -SearchRoot $domain | Select Domain, Firstname, LastName, samaccountname, email, AccountIsDisabled, LastLogon)
+                    }
+                }
+
+# Search Fullname
+                elseif($user.contains(&quot; &quot;)) {
+                        write-host &quot;Search Fullname&quot; | out-null
+                        foreach ($domain in $domains.values){
+                        write-host $domain
+                            $found = $found + @(get-qaduser -Displayname $user -IncludeAllProperties -SearchRoot $domain | Select Domain, Firstname, LastName, samaccountname, email, AccountIsDisabled, LastLogon)
+                        }
+                    }
+                
+# Search LastName
+                else {
+                    write-host &quot;Search Lastname&quot; | out-null
+                    foreach ($domain in $domains.values){
+                        $found = $found + @(get-qaduser -LastName $user -IncludeAllProperties -SearchRoot $domain | Select Domain, Firstname, LastName, samaccountname, email, AccountIsDisabled, LastLogon)
+                    }
+
+# Search FirstName
+                    $found.Length | out-null
+                    write-host &quot;Search FirstName&quot; | out-null
+                        foreach ($domain in $domains.values) {
+                        $found = $found + @(get-qaduser -FirstName $user -IncludeAllProperties -SearchRoot $domain | Select Domain, Firstname, LastName, samaccountname, email, AccountIsDisabled, LastLogon)
+                        }
+                    
+# No Results
+
+                } # End LastName
+            } # End If (($user.length -gt 0) -and ($user -ne &quot;&quot;))
+        }    # End For Each User
+        $none = $null
+        if ($found.length -eq 0) {
+            $none = &quot;Your search did not return any results&quot;
+            return $none 
+        }
+        else {
+        # End of Multi&quot;
+        return $found
+        }
+    }
+    
+# Window
+
+New-Window -Title &quot;User Search&quot; -SizeToContent WidthAndHeight -WindowStartupLocation CenterScreen -ResizeMode NoResize -Background &quot;black&quot; {
+New-StackPanel -name Stack -ControlName 'FindUser' -Orientation Vertical -Background &quot;White&quot; -HorizontalAlignment Left -margin 10 {
+        # Select Search Type
+        RadioButton &quot;_Single User&quot; -Name UserType -margin 10 -On_Checked {
+            $Button_Multi.IsEnabled = $false;
+            $Button_Single.IsEnabled = $true;
+            $FirstName.ISEnabled = $true;
+            $CheckFirst.ISEnabled = $true;
+            $CheckFirst.IsChecked = $true;
+            $FirstName.text = &quot;&quot;;
+            $Lastname.ISEnabled = $true;
+            $EmailAddress.ISEnabled = $false;
+            $CheckLast.ISEnabled = $true;
+            $CheckLast.IsChecked = $true;
+            $LastName.text = &quot;&quot;;
+            $EmailAddress.IsEnabled = $false;
+            $CheckEmail.ISEnabled = $true;
+            $CheckEmail.ISChecked = $false;
+            $EmailAddress.text = &quot;&quot;;
+            $Multi.IsEnabled = $false;
+            $multi.text = &quot;&quot;
+            }
+        RadioButton &quot;_Multi User&quot; -Name UserType -margin 10 -On_Checked {
+            $Button_Single.IsEnabled = $false;
+            $Button_Multi.IsEnabled = $true;
+            $Multi.IsEnabled = $true;
+            $Multi.text = &quot;&quot;;
+            $CheckFirst.ISEnabled = $false
+            $CheckLast.ISEnabled = $false
+            $FirstName.ISEnabled = $false;
+            $CheckFirst.ISChecked = $false;
+            $FirstName.text = &quot;&quot;;
+            $Lastname.ISEnabled = $false;
+            $CheckLast.ISChecked = $false;
+            $LastName.text = &quot;&quot;  
+            $EmailAddress.ISEnabled = $false;
+            $CheckEmail.ISEnabled = $false;
+            $CheckEmail.ISChecked = $false;
+            $EmailAddress.text = &quot;&quot;
+            }
+# Grid
+New-Grid -Name UserInfo -Isenabled:$true -HorizontalAlignment Left -Rows 7 -Columns 3 -background &quot;white&quot; -margin 25 {
+            New-CheckBox -name CheckFirst -VerticalAlignment Center -Isenabled:$false -IsChecked:$False -Row 0 -Column 0 -On_Checked {
+                $EmailAddress.IsEnabled = $false;
+                $CheckEmail.IsChecked = $false;
+                $FirstName.ISEnabled = $true} -On_Unchecked {$FirstName.text = $null; $FirstName.ISEnabled = $false}
+            label &quot;First Name&quot; -Row 0 -column 1 -HorizontalAlignment Left
+            TextBox -Name FirstName -IsEnabled:$False -Row 0 -Column 2 -MinWidth 300
+            #
+            New-CheckBox -name CheckLast -VerticalAlignment Center -Isenabled:$false -IsChecked:$False -Row 1 -Column 0 -On_Checked {
+                $EmailAddress.IsEnabled = $false;
+                $CheckEmail.IsChecked = $false;
+                $LastName.ISEnabled = $true} -On_Unchecked {$LastName.text = $null; $LastName.ISEnabled = $false}
+            label &quot;Last Name&quot; -Row 1 -column 1 -HorizontalAlignment Left
+            TextBox -Name Lastname -IsEnabled:$False -Row 1 -Column 2 -MinWidth 300
+            #
+            New-CheckBox -name CheckEmail -VerticalAlignment Center -Isenabled:$false -IsChecked:$False -Row 2 -Column 0 -On_Checked {
+                $CheckFirst.ISEnabled = $true;
+                $CheckFirst.ISChecked = $false;
+                $CheckLast.ISEnabled = $true;
+                $CheckLast.ISChecked = $false;
+                $EmailAddress.IsEnabled = $true
+                } -On_Unchecked {$EmailAddress.text = $null; $EmailAddress.ISEnabled = $false}
+            label &quot;Email Address&quot; -Row 2 -column 1 -HorizontalAlignment Left
+
+            TextBox -Name EmailAddress -IsEnabled:$False -Row 2 -Column 2 -MinWidth 300
+        # Execute Single User Search
+            new-button -name Button_Single &quot;Search&quot; -IsEnabled:$false -Row 3 -Column 1 -width 100 -HorizontalAlignment Left -VerticalAlignment bottom -Margin 20 -On_Click {
+                cls;
+                $window.Cursor = &quot;Wait&quot;;
+                Find-User $FirstName.text $LastName.text $EmailAddress.text &quot;Single&quot; | Out-GridView -Title &quot;Single User Results - Search&quot; -Passthru | foreach {
+                    $export = $null
+                    $export = [Environment]::GetFolderPath(&quot;Desktop&quot;)
+                    Export-Csv -InputObject $_ -Delimiter (&quot;,&quot;) -Encoding ASCII -LiteralPath &quot;$export\search_results.csv&quot; -NoClobber -Append -Force
+                }
+                $window.Cursor = &quot;&quot;
+            }
+            label &quot; &quot; -Row 4 -Column 0
+            label &quot;Multi User&quot; -Row 5 -Column 1 -HorizontalAlignment Left
+            TextBox -Row 5 -Column 2 -MinLines 20 -Name Multi -IsEnabled:$False -AcceptsReturn:$true -TextWrapping Wrap -VerticalScrollBarVisibility Auto
+        # Execute Multi User Search
+            new-button -name Button_Multi &quot;Search&quot; -IsEnabled:$False -Row 6 -Column 1 -width 100 -HorizontalAlignment Left -VerticalAlignment bottom -Margin 20 -On_Click {
+                cls;
+                $window.Cursor = &quot;Wait&quot;;
+                Find-MultiUser $multi.text | Out-GridView -Title &quot;Mutli User Results - Search&quot; -Passthru | foreach {
+                    $export = $null
+                    $export = [Environment]::GetFolderPath(&quot;Desktop&quot;)
+                    Export-Csv -InputObject $_ -Delimiter (&quot;,&quot;) -Encoding ASCII -Force -LiteralPath &quot;$export\search_results.csv&quot; -NoClobber -Append -Force
+                }
+                $window.Cursor = &quot;&quot;
+            }
+        }
+
+New-Grid -Name Bottom -IsEnabled:$True -HorizontalAlignment Left -Rows 1 -Columns 3 -margin 15 {
+        
+        new-button -Name Button_Quit &quot;Quit&quot; -IsEnabled:$true -width 100 -HorizontalAlignment Left -Row 3 -Column 2 -on_click {
+        Close-Control
+        }
+    }
+}
+}-show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

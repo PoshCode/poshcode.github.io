@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Rich Kusak">
+    <title>Get-TheVillageChurchPod - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-TheVillageChurchPod</h1>
+<h3><a href="//scripts/2951.ps1">download</a></h3>
+<p>The Get-TheVillageChurchPodcast function returns objects of all the available sermon podcasts from The Village Church. The objects can be filtered by speaker, series, title, or date and optionally downloaded to a specified folder.</p>
+<pre><code class="language-posh">function Get-TheVillageChurchPodCast {
+&lt;#
+	.SYNOPSIS
+		Gets The Village Church sermon podcasts.
+
+	.DESCRIPTION
+		The Get-TheVillageChurchPodcast function returns objects of all the available sermon podcasts from The Village Church.
+		The objects can be filtered by speaker, series, title, or date and optionally downloaded to a specified folder.
+
+	.PARAMETER Speaker
+		Specifies the name of the podcast speaker. The wildcard '*' is allowed.
+
+	.PARAMETER Series
+		Specifies the series of the podcast. The wildcard '*' is allowed.
+
+	.PARAMETER Title
+		Specifies the title of the podcast. The wildcard '*' is allowed.
+
+	.PARAMETER Date
+		Specifies the date or date range of the podcast(s).
+
+	.PARAMETER DownloadPath
+		Specifies the download folder path to save the podcast files.
+
+	.EXAMPLE
+		Get-TheVillageChurchPodcast
+		Gets all the available sermon podcasts from The Village Church.
+
+	.EXAMPLE
+		Get-TheVillageChurchPodcast -Speaker MattChandler -Series Habakkuk
+		Gets all the sermon podcasts where Matt Chandler is the speaker and the series is Habakkuk.
+		
+	.EXAMPLE
+		Get-TheVillageChurchPodcast -Speaker MattChandler -Date 1/1/2003,3/31/2003
+		Gets all the sermon podcasts where Matt Chandler is the speaker and the podcasts are in the date ranage 1/1/2003 - 3/31/2003.
+		
+	.EXAMPLE
+		Get-TheVillageChurchPodcast -Speaker MattChandler -Date 1/1/2003,3/31/2003 -DownloadPath C:\temp\TheVillage
+		Gets all the sermon podcasts where Matt Chandler is the speaker and the podcasts are in the date ranage 1/1/2003 - 3/31/2003 and
+		downloads the podcast files to the folder path C:\temp\TheVillage.
+
+	.INPUTS
+		System.String
+
+	.OUTPUTS
+		PSObject
+
+	.NOTES
+		Name: Get-TheVillageChurchPodCast
+		Author: Rich Kusak
+		Created: 2011-06-14
+		LastEdit: 2011-09-12 11:07
+		Version: 1.2.0.0
+
+	.LINK
+		http://fm.thevillagechurch.net/sermons
+
+	.LINK
+		about_regular_expressions
+
+#&gt;
+
+	[CmdletBinding()]
+	param (
+		[Parameter(Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+		[ValidateNotNullOrEmpty()]
+		[string]$Speaker = '*',
+
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[ValidateNotNullOrEmpty()]
+		[string]$Series = '*',
+		
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[ValidateNotNullOrEmpty()]
+		[string]$Title = '*',
+
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[ValidateCount(1,2)]
+		[datetime[]]$Date = ([datetime]::MinValue,[datetime]::MaxValue),
+		
+		[Parameter(ValueFromPipelineByPropertyName=$true)]
+		[ValidateScript({
+			if ($_) {
+				if (Test-Path $_ -IsValid) {$true} else {
+					throw &quot;The download path '$_' is not valid.&quot;
+				}
+			} else {$true}
+		})]
+		[string]$DownloadPath
+	)
+	
+	begin {
+	
+		$sermonsUri = 'http://fm.thevillagechurch.net/sermons'
+		$studiesSeminarsUri = 'http://fm.thevillagechurch.net/studies-seminars'
+		$resourceFilesAudioUri = 'http://fm.thevillagechurch.net/resource_files/audio/'
+
+		$partRegex = &quot;href='/resource_files/audio/(?&lt;file&gt;(?&lt;date&gt;\d{8}).*_(?&lt;speaker&gt;\w+)_(?&lt;series&gt;\w+)Pt(?&lt;part&gt;\d+)-(?&lt;title&gt;\w+)\.mp3)'&quot;
+		$noPartRegex = &quot;href='/resource_files/audio/(?&lt;file&gt;(?&lt;date&gt;\d{8}).*_(?&lt;speaker&gt;\w+)_(?&lt;series&gt;\w+)-(?&lt;title&gt;\w+)\.mp3)'&quot;
+
+		$webClient = New-Object System.Net.WebClient
+		if ([System.Net.WebProxy]::GetDefaultProxy().Address) {
+			$webClient.UseDefaultCredentials = $true
+			$webClient.Proxy.Credentials = $webClient.Credentials
+		}
+		
+	} # begin
+	
+	process {
+
+		try {
+			Write-Debug &quot;Performing operation 'DownloadString' on target '$sermonsUri'.&quot;
+			$reference = $webClient.DownloadString($sermonsUri)
+		
+			$pages = [regex]::Matches($reference, 'page=(\d+)&amp;') | ForEach {$_.Groups[1].Value} | Sort -Unique
+			$pages | ForEach -Begin {$sermons = @()} -Process {
+				$sermonsPageUri = &quot;http://fm.thevillagechurch.net/sermons?type=sermons&amp;page=$_&amp;match=any&amp;kw=&amp;topic=&amp;sb=date&amp;sd=desc&quot;
+				Write-Debug &quot;Performing operation 'DownloadString' on target '$sermonsPageUri'.&quot;
+				$sermons += $webClient.DownloadString($sermonsPageUri)
+			}
+		} catch {
+			return Write-Error $_
+		}
+
+		$obj = foreach ($line in $sermons -split '(?m)\s*$') {
+			if ($line -match $partRegex) {
+				New-Object PSObject -Property @{
+					'File' = $matches['file']
+					'Date' = &quot;{0:####-##-##}&quot; -f [int]$matches['date']
+					'Speaker' = $matches['speaker']
+					'Series' = $matches['series']
+					'Part' = &quot;{0:d2}&quot; -f [int]$matches['part']
+					'Title' = $matches['title']
+				}
+
+			} elseif ($line -match $noPartRegex) {
+				New-Object PSObject -Property @{
+					'File' = $matches['file']
+					'Date' = &quot;{0:####-##-##}&quot; -f [int]$matches['date']
+					'Speaker' = $matches['speaker']
+					'Series' = $matches['series']
+					'Part' = '00'
+					'Title' = $matches['title']
+				}
+			}
+		} # foreach ($line in $sermons -split '(?m)\s*$')
+		
+		if ($PSBoundParameters['Date']) {
+			switch ($Date.Length) {
+				1 {$Date += $Date ; break}
+				2 {
+					if ($Date[0] -gt $Date[1]) {
+						[array]::Reverse($Date)
+					}
+				}
+			} # switch
+		} # if ($PSBoundParameters['Date'])
+		
+		if ($DownloadPath) {
+			try {
+				if (-not (Test-Path $DownloadPath -PathType Container)) {
+					New-Item $DownloadPath -ItemType Directory -Force -ErrorAction Stop | Out-Null
+				}
+			} catch {
+				return Write-Error $_
+			}
+			
+			[PSObject[]]$filter = $obj | Where {
+				$_.Speaker -like $Speaker -and
+				$_.Series -like $Series -and
+				([datetime]$_.Date -ge $Date[0]) -and ([datetime]$_.Date -le $Date[1])
+			}
+			
+			$count = $filter.Length
+			$i = 0
+
+			foreach ($podcast in $filter) {
+				$fullPath = Join-Path $DownloadPath $podcast.File
+				if (Test-Path $fullPath) {
+					Write-Warning &quot;File '$fullPath' already exists.&quot;
+					continue
+				}
+
+				try {
+					Write-Debug &quot;Performing operation 'DownloadFile' on target '$($podcast.File)'.&quot;
+					Write-Progress -Activity 'Downloading PodCast' -Status $podcast.File -PercentComplete $(($i/$count)*100 ; $i++) -CurrentOperation &quot;$i of $count&quot;
+					$webClient.DownloadFile($resourceFilesAudioUri + $podcast.File, $fullPath)
+				} catch {
+					Write-Error $_
+					continue
+				}
+			} # foreach ($podcast in $filter)
+			
+			Write-Progress -Activity 'Downloading PodCast' -Status 'Complete' -PercentComplete 100
+			Sleep -Seconds 1
+
+		} else {
+			$obj | Where {
+				$_.Speaker -like $Speaker -and
+				$_.Series -like $Series -and
+				$_.Title -like $Title -and
+				([datetime]$_.Date -ge $Date[0]) -and ([datetime]$_.Date -le $Date[1])
+			} | Select Date, Speaker, Series, Part, Title | Sort Date
+		}
+	} # process
+} # function Get-TheVillageChurchPodCast {
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Clint">
+    <title>ScheduleGPOBackups.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ScheduleGPOBackups.ps1</h1>
+<h3><a href="//scripts/1507.ps1">download</a></h3>
+<p>Requires Powershell 2.0 &amp; the grouppolicy module.
+Using the configuration block in the script you can define where to back GPOs up to, how often to backup everything and how often to backup only what has changed since the last good backup.  Schedule the script to automatically run every so often depending on your needs and you should have a nice GPO backup solution.</p>
+<pre><code class="language-posh">Import-Module grouppolicy
+#region ConfigBlock
+# What domain are we going to backup GPOs for?
+$domain = &quot;psd267.wednet.edu&quot;
+# Where are we going to store the backups?
+$gpoBackupRootDir = &quot;c:\gpoBackups&quot;
+# As I plan to do a new backup set each month I'll setup the directory names to reflect
+# the year and month in a nice sortable way.
+# Set this up and format to your liking, I prefer $gpoBackupRootDir\yyyy-MM
+$backupDir = &quot;$gpoBackupRootDir\{0:yyyy-MM}&quot; -f (Get-Date)
+
+# Perform a full backup how often? Day/Week/Month/Year?
+#$fullBackupFrequency = &quot;Day&quot;
+#$fullBackupFrequency = &quot;Week&quot;
+$fullBackupFrequency = &quot;Month&quot;
+#$fullBackupFrequency = &quot;Year&quot;
+
+# Perform Incremental backups how often?  Hour/Day/Week/Month?
+$IncBackupFreqency = &quot;Hour&quot;
+# $IncBackupFreqency = &quot;Day&quot;
+# $IncBackupFreqency = &quot;Week&quot;
+# $IncBackupFreqency = &quot;Month&quot;
+
+# How many full sets to keep?
+# Alternatively, how far back do we keep our backup sets?
+$numKeepBackupSets = 12
+
+# On what day do we want to consider the start of Week?
+#$startOfWeek = &quot;Sunday&quot;
+$startOfWeek = &quot;Monday&quot;
+#$startOfWeek = &quot;Tuesday&quot;
+#$startOfWeek = &quot;Wednesday&quot;
+#$startOfWeek = &quot;Thursday&quot;
+#$startOfWeek = &quot;Friday&quot;
+#$startOfWeek = &quot;Saturday&quot;
+
+# On what day do we want to consider the start of Month?
+$startOfMonth = 1
+
+# On what day do we want to consider the start of Year?
+$startOfYear = 1
+
+#endregion
+
+$currentDateTime = Get-Date
+$doFull = $false
+$doInc  = $false
+
+# Does our backup directory exist?
+# If not attempt to create it and fail the script with an approprate error
+if (-not (Test-Path $backupDir))
+{
+	try 
+	{
+		New-Item -ItemType Directory -Path $backupDir
+	}
+	catch
+	{
+		Throw $(&quot;Could not create directory $backupDir&quot;)
+	}
+}
+
+# If we're here then our backup directory is in good shape
+# Check if we need to run a full backup or not
+#  if we do, then run it
+if ( Test-Path $backupDir\LastFullTimestamp.xml )
+{
+	# Import the timestamp from the last recorded complete full
+	$lastFullTimestamp = Import-Clixml $backupDir\LastFullTimestamp.xml
+	# check to see if the timestamp is valid, if not then delete it and run a full
+	if ( $lastFullTimestamp -isnot [datetime] )
+	{
+		$doFull = $true
+		Remove-Item $backupDir\LastFullTimestamp.xml
+	}
+	else # $lastfulltimestamp is or can be boxed/cast into [datetime]
+	{
+		# determine how long it has been since the last recorded full
+		$fullDelta = $currentDateTime - $lastFullTimestamp
+		switch ($fullBackupFrequency)
+		{
+			Day
+			{
+				if ( $fullDelta.days -gt 0 )
+				{
+					$doFull = $true
+				}
+			}
+			Week
+			{
+				if ( ($currentDateTime.dayOfWeek -eq [DayOfWeek]$startOfWeek) `
+					 -or ($fullDelta.days -gt 7) )
+				{
+					$doFull = $true
+				}
+			}
+			Month
+			{
+				if ( ($currentDateTime.day -eq $startOfMonth) `
+					 -or ($fullDelta.days -gt 30) )
+				{
+					$doFull = $true
+				}
+			}
+			Year
+			{
+				if ( ($currentDateTime.dayofyear -eq $startOfYear) `
+					 -or ($fullDelta.days -gt 365) )
+				{
+					$doFull = $true
+				}
+			}
+		}
+	}
+}
+else # There is no recorded last completed full so we want to run one
+{
+	$doFull = $true
+}
+
+if ($doFull)
+{
+	# Run Backup of All GPOs in domain
+	$GPOs = Get-GPO -domain $domain -All
+	foreach ($GPO in $GPOs)
+	{
+		$GPOBackup = Backup-GPO $GPO.DisplayName -Path $backupDir
+	    # First build the Report path, then generate a report of the backed up settings.
+	    $ReportPath = $backupDir + &quot;\&quot; + $GPO.ModificationTime.Year + &quot;-&quot; + $GPO.ModificationTime.Month + &quot;-&quot; + $GPO.ModificationTime.Day + &quot;_&quot; +  $GPO.Displayname + &quot;_&quot; + $GPOBackup.Id + &quot;.html&quot;
+	    Get-GPOReport -Name $GPO.DisplayName -path $ReportPath -ReportType HTML 		
+	}
+	Export-Clixml -Path $backupDir\LastFullTimestamp.xml -InputObject ($currentDateTime)
+}
+else # If we're not running a full check if we need to run an incremental backup
+{
+	if ( Test-Path $backupDir\LastIncTimestamp.xml )
+	{
+		# Import the timestamp from the last recorded complete Incremental
+		$lastIncTimestamp = Import-Clixml $backupDir\LastIncTimestamp.xml
+		# check to see if the timestamp is valid, if not then delete it and run an inc
+		if ( $lastIncTimestamp -isnot [datetime] )
+		{
+			# Import the timestamp from the last recorded complete full
+			# If we're here then the timestamp is valid. It is checked earlier and if it fails
+			# or doesn't exist then we run a full and will never get here.
+			# determine how long it has been since the last recorded full
+			$lastFullTimestamp = Import-Clixml $backupDir\LastFullTimestamp.xml
+			$IncDelta = $currentDateTime - $lastFullTimestamp
+			$doInc = $true
+			Remove-Item $backupDir\LastIncTimestamp.xml
+		}
+		else # $lastIncTimestamp is or can be boxed/cast into [datetime]
+		{
+			# determine how long it has been since the last recorded full
+			$IncDelta = $currentDateTime - $lastIncTimestamp
+		}
+	}
+	else # There is no recorded last Incremental
+	{
+		# Import the timestamp from the last recorded complete full
+		# If we're here then the timestamp is valid. It is checked earlier and if it fails
+		# or doesn't exist then we run a full and will never get here.
+		# determine how long it has been since the last recorded full
+		$lastFullTimestamp = Import-Clixml $backupDir\LastFullTimestamp.xml
+		$IncDelta = $currentDateTime - $lastFullTimestamp
+	}
+	# If we have already determined to run an Inc we want to skip this part
+	if ($doInc = $false)
+	{
+		switch ($IncBackupFreqency)
+		{
+			Hour
+			{
+				if ($IncDelta.hours -gt 0)
+				{
+					$doInc = $true
+				}
+			}
+			Day
+			{
+				if ($IncDelta.days -gt 0)
+				{
+					$doInc = $true
+				}
+			}
+			Week
+			{
+				if ( ($currentDateTime.dayOfWeek -eq [DayOfWeek]$startOfWeek) `
+					 -or ($IncDelta.days -gt 7) )
+				{
+					$doInc = $true
+				}
+			}
+			Month
+			{
+				if ( ($currentDateTime.day -eq $startOfMonth) `
+					 -or ($IncDelta.days -gt 30) )
+				{
+					$doInc = $true
+				}
+			}
+		}
+	}
+	# Time to check our Incremental flag and run the backup if we need to
+	if ($doInc)
+	{
+		# Run Incremental Backup
+		$GPOs = Get-GPO -domain $domain -All | Where-Object { $_.modificationTime -gt ($currentDateTime - $incDelta) }
+		foreach ($GPO in $GPOs)
+		{
+			$GPOBackup = Backup-GPO $GPO.DisplayName -Path $backupDir
+		    # First build the Report path, then generate a report of the backed up settings.
+		    $ReportPath = $backupDir + &quot;\&quot; + $GPO.ModificationTime.Year + &quot;-&quot; + $GPO.ModificationTime.Month + &quot;-&quot; + $GPO.ModificationTime.Day + &quot;_&quot; +  $GPO.Displayname + &quot;.html&quot;
+		    Get-GPOReport -Name $GPO.DisplayName -path $ReportPath -ReportType HTML 		
+		}
+		Export-Clixml -Path $backupDir\LastIncTimestamp.xml -InputObject ($currentDateTime)
+	}
+}
+#TODO: Cleanup old backup sets
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

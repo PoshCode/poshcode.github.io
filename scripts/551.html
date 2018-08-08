@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="alanrenouf">
+    <title>VI Report - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>VI Report</h1>
+<h3><a href="//scripts/551.ps1">download</a></h3>
+<p>export various information into Microsoft Word using PowerShell and the VI Toolkit, this is completely risk free and does not alter anything, just feed it your VI server name and sit back, it can also be used as a scheduled task and even set to email you a word attachment.</p>
+<p>It even throws in a few graphs and pie charts for good measure, almost all information can be sent to the functions for you to expand on the report easily.</p>
+<p>Comments are welcome via my blog.... http://teckinfo.blogspot.com/2008/08/exporting-virtual-infrastructure.html</p>
+<p>Usage:  Report.ps1 YOUR_VI_SERVERNAME</p>
+<pre><code class="language-posh">param( [string] $VIServer )
+
+if ($VIServer -eq &quot;&quot;){
+	Write-Host
+	Write-Host &quot;Please specify a VI Server name eg....&quot;
+	Write-Host &quot;      powershell.exe Report.ps1 MYVISERVER&quot;
+	Write-Host
+	Write-Host
+	exit
+}
+
+function PreReq
+{
+	if ((Test-Path  REGISTRY::HKEY_CLASSES_ROOT\Word.Application) -eq $False){
+		Write-Host &quot;This script directly outputs to Microsoft Word, please install Microsoft Word&quot;
+		exit
+	}
+	Else
+	{
+		Write-Host &quot;Microsoft Word Detected&quot;
+	}
+	if ((Test-Path  REGISTRY::HKEY_CLASSES_ROOT\OWC11.ChartSpace.11) -eq $False){
+		Write-Host &quot;This script requires Office Web Components to run correctly, please install these from the following website: http://www.microsoft.com/downloads/details.aspx?FamilyId=7287252C-402E-4F72-97A5-E0FD290D4B76&amp;displaylang=en&quot;
+		exit
+	}
+	Else
+	{
+		Write-Host &quot;Office Web Components Detected&quot;
+	}
+	$wordrunning = (Get-Process 'WinWord' -ea SilentlyContinue)
+	if ( $wordrunning -eq &quot;&quot;){
+		Write-Host &quot;Please close all instances of Microsoft Word before running this report.&quot;
+		exit
+	}
+	else
+	{
+	}
+}
+
+function InsertTitle ($title)
+{
+	# Insert Document Title Information
+	$objSelection = $msWord.Selection
+	$objSelection.Style = &quot;Heading 1&quot;
+	$objSelection.TypeText($Title)
+	$msword.Selection.EndKey(6)  &gt; Null
+	$objSelection.TypeParagraph()
+	$msword.Selection.EndKey(6)  &gt; Null
+}
+
+function InsertText ($text)
+{
+	# Insert Document text
+	$objSelection = $msWord.Selection
+	$objSelection.Style = &quot;Normal&quot;
+	$objSelection.TypeText($text)
+	$msword.Selection.EndKey(6)  &gt; Null
+	$objSelection.TypeParagraph()
+	$msword.Selection.EndKey(6)  &gt; Null
+}
+
+function InsertChart ($Caption, $Stat, $NumToReturn, $Contents)
+{
+	Write-Host &quot;Creating $Caption bar chart...Please Wait&quot;
+	$categories = @()
+	$values = @()
+	$chart = new-object -com OWC11.ChartSpace.11
+	$chart.Clear()
+	$c = $chart.charts.Add(0)
+	# 3D chart type, change the following .Type = 52
+	$c.Type = 4
+	$c.HasTitle = &quot;True&quot;
+	$series = ([array] $chart.charts)[0].SeriesCollection.Add(0)
+
+	if ($stat -eq &quot;&quot;){ 
+	$contents | foreach-object {
+		$categories += $_.Name
+		$values += $_.Value * 1	
+		}
+	$series.Caption = $Caption 
+	}
+	else
+	{
+		$i = 1
+		$j = $contents.Length
+		$myCol = @()
+		ForEach ($content in $contents)
+		{
+			Write-Progress -Activity &quot;Processing Graph Information&quot; -Status &quot;$content ($i of $j)&quot; -PercentComplete (100*$i/$j)
+			$myObj = &quot;&quot; | Select-Object Name, Value
+			$myObj.Name = $content.Name
+			$messtat = Get-Stat -Entity $content -Start ((Get-Date).AddHours(-24)) -Finish (Get-Date) -Stat $stat
+			$myObj.Value = ($messtat| Measure-Object -Property Value -Average).Average
+			$myCol += $myObj
+			$i++
+		}
+		$myCol | Sort-Object Value -Descending | Select-Object -First $numtoreturn | foreach-object {
+			$categories += $_.Name
+			$values += $_.Value * 1
+		}
+	$series.Caption = &quot;$Caption (last 24hrs)&quot;
+	}
+	$series.SetData(1, -1, $categories)
+	$series.SetData(2, -1, $values)
+	$filename = (resolve-path .).Path + &quot;\Chart.jpg&quot;
+	$chart.ExportPicture($filename, &quot;jpg&quot;, 900, 600)
+	
+	$objSelection = $msWord.Selection
+	$msword.Selection.EndKey(6)  &gt; Null
+	$objSelection.TypeParagraph()
+	$msWord.Application.Selection.InlineShapes.AddPicture($filename)  &gt; Null
+	Remove-Item $filename
+	$msword.Selection.EndKey(6)  &gt; Null
+}
+
+function InsertPie ($Caption, $Contents, $cats)
+{
+	Write-Host &quot;Creating $Caption pie chart...Please Wait&quot;
+	$categories = @()
+	$values = @()
+	$chart = new-object -com OWC11.ChartSpace.11
+	$chart.Clear()
+	$c = $chart.charts.Add(0)
+	# Non 3D pie chart, change the following .Type = 18
+	$c.Type = 58
+  	$c.HasTitle = &quot;True&quot;
+	$c.HasLegend = &quot;True&quot;
+	$series = ([array] $chart.charts)[0].SeriesCollection.Add(0)
+	$dl =  $series.DataLabelsCollection.Add()
+	$dl.HasValue = &quot;True&quot;
+		
+	$Contents | foreach-object { 
+	$categories = $cats[0], $cats[1]
+	$values = [math]::round(($contents[0]), 0), [math]::round(($contents[1]), 0)
+	}
+		
+	$series.Caption = $Caption
+	$series.SetData(1, -1, $categories)
+	$series.SetData(2, -1, $values)
+	$filename = (resolve-path .).Path + &quot;\PIE.jpg&quot;
+	$chart.ExportPicture($filename, &quot;jpg&quot;, 900, 600)
+	
+	$objSelection = $msWord.Selection
+	$msword.Selection.EndKey(6) &gt; Null
+	$objSelection.TypeParagraph()
+	$msWord.Application.Selection.InlineShapes.AddPicture($filename) &gt; Null
+	$msword.Selection.EndKey(6)  &gt; Null
+	Remove-Item $filename
+}
+
+function TableOutput ($Heading, $columnHeaders, $columnProperties, $contents)
+{
+	Write-Host &quot;Creating $Heading Table...Please Wait&quot;
+	# Number of columns
+	$columnCount = $columnHeaders.Count
+
+	# Insert Table Heading
+	$Title = $Heading
+	InsertTitle $title
+
+	# Create a new table
+	$docTable = $wordDoc.Tables.Add($wordDoc.Application.Selection.Range,$contents.Count,$columnCount)
+
+	# Insert the column headers into the table
+	for ($col = 0; $col -lt $columnCount; $col++) {
+    	$cell = $docTable.Cell(1,$col+1).Range
+    	$cell.Font.Name=&quot;Arial&quot;
+    	$cell.Font.Bold=$true
+    	$cell.InsertAfter($columnHeaders[$col])
+	}
+	$doctable.Rows.Add() &gt; Null
+
+	# Load the data into the table
+	$i = 1
+	$j = $contents.Count
+	for($row = 2; $row -lt ($contents.Count + 2); $row++){
+  		if($row -gt 2){
+  	}
+  	for ($col = 1; $col -le $columnCount; $col++){
+		Write-Progress -Activity &quot;Processing Table Information&quot; -Status &quot;Adding Row entry $i of $j&quot; -PercentComplete (100*$i/$j)
+    	$cell = $docTable.Cell($row,$col).Range
+    	$cell.Font.Name=&quot;Arial&quot;
+    	$cell.Font.Size=&quot;10&quot;
+    	$cell.Font.Bold=$FALSE
+    	$cell.Text = $contents[$row-2].($columnProperties[$col-1])
+  	}
+	$i++
+	}
+
+	# Table style
+	$doctable.Style = &quot;Table List 4&quot;
+	$docTable.Columns.AutoFit()
+	$objSelection = $msWord.Selection
+	$msword.Selection.EndKey(6)  &gt; Null
+	$objSelection.TypeParagraph()
+	$msword.Selection.EndKey(6)  &gt; Null
+
+}
+$date = Get-date
+Prereq
+
+# Connect to the VI Server
+Write-Host &quot;Connecting to VI Server&quot;
+Connect-VIServer $VIServer
+
+# Get Word Ready for Input
+# Launch instance of Microsoft Word
+Write-Host &quot;Creating New Word Document&quot;
+$msWord = New-Object -Com Word.Application
+# Create new document
+$wordDoc = $msWord.Documents.Add()
+# Make word visible (optional)
+$msWord.Visible = $false
+# Activate the new document
+$wordDoc.Activate()
+
+# Insert Document Title
+
+$Title = &quot;VMWare Report produced for $VIServer&quot;
+InsertTitle $title
+
+$Title = &quot;Created on &quot; + $date
+InsertTitle $title
+
+#Setting common used commands to speed things up
+Write-Host &quot;Setting Variables...Please wait&quot;
+$VMs = Get-VM
+$VMHs = Get-VMHost
+$Ds = Get-Datastore
+$rp = Get-resourcepool
+$clu = Get-Cluster
+
+# Send VM Host Information to Document
+$myCol = @()
+ForEach ($vmh in $vmhs)
+{
+  $hosts = Get-VMHost $vmh.Name | %{Get-View $_.ID}
+  $esx = &quot;&quot; | select-Object Name, Version, NumCpuPackages, NumCpuCores, Hz, Memory
+  $esx.Name = $hosts.Name
+  $esx.Version = $hosts.Summary.Config.Product.FullName
+  $esx.NumCpuPackages = $hosts.Hardware.CpuInfo.NumCpuPackages 
+  $esx.NumCpuCores = $hosts.Hardware.CpuInfo.NumCpuCores
+  $esx.Hz = [math]::round(($hosts.Hardware.CpuInfo.Hz)/10000, 0)
+  $esx.Memory = [math]::round(($hosts.Hardware.MemorySize)/1024, 0)
+  $myCol += $esx
+}
+$contents = $myCol
+$columnHeaders = @('Name', 'Version', 'CPU', 'Cores', 'Hz', 'Memory' )
+$columnproperties = @('Name', 'Version', 'NumCpuPackages', 'NumCpuCores', 'Hz', 'Memory')
+$Heading = &quot;Host Information&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	Tableoutput $Heading $columnHeaders $columnProperties $contents
+}
+
+$totalhosts = $VMhs.Length
+$Text = &quot;Total Number of Hosts: $totalhosts&quot;
+InsertText $Text
+
+#Insert VM Host CPU Graph
+$contents = $VMHs
+$Stat = &quot;cpu.usage.average&quot;
+$NumToReturn = 5
+$Caption = &quot;Top &quot; + $NumToReturn + &quot; Hosts CPU Usage %Average&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	InsertChart $Caption $Stat $NumToReturn $contents
+}
+
+#Insert VM Host MEM Graph
+$contents = $VMHs
+$Stat = &quot;mem.usage.average&quot;
+$NumToReturn = 5
+$Caption = &quot;Top &quot; + $NumToReturn + &quot; Hosts MEM Usage %Average&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	InsertChart $Caption $Stat $NumToReturn $contents
+}
+
+# Send VM Information to the document
+$contents = @($VMs | Sort-Object Name )
+$columnHeaders = @('Name','CPUs','MEM','Power','Description')
+$columnProperties = @('Name','NumCPU','MemoryMB','PowerState','Description')
+$Heading = &quot;VM Information&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	Tableoutput $Heading $columnHeaders $columnProperties $contents
+}
+
+$totalhosts = $VMs.Length
+$Text = &quot;Total Number of Virtual Machines: $totalhosts&quot;
+InsertText $Text
+
+#Insert VM CPU Graph
+$contents = $VMs
+$Stat = &quot;cpu.usage.average&quot;
+$NumToReturn = 5
+$Caption = &quot;Top &quot; + $NumToReturn + &quot; Virtual Machines CPU Usage %Average&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	InsertChart $Caption $Stat $NumToReturn $contents
+}
+
+#Insert VM MEM Graph
+$contents = $VMs
+$Stat = &quot;mem.usage.average&quot;
+$NumToReturn = 5
+$Caption = &quot;Top &quot; + $NumToReturn + &quot; Virtual Machines MEM Usage %Average&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	InsertChart $Caption $Stat $NumToReturn $contents
+}
+
+# Send VM Tools Information to Document
+$contents = @($VMs | % { get-view $_.ID } | select Name, @{ Name=&quot;ToolsVersion&quot;; Expression={$_.config.tools.toolsVersion}} | Sort-Object Name)
+$columnHeaders = @('Name','VM Tools Version')
+$columnproperties = @('Name', 'ToolsVersion')
+$Heading = &quot;VMWare Tools Version&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	Tableoutput $Heading $columnHeaders $columnProperties $contents
+}
+
+# Datastore report
+$contents = @($Ds | Sort-Object Name)
+$columnHeaders = @('Name','Storage Type','Total Size','Free Space')
+$columnProperties = @('Name','Type','CapacityMB','FreeSpaceMB')
+$Heading = &quot;Datastore Information&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	Tableoutput $Heading $columnHeaders $columnProperties $contents
+}
+
+#Insert Datastore Pie Charts
+foreach ($contents in $Ds)
+{
+$UsedSpace = $contents.CapacityMB - $contents.FreespaceMB
+$categories = @('Free Space', 'Used Space')
+$newcontents = @($contents.FreespaceMB, $usedSpace)
+$Caption = $contents.Name + &quot; Space Allocation&quot;
+if ($contents -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	InsertPie $Caption $newcontents $categories
+}
+
+} 
+
+# Send Cluster Information to Document
+$contents = @($clu | Sort-Object Name)
+$columnHeaders = @('Name','HA Enabled','HA Failover Level','DRS Enabled','DRS Mode')
+$columnProperties = @('Name', 'HAEnabled', 'HAFailoverLevel', 'DRSEnabled', 'DrsMode')
+$Heading = &quot;Cluster Information&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	Tableoutput $Heading $columnHeaders $columnProperties $contents
+}
+
+# Send ResourcePool Information to Document
+$contents = @($rp | select-object Name, MemLimitMB, CpuLimitMhz, NumCPUShares, NumMemShares | Sort-Object Name)
+$columnHeaders = @('Name', 'Memory Limit MB', 'CPU Limit Mhz', 'CPU Shares', 'MEM Shares')
+$columnProperties = @('Name', 'MemLimitMB', 'CpuLimitMhz', 'NumCPUShares', 'NumMemShares')
+$Heading = &quot;Resource Pool Information&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	Tableoutput $Heading $columnHeaders $columnProperties $contents
+}
+
+# Send Snapshot Information to Document
+$contents = @($VMs | Get-Snapshot | select-object VM, Name, Description)
+$columnHeaders = @('VM', 'Name', 'Description')
+$columnProperties = @('VM', 'Name', 'Description')
+$Heading = &quot;Snapshot Information&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	Tableoutput $Heading $columnHeaders $columnProperties $contents
+}
+
+# Send Snapshot's over 1 month old to Document
+$contents = @($VMs | Get-Snapshot | where { $_.Created -lt (get-date).addmonths(-1)} | select-object VM, Name, Description, Created)
+$columnHeaders = @('VM', 'Name', 'Description', 'Created')
+$columnProperties = @('VM', 'Name', 'Description', 'Created')
+$Heading = &quot;Snapshot's over 1 Month old&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	Tableoutput $Heading $columnHeaders $columnProperties $contents
+}
+
+#Insert Snapshot Graph
+$myCol = @()
+ForEach ($vm in $vms)
+{
+  $snapshots = Get-Snapshot -VM $vm
+  $myObj = &quot;&quot; | Select-Object Name, Value
+  $myObj.Name = $vm.name
+  $myObj.Value = ($snapshots | measure-object).count
+  $myCol += $myObj
+}
+$contents = @($myCol | Where-Object{$_.Value -gt 0} |  Sort-Object Name)
+$Stat = &quot;&quot;
+$NumToReturn = &quot;&quot;
+$Caption = &quot;Number of snapshots per VM&quot;
+if ($contents[0] -eq $null){
+	Write-Host &quot;No entries for $Heading found&quot;
+}
+else
+{
+	InsertChart $Caption $Stat $NumToReturn $contents
+}
+
+Write-Host &quot;------------------------------&quot;
+Write-Host &quot;Start Date: $date&quot;
+$enddate = get-date
+Write-Host &quot;End Date:   $enddate&quot;
+
+# Show the finished Report
+$msword.Selection.HomeKey(6)  &gt; Null
+$msWord.Visible = $true
+
+# Save the document to disk and close it
+$filename = 'C:\VMReport.doc'
+$wordDoc.SaveAs([ref]$filename)
+
+#Close the document if you are using as a scheduled task
+#$wordDoc.Close()
+
+# Exit our instance of word
+#$msWord.Application.Quit()
+
+#Email options for automated emailed report
+#$smtpServer = “localhost”
+#
+#$msg = new-object Net.Mail.MailMessage
+#$att = new-object Net.Mail.Attachment($filename)
+#$smtp = new-object Net.Mail.SmtpClient($smtpServer)
+#
+#$msg.From = “somebody@yourdomain.com”
+#$msg.To.Add(”somebody@theirdomain.com”)
+#$msg.Subject = “VMware Report”
+#$msg.Body = “Please find attached the automated VMware report”
+#$msg.Attachments.Add($att)
+#
+#$smtp.Send($msg)
+
+#Delete file if no longer needed once sent via email
+#Remove-Item $filename
+Disconnect-VIServer -Confirm:$False
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

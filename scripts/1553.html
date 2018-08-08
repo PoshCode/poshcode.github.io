@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Thell">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/1553.ps1">download</a> - <a href="//scripts/1552.md">parent</a></h3>
+<p>just a script in progress file 2</p>
+<pre><code class="language-posh">####################################################################################################
+## Script Name:     N++CR FuncGuard Module
+## Created On:      12/19/2009
+## Author:          Thell Fowler
+## File:            FuncGuard.psm1
+## Usage:           
+## Version:         0.0.1
+## Purpose:         Provides cmdlets for working with function guards in the N++CR source files:
+##                      Add-FuncGuard - Create header and source entries for function guard.
+##                      Get-FuncGuard - list available func_guards categories.
+##                      Find-FuncGuard - list file and line instances of
+##						Update-FuncGuard - update category template headers.
+##                      Enable-FuncGuard
+##                      Disable-FuncGuard
+##                      Remove-FuncGuard - Delete all entries for function guard.
+##
+## Requirements:    PowerShell Version 2
+## Last Updated:    12/19/2009
+## History:
+##                  0.0.1  12/19/2009 - Initial rendition.
+##
+####################################################################################################
+#requires -version 2.0
+Set-StrictMode -Version 2
+
+# The export function is obtained from example 7 in Export-FunctionMember
+function export {
+    param (
+        [parameter(mandatory=$true)] [validateset(&quot;function&quot;,&quot;variable&quot;)] $type,
+        [parameter(mandatory=$true)] $name,
+        [parameter(mandatory=$true)] $value
+    )
+	if ( $args -ne &quot;PSUnit&quot; ) {
+		if ($type -eq &quot;function&quot;)
+		{
+			Set-item &quot;function:script:$name&quot; $value
+			Export-ModuleMember $name
+		}
+		else
+		{
+			Set-Variable -scope Script $name $value
+			Export-ModuleMember -variable $name
+		}
+	}
+}
+
+export function Add-FuncGuard {
+	&lt;#
+	.SYNOPSIS
+		Modifies the target C++ source code for a new function guard.
+	.DESCRIPTION
+		Function guards are a N++CR debug tool created by Jocelyn Legault for debug
+		function tracing.  Add-FuncGuard generates the required source code lines to
+		for function guard definition, enable/disable control, and importing.
+	.EXAMPLE
+		PS C:\NPPCR_ROOT&gt;Add-FuncGuard -prefix &quot;NPPCR&quot; -path &quot;$NPPCR_ROOT\PowerEditor\src\MISC\Debug\&quot; `
+		&gt;&gt; -name &quot;WinMain&quot; `
+		&gt;&gt; -description &quot;Trace functions in WinMain.cpp, should not be used in other files.&quot;
+	
+		Results in the following code being added:
+			... to FuncGuards_skel.h and FuncGuards.h (if it exists):
+				// func_guard(guard_WinMain);
+				// Description:  Trace functions in WinMain.cpp, should not be used in other files.
+				// #define NPPCR_GUARD_WINMAIN
+	
+			... to FuncGuards.cpp:
+				#ifdef NPPCR_GUARD_WINMAIN
+					func_guard_enable_cat(guard_WinMain);
+				#else
+					func_guard_disable_cat(guard_WinMain);
+				#endif
+	
+			... to FuncGuardsImport.h
+				func_guard_import_cat(guard_WinMain);
+	
+	.PARAMETER Prefix
+		An all upper case string prefixing the preprocessor MACRO value.
+	.PARAMETER Path
+		Path to th function guard source files directory.
+	.PARAMETER Name
+		CamelCase_UnderscoreSpaced name of the function guard category.
+	.PARAMETER Description
+		Category notes inserted as comments to FuncGuards_skel.h &amp;&amp; FuncGuards.h
+	#&gt;
+	[CmdletBinding()]
+	param(
+		[Parameter(Position=0, Mandatory=$true)]
+		[string]
+		$Prefix = $(Throw 'Preprocessor MACRO prefix is required.')
+	,
+		[Parameter(Position=1, Mandatory=$true)]
+		[string]
+		$Path = $(Throw 'Path to required function guard source files is required.')
+	,
+		[Parameter(Position=2, Mandatory=$true)]
+		[string]
+		$Name = $(Throw 'CamelCase_UnderscoreSpaced function guard name is required.')
+	,
+		[Parameter(Position=3, Mandatory=$false)]
+		[string]
+		$Description
+	)
+	BEGIN {
+		# Parameter Validation
+		try {
+			Test-PrefixParameter -Prefix $Prefix
+			Test-PathParameter -Path $Path
+			Test-NameParameter -Name $Name
+			Get-SourceFiles -sourceType &quot;all&quot; -Path $Path
+		}
+		catch {
+			Format-ErrorRecord $_ | Write-Debug
+			throw $_
+		}
+	}
+	PROCESS {
+		# Check for pre-existence of $Name in function guard files.
+		
+		# Insert function guard statements into source files.
+	}
+	END {
+		# Report was done.
+		
+		# Clean-up
+		
+		return $true
+	}
+}
+
+function Test-PrefixParameter {
+	param([string]$Prefix)
+}
+function Test-PathParameter {
+	param([string]$Path)
+	if (! (Test-Path -Path $Path -PathType Container) ) {
+		throw (New-Object IO.DirectoryNotFoundException $Path);
+	}
+}
+function Test-NameParameter {
+	param([string]$Name)
+	$retVal=$false
+	
+	if (! ( $Name -cmatch &quot;(\p{Lu}{1}\p{Ll}+)+($|_((\p{Lu}{1}\p{Ll}+)|\d)+|\d+)+&quot; ) ) {
+		throw (New-Object System.FormatException &quot;Invalid function guard name format.&quot;)
+	}
+	
+	return $true
+}
+
+function Get-SourceFiles {
+	param([string]$sourceType,[string]$Path)
+	$SourceFiles = @{}
+
+	if ( ( $sourceType -eq &quot;all&quot; ) -or ( $sourceType -eq &quot;required&quot; ) ) {
+		$SourceFiles = (Get-RequiredFiles $Path)
+	}
+	return $SourceFiles
+}
+
+function Get-RequiredFiles {
+	param([string]$Path)
+	$RequiredSourceFiles = @{}
+
+	$TestFiles = @{
+		&quot;SkeletonHeader&quot; = (Join-Path -Path $Path -ChildPath &quot;FuncGuards_skel.h&quot;);
+		&quot;GuardSource&quot; = (Join-Path -Path $Path -ChildPath &quot;FuncGuards.cpp&quot;);
+		&quot;GuardImport&quot; = (Join-Path -Path $Path -ChildPath &quot;FuncGuardsImport.h&quot;)
+	}
+	
+	$TestFiles.keys | foreach {
+		if (Test-Path -Path $TestFiles.$_ -PathType leaf) {
+			$RequiredSourceFiles.add(&quot;$_&quot;, (Get-Item $TestFiles.$_ ))
+		} else {
+			throw (New-Object IO.FileNotFoundException $TestFiles.$_)
+		}
+	}
+
+	$TestFiles = $null
+	
+	return $RequiredSourceFiles
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

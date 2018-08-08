@@ -1,0 +1,712 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Bart Lievers">
+    <title>Robocopy Log analyser - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Robocopy Log analyser</h1>
+<h3><a href="//scripts/5777.ps1">download</a> - <a href="//scripts/5776.md">parent</a></h3>
+<p>A function to analyse Robocopy logs which are placed in a folder.
+It returns a custom PS object containing three properties:
+- filename of the CSV file where the results are writen to.
+- RC like summary of all the RC Logs.
+- The results, same data as in the CSV file.</p>
+<pre><code class="language-posh">function Analyse-RC_Log {
+    &lt;#
+    .SYNOPSIS
+        Robocopy log analyser
+    .DESCRIPTION
+        analysing the robocopy logs that are generated with the /LOG option.
+        It has two modes, anaylsing the summary of log files and analyse the full log.
+        The report is saved as a CSV file.
+        Returns an custom object containing a RC summary like property, a CSV property.
+        During script process the Culture of the script is changed to en-US for date and number interpretation / calculations
+
+        Script is based on Robocopy log analyser from http://www.chapmancentral.co.uk/cloudy/2013/02/23/parsing-robocopy-logs-in-powershell/
+    .EXAMPLE
+        &gt;Analyse-RC_Log -SourcePath d:\RC_logdir -ExcelCSV -fp -unitsize GB
+        Analyse log files in d:\RC_logdir, use a semicolon in the CSV file (conform MS Excel). Parse the complete log files and report al Bytes sizes as GB
+    .EXAMPLE
+        &gt;$Result=Analyse-RC_Log -SourcePath d:\RC_logdir -ExcelCSV -fp -unitsize GB
+	&gt;&amp; $Result.ReportFileName
+	&gt;$Result.Summary | out-gridview
+	
+	opens the CSV file and show the summary in a powershell gridview
+    .PARAMETER fp
+        File Parsing. Parse the complete file instead of the heather and footer
+    .PARAMETER SourcePath
+        Path where the Robocopy logs are saved.
+    .PARAMETER ExcelCSV
+        Use a semicolon as seperator
+    .Parameter UnitSize
+        Report al Byte sizes  in given unit size.
+    .Link
+        http://www.chapmancentral.co.uk/cloudy/2013/02/23/parsing-robocopy-logs-in-powershell/
+    .NOTES
+        File Name      : Analyse-RC_Log.ps1
+        Author         : B. Lievers
+        Prerequisite   : PowerShell V2 over Vista and upper.
+        Copyright 2015 - Bart Lievers
+    #&gt;
+    [CmdletBinding()]
+
+    param(
+	    [parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false,HelpMessage='Source Path with no trailing slash')][string]$SourcePath,
+	    [switch]$fp,
+        [Switch]$ExcelCSV,
+        [Parameter(HelpMessage='Unit size, default is Bytes when parameter is not present')][ValidateSet(&quot;B&quot;,&quot;GB&quot;,&quot;KB&quot;,&quot;MB&quot;,&quot;TB&quot;)][string]$UnitSize
+	    )
+ 
+    begin {
+        [System.Globalization.CultureInfo]$culture=[System.Globalization.CultureInfo](&quot;en-US&quot;)
+        $OldCulture = [System.Threading.Thread]::CurrentThread.CurrentCulture
+        trap 
+        {
+            [System.Threading.Thread]::CurrentThread.CurrentCulture = $OldCulture
+        }
+        [System.Threading.Thread]::CurrentThread.CurrentCulture = $culture
+        Write-Verbose (&quot;Changing Locale from &quot;+$oldCulture.Name+&quot; to &quot;+$culture.Name)
+
+        write-host &quot;Robocopy log parser. $(if($fp){&quot;Parsing file entries&quot;} else {&quot;Parsing summaries only, use -fp to parse file entries&quot;})&quot;
+ 
+        $ElapsedTime = [System.Diagnostics.Stopwatch]::StartNew()
+        $refreshrate=1 # progress counter refreshes this often when parsing files (in seconds)
+
+        #region initialize header fields
+        # These summary fields always appear in this order in a robocopy log
+        $HeaderParams = @{
+	        &quot;04|Started&quot; = &quot;date&quot;;	
+	        &quot;01|Source&quot; = &quot;string&quot;;
+	        &quot;02|Dest&quot; = &quot;string&quot;;
+	        &quot;03|Options&quot; = &quot;string&quot;;
+	        &quot;07|Dirs&quot; = &quot;counts&quot;;
+	        &quot;08|Files&quot; = &quot;counts&quot;;
+	        &quot;09|Bytes&quot; = &quot;counts&quot;;
+	        &quot;10|Times&quot; = &quot;counts&quot;;
+	        &quot;05|Ended&quot; = &quot;date&quot;
+	        #&quot;06|Duration&quot; = &quot;string&quot;
+        }
+        #-- summary fields for file tag statistics during file parsing, swich -fp
+        $fileTags=@{ 
+            &quot;01|MISMATCH&quot; = &quot;&quot;
+            &quot;02|EXTRA file&quot; = &quot;&quot;
+            &quot;03|New File&quot; = &quot;&quot;
+            &quot;04|lonely&quot; = &quot;&quot;
+            &quot;05|Newer&quot; = &quot;&quot;
+            &quot;06|Newer XN&quot; = &quot;&quot;
+            &quot;07|Older&quot; = &quot;&quot;
+            &quot;08|Older XO&quot; = &quot;&quot;
+            &quot;09|Changed&quot; = &quot;&quot;
+            &quot;10|Changed XC&quot; = &quot;&quot;
+            &quot;11|Tweaked&quot; = &quot;&quot;
+            &quot;12|Same IS&quot; = &quot;&quot;
+            &quot;13|Same&quot; = &quot;&quot;
+            &quot;14|attrib&quot; = &quot;&quot;
+            &quot;15|named&quot; = &quot;&quot;
+            &quot;16|large&quot; = &quot;&quot;
+            &quot;17|small&quot; = &quot;&quot;
+            &quot;18|too old&quot; = &quot;&quot;
+            &quot;19|too new&quot; = &quot;&quot;
+            &quot;20|New Dir&quot;= &quot;&quot;
+        }
+        #-- summary fields for directory tag statistics during file parsing, swich -fp
+        $DirTags=@{ 
+            &quot;01|MISMATCH&quot; = &quot;&quot;
+            &quot;02|Extra Dir&quot; = &quot;&quot;
+            &quot;03|New Dir&quot; = &quot;&quot;
+            &quot;04|lonely&quot; = &quot;&quot;
+            &quot;05|named&quot; = &quot;&quot;
+            &quot;06|junction&quot; = &quot;&quot;
+            &quot;07|exist&quot; = &quot;&quot;
+        } 
+
+        $ProcessCounts = @{
+	        &quot;Processed&quot; = 0;
+	        &quot;Error&quot; = 0;
+	        &quot;Incomplete&quot; = 0
+        }
+        #endregion
+
+        #-- Default the CSV delim is a comma, when using CSV for Excel a semicolon is needed as delimmiter
+        if ($ExcelCSV) { $Delim=&quot;;&quot;} else {$Delim=&quot;,&quot;}
+         #-- ASCII tab character
+        $tab=[char]9
+
+         #-- Get list of files to analyse
+        $files=get-childitem $SourcePath
+        #-- let's start writing, shall we ? 
+        $writer=new-object System.IO.StreamWriter(&quot;$(get-location)\robocopy-$(get-date -format &quot;dd-MM-yyyy_HH-mm-ss&quot;).csv&quot;)
+
+
+        #region private functions
+                                                                                                                                    
+        function Get-Tail{
+            &lt;#
+            .SYNOPSIS
+                Get tail of file
+            .EXAMPLE
+                &gt;Get-Tail $reader 20
+            .PARAMETER reader
+                an IO stream file object
+            .PARAMETER count
+                Number of rows to collect
+            #&gt;
+            Param (
+                [object]$reader, 
+                [int]$count = 10
+                )
+
+	        $lineCount = 0
+	        [long]$pos = $reader.BaseStream.Length - 1
+ 
+	        while($pos -gt 0) {
+		        $reader.BaseStream.position=$pos
+ 
+		        # 0x0D (#13) = CR
+		        # 0x0A (#10) = LF
+		        if ($reader.BaseStream.ReadByte() -eq 10) {
+			        $lineCount++
+			        if ($lineCount -ge $count) { break }
+		            }
+		        $pos--
+	            } 
+ 
+	        # tests for file shorter than requested tail
+	        if ($lineCount -lt $count -or $pos -ge $reader.BaseStream.Length - 1) {
+		        $reader.BaseStream.Position=0
+	        } else {
+		        # $reader.BaseStream.Position = $pos+1
+	        }
+ 
+	        $lines=@()
+	        while(!$reader.EndOfStream) {
+		        $lines += $reader.ReadLine()
+	        }
+	        return $lines
+        }
+ 
+        function Get-Top {
+            &lt;#
+            .SYNOPSIS
+                Get top of file
+            .EXAMPLE
+                &gt;Get-Top $reader 20
+            .PARAMETER reader
+                an IO stream file object
+            .PARAMETER count
+                Number of rows to collect
+            #&gt;
+            Param(
+                [object]$reader,
+                [int]$count = 10
+            )
+
+	        $lines=@()
+	        $lineCount = 0
+	        $reader.BaseStream.Position=0
+	        while(($linecount -lt $count) -and !$reader.EndOfStream) {
+		        $lineCount++
+		        $lines += $reader.ReadLine()		
+	        }
+	        return $lines
+        }
+ 
+        function Remove-Key{
+            &lt;#
+            .SYNOPSIS
+                Return the name without the ID
+            .EXAMPLE
+                &gt;Remove-Key -name &quot;01|example&quot;
+            .PARAMETER name
+                a string where the ID needs to be stripped
+            #&gt;
+            Param ( $name 
+            )
+	        if ( $name -match &quot;|&quot;) {
+		        return $name.split(&quot;|&quot;)[1]
+	        } else {
+		        return ( $name )
+	        }
+        }
+ 
+        function Get-Value{
+            &lt;#
+            .SYNOPSIS
+                Get the value of a RC line
+            .EXAMPLE
+                &gt;Get-Value -line &quot; filecount : 35555&quot; -variable &quot;Filecount&quot;
+                Returns 35555
+            .PARAMETER line
+                A RC log string
+            .PARAMETER variable
+                The variable that needs to be extracted
+            #&gt;
+            Param(
+                $line,
+                $variable
+            )
+	        if ($line -like &quot;*$variable*&quot; -and $line -like &quot;* : *&quot; ) {
+		        $result = $line.substring( $line.IndexOf(&quot;:&quot;)+1 )
+		        return $result 
+	        } else {
+		        return $null
+	        }
+        }
+ 
+        function UnBodge-Date{
+            &lt;#
+            .SYNOPSIS
+                Convert Robocopy date to a usable format
+            .EXAMPLE
+                &gt;UnBodge-Date -dt &quot;Sat Feb 16 00:16:49 2013&quot;
+                Returns 16-02-2013 00:16:49 in Locale format
+            .PARAMETER dt
+            #&gt;
+            Param(
+                $dt
+            )
+	        # Fixes RoboCopy botched date-times in format Sat Feb 16 00:16:49 2013
+	        if ( $dt -match &quot;.{3} .{3} \d{2} \d{2}:\d{2}:\d{2} \d{4}&quot; ) {
+		        $dt=$dt.split(&quot; &quot;)
+                $dt=$dt[2]+&quot;/&quot;+$dt[1]+&quot;/&quot;+$dt[4],$dt[3]
+		        $dt -join &quot; &quot; | Out-Null
+	        }
+	        if ( $dt -as [DateTime] ) {
+                return(get-date $dt -format &quot;dd/MM/yyy HH:mm:ss&quot;)
+	        } else {
+		        return $null
+	        }
+        }
+ 
+        function Unpack-Params{
+            &lt;#
+            .SYNOPSIS
+	            Unpacks file count bloc in the format
+	             Dirs :      1827         0      1827         0         0         0
+	            Files :      9791         0      9791         0         0         0
+	            Bytes :  165.24 m         0  165.24 m         0         0         0
+	            Times :   1:11:23   0:00:00                       0:00:00   1:11:23
+	            Parameter name already removed
+            .EXAMPLE
+                &gt;UnBodge-Date -dt &quot;Sat Feb 16 00:16:49 2013&quot;
+                Returns 16-02-2013 00:16:49 in Locale format
+            .PARAMETER params
+                
+            #&gt;
+            Param(
+                $params
+            )
+ 
+	        if ( $params.length -ge 58 ) {
+		        $params = $params.ToCharArray()
+		        $result=(0..5)
+		        for ( $i = 0; $i -le 5; $i++ ) {
+			        $result[$i]=$($params[$($i*10 + 1) .. $($i*10 + 9)] -join &quot;&quot;).trim()
+		        }
+		        #$result=$result -join &quot;,&quot;
+                $result=$result -join $Delim
+	        } else {
+		        #$result = &quot;,,,,,&quot;
+                $result=$Delim+$Delim+$Delim+$Delim+$Delim
+	        }
+	        return $result
+        }
+    #endregion        
+    } #-- end of Begin
+    
+    Process{
+    $sourcecount = 0
+        $targetcount = 1
+
+        #region construct the header line of the CSV
+    $writer.Write(&quot;File&quot;)
+    $fields=&quot;File&quot;
+    foreach ( $HeaderParam in $HeaderParams.GetEnumerator() | Sort-Object Name ) {
+	    if ( $HeaderParam.value -eq &quot;counts&quot; ) {
+            $tmp=&quot;~ Total&quot;+$Delim+&quot;~ Copied&quot;+$Delim+&quot;~ Skipped&quot;+$Delim+&quot;~ Mismatch&quot;+$Delim+&quot;~ Failed&quot;+$Delim+&quot;~ Extras&quot;
+            if ((Remove-Key $headerparam.name) -match &quot;Bytes&quot;) {
+                #-- if column header is a Bytes Column then match it to the unitsize
+                if ($UnitSize -and $UnitSize -ne &quot;B&quot;) {
+                    #-- change the Bytes header according to the unitsize, Unitsize is GB ==&gt; header is GBytes
+		            $tmp=$tmp.replace(&quot;~&quot;,$UnitSize.Substring(0,1)+ &quot;$(Remove-Key $headerparam.name)&quot;)
+                } else {
+                    $tmp=$tmp.replace(&quot;~&quot;,&quot;$(Remove-Key $headerparam.name)&quot;)
+                }
+            } else {
+		        $tmp=$tmp.replace(&quot;~&quot;,&quot;$(Remove-Key $headerparam.name)&quot;)
+            }
+            $fields=$fields+$Delim+&quot;$($tmp)&quot;
+		    $writer.write($Delim+&quot;$($tmp)&quot;)
+	    } else {
+            $writer.write($Delim+&quot;$(Remove-Key $HeaderParam.name)&quot;)
+            $fields=$fields+$Delim+&quot;$(Remove-Key $HeaderParam.name)&quot;
+	    }
+    }
+ 
+    if($fp){
+        $writer.write($Delim+&quot;Scanned&quot;+$Delim+&quot;Newest&quot;+$Delim+&quot;Oldest&quot;)
+        $fields=$fields+$Delim+&quot;Scanned&quot;+$Delim+&quot;Newest&quot;+$Delim+&quot;Oldest&quot;
+        foreach ($fileTag in $filetags.GetEnumerator() | Sort-Object Name ) {
+            $writer.write($Delim+$filetag.name.split(&quot;|&quot;)[1])
+             $fields=$fields+$delim+$filetag.name.split(&quot;|&quot;)[1]
+                }
+        foreach ($DirTag in $Dirtags.GetEnumerator() | Sort-Object Name ) {
+            $writer.write($Delim+&quot;DIR &quot;+$DirTag.name.split(&quot;|&quot;)[1])
+             $fields=$fields+$delim+&quot;DIR &quot;+$DirTag.name.split(&quot;|&quot;)[1]
+        }
+    }
+     # EOL
+    $writer.WriteLine()
+    #endregion
+
+        $table=$fields
+        $filecount=0
+ 
+        # Enumerate the files
+        foreach ($file in $files) {  
+	        $filecount++
+            write-host &quot;$filecount/$($files.count) $($file.name) ($($file.length) bytes)&quot;
+	        $results=@{}
+            #-- open the file
+	        $Stream = $file.Open([System.IO.FileMode]::Open, 
+                           [System.IO.FileAccess]::Read, 
+                            [System.IO.FileShare]::ReadWrite) 
+	        $reader = New-Object System.IO.StreamReader($Stream) 
+ 
+	        $HeaderFooter = Get-Top $reader 16
+ 
+	        if ( $HeaderFooter -match &quot;ROBOCOPY     ::     Robust File Copy for Windows&quot; ) {
+                #-- file has valid header
+		        if ( $HeaderFooter -match &quot;Files : &quot; ) {
+			        $HeaderFooter = $HeaderFooter -notmatch &quot;Files : &quot;
+		        }
+ 
+		        [long]$ReaderEndHeader=$reader.BaseStream.position
+            
+		        $Footer = Get-Tail $reader 16
+                #check footer of file
+		        $ErrorFooter = $Footer -match &quot;ERROR \d \(0x000000\d\d\) Accessing Source Directory&quot;
+		        if ($ErrorFooter) {
+			        $ProcessCounts[&quot;Error&quot;]++
+			        write-host -foregroundcolor red &quot;`t $ErrorFooter&quot;
+		        } elseif ( $footer -match &quot;---------------&quot; ) {
+			        $ProcessCounts[&quot;Processed&quot;]++
+			        $i=$Footer.count
+			        while ( !($Footer[$i] -like &quot;*----------------------*&quot;) -or $i -lt 1 ) { $i-- }
+			        $Footer=$Footer[$i..$Footer.Count]
+			        $HeaderFooter+=$Footer
+		        } else {
+			        $ProcessCounts[&quot;Incomplete&quot;]++
+			        #write-host -foregroundcolor yellow &quot;`t Log file $file is missing the footer and may be incomplete&quot;
+                    write-warning &quot;`t Log file $file is missing the footer and may be incomplete&quot;
+		        }
+ 
+		        foreach ( $HeaderParam in $headerparams.GetEnumerator() | Sort-Object Name ) {
+			        $name = &quot;$(Remove-Key $HeaderParam.Name)&quot;
+			        $tmp = Get-Value $($HeaderFooter -match &quot;$name : &quot;) $name
+			        if ( $tmp -ne &quot;&quot; -and $tmp -ne $null ) {
+				        switch ( $HeaderParam.value ) {
+					        &quot;date&quot; { $results[$name]=UnBodge-Date $tmp.trim() }
+					        &quot;counts&quot; { $results[$name]=Unpack-Params $tmp }
+					        &quot;string&quot; { $results[$name] = &quot;&quot;&quot;$($tmp.trim())&quot;&quot;&quot; }		
+					        default { $results[$name] = $tmp.trim() }		
+				        }
+			        }
+                    #-- convert bytes statistics to numbers
+                    if ($name -eq &quot;Bytes&quot; -and ($results[$name] -ne $null)) {
+                        $tmp=@()     
+                        $results[$name].split($Delim) | % {
+                            #-- convert value to MBytes 
+                            $Bytes=$_
+                            if ($Bytes -match &quot;m|g|t|k&quot;) {
+                                switch ($Bytes.split(&quot; &quot;)[1]) {                
+                                    &quot;m&quot; {$conv=1MB*$Bytes.replace(&quot; m&quot;,&quot;MB&quot;)/1MB}
+                                    &quot;k&quot; {$conv=1KB*$Bytes.replace(&quot; k&quot;,&quot;KB&quot;)/1KB}
+                                    &quot;g&quot; {$conv=1GB*$Bytes.replace(&quot; g&quot;,&quot;GB&quot;)/1GB}
+                                    &quot;t&quot; {$conv=1TB*$Bytes.replace(&quot; t&quot;,&quot;TB&quot;)/1TB}
+                                }
+                            } else { 
+                                #-- copy original value, no unit sign detected
+                                $conv = $Bytes
+                            }
+                            #-- convert size 
+                            switch ($UnitSize) {
+                                &quot;MB&quot; {$tmp+=($conv/1MB)}
+                                &quot;KB&quot; {$tmp+=($conv/1KB)}
+                                &quot;GB&quot; {$tmp+=($conv/1GB)}
+                                &quot;TB&quot; {$tmp+=($conv/1TB)}
+                                default {$tmp+=($conv)} #-- no conversion needed. Size is in Bytes
+                            }              
+                        }
+                        #-- rebuild string
+                        $results[$name]=$tmp -join $delim                    
+                    } #-- end of converting bytes statistics          
+		        } #-- end of parsing headerparam fields
+ 
+
+		        if ( $fp ) {
+                    #-- parse the complete file
+			        write-host &quot;Parsing $($reader.BaseStream.Length) bytes&quot; -NoNewLine
+ 
+			        # Now go through the file line by line
+                    $FT_counters=@{}
+                    $DT_counters=@{}
+                    $FileTags.GetEnumerator() | select name | %{ $FT_counters.add($_.name.split(&quot;|&quot;)[1],0)}
+                    $DirTags.GetEnumerator() | select name | %{ $DT_counters.add($_.name.split(&quot;|&quot;)[1],0)}
+			        $reader.BaseStream.Position=0
+			        $filesdone = $false
+			        $linenumber=0
+			        $FileResults=@{}
+			        $newest=[datetime]&quot;1/1/1900&quot;
+                    $oldest=Get-Date
+			        $linecount++
+			        $firsttick=$elapsedtime.elapsed.TotalSeconds
+			        $tick=$firsttick+$refreshrate
+			        $LastLineLength=1
+ 
+			        try {
+				        do {
+					        $line = $reader.ReadLine()
+					        $linenumber++
+					        if (($line -eq &quot;-------------------------------------------------------------------------------&quot; -and $linenumber -gt 16)  ) { 
+						        # line is end of job
+						        $filesdone=$true
+					        } elseif ($linenumber -gt 16 -and $line -gt &quot;&quot; ) {
+                                #-- split line according to TAB
+						        $buckets=$line.split($tab)
+
+						        if ( $buckets.count -gt 3 ) {
+                                    #-- line contains file information
+							        $status=$buckets[1].trim()
+							        $FileResults[&quot;$status&quot;]++
+                                    #-- File tag counters
+                                    if ($status -ceq &quot;Newer&quot;) { $FT_counters[&quot;$status&quot; +&quot; XN&quot;]++ }
+                                    elseif ($status -ceq &quot;Older&quot;) {  $FT_counters[&quot;$status&quot; +&quot; XO&quot;]++ } 
+                                    elseif ($status -ceq &quot;Changed&quot;) {  $FT_counters[&quot;$status&quot; +&quot; XC&quot;]++ }
+                                    elseif ($status -ceq &quot;same&quot;) {  $FT_counters[&quot;$status&quot; +&quot; IS&quot;]++ }
+                                    else {$FT_counters[&quot;$status&quot;]++}
+
+                                    #-- Get Timestamp from file
+							        $SizeDateTime=$buckets[3].trim()
+							        if ($sizedatetime.length -gt 19 ) {
+								        $DateTime = $sizedatetime.substring($sizedatetime.length -19)
+								        if ( $DateTime -as [DateTime] ){
+									        $DateTimeValue=[datetime]$DateTime
+									        if ( $DateTimeValue -gt $newest ) { $newest = $DateTimeValue }
+									        if ( $DateTimeValue -lt $oldest ) { $oldest = $DateTimeValue }
+								        }
+							        }
+						        } elseif ($buckets.count -eq 3) {
+                                    #-- line contains directory information
+                                    #-- Directory tag counters
+                                    $status=$buckets[1].Substring(0,10).trim()
+                                    if ($status.length -gt 0){
+                                        $DT_counters[&quot;$status&quot;]++
+                                    } else {
+                                        $DT_counters[&quot;Exist&quot;]++
+                                    }
+                                }
+					        }
+
+                            #-- progress indicator 
+					        if ( $elapsedtime.elapsed.TotalSeconds -gt $tick ) {
+						        $line=$line.Trim()
+						        if ( $line.Length -gt 48 ) {
+							        $line=&quot;[...]&quot;+$line.substring($line.Length-48)
+						        }
+						        $line=&quot;$([char]13)Parsing &gt; $($linenumber) ($(($reader.BaseStream.Position/$reader.BaseStream.length).tostring(&quot;P1&quot;))) - $line&quot;
+						        write-host $line.PadRight($LastLineLength) -NoNewLine
+						        $LastLineLength = $line.length
+						        $tick=$tick+$refreshrate						
+					        }
+ 
+				        } until ($filesdone -or $reader.endofstream)
+			        }
+			        finally {
+				        $reader.Close()
+			        }
+ 
+			        $line=$($([string][char]13)).padright($lastlinelength)+$([char]13)
+			        write-host $line -NoNewLine
+		        }
+
+                #-- write results
+		        $writer.Write(&quot;`&quot;$file`&quot;&quot;)
+                $line=&quot;`&quot;$file`&quot;&quot;
+                #-- write values
+		        foreach ( $HeaderParam in $HeaderParams.GetEnumerator() | Sort-Object Name ) {
+			        $name = &quot;$(Remove-Key $HeaderParam.Name)&quot;
+			        if ( $results[$name] ) {
+                        $writer.Write(&quot;$Delim$($results[$name])&quot;)
+                        $line=$line+&quot;$Delim$($results[$name])&quot;
+			        } else {
+				        if ( $ErrorFooter ) {
+					        #-- placeholder
+				        } elseif ( $HeaderParam.Value -eq &quot;counts&quot; ) {
+                            #-- write summary counters
+                            $writer.Write($Delim+$Delim+$Delim+$Delim+$Delim+$Delim)
+                            $line=$line+&quot;$Delim$($results[$name])&quot;
+				        } else {
+					        $writer.Write($Delim) 
+                            $line=$line+&quot;$Delim$($results[$name])&quot;
+				        }
+			        }
+		        }
+ 
+		        if ( $ErrorFooter ) {
+			        $tmp = $($ErrorFooter -join &quot;&quot;).substring(20)
+                    $tmp=$tmp.substring(0,$tmp.indexof(&quot;)&quot;)+1)+$Delim+$tmp
+			        $writer.write($delim+$delim+&quot;$tmp&quot;)
+                    $line=$line+&quot;$Delim$($results[$name])&quot;
+		        } elseif ( $fp ) {
+                    #-- write values from file parsing		
+			        $writer.write($delim+&quot;$LineCount&quot;+$delim+&quot;$($newest.ToString('dd/MM/yyyy hh:mm:ss'))&quot;+$delim+&quot;$($oldest.ToString('dd/MM/yyyy hh:mm:ss'))&quot;)		
+                    $line=$line+&quot;$Delim$($results[$name])&quot;
+                    #-- write File tag counters	
+                    foreach ($fileTag in $filetags.GetEnumerator() | Sort-Object Name ) {
+                    $writer.write($delim+&quot;$($FT_counters[$Filetag.name.split(&quot;|&quot;)[1]])&quot;)
+                    $line=$line+$delim+$($FT_counters[$Filetag.name.split(&quot;|&quot;)[1]])
+                    }
+                    #-- write directory tag counters
+                    foreach ($DirTag in $DirTags.GetEnumerator() | Sort-Object Name ) {
+                    $writer.write($delim+&quot;$($DT_counters[$dirtag.name.split(&quot;|&quot;)[1]])&quot;)
+                    $line=$line+$delim+$($dT_counters[$DirTag.name.split(&quot;|&quot;)[1]])
+                    }
+		        }
+                #-- EOL
+		        $writer.WriteLine()
+                $table=$table+&quot;`n&quot;+$line
+	        } else {
+                #-- file is not a RoboCopy log file
+		        #write-host -foregroundcolor darkgray &quot;$($file.name) is not recognised as a RoboCopy log file&quot;
+                write-warning &quot;$($file.name) is not recognised as a RoboCopy log file&quot;
+	        }
+        }
+    } #- -end of Process
+
+    End{
+        #-- write and output results
+        write-host &quot;$filecount files scanned in $($elapsedtime.elapsed.tostring()), $($ProcessCounts[&quot;Processed&quot;]) complete, $($ProcessCounts[&quot;Error&quot;]) have errors, $($ProcessCounts[&quot;Incomplete&quot;]) incomplete&quot;
+        write-host  &quot;Results written to $($writer.basestream.name)&quot;
+        $CSVFile=$writer.basestream.name
+        $writer.close() #-- yes, we are done writing
+        #-- create output object, containing name of CSV file and Report object
+        $Output=New-Object -TypeName psobject -Property @{ReportFileName=$CSVFile
+                                                          Report=ConvertFrom-Csv -Delimiter $Delim -InputObject $table
+                                                          Summary=@()}
+
+        #-- summize, build a Robocopy like Summary
+        $Types=@(&quot;Dirs&quot;,&quot;Files&quot;,(&quot;Bytes&quot;.replace(&quot;B&quot;,$SizeUnit)),&quot;Times&quot;,&quot;Speed&quot;)
+        $types | % {
+            $row= &quot;&quot; | select  Type,Total,Copied,Skipped,Mismatch,FAILED,Extras
+            $row.type=$_
+            if ($row.type -ilike &quot;Times&quot;) { 
+                #-- calculate times
+                $Output.Report | %{
+                    if ($_.ended.length -gt 0){
+                        #-- only use data from complete RC logs
+                        $row.total=$row.total+[timespan]$_.&quot;Times Total&quot;
+                        $row.Failed=$row.Failed+[timespan]$_.&quot;Times Failed&quot;
+                        $row.Copied=$row.Copied+[timespan]$_.&quot;Times Copied&quot;
+                        $row.Extras=$row.Extras+[timespan]$_.&quot;Times Extras&quot;   
+                    } else {
+                        Write-Verbose (&quot;RC log &quot;+$_.file+&quot; skipped for summary calculation. Log file is not complete.&quot;)
+                    }     
+                }
+            } elseif ($row.type -ilike &quot;Speed&quot;) {
+                #-- Calculate speed
+                $Duration=0
+                $output.Report | %{
+                        if ($_.ended.length -gt 0){
+                            #-- only use data from complete RC logs
+                            $Duration=$Duration+[timespan]$_.&quot;Times Copied&quot;
+                        }
+                    }
+                $row.Copied=&quot;{0:N1}&quot; -F ((($output.report | Measure-Object -Property ((&quot;Bytes&quot;.replace(&quot;B&quot;,$SizeUnit))+&quot; Copied&quot;) -Sum).sum) / $Duration.seconds)
+            } else {
+                #-calculate counters
+                $row.Total=&quot;{0:N1}&quot; -f ($output.report | Measure-Object -Property ($row.type+&quot; Total&quot;) -Sum).sum
+                $row.Copied=&quot;{0:N1}&quot; -f($output.report | Measure-Object -Property ($row.type+&quot; Copied&quot;) -Sum).sum
+                $row.Skipped=&quot;{0:N1}&quot; -f($output.report | Measure-Object -Property ($row.type+&quot; Skipped&quot;) -Sum).sum
+                $row.Mismatch=&quot;{0:N1}&quot; -f($output.report | Measure-Object -Property ($row.type+&quot; Mismatch&quot;) -Sum).sum
+                $row.Failed=&quot;{0:N1}&quot; -f($output.report | Measure-Object -Property ($row.type+&quot; Failed&quot;) -Sum).sum
+                $row.Extras=&quot;{0:N1}&quot; -f($output.report | Measure-Object -Property ($row.type+&quot; Extras&quot;) -Sum).sum
+            }
+            $Output.Summary+=$row
+        }
+        [System.Threading.Thread]::CurrentThread.CurrentCulture = $OldCulture
+        Write-Verbose (&quot;Changed Locale back to &quot;+$oldCulture.Name)
+        return($output) #-- done, fini, finaly....
+    } #-- end of End
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

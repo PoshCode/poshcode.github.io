@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Assembly Explorer - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Assembly Explorer</h1>
+<h3><a href="//scripts/4608.ps1">download</a> - <a href="//scripts/4607.md">parent</a></h3>
+<p>Displays detailed information about loaded assemblies and available static methods of classes. By default members pane is hidden, to activate it you need to press Ctrl+M. Also you can load third party assemblies for explore them. Please send me feedbacks (of corse, if you wish).</p>
+<pre><code class="language-posh">function AssembliesTree {
+  $tvAssem.Nodes.Clear()
+  
+  [AppDomain]::CurrentDomain.GetAssemblies() | % {
+    $nod = New-Object Windows.Forms.TreeNode
+    $nod.Text = $_.GetName().Name
+    $nod.Tag = $_
+    
+    $tvAssem.Nodes.Add($nod)
+    $nod.Nodes.Add(&quot;&lt;NULL&gt;&quot;)
+  }
+}
+
+$tvAssem_BeforeExpand= {
+  $_.Node.Nodes.Clear()
+  
+  foreach ($t in $_.Node.Tag.GetTypes()) {
+    if ($t.IsPublic) {
+      $new = $_.Node.Nodes.Add($t.FullName)
+      $new.Tag = $t
+    }
+  }
+}
+
+$tvAssem_BeforeSelect= {
+  $lstLst1.Items.Clear()
+  $lstlst2.Items.Clear()
+  $sbLabel.Text = [String]::Empty
+
+  foreach ($p in $_.Node.Tag.PSObject.Properties) {
+    $itm = $lstLst1.Items.Add($p.Name)
+    
+    switch (($p.Value -ne $null)) {
+      $true {
+        $itm.SubItems.Add($p.Value.ToString())
+        
+        switch ($p.Value) {
+          $true {$itm.ForeColor = &quot;Blue&quot;}
+          $false {$itm.ForeColor = &quot;Crimson&quot;}
+        }
+      }
+      default {
+        $itm.ForeColor = &quot;Gray&quot;
+        $itm.SubItems.Add(&quot;&lt;NULL&gt;&quot;)
+      }
+    }
+  }
+
+  try {
+    $_.Node.Tag -as [Type] | gm -ea 0 -s -fo | % {
+      $itm = $lstLst2.Items.Add($_.Name)
+      $itm.SubItems.Add($_.MemberType.ToString())
+      $itm.SubItems.Add($_.Definition)
+    }
+  }
+  catch {}
+
+  $sbLabel.Text = $_.Node.Tag
+}
+
+$mnuLoad_Click= {
+  (New-Object Windows.Forms.OpenFileDialog) | % {
+    $_.InitialDirectory = [Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
+    $_.Filter = &quot;PE Files (*.dll)|*.dll&quot;
+    
+    if ($_.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+      [void][Reflection.Assembly]::Load(([IO.File]::ReadAllBytes($_.FileName)))
+    }
+  }
+  AssembliesTree
+}
+
+$mnuStrp_Click= {
+  $toggle =! $mnuStrp.Checked
+  $mnuStrp.Checked = $toggle
+  $sbStrip.Visible = $toggle
+}
+
+$mnuMems_Click= {
+  $toggle =! $mnuMems.Checked
+  $mnuMems.Checked = $toggle
+  $scSplt2.Panel2Collapsed =! $toggle
+}
+
+function frmMain_Show {
+  Add-Type -Assembly System.Windows.Forms
+  [Windows.Forms.Application]::EnableVisualStyles()
+  
+  $ico = [Drawing.Icon]::ExtractAssociatedIcon(($PSHome + '\powershell.exe'))
+  
+  $frmMain = New-Object Windows.Forms.Form
+  $mnuMain = New-Object Windows.Forms.MenuStrip
+  $mnuFile = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuLoad = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuNull = New-Object Windows.Forms.ToolStripSeparator
+  $mnuExit = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuView = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuStrp = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuMems = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuHelp = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuInfo = New-Object Windows.Forms.ToolStripMenuItem
+  $scSplt1 = New-Object Windows.Forms.SplitContainer
+  $tvAssem = New-Object Windows.Forms.TreeView
+  $scSplt2 = New-Object Windows.Forms.SplitContainer
+  $lstLst1 = New-Object Windows.Forms.ListView
+  $chCol_1 = New-Object Windows.Forms.ColumnHeader
+  $chCol_2 = New-Object Windows.Forms.ColumnHeader
+  $lstLst2 = New-Object Windows.Forms.ListView
+  $chCol_3 = New-Object Windows.Forms.ColumnHeader
+  $chCol_4 = New-Object Windows.Forms.ColumnHeader
+  $chCol_5 = New-Object Windows.Forms.ColumnHeader
+  $sbStrip = New-Object Windows.Forms.StatusStrip
+  $sbLabel = New-Object Windows.Forms.ToolStripStatusLabel
+  #
+  #mnuMain
+  #
+  $mnuMain.Items.AddRange(@($mnuFile, $mnuView, $mnuHelp))
+  #
+  #mnuFile
+  #
+  $mnuFile.DropDownItems.AddRange(@($mnuLoad, $mnuNull, $mnuExit))
+  $mnuFile.Text = &quot;&amp;File&quot;
+  #
+  #mnuLoad
+  #
+  $mnuLoad.ShortcutKeys = &quot;Control&quot;, &quot;O&quot;
+  $mnuLoad.Text = &quot;&amp;Load Assembly&quot;
+  $mnuLoad.Add_Click($mnuLoad_Click)
+  #
+  #mnuExit
+  #
+  $mnuExit.ShortcutKeys = &quot;Control&quot;, &quot;X&quot;
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click({$frmMain.Close()})
+  #
+  #mnuView
+  #
+  $mnuView.DropDownItems.AddRange(@($mnuStrp, $mnuMems))
+  $mnuView.Text = &quot;&amp;View&quot;
+  #
+  #mnuStrp
+  #
+  $mnuStrp.Checked = $true
+  $mnuStrp.Text = &quot;&amp;Status Bar Toggle&quot;
+  $mnuStrp.Add_Click($mnuStrp_Click)
+  #
+  #mnuMems
+  #
+  $mnuMems.ShortcutKeys = &quot;Control&quot;, &quot;M&quot;
+  $mnuMems.Text = &quot;&amp;Members Pane&quot;
+  $mnuMems.Add_Click($mnuMems_Click)
+  #
+  #mnuHelp
+  #
+  $mnuHelp.DropDownItems.AddRange(@($mnuInfo))
+  $mnuHelp.Text = &quot;&amp;Help&quot;
+  #
+  #mnuInfo
+  #
+  $mnuInfo.Text = &quot;About...&quot;
+  $mnuInfo.Add_Click({frmInfo_Show})
+  #
+  #scSplt1
+  #
+  $scSplt1.Dock = &quot;Fill&quot;
+  $scSplt1.Panel1.Controls.Add($tvAssem)
+  $scSplt1.Panel2.Controls.Add($scSplt2)
+  $scSplt1.SplitterWidth = 1
+  #
+  #tvAssem
+  #
+  $tvAssem.Dock = &quot;Fill&quot;
+  $tvAssem.Sorted = $true
+  $tvAssem.Add_BeforeExpand($tvAssem_BeforeExpand)
+  $tvAssem.Add_BeforeSelect($tvAssem_BeforeSelect)
+  #
+  #scSplt2
+  #
+  $scSplt2.Dock = &quot;Fill&quot;
+  $scSplt2.Panel1.Controls.Add($lstLst1)
+  $scSplt2.Panel2.Controls.Add($lstLst2)
+  $scSplt2.Panel2Collapsed = $true
+  $scSplt2.Orientation = &quot;Horizontal&quot;
+  $scSplt2.SplitterDistance = 45
+  $scSplt2.SplitterWidth = 1
+  #
+  #lstLst1
+  #
+  $lstLst1.Columns.AddRange(@($chCol_1, $chCol_2))
+  $lstLst1.Dock = &quot;Fill&quot;
+  $lstLst1.FullRowSelect = $true
+  $lstLst1.MultiSelect = $false
+  $lstLst1.ShowItemToolTips = $true
+  $lstLst1.Sorting = &quot;Ascending&quot;
+  $lstLst1.View = &quot;Details&quot;
+  #
+  #chCol_1
+  #
+  $chCol_1.Text = &quot;Name&quot;
+  $chCol_1.Width = 205
+  #
+  #chCol_2
+  #
+  $chCol_2.Text = &quot;Property&quot;
+  $chCol_2.Width = 307
+  #
+  #lstLst2
+  #
+  $lstLst2.Columns.AddRange(@($chCol_3, $chCol_4, $chCol_5))
+  $lstLst2.Dock = &quot;Fill&quot;
+  $lstLst2.FullRowSelect = $true
+  $lstLst2.MultiSelect = $false
+  $lstLst2.ShowItemToolTips = $true
+  $lstLst2.View = &quot;Details&quot;
+  #
+  #chCol_3
+  #
+  $chCol_3.Text = &quot;Name&quot;
+  $chCol_3.Width = 130
+  #
+  #chCol_4
+  #
+  $chCol_4.Text = &quot;Member Type&quot;
+  $chCol_4.Width = 90
+  #
+  #chCol_5
+  #
+  $chCol_5.Text = &quot;Definition&quot;
+  $chCol_5.Width = 292
+  #
+  #sbStrip
+  #
+  $sbStrip.Items.AddRange(@($sbLabel))
+  $sbStrip.SizingGrip = $false
+  #
+  #sbLabel
+  #
+  $sbLabel.AutoSize = $true
+  #
+  #frmMain
+  #
+  $frmMain.ClientSize = New-Object Drawing.Size(800, 600)
+  $frmMain.Controls.AddRange(@($scSplt1, $sbStrip, $mnuMain))
+  $frmMain.FormBorderStyle = &quot;FixedSingle&quot;
+  $frmMain.Icon = $ico
+  $frmMain.StartPosition = &quot;CenterScreen&quot;
+  $frmMain.Text = &quot;Assembly Explorer&quot;
+  $frmMain.Add_Load({AssembliesTree})
+  
+  [void]$frmMain.ShowDialog()
+}
+
+function frmInfo_Show {
+  $frmInfo = New-Object Windows.Forms.Form
+  $pbImage = New-Object Windows.Forms.PictureBox
+  $lblName = New-Object Windows.Forms.Label
+  $lblCopy = New-Object Windows.Forms.Label
+  $btnExit = New-Object Windows.Forms.Button
+  #
+  #pbImage
+  #
+  $pbImage.Image = $ico.ToBitmap()
+  $pbImage.Location = New-Object Drawing.Point(16, 16)
+  $pbImage.Size = New-Object Drawing.Size(32, 32)
+  $pbImage.SizeMode = &quot;StretchImage&quot;
+  #
+  #lblName
+  #
+  $lblName.Font = New-Object Drawing.Font(&quot;Microsoft Sans Serif&quot;, 9, [Drawing.FontStyle]::Bold)
+  $lblName.Location = New-Object Drawing.Point(53, 19)
+  $lblName.Size = New-Object Drawing.Size(360, 18)
+  $lblName.Text = &quot;Assembly Explorer v2.03&quot;
+  #
+  #lblCopy
+  #
+  $lblCopy.Location = New-Object Drawing.Point(67, 37)
+  $lblCopy.Size = New-Object Drawing.Size(360, 23)
+  $lblCopy.Text = &quot;(C) 2010-2013 greg zakharov gregzakh@gmail.com&quot;
+  #
+  #btnExit
+  #
+  $btnExit.Location = New-Object Drawing.Point(135, 67)
+  $btnExit.Text = &quot;OK&quot;
+  #
+  #frmInfo
+  #
+  $frmInfo.AcceptButton = $btnExit
+  $frmInfo.CancelButton = $btnExit
+  $frmInfo.ClientSize = New-Object Drawing.Size(350, 110)
+  $frmInfo.ControlBox = $false
+  $frmInfo.Controls.AddRange(@($pbImage, $lblName, $lblCopy, $btnExit))
+  $frmInfo.ShowInTaskBar = $false
+  $frmInfo.StartPosition = &quot;CenterParent&quot;
+  $frmInfo.Text = &quot;About...&quot;
+  $frmInfo.Add_Load($frmInfo_Load)
+
+  [void]$frmInfo.ShowDialog()
+}
+
+frmMain_Show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="james">
+    <title>PowerBot 2.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PowerBot 2.0</h1>
+<h3><a href="//scripts/2317.asp">download</a> - <a href="//scripts/2055.md">parent</a></h3>
+<p>PowerBot is my IRC bot written in PowerShell script using &quot;SmartIrc4Net&quot;:http://smartirc4net.meebey.net/  There's a bit more to it than this, but this is the basic script, and all you have to do is add your own commands!  Of course, you could also add your own additional message handlers and make a chatter-bot or whatever you like. Please share your mods back here!</p>
+<pre><code class="language-asp">## PowerBot 2.0
+## A simple framework to get you started writing your own IRC bots in PowerShell
+####################################################################################################
+## Requires Meebey.SmartIrc4net.dll to be in your ...\WindowsPowerShell\Libraries\
+## You can get Meebey.SmartIrc4net.dll from 
+## http://voxel.dl.sourceforge.net/sourceforge/smartirc4net/SmartIrc4net-0.4.0.bin.tar.bz2
+####################################################################################################
+## Add-Type -path $ProfileDir\Libraries\Meebey.SmartIrc4net.dll
+$null = [Reflection.Assembly]::LoadFrom(&quot;$ProfileDir\Libraries\Meebey.SmartIrc4net.dll&quot;)
+
+function Start-PowerBot {
+PARAM( $server = &quot;irc.freenode.net&quot;, [string[]]$channels = @(&quot;#PowerShell&quot;), [string[]]$nick     = @(Read-Host 'You must provide a nickname'), [string]$password, $realname = &quot;PowerShell Bot&quot;, $port               = 6667)
+  
+   if(!$global:irc) { 
+      $global:irc = New-Object Meebey.SmartIrc4net.IrcClient
+      $irc.ActiveChannelSyncing = $true # $irc will track channels for us
+      # $irc.Encoding = [Text.Encoding]::UTF8
+      # $irc.Add_OnError( {Write-Error $_.ErrorMessage} )
+      $irc.Add_OnQueryMessage( {PrivateMessage} )
+      $irc.Add_OnChannelMessage( {ChannelMessage} )
+   }
+   
+   $irc.Connect($server, $port)
+   $irc.Login($nick, $realname, 0, $nick, $password)
+   ## $channels | % { $irc.RfcJoin( $_ ) }
+   foreach($channel in $channels) { $irc.RfcJoin( $channel ) }
+   Resume-PowerBot # Shortcut so starting this thing up only takes one command
+}
+
+## Note that PowerBot stops listening if you press a key ...
+## You'll have to re-run Resume-Powerbot to get him to listen again
+function Resume-PowerBot {
+   while(!$Host.UI.RawUI.KeyAvailable) { $irc.ListenOnce($false) }
+}
+
+function Stop-PowerBot {
+   $irc.RfcQuit(&quot;If people listened to themselves more often, they would talk less.&quot;)
+   $irc.Disconnect()
+}
+
+####################################################################################################
+## Event Handlers
+####################################################################################################
+## Event handlers in powershell have TWO automatic variables: $This and $_
+##   In the case of SmartIrc4Net:
+##   $This  - usually the connection, and such ...
+##   $_     - the IrcEventArgs, which just has the Data member:
+##
+
+function PrivateMessage { 
+   $Data = $_.Data
+   # Write-Verbose $Data.From   
+   # Write-Verbose $Data.Message
+   # Write-Verbose $($Data | Out-String)
+   
+   $command, $params = $Data.MessageArray
+   if($PowerBotCommands.ContainsKey($command)) {
+      &amp;$PowerBotCommands[$command] $params $Data |  Out-String -width (510 - $Data.From.Length - $nick.Length - 3) | % { $_.Trim().Split(&quot;`n&quot;) | %{ $irc.SendMessage(&quot;Message&quot;, $Data.Channel, $_.Trim() ) }}
+   }
+}
+
+function ChannelMessage {
+   $Data = $_.Data
+   # Write-Verbose $Data.From
+   # Write-Verbose $Data.Channel
+   # Write-Verbose $Data.Message
+   # Write-Verbose $($Data | Out-String)
+   
+   $command, $params = $Data.MessageArray
+   if($PowerBotCommands.ContainsKey($command)) {
+      &amp;$PowerBotCommands[$command] $params $Data | Out-String -width (510 - $Data.Channel.Length - $nick.Length - 3) | % { $_.Trim().Split(&quot;`n&quot;) | %{ $irc.SendMessage(&quot;Message&quot;, $Data.Channel, $_.Trim() ) }}
+   }
+}
+
+####################################################################################################
+## The PowerBotCommands hashtable is extremely simple ...
+##
+## You register a &quot;command&quot; which must be the FIRST WORD of a message (either private, or channel)
+##   and you provide a scriptblock to process said message.  
+## The handler scriptblock gets two parameters, for convenience:
+##   $Params is the rest of the message text after the command word (which is probably all you need)
+##   $Data is the Data propert of the IrcEventArgs, which has everything in it that you could want
+## 
+## You may do whatever you want in the scriptblock (this runs on your PC, after all), but the 
+##   simplest thing is to respond by returning &quot;something&quot; which will be sent to wherever the message
+##   came from.  
+##
+## NOTE 1: Evrything you return is output to Out-String and then the channel or user.  Be careful!
+## NOTE 2: 510 is the Max IRC Message Length, including the channel name etc.
+##         http`://www.faqs.org/rfcs/rfc1459.html
+##
+$PowerBotCommands=@{}
+
+## A sample command to get you started
+$PowerBotCommands.&quot;Hello&quot; = {Param($Query,$Data)
+   &quot;Hello, $($Data.Nick)!&quot;
+}
+
+##$PowerBotCommands.&quot;!Echo&quot; = {Param($Query,$Data)
+##   &quot;$Query&quot;
+##}
+##
+
+##$PowerBotCommands.&quot;!Get-Help&quot; = {Param($Query)
+##   $help = get-help $Query | Select Name,Synopsis,Syntax
+##   if($?) {
+##      if($help -is [array]) {
+##         &quot;You're going to need to be more specific, I know all about $((($help | % { $_.Name })[0..($help.Length-2)] -join ', ') + ' and even ' + $help[-1].Name)&quot;
+##      } else {
+##         @($help.Synopsis,($help.Syntax | Out-String -width 1000).Trim().Split(&quot;`n&quot;,4,&quot;RemoveEmptyEntries&quot;)[0..3])
+##      }
+##   } else {
+##      &quot;I couldn't find the help file for '$Query', sorry.  I probably don't have that snapin loaded.&quot;
+##   }
+##}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

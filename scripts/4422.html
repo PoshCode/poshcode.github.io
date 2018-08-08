@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Ulgar">
+    <title>Set-Wallpaper (CTP3) - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-Wallpaper (CTP3)</h1>
+<h3><a href="//scripts/4422.ps1">download</a> - <a href="//scripts/2603.md">parent</a></h3>
+<p>Set-Wallpaper lets you set your windows desktop wallpaper.  It <em>requires PInvoke</em> and I wrote it using PowerShell 2's @Add-Type@, although it could be done in v1 using the JIT code generation tricks Lee Holmes has mentioned in the past ...</p>
+<ul>
+<li>Updated for CTP3</li>
+<li>Made it run as a script instead of a function.</li>
+</ul>
+<p>*Fixed bug in $Style param.</p>
+<p>*added a fix for the problem described in http://stackoverflow.com/questions/6147731/powershell-script-fails-first-time-but-works-second-time</p>
+<pre><code class="language-posh">#requires -version 2.0
+## Set-Wallpaper - set your windows desktop wallpaper
+###################################################################################################
+## Usage:
+##    Set-Wallpaper &quot;C:\Users\Joel\Pictures\Wallpaper\Dual Monitor\mandolux-tiger.jpg&quot; &quot;Tile&quot;
+##    ls *.jpg | get-random | Set-Wallpaper
+##    ls *.jpg | get-random | Set-Wallpaper -Style &quot;Stretch&quot;
+###################################################################################################
+## History:
+##    v0.5  First release (on #PowerShell@irc.freenode.net)
+##    v1.0  Public release (http://www.poshcode.org/488)
+##          - Added Style: Tile|Center|Stretch
+##    v1.1  (http://poshcode.org/491)
+##          - Added &quot;NoChange&quot; style to just use the style setting already set
+##          - Made the Style parameter to the cmdlet optional
+##    v2.0  This Release
+##          - Updated for CTP3, and made it run as a script instead of a function.
+###################################################################################################
+[CmdletBinding()]
+Param(
+   [Parameter(Position=0, Mandatory=$true, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;FullName&quot;)]
+   [string]
+   $Path
+,
+   [Parameter(Position=1, Mandatory=$false)]
+   $Style = &quot;NoChange&quot;
+)
+
+BEGIN {
+try {
+   $WP = [Wallpaper.Setter]
+} catch {
+   $WP = add-type @&quot;
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32;
+namespace Wallpaper
+{
+   public enum Style : int
+   {
+       Tile, Center, Stretch, NoChange
+   }
+
+   public class Setter {
+      public const int SetDesktopWallpaper = 20;
+      public const int UpdateIniFile = 0x01;
+      public const int SendWinIniChange = 0x02;
+
+      [DllImport(&quot;user32.dll&quot;, SetLastError = true, CharSet = CharSet.Auto)]
+      private static extern int SystemParametersInfo (int uAction, int uParam, string lpvParam, int fuWinIni);
+      
+      public static void SetWallpaper ( string path, Wallpaper.Style style ) {
+         SystemParametersInfo( SetDesktopWallpaper, 0, path, UpdateIniFile | SendWinIniChange );
+         
+         RegistryKey key = Registry.CurrentUser.OpenSubKey(&quot;Control Panel\\Desktop&quot;, true);
+         switch( style )
+         {
+            case Style.Stretch :
+               key.SetValue(@&quot;WallpaperStyle&quot;, &quot;2&quot;) ; 
+               key.SetValue(@&quot;TileWallpaper&quot;, &quot;0&quot;) ;
+               break;
+            case Style.Center :
+               key.SetValue(@&quot;WallpaperStyle&quot;, &quot;1&quot;) ; 
+               key.SetValue(@&quot;TileWallpaper&quot;, &quot;0&quot;) ; 
+               break;
+            case Style.Tile :
+               key.SetValue(@&quot;WallpaperStyle&quot;, &quot;1&quot;) ; 
+               key.SetValue(@&quot;TileWallpaper&quot;, &quot;1&quot;) ;
+               break;
+            case Style.NoChange :
+               break;
+         }
+         key.Close();
+      }
+   }
+}
+&quot;@ -Passthru
+$WP = [Wallpaper.Setter]
+}
+}
+PROCESS {
+   Write-Verbose &quot;Setting Wallpaper ($Style) to $(Convert-Path $Path)&quot;
+   $WP::SetWallpaper( (Convert-Path $Path), $Style )
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

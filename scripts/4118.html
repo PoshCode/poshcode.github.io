@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Leon Scheltema">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/4118.ps1">download</a></h3>
+<p>Add VM to DRS group function</p>
+<pre><code class="language-posh">Function Get-DrsGroup {
+&lt;#
+.SYNOPSIS
+Retrieves DRS groups from a cluster.
+
+.DESCRIPTION
+Retrieves DRS groups from a cluster.
+
+.PARAMETER Cluster
+Specify the cluster for which you want to retrieve the DRS groups
+
+.PARAMETER Name
+Specify the name of the DRS group you want to retrieve.
+
+.EXAMPLE
+Get-DrsGroup -Cluster $Cluster -Name &quot;VMs DRS Group&quot;
+Retrieves the DRS group &quot;Vms DRS Group&quot; from cluster $Cluster.
+
+.EXAMPLE
+Get-Cluster | Get-DrsGroup
+Retrieves all the DRS groups for all clusters.
+
+.INPUTS
+ClusterImpl
+
+.OUTPUTS
+ClusterVmGroup
+ClusterHostGroup
+
+.COMPONENT
+VMware vSphere PowerCLI
+#&gt;
+
+  param([parameter(Mandatory=$true, ValueFromPipeline=$true)]$Cluster,
+        [string] $Name=&quot;*&quot;)
+
+  process {
+    $Cluster = Get-Cluster -Name $Cluster
+    if($Cluster) {
+      $Cluster.ExtensionData.ConfigurationEx.Group | `
+      Where-Object {$_.Name -like $Name}
+    }
+  }
+}
+  
+Function Add-VMToDrsGroup {
+&lt;#
+.SYNOPSIS
+Adds a virtual machine to a cluster VM DRS group.
+
+.DESCRIPTION
+Adds a virtual machine to a cluster VM DRS group.
+
+.PARAMETER Cluster
+Specify the cluster for which you want to retrieve the DRS groups
+
+.PARAMETER DrsGroup
+Specify the DRS group you want to retrieve.
+
+.PARAMETER VM
+Specify the virtual machine you want to add to the DRS Group.
+
+.EXAMPLE
+Add-VMToDrsGroup -Cluster $Cluster -DrsGroup &quot;VM DRS Group&quot; -VM $VM
+Adds virtual machine $VM to the DRS group &quot;VM DRS Group&quot; of cluster $Cluster.
+
+.EXAMPLE
+Get-Cluster MyCluster | Get-VM &quot;A*&quot; | Add-VMToDrsGroup -Cluster MyCluster -DrsGroup $DrsGroup
+Adds all virtual machines with a name starting with &quot;A&quot; in cluster MyCluster to the DRS group $DrsGroup of cluster MyCluster.
+
+.INPUTS
+VirtualMachineImpl
+
+.OUTPUTS
+Task
+
+.COMPONENT
+VMware vSphere PowerCLI
+#&gt;
+
+  param([parameter(Mandatory=$true)] $Cluster,
+        [parameter(Mandatory=$true)] $DrsGroup,
+        [parameter(Mandatory=$true, ValueFromPipeline=$true)] $VM)
+        
+  begin {
+    $Cluster = Get-Cluster -Name $Cluster
+  }
+  
+  process {
+    if ($Cluster) {
+      if ($DrsGroup.GetType().Name -eq &quot;string&quot;) {
+        $DrsGroupName = $DrsGroup
+        $DrsGroup = Get-DrsGroup -Cluster $Cluster -Name $DrsGroup
+      }
+      if (-not $DrsGroup) {
+        Write-Error &quot;The DrsGroup $DrsGroupName was not found on cluster $($Cluster.name).&quot;
+      }
+      else { 
+        if ($DrsGroup.GetType().Name -ne &quot;ClusterVmGroup&quot;) {
+          Write-Error &quot;The DrsGroup $DrsGroupName on cluster $($Cluster.Name) doesn't have the required type ClusterVmGroup.&quot;
+        }
+        else {
+          $VM = $Cluster | Get-VM -Name $VM
+          If ($VM) {
+            $spec = New-Object VMware.Vim.ClusterConfigSpecEx
+            $spec.groupSpec = New-Object VMware.Vim.ClusterGroupSpec[] (1)
+            $spec.groupSpec[0] = New-Object VMware.Vim.ClusterGroupSpec
+            $spec.groupSpec[0].operation = &quot;edit&quot;
+            $spec.groupSpec[0].info = $DrsGroup
+            $spec.groupSpec[0].info.vm += $VM.ExtensionData.MoRef
+
+            $Cluster.ExtensionData.ReconfigureComputeResource_Task($spec, $true)
+          }
+        }
+      }
+    }
+  }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

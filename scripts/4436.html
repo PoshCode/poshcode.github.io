@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Profiles - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Profiles</h1>
+<h3><a href="//scripts/4436.ps1">download</a></h3>
+<p>This is just prototype. This script let you know what profiles loaded at current moment with some specific information such as SID, name, account and path of profile. Your current profile highlights with teal color. By default script shows only loaded profiles at current moment but to get all local profiles list check off &quot;Only Loaded&quot; menu item. Also it can copy SID of selected user to clipboard. (I repeat that script is just a concept and has not been optimized).
+P.S.For lorena-kuhni =)</p>
+<pre><code class="language-posh">if ($host.Runspace.ApartmentState -ne &quot;STA&quot;) {
+  powershell /noprofile /sta $MyInvocation.MyCommand.Path
+  return
+}
+
+$dir = (gci $MyInvocation.MyCommand.Name).Directory
+$iam = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$key = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList'
+
+function ItemsCounting {
+  $sbLabel.Text = $lstView.Items.Count.ToString() + &quot; item(s)&quot;
+}
+
+function BuildItemsList([string]$sid) {
+  $str = (gp ($key + '\' + $sid)).ProfileImagePath
+  $acc = ([Security.Principal.SecurityIdentifier]($sid)).Translate([Security.Principal.NTAccount]).Value
+  
+  $itm = $lstView.Items.Add($sid, 0)
+  $itm.Subitems.Add((Split-Path -leaf $str))
+  $itm.Subitems.Add($acc)
+  $itm.Subitems.Add($str)
+  
+  if ($iam -eq $acc) { $itm.ForeColor = &quot;Teal&quot; }
+}
+
+function ShowProfilesList {
+  $lstView.Items.Clear()
+  
+  switch ($mnuOnly.Checked) {
+    $true {
+      [Microsoft.Win32.Registry]::Users.GetSubKeyNames() `
+      -notmatch '(Classes|.DEFAULT)'| % { BuildItemsList($_) }
+    }
+    $false {
+      gci $key | % { BuildItemsList($_.PSChildName) }
+    }
+  }#switch
+}
+
+$mnuSave_Click= {
+  if ($lstView.Items.Count -ne 0) {
+    (New-Object Windows.Forms.SaveFileDialog) | % {
+      $_.Filename = &quot;Profiles&quot;
+      $_.Filter = &quot;CSV (*.csv)|*.csv&quot;
+      $_.InitialDirectory = $dir
+
+      if ($_.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+        if (-not (Test-Path $_.FileName)) {
+          $sw = New-Object IO.StreamWriter($_.FileName, [Text.Encoding]::Deafault)
+          $sw.WriteLine(&quot;SID, User Name, Account, Profile Path&quot;)
+          $lstView.Items | % {
+            $sw.WriteLine($($_.Text + ', ' + $_.SubItems[1].Text + ', ' + `
+                                $_.SubItems[2].Text + ', ' + $_.SubItems[3].Text))
+          }
+          $sw.Flush()
+          $sw.Close()
+        }#file exist
+      }#result
+    }#dialog
+  }#if
+}
+
+$mnuCopy_Click= {
+  for ([int]$i = 0; $i -lt $lstView.Items.Count; $i++) {
+    if ($lstView.Items[$i].Selected) {
+      [Windows.Forms.Clipboard]::SetText($lstView.Items[$i].Text)
+    }
+  }#for
+}
+
+$mnuOnly_Click= {
+  [bool]$tgl =! $mnuOnly.Checked
+  $mnuOnly.Checked = $tgl
+  
+  ShowProfilesList
+  ItemsCounting
+}
+
+$mnuSBar_Click= {
+  [bool]$tgl =! $mnuSbar.Checked
+  $mnuSbar.Checked = $tgl
+  $sbStrip.Visible = $tgl
+}
+
+$mnuFont_Click= {
+  (New-Object Windows.Forms.FontDialog) | % {
+    $_.MaxSize = 12
+    $_.ShowEffects = $false
+    
+    if ($_.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+      $lstView.Font = $_.Font
+    }#if
+  }#for each
+}
+
+function frmMain_Show {
+  Add-Type -Assembly System.Windows.Forms
+  [Windows.Forms.Application]::EnableVisualStyles()
+  
+  $ico = [Drawing.Icon]::ExtractAssociatedIcon($pshome + &quot;\powershell.exe&quot;)
+  
+  $frmMain = New-Object Windows.Forms.Form
+  $mnuMain = New-Object Windows.Forms.MenuStrip
+  $mnuFile = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuScan = New-Object Windows.Forms.ToolStripmenuItem
+  $mnuCopy = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuSave = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuNul1 = New-Object Windows.Forms.ToolStripSeparator
+  $mnuExit = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuView = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuOnly = New-Object Windows.Forms.ToolStripmenuItem
+  $mnuSBar = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuNul2 = New-Object Windows.Forms.ToolStripSeparator
+  $mnuFont = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuHelp = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuInfo = New-Object Windows.Forms.ToolStripMenuItem
+  $lstView = New-Object Windows.Forms.ListView
+  $imgList = New-Object Windows.Forms.ImageList
+  $chSIDs_ = New-Object Windows.Forms.ColumnHeader
+  $chNames = New-Object Windows.Forms.ColumnHeader
+  $chNTAcc = New-Object Windows.Forms.ColumnHeader
+  $chPaths = New-Object Windows.Forms.ColumnHeader
+  $sbStrip = New-Object Windows.Forms.StatusStrip
+  $sbLabel = New-Object Windows.Forms.ToolStripStatusLabel
+  #
+  #mnuMain
+  #
+  $mnuMain.Items.AddRange(@($mnuFile, $mnuView, $mnuHelp))
+  #
+  #mnuFile
+  #
+  $mnuFile.DropDownItems.AddRange(@($mnuScan, $mnuCopy, $mnuSave, $mnuNul1, $mnuExit))
+  $mnuFile.Text = &quot;&amp;File&quot;
+  #
+  #mnuScan
+  #
+  $mnuScan.ShortcutKeys = &quot;F5&quot;
+  $mnuScan.Text = &quot;S&amp;can&quot;
+  $mnuScan.Add_Click({ShowProfilesList; ItemsCounting})
+  #
+  #mnuSave
+  #
+  $mnuSave.ShortcutKeys = &quot;Control, S&quot;
+  $mnuSave.Text = &quot;&amp;Save&quot;
+  $mnuSave.Add_Click($mnuSave_Click)
+  #
+  #mnuCopy
+  #
+  $mnuCopy.ShortcutKeys = &quot;Control, C&quot;
+  $mnuCopy.Text = &quot;&amp;Copy SID&quot;
+  $mnuCopy.Add_Click($mnuCopy_Click)
+  #
+  #mnuExit
+  #
+  $mnuExit.ShortcutKeys = &quot;Control, X&quot;
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click({$frmMain.Close()})
+  #
+  #mnuView
+  #
+  $mnuView.DropDownItems.AddRange(@($mnuOnly, $mnuSBar, $mnuNul2, $mnuFont))
+  $mnuView.Text = &quot;&amp;View&quot;
+  #
+  #mnuOnly
+  #
+  $mnuOnly.Checked = $true
+  $mnuOnly.ShortcutKeys = &quot;Control, L&quot;
+  $mnuOnly.Text = &quot;Only &amp;Loaded&quot;
+  $mnuOnly.Add_Click($mnuOnly_Click)
+  #
+  #mnuSBar
+  #
+  $mnuSBar.Checked = $true
+  $mnuSBar.ShortcutKeys = &quot;Control, B&quot;
+  $mnuSBar.Text = &quot;Show Status &amp;Bar&quot;
+  $mnuSBar.Add_Click($mnuSbar_Click)
+  #
+  #mnuFont
+  #
+  $mnuFont.Text = &quot;&amp;Font...&quot;
+  $mnuFont.Add_Click($mnuFont_Click)
+  #
+  #mnuHelp
+  #
+  $mnuHelp.DropDownItems.AddRange(@($mnuInfo))
+  $mnuHelp.Text = &quot;&amp;Help&quot;
+  #
+  #mnuInfo
+  #
+  $mnuInfo.Text = &quot;About&quot;
+  $mnuInfo.Add_Click({frmAbout_Show})
+  #
+  #lstView
+  #
+  $lstView.AllowColumnReorder = $true
+  $lstView.Columns.AddRange(@($chSIDs_, $chNames, $chNTAcc, $chPaths))
+  $lstView.Dock = &quot;Fill&quot;
+  $lstView.FullRowSelect = $true
+  $lstView.MultiSelect = $false
+  $lstView.SmallImageList = $imgList
+  $lstView.ShowItemToolTips = $true
+  $lstView.Sorting = &quot;Ascending&quot;
+  $lstView.View = &quot;Details&quot;
+  #
+  #imgList
+  #
+  $imgList.ColorDepth = &quot;Depth32Bit&quot;
+  $imgList.Images.Add($ico.ToBitmap())
+  $imgList.ImageSize = New-Object Drawing.Size(17, 15)
+  #
+  #chSIDs_
+  #
+  $chSIDs_.Text = &quot;SID&quot;
+  $chSIDs_.Width = 75 #195
+  #
+  #chNames
+  #
+  $chNames.Text = &quot;User Name&quot;
+  $chNames.Width = 90 #100
+  #
+  #chNTAcc
+  #
+  $chNTAcc.Text = &quot;Account&quot;
+  $chNTAcc.Width = 143
+  #
+  #chPaths
+  #
+  $chPaths.Text = &quot;Profile Path&quot;
+  $chPaths.Width = 260 #273
+  #
+  #sbStrip
+  #
+  $sbStrip.Items.AddRange(@($sbLabel))
+  $sbStrip.SizingGrip = $false
+  #
+  #sbLabel
+  #
+  $sbLabel.Alignment = &quot;Left&quot;
+  $sbLabel.BorderStyle = &quot;Raised&quot;
+  #
+  #frmMain
+  #
+  $frmMain.ClientSize = New-Object Drawing.Size(573, 217)
+  $frmMain.Controls.AddRange(@($lstView, $sbStrip, $mnuMain))
+  $frmMain.Icon = $ico
+  $frmMain.MainMenuStrip = $mnuMain
+  $frmMain.MaximizeBox = $false
+  $frmMain.StartPosition = &quot;CenterScreen&quot;
+  $frmMain.Text = &quot;Profiles&quot;
+  $frmMain.Add_load({ItemsCounting})
+  
+  [void]$frmMain.ShowDialog()
+}
+
+function frmAbout_Show {
+  $frmMain = New-Object Windows.Forms.Form
+  $pbImage = New-Object Windows.Forms.PictureBox
+  $lblName = New-Object Windows.Forms.Label
+  $lblCopy = New-Object Windows.Forms.Label
+  $btnExit = New-Object Windows.Forms.Button
+  #
+  #pbImage
+  #
+  $pbImage.Location = New-Object Drawing.Point(16, 16)
+  $pbImage.Size = New-Object Drawing.Size(32, 32)
+  $pbImage.SizeMode = &quot;StretchImage&quot;
+  #
+  #lblName
+  #
+  $lblName.Font = New-Object Drawing.Font(&quot;Microsoft Sans Serif&quot;, 8.5, [Drawing.FontStyle]::Bold)
+  $lblName.Location = New-Object Drawing.Point(53, 19)
+  $lblName.Size = New-Object Drawing.Size(360, 18)
+  $lblName.Text = &quot;Profiles v1.00&quot;
+  #
+  #lblCopy
+  #
+  $lblCopy.Location = New-Object Drawing.Point(67, 37)
+  $lblCopy.Size = New-Object Drawing.Size(360, 15)
+  $lblCopy.Text = &quot;Copyright (C) 2013 gregzakh@gmail.com&quot;
+  #
+  #btnExit
+  #
+  $btnExit.Location = New-Object Drawing.Point(135, 57)
+  $btnExit.Text = &quot;OK&quot;
+  #
+  #frmMain
+  #
+  $frmMain.AcceptButton = $btnExit
+  $frmMain.CancelButton = $btnExit
+  $frmMain.ClientSize = New-Object Drawing.Size(350, 90)
+  $frmMain.ControlBox = $false
+  $frmMain.Controls.AddRange(@($pbImage, $lblName, $lblCopy, $btnExit))
+  $frmMain.FormBorderStyle = &quot;FixedSingle&quot;
+  $frmMain.ShowInTaskbar = $false
+  $frmMain.StartPosition = &quot;CenterParent&quot;
+  $frmMain.Text = &quot;About...&quot;
+  $frmMain.Add_Load({$pbImage.Image = $ico.ToBitmap()})
+  
+  [void]$frmMain.ShowDialog()
+}
+
+frmMain_Show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="kenlaorbccmco">
+    <title>Get Virtual ESXi IP Addr - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get Virtual ESXi IP Addr</h1>
+<h3><a href="//scripts/1823.cs">download</a> - <a href="//scripts/1495.md">parent</a></h3>
+<p>This code determines the IP address of a virtual ESXi VM in what might just be the dumbest way possible, namely by taking a screenshot of it, OCRing the results and extracting the IP. For educational purposes only. Unfortunately it's pretty slow due to some cmdlet slowness. Requires PowerCLI 4.0 U1, PowerShell v2, and Microsoft Office Document Imaging (MODI) to be installed and configured.</p>
+<pre><code class="language-csharp">function Get-VirtualEsxiIp {
+	param($vm)
+	$tmpFileTemplate = ($env:TEMP + &quot;\ipdetect-&quot;)
+	$tmpFile = $tmpFileTemplate + (Get-Random) + &quot;.png&quot;
+
+	# Take the screenshot.
+	$view = $vm | Get-View -Property Name
+	$path = $view.CreateScreenShot()
+	$path -match &quot;([^/]+/[^/]+$)&quot; | Out-Null
+	$relativePath = $matches[1]
+
+	# Determine the VM's datastore.
+	$datastore = $vm | Get-Datastore
+	$remotePath = ($datastore.DatastoreBrowserPath + &quot;\&quot; + $relativePath)
+	Write-Verbose (&quot;Use remote path &quot; + $remotePath)
+
+	# Copy it locally. Requires PowerCLI 4.0 U1.
+	Write-Verbose ($remotePath + &quot;, &quot; + $tmpFile)
+	Copy-DatastoreItem $remotePath $tmpFile
+
+	# OCR the screenshot.
+	$output = Apply-Ocr -pngFile $tmpFile
+
+	# Pull out the IP address.
+	$output -match &quot;http://([^/]+)&quot; | Out-Null
+	$ip = $matches[1]
+
+	# Clean up.
+	Write-Verbose &quot;Cleaning up&quot;
+	# Remove-Item -Force $remotePath
+	Remove-Item -Force $tmpFile
+
+	# Output the IP.
+	Write-Output $ip
+}
+
+# Apply OCR to a PNG file and return the text results.
+function Apply-Ocr {
+	param($pngFile)
+	$tmpFileTemplate = ($env:TEMP + &quot;\ipdetectocr-&quot;)
+	$tmpFile = $tmpFileTemplate + (Get-Random) + &quot;.tif&quot;
+
+	# Convert the PNG to TIFF.
+	[reflection.assembly]::loadwithpartialname(&quot;System.Drawing&quot;) | Out-Null
+	$image = [System.Drawing.Image]::FromFile($pngFile)
+	$image.Save($tmpFile, [System.Drawing.Imaging.ImageFormat]::TIFF)
+
+	# OCR it! (Requires Microsoft Office Document Imaging)
+	$modi = new-object -com MODI.Document
+	$modi.Create($tmpFile)
+	$modi.OCR()
+	$OCRText = ($modi.Images | select -expand Layout).Text
+	$modi.Close()
+	$image.Dispose()
+
+	# Clean out old left over files.
+	foreach ($file in (
+		Get-Childitem $tmpFileTemplate* |
+		    Where { $_.LastWriteTime -lt ((Get-Date).addMinutes(-1)) } )) {
+		Remove-Item -Force $file
+	}
+
+	Write-Output $OCRText
+}
+
+# Example use:
+# Get-VirtualEsxiIp -vm (Get-VM &quot;ESXi 4.0 Instance 3&quot;)
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

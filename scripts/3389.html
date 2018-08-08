@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Grant Carthew">
+    <title>Invoke-RemoteCommand - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-RemoteCommand</h1>
+<h3><a href="//scripts/3389.ps1">download</a> - <a href="//scripts/3388.md">parent</a></h3>
+<p>This function will run code on a remote computer under the currently logged on user credentials. Knowing there password is not required as it will impersonate the windows token.</p>
+<pre><code class="language-posh">&lt;#
+ # Script FileName: func_Invoke-RemoteCommand.ps1
+ # Current Version: A03
+ # Description: Run command on a remote computer as the currently logged on user.
+ # Created By: Adam Listek
+ # Version Notes
+ #      A01 - Initial Release
+ #      A02 - Conversion to Function
+ #      A03 - Abstracted to generic purpose
+ #&gt;
+ 
+ Function Global:Invoke-RemoteCommand {
+
+    [CmdletBinding(
+        SupportsShouldProcess=$true,
+        ConfirmImpact=&quot;Low&quot;
+    )] # Terminate CmdletBinding
+
+    Param (
+        [Parameter(
+            ValueFromPipeline=$true,
+            Position=0)]
+        [String]$computerName = &quot;localhost&quot;,
+        
+        [Parameter(Position=1)][String]$inputCode,
+        
+        [Parameter(Position=2)][String]$outputFile = &quot;C:\Temp\Output.ps1&quot;,
+        [Switch]$passthru
+    ) # Terminate Param
+    
+    Begin {
+        If ($MyInvocation.BoundParameters.Verbose -match $true) {
+            $local:VerbosePreference = &quot;Continue&quot;
+            $local:ErrorActionPreference = &quot;Continue&quot;
+            $local:verbose = $true
+        } Else {
+            $local:VerbosePreference = &quot;SilentlyContinue&quot;
+            $local:ErrorActionPreference = &quot;SilentlyContinue&quot;
+            $local:verbose = $false
+        } # Terminate If - Verbose Parameter Check
+
+        # Define Internal Functions
+@@        Function local:Test-AdministratorPrivileges {
+    		Write-Verbose &quot;Get user that script context is being run in.&quot;
+    		$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    		
+    		Write-Verbose &quot;Create a new Security Principal object to retrieve rights.&quot;
+    		$principal = new-object Security.Principal.WindowsPrincipal $identity
+    		
+    		Write-Verbose &quot;Retrieve if user is currently in an Administrator role.&quot;
+    		$result = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+		
+    		If ($result) {
+    			Write-Output $true
+    		} Else {
+    			Write-Output $false
+    		} # Terminate If - Result
+        } # Terminate Function  
+        
+        # Verify whether the current user context for the function is an Administrator
+@@        If (Test-AdministratorPrivileges -Verbose:$verbose) {
+            Write-Verbose &quot;Function is being run as an Administrator.&quot;
+        } Else {
+            Write-Host &quot;Current user, {0}, is not an Administrator.&quot; `
+                -F ([Security.Principal.WindowsIdentity]::GetCurrent()) `
+                -ForegroundColor Red
+            Break
+        } # Terminate Test for Administrative Privileges
+        
+        # Global Variables
+        $servicePath = &quot;C:\Temp&quot;
+        $serviceName = &quot;ps_service&quot;
+    } # Terminate Begin
+
+    Process {
+        # Required if running in Powershell ISE, will set for the shell also.
+        If ($MyInvocation.BoundParameters.Debug -match $true) {
+            # Must be set per pipeline run
+            $local:DebugPreference = &quot;Continue&quot;
+        } Else {
+            $local:DebugPreference = &quot;SilentlyContinue&quot;   
+        } # Terminate If - Debug    
+    
+        $scriptblock = {
+            Param(
+                $inputCode,
+                $outputFile,
+                $servicePath,
+                $serviceName
+            )            
+        
+            # Parse the results of the current sessions using the built-in executable, Query.exe.
+            $results = c:\windows\system32\query.exe session
+
+            # Create object array of Query results
+            $active = $results | %{        
+                $line = $_.ToString().Split(&quot; &quot;)
+                $array = $line | Where { $_ -ne &quot;&quot; }
+                
+                Switch ($array.count) {
+                    3 {
+                        $sessionname = $array[0]
+                        $username = $null
+                        $id = $array[1]
+                        $state = $array[2]
+                        $type = $null
+                        Break
+                    }
+                    
+                    4 {
+                        $sessionname = $array[0]
+                        $username = $array[1]
+                        $id = $array[2]
+                        $state = $array[3]
+                        $type = $null
+                        Break        
+                    }
+                    
+                    5 {
+                        $sessionname = $array[0]
+                        $username = $array[1]
+                        $id = $array[2]
+                        $state = $array[3]
+                        $type = $array[4]
+                        Break        
+                    }
+                } # Terminate Switch
+                
+                $object = New-Object PSObject -Property @{
+                    sessionname = $sessionname
+                    username = $username
+                    ID = $id
+                    state = $state
+                    type = $type
+                }
+                
+                Write-Output $object
+            } | Where { $_.State -eq &quot;Active&quot; }
+
+            If ($active) {
+                # The data is the local Powershell script that you want to run on the remote system
+                # Using a HereString @'' (does not parse variables within), @&quot;&quot; (will parse variables)
+                
+                Write-Verbose $outputFile
+                Write-Verbose $inputCode
+                # Generate the script file on the fly on the remote computer
+                Out-File -FilePath $outputFile -InputObject $inputCode -Encoding ascii
+
+                # We want to hide the powershell window and override the execution policy to make sure it runs
+                $command = &quot;powershell.exe -NonInteractive -WindowStyle hidden -NoLogo -File $outputFile -ExecutionPolicy RemoteSigned&quot;
+                $serviceDisplayName = &quot;PS Emulate Session&quot;
+
+                Write-Verbose $command
+                Write-Verbose $serviceDisplayName
+
+                # The code to actually generate the service
+                $source = @&quot;
+                using System;
+                using System.Text;
+                using System.Runtime.InteropServices;
+                using System.ServiceProcess;
+                using System.Diagnostics;
+
+                namespace PS
+                {
+                    public class Emulate : System.ServiceProcess.ServiceBase {
+                    
+                        public Emulate() {
+                            this.ServiceName = &quot;$serviceDisplayName&quot;;
+                        }
+                        
+                        static void Main(string[] args) {
+                            System.ServiceProcess.ServiceBase.Run(new Emulate());
+                        }
+                        
+                        protected override void OnStart(string[] args) {
+                            base.OnStart(args);
+                            
+                            EmulateSession.StartProcessInSession($($active.Id), @&quot;$command&quot;);      
+                        }
+                        
+                        protected override void OnStop() {
+                            base.OnStop();
+                        }
+                        
+                        public static void WriteToEventLog(string message) {
+                            string cs = &quot;PS_Emulate_Service&quot;;
+                            EventLog elog = new EventLog();
+                            if (!EventLog.SourceExists(cs))
+                            {
+                                EventLog.CreateEventSource(cs, &quot;Application&quot;);
+                            }
+                            elog.Source = cs;
+                            elog.EnableRaisingEvents = true;
+                            EventLog.WriteEntry(cs, message, EventLogEntryType.Information);
+                        }
+                    }
+
+                    static public class EmulateSession
+                    {
+                        /* structs, enums, and external functions defined at end of code */
+
+                        public static System.Diagnostics.Process StartProcessInSession(int sessionID, String commandLine)
+                        {
+                            Emulate.WriteToEventLog(&quot;Inside StartProcessInSession&quot;);
+                            Emulate.WriteToEventLog(&quot;Session ID: &quot; + sessionID.ToString());
+                            IntPtr userToken;
+                            if (WTSQueryUserToken(sessionID, out userToken))
+                            {
+                                //note that WTSQueryUserToken only works when in context of local system account with SE_TCB_NAME
+                                IntPtr lpEnvironment;
+                                Emulate.WriteToEventLog(&quot;Token: &quot; + userToken.ToString());
+                                if (CreateEnvironmentBlock(out lpEnvironment, userToken, false))
+                                {
+                                    Emulate.WriteToEventLog(&quot;User Env: &quot; + lpEnvironment.ToString());
+                                    StartupInfo si = new StartupInfo();
+                                    si.cb = Marshal.SizeOf(si);
+                                    si.lpDesktop = &quot;winsta0\\default&quot;;
+                                    si.dwFlags = STARTF.STARTF_USESHOWWINDOW;
+                                    // Using the SW_HIDE will make the window hidden, see in the bottom section for more commands
+                                    si.wShowWindow = ShowWindow.SW_HIDE;
+                                    ProcessInformation pi;
+                                    // Note the CreationFlags, they make this work as it must have both the CREATE_NEW_CONSOLE and CREATE_UNICODE_ENVIRONMENT
+                                    if (CreateProcessAsUser(userToken, null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, CreationFlags.CREATE_NEW_CONSOLE | CreationFlags.CREATE_UNICODE_ENVIRONMENT, lpEnvironment, null, ref si, out pi))
+                                    {
+                                        CloseHandle(pi.hThread);
+                                        CloseHandle(pi.hProcess);
+                                        //context.Undo();
+                                        try
+                                        {
+                                            return System.Diagnostics.Process.GetProcessById(pi.dwProcessId);
+                                        }
+                                        catch (ArgumentException)
+                                        {
+                                            // I had to remove the ArgumentException e (I removed the e), it threw up a compiler warning
+                                            //The process ID couldn't be found - which is what always happens because it has closed
+                                            return null;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Emulate.WriteToEventLog(&quot;Could Not Create Process.&quot;);
+                                        int err = Marshal.GetLastWin32Error();
+                                        throw new System.ComponentModel.Win32Exception(err, &quot;Could not create process.\nWin32 error: &quot; + err.ToString());
+                                    }
+                                }
+                                else
+                                {
+                                    Emulate.WriteToEventLog(&quot;Could not create environment block.&quot;);
+                                    int err = Marshal.GetLastWin32Error();
+                                    throw new System.ComponentModel.Win32Exception(err, &quot;Could not create environment block.\nWin32 error: &quot; + err.ToString());
+                                }
+                            }
+                            else
+                            {
+                                Emulate.WriteToEventLog(&quot;No Token&quot;);
+                                int err = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+                                if (err == 1008) return null; //There is no token
+                                throw new System.ComponentModel.Win32Exception(err, &quot;Could not get the user token from session &quot; + sessionID.ToString() + &quot; - Error: &quot; + err.ToString());
+                            }
+                        }
+                        
+                        [DllImport(&quot;wtsapi32.dll&quot;, SetLastError = true)]
+                        static extern bool WTSQueryUserToken(Int32 sessionId, out IntPtr Token);
+
+                        [DllImport(&quot;userenv.dll&quot;, SetLastError = true)]
+                        static extern bool CreateEnvironmentBlock(out IntPtr lpEnvironment, IntPtr hToken, bool bInherit);
+
+                        [DllImport(&quot;advapi32.dll&quot;, SetLastError = true, CharSet = CharSet.Auto)]
+                        static extern bool CreateProcessAsUser(IntPtr hToken, String lpApplicationName, [In] StringBuilder lpCommandLine, IntPtr /*to a SecurityAttributes struct or null*/ lpProcessAttributes, IntPtr /*to a SecurityAttributes struct or null*/ lpThreadAttributes, bool bInheritHandles, CreationFlags creationFlags, IntPtr lpEnvironment, String lpCurrentDirectory, ref StartupInfo lpStartupInfo, out ProcessInformation lpProcessInformation);
+
+                        [DllImport(&quot;kernel32.dll&quot;, SetLastError = true)]
+                        static extern bool CloseHandle(IntPtr hHandle);
+
+                        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+                        struct StartupInfo
+                        {
+                            public Int32 cb;
+                            public String lpReserved;
+                            public String lpDesktop;
+                            public String lpTitle;
+                            public Int32 dwX;
+                            public Int32 dwY;
+                            public Int32 dwXSize;
+                            public Int32 dwYSize;
+                            public Int32 dwXCountChars;
+                            public Int32 dwYCountChars;
+                            public Int32 dwFillAttribute;
+                            public STARTF dwFlags;
+                            public ShowWindow wShowWindow;
+                            public Int16 cbReserved2;
+                            public IntPtr lpReserved2;
+                            public IntPtr hStdInput;
+                            public IntPtr hStdOutput;
+                            public IntPtr hStdError;
+                        }
+
+                        [StructLayout(LayoutKind.Sequential)]
+                        internal struct ProcessInformation
+                        {
+                            public IntPtr hProcess;
+                            public IntPtr hThread;
+                            public int dwProcessId;
+                            public int dwThreadId;
+                        }
+
+
+                        /// &lt;summary&gt;
+                        /// The following process creation flags are used by the CreateProcess, CreateProcessAsUser, CreateProcessWithLogonW, and CreateProcessWithTokenW functions. They can be specified in any combination, except as noted.
+                        /// &lt;/summary&gt;
+                        [Flags]
+                        enum CreationFlags : int
+                        {
+                            /// &lt;summary&gt;
+                            /// Not specified by MSDN???
+                            /// &lt;/summary&gt;
+                            NONE = 0,
+
+                            /// &lt;summary&gt;
+                            /// The calling thread starts and debugs the new process and all child processes created by the new process. It can receive all related debug events using the WaitForDebugEvent function. 
+                            /// A process that uses DEBUG_PROCESS becomes the root of a debugging chain. This continues until another process in the chain is created with DEBUG_PROCESS.
+                            /// If this flag is combined with DEBUG_ONLY_THIS_PROCESS, the caller debugs only the new process, not any child processes.
+                            /// &lt;/summary&gt;
+                            DEBUG_PROCESS = 0x00000001,
+
+                            /// &lt;summary&gt;
+                            /// The calling thread starts and debugs the new process. It can receive all related debug events using the WaitForDebugEvent function.
+                            /// &lt;/summary&gt;
+                            DEBUG_ONLY_THIS_PROCESS = 0x00000002,
+
+                            /// &lt;summary&gt;
+                            /// The primary thread of the new process is created in a suspended state, and does not run until the ResumeThread function is called.
+                            /// &lt;/summary&gt;
+                            CREATE_SUSPENDED = 0x00000004,
+
+                            /// &lt;summary&gt;
+                            /// For console processes, the new process does not inherit its parent's console (the default). The new process can call the AllocConsole function at a later time to create a console. For more information, see Creation of a Console. 
+                            /// This value cannot be used with CREATE_NEW_CONSOLE.
+                            /// &lt;/summary&gt;
+                            DETACHED_PROCESS = 0x00000008,
+
+                            /// &lt;summary&gt;
+                            /// The new process has a new console, instead of inheriting its parent's console (the default). For more information, see Creation of a Console. 
+                            /// This flag cannot be used with DETACHED_PROCESS.
+                            /// &lt;/summary&gt;
+                            CREATE_NEW_CONSOLE = 0x00000010,
+
+                            /// &lt;summary&gt;
+                            /// The new process is the root process of a new process group. The process group includes all processes that are descendants of this root process. The process identifier of the new process group is the same as the process identifier, which is returned in the lpProcessInformation parameter. Process groups are used by the GenerateConsoleCtrlEvent function to enable sending a CTRL+BREAK signal to a group of console processes.
+                            /// If this flag is specified, CTRL+C signals will be disabled for all processes within the new process group.
+                            /// This flag is ignored if specified with CREATE_NEW_CONSOLE.
+                            /// &lt;/summary&gt;
+                            CREATE_NEW_PROCESS_GROUP = 0x00000200,
+
+                            /// &lt;summary&gt;
+                            /// If this flag is set, the environment block pointed to by lpEnvironment uses Unicode characters. Otherwise, the environment block uses ANSI characters.
+                            /// &lt;/summary&gt;
+                            CREATE_UNICODE_ENVIRONMENT = 0x00000400,
+
+                            /// &lt;summary&gt;
+                            /// This flag is valid only when starting a 16-bit Windows-based application. If set, the new process runs in a private Virtual DOS Machine (VDM). By default, all 16-bit Windows-based applications run as threads in a single, shared VDM. The advantage of running separately is that a crash only terminates the single VDM; any other programs running in distinct VDMs continue to function normally. Also, 16-bit Windows-based applications that are run in separate VDMs have separate input queues. That means that if one application stops responding momentarily, applications in separate VDMs continue to receive input. The disadvantage of running separately is that it takes significantly more memory to do so. You should use this flag only if the user requests that 16-bit applications should run in their own VDM.
+                            /// &lt;/summary&gt;
+                            CREATE_SEPARATE_WOW_VDM = 0x00000800,
+
+                            /// &lt;summary&gt;
+                            /// The flag is valid only when starting a 16-bit Windows-based application. If the DefaultSeparateVDM switch in the Windows section of WIN.INI is TRUE, this flag overrides the switch. The new process is run in the shared Virtual DOS Machine.
+                            /// &lt;/summary&gt;
+                            CREATE_SHARED_WOW_VDM = 0x00001000,
+
+                            /// &lt;summary&gt;
+                            /// The process is to be run as a protected process. The system restricts access to protected processes and the threads of protected processes. For more information on how processes can interact with protected processes, see Process Security and Access Rights.
+                            /// To activate a protected process, the binary must have a special signature. This signature is provided by Microsoft but not currently available for non-Microsoft binaries. There are currently four protected processes: media foundation, audio engine, Windows error reporting, and system. Components that load into these binaries must also be signed. Multimedia companies can leverage the first two protected processes. For more information, see Overview of the Protected Media Path.
+                            /// Windows Server 2003 and Windows XP/2000:  This value is not supported.
+                            /// &lt;/summary&gt;
+                            CREATE_PROTECTED_PROCESS = 0x00040000,
+
+                            /// &lt;summary&gt;
+                            /// The process is created with extended startup information; the lpStartupInfo parameter specifies a STARTUPINFOEX structure.
+                            /// Windows Server 2003 and Windows XP/2000:  This value is not supported.
+                            /// &lt;/summary&gt;
+                            EXTENDED_STARTUPINFO_PRESENT = 0x00080000,
+
+                            /// &lt;summary&gt;
+                            /// The child processes of a process associated with a job are not associated with the job. 
+                            /// If the calling process is not associated with a job, this constant has no effect. If the calling process is associated with a job, the job must set the JOB_OBJECT_LIMIT_BREAKAWAY_OK limit.
+                            /// &lt;/summary&gt;
+                            CREATE_BREAKAWAY_FROM_JOB = 0x01000000,
+
+                            /// &lt;summary&gt;
+                            /// Allows the caller to execute a child process that bypasses the process restrictions that would normally be applied automatically to the process.
+                            /// Windows 2000:  This value is not supported.
+                            /// &lt;/summary&gt;
+                            CREATE_PRESERVE_CODE_AUTHZ_LEVEL = 0x02000000,
+
+                            /// &lt;summary&gt;
+                            /// The new process does not inherit the error mode of the calling process. Instead, the new process gets the default error mode. 
+                            /// This feature is particularly useful for multi-threaded shell applications that run with hard errors disabled.
+                            /// The default behavior is for the new process to inherit the error mode of the caller. Setting this flag changes that default behavior.
+                            /// &lt;/summary&gt;
+                            CREATE_DEFAULT_ERROR_MODE = 0x04000000,
+
+                            /// &lt;summary&gt;
+                            /// The process is a console application that is being run without a console window. Therefore, the console handle for the application is not set.
+                            /// This flag is ignored if the application is not a console application, or if it is used with either CREATE_NEW_CONSOLE or DETACHED_PROCESS.
+                            /// &lt;/summary&gt;
+                            CREATE_NO_WINDOW = 0x08000000,
+                        }
+
+                        [Flags]
+                        public enum STARTF : uint
+                        {
+                            STARTF_USESHOWWINDOW = 0x00000001,
+                            STARTF_USESIZE = 0x00000002,
+                            STARTF_USEPOSITION = 0x00000004,
+                            STARTF_USECOUNTCHARS = 0x00000008,
+                            STARTF_USEFILLATTRIBUTE = 0x00000010,
+                            STARTF_RUNFULLSCREEN = 0x00000020,  // ignored for non-x86 platforms
+                            STARTF_FORCEONFEEDBACK = 0x00000040,
+                            STARTF_FORCEOFFFEEDBACK = 0x00000080,
+                            STARTF_USESTDHANDLES = 0x00000100,
+                        }
+
+                        public enum ShowWindow : short
+                        {
+                            SW_HIDE = 0,
+                            SW_SHOWNORMAL = 1,
+                            SW_NORMAL = 1,
+                            SW_SHOWMINIMIZED = 2,
+                            SW_SHOWMAXIMIZED = 3,
+                            SW_MAXIMIZE = 3,
+                            SW_SHOWNOACTIVATE = 4,
+                            SW_SHOW = 5,
+                            SW_MINIMIZE = 6,
+                            SW_SHOWMINNOACTIVE = 7,
+                            SW_SHOWNA = 8,
+                            SW_RESTORE = 9,
+                            SW_SHOWDEFAULT = 10,
+                            SW_FORCEMINIMIZE = 11,
+                            SW_MAX = 11
+                        }
+
+                    }
+                }
+&quot;@
+
+                Write-Verbose $source
+                
+                # Using the OutputAssembly and OutputType we can make an executable out of this.  It requires the System.ServiceProcess assembly also to inherit the ServiceBase class.
+                Add-Type -TypeDefinition $source -Language CSharpVersion3 -OutputAssembly (&quot;$servicePath$serviceName.exe&quot;) -OutputType ConsoleApplication -ReferencedAssemblies &quot;System.ServiceProcess&quot;
+
+                # Use WMI to create the service, it does not require DesktopInteract
+                # The computer is the localhost cause this code will be run on the remote computer locally.
+                $computer = &quot;.&quot;
+                $class = &quot;Win32_Service&quot;
+                $method = &quot;Create&quot;
+                $mc = [wmiclass]&quot;\\$computer\ROOT\CIMV2:$class&quot;
+                $inparams = $mc.PSBase.GetMethodParameters($method)
+                $inparams.DesktopInteract = $false
+                $inparams.DisplayName = $serviceDisplayName
+                $inparams.ErrorControl = 0
+                $inparams.LoadOrderGroup = $null
+                $inparams.LoadOrderGroupDependencies = $null
+                $inparams.Name = $serviceDisplayName.Replace(&quot; &quot; ,&quot;_&quot;)
+                $inparams.PathName = (&quot;$servicePath$serviceName.exe&quot;)
+                $inparams.ServiceDependencies = $null
+                $inparams.ServiceType = 16
+                $inparams.StartMode = &quot;Automatic&quot;
+                # Will start as localsystem builtin if null
+                $inparams.StartName = $null
+                $inparams.StartPassword = $null
+
+                $result = $mc.PSBase.InvokeMethod($method,$inparams,$null)
+
+                Start-Service -DisplayName $serviceDisplayName
+
+                # Loop until the child process of Powershell.exe is gone.
+                $baseproc = Get-WMIObject Win32_Process | Where { $_.Name -eq $serviceName }
+
+                While (Get-WMIObject Win32_Process | Where { $_.ParentProcessId -eq $baseproc.ProcessId }) {
+                    Sleep 1
+                } # Terminate While
+
+                Stop-Service -DisplayName $serviceDisplayName
+
+                # Use sc.exe to delete the service, if you only use WMI to do this, it will not disappear until next restart, this deletes it immediately
+                C:\Windows\System32\sc.exe delete $serviceDisplayName.Replace(&quot; &quot; ,&quot;_&quot;) | Out-Null
+
+                # Clean up created files
+                Remove-Item -Path (&quot;$servicePath$serviceName.exe&quot;) -Force
+                Remove-Item -Path (&quot;$servicePath$serviceName.pdb&quot;) -Force
+                Remove-Item -Path $outputFile -Force
+            } Else {
+                Write-Host &quot;No active sessions&quot;
+            } # Terminate If - Active User
+        } # Terminate Scriptblock
+
+        If (Test-Connection $computerName -Quiet) {
+            Try {
+                Invoke-Command `
+                    -ComputerName $computerName `
+                    -ScriptBlock $scriptblock `
+                    -ArgumentList $inputCode,$outputFile,$servicePath,$serviceName
+            }
+            Catch {
+                Write-Warning &quot;Unable to create remote session: $($_.Exception.Message)&quot;
+                Break
+            } # Terminate Try-Catch
+        } # Terminate If - Test Connection
+    } # Terminate Process
+
+    &lt;#    
+        .SYNOPSIS 
+        Invoke remote code impersonating the currently logged on user.
+
+        .PARAMETER computername
+        Computer to run the remote code on.
+        
+        .PARAMETER inputCode
+        The code to run on the remote computer.
+        
+        .PARAMETER outputFile
+        The output data from a file.
+
+        .INPUTS
+        The input is a computer.
+
+        .OUTPUTS
+        The output is the returned data from 
+
+        .EXAMPLE
+        C:\PS&gt; $code = &quot;Out-File -FilePath c:\temp\output.txt -InputObject ([Security.Principal.WindowsIdentity]::GetCurrent())&quot;
+        C:\PS&gt; Invoke-RemoteCommand -inputCode $code
+    #&gt;        
+} # Terminate Function
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

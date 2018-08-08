@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="MatthewASchmitt">
+    <title>Lead Systems Engineer - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Lead Systems Engineer</h1>
+<h3><a href="//scripts/3799.ps1">download</a> - <a href="//scripts/3798.md">parent</a></h3>
+<p>Never fails a user calls in or enters a helpdesk ticket with, “I can’t log in”.  This is a script provides everything I need to determine why: Password Expired? Account Locked? If Locked, which DCs? Are there other users that are locked, that haven’t noticed yet?</p>
+<p>This replaces using AD and the Account Lockout Status Tool.  It not only saves a little time, but has everything in one place.</p>
+<p>Twitter: @MatthewASchmitt
+LinkedIn: www.linkedin.com/in/matthewaschmitt</p>
+<pre><code class="language-posh">&lt;#
+  Author:   Matt Schmitt
+  Date:     11/28/12 
+  Version:  1.0 
+  From:     USA 
+  Email:    ithink2020@gmail.com 
+  Website:  http://about.me/schmittmatt
+  Twitter:  @MatthewASchmitt
+  
+  Description
+  A script for forwarding and unforwarding email for users in Office 365.  
+#&gt;
+
+
+Import-Module ActiveDirectory
+
+Write-Host &quot;&quot;
+Write-Host &quot;PowerShell AD Password Tool&quot;
+Write-Host &quot;&quot;
+Write-Host &quot;This tool displays the Exparation Date of a user's Password and thier Lockedout&quot;
+Write-Host &quot;Status.  It will then allow you to unlock and/or reset the password.&quot;
+Write-Host &quot;&quot;
+
+Write-Host &quot;&quot;
+
+#Counts how many locked account there are on the local DC and sets it to $count
+$count = Search-ADAccount –LockedOut | where { $_.Name -ne &quot;Administrator&quot; -and $_.Name -ne &quot;Guest&quot; } | Measure-Object | Select-Object -expand Count
+
+
+#If there are locked accounts (other than Administrator and Guest), then this will display who is locked out.
+If ( $count -gt 0 ) {
+
+    Write-Host &quot;Current Locked Out Accounts on your LOCAL Domain Controller:&quot;
+    Search-ADAccount –LockedOut | where { $_.Name -ne &quot;Administrator&quot; -and $_.Name -ne &quot;Guest&quot; } | Select-Object SamAccountName, LastLogonDate | Format-Table -AutoSize
+    
+}else{
+    
+#   Write-Host &quot;There are no locked out accounts on your local Domain Controller.&quot;
+
+}
+
+
+Write-Host &quot;&quot;
+
+
+#Asks for the username
+$user = Read-Host &quot;Enter username of the employee you would like to check or [ Ctrl+c ] to exit&quot;
+Write-Host &quot;&quot;
+Write-Host &quot;&quot;
+[datetime]$today = (get-date)
+
+#Get pwdlastset date from AD and set it to $passdate
+$searcher=New-Object DirectoryServices.DirectorySearcher
+$searcher.Filter=&quot;(&amp;(samaccountname=$user))&quot;
+$results=$searcher.findone()
+$passdate = [datetime]::fromfiletime($results.properties.pwdlastset[0])
+
+#Set password Age to $PwdAge
+$PwdAge = ($today - $passdate).Days
+
+If ($PwdAge -gt 90){
+
+    Write-Host &quot;Password for $user is EXPIRED!&quot;
+    Write-Host &quot;Password for $user is $PwdAge days old.&quot;
+
+}else{
+
+    Write-Host &quot;Password for $user is $PwdAge days old.&quot;
+
+}
+
+
+Write-Host &quot;&quot;
+Write-Host &quot;&quot;
+Write-Host &quot;Checking LockedOut Status on defined Domain Controllers:&quot;
+
+#Get Lockedout status and display
+
+# ---&gt; IMPORTANT:  You need to change DC01.your.domain.com &amp; DC02.your.domain.com to the FQDN of your Domian Controlls
+
+switch (Get-ADUser -server DC01.your.domain.com  -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand lockedout) { &quot;False&quot; {&quot;DC01:      Not Locked&quot;} &quot;True&quot; {&quot;DC01:    LOCKED&quot;}}
+
+switch (Get-ADUser -server DC02.your.domain.com  -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand lockedout) { &quot;False&quot; {&quot;DC02:      Not Locked&quot;} &quot;True&quot; {&quot;DC02:    LOCKED&quot;}}
+
+# ---&gt; You can add more domain controllers to list, by copying one of the lines, then Modifying the text to reflect your DCs.
+
+
+Write-Host &quot;&quot;
+Write-Host &quot;&quot;
+
+
+[int]$y = 0
+
+
+$option = Read-Host  &quot;Would you like to (1) Unlock user, (2) Reset user's password, (3) Unlock and reset user's password or (4) Exit?&quot;
+
+cls
+
+While ($y -eq 0) {
+    
+    switch ($option)
+    {
+        &quot;1&quot; { 
+                
+                # ---&gt; IMPORTANT:  You need to change DC01.your.domain.com &amp; DC02.your.domain.com to the FQDN of your Domian Controlls
+                
+                Write-Host &quot;Unlocking account on DC01&quot;
+                Unlock-ADAccount -Identity $user -server DC01.your.domain.com 
+                
+                Write-Host &quot;Unlocking account on DC02&quot;
+                Unlock-ADAccount -Identity $user -server DC02.your.domain.com  
+                
+                # ---&gt; You can add more domain controllers to list, by copying one of the lines, then Modifying the text to reflect your DCs.                           
+                
+                
+                #Get Lockedout status and set it to $Lock
+                $Lock = (Get-ADUser -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand lockedout)
+
+                Write-Host &quot;&quot;
+
+                #Depending on Status, tell user if the account is locked or not.
+                switch ($Lock)
+                {
+                    &quot;False&quot; { Write-Host &quot;$user is unlocked.&quot; }
+                    &quot;True&quot; { Write-Host &quot;$user is LOCKED Out.&quot; }
+                }                
+                
+            
+                Write-Host &quot;&quot;
+                Write-Host &quot;Press any key to Exit.&quot;
+                
+                $y += 1
+                
+                $x = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+                
+            
+            }
+        &quot;2&quot; { 
+                
+                $newpass = (Read-Host -AsSecureString &quot;Enter user's New Password&quot;)
+                
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Resetting Password on local DC...&quot;
+                Write-Host &quot;&quot;
+                Set-ADAccountPassword -Identity $user -NewPassword $newpass
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Resetting Password on DC02&quot;
+                Write-Host &quot;&quot;
+                
+                # ---&gt; IMPORTANT:  You need to change DC01.your.domain.com &amp; DC02.your.domain.com to the FQDN of your Domian Controlls
+                
+                Set-ADAccountPassword -Server DC02.your.domain.com -Identity $user -NewPassword $newpass
+                
+                # ---&gt; You can add more domain controllers to list, by copying one of the lines, then Modifying the text to reflect your DCs.
+                             
+                           
+                Write-Host &quot;&quot;
+                Write-Host &quot;Press any key to Exit.&quot;
+                $x = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+                
+                $y += 1
+    
+            }
+        &quot;3&quot; {
+    
+                $newpass = (Read-Host -AsSecureString &quot;Enter user's New Password&quot;)
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Resetting Password on Local DC...&quot;
+                Write-Host &quot;&quot;
+                Set-ADAccountPassword -Identity $user -NewPassword $newpass
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Resetting Password on DC02&quot;
+                Write-Host &quot;&quot;
+                
+                # ---&gt; IMPORTANT:  You need to change DC01.your.domain.com &amp; DC02.your.domain.com to the FQDN of your Domian Controlls
+                
+                Set-ADAccountPassword -Server DC02.your.domain.com -Identity $user -NewPassword $newpass
+                
+                # ---&gt; You can add more domain controllers to list, by copying one of the lines, then Modifying the text to reflect your DCs.
+                
+                Write-Host &quot;&quot;
+                Write-Host &quot;Password for $user has been reset.&quot;
+                Write-Host &quot;&quot;
+                
+                
+                # ---&gt; IMPORTANT:  You need to change DC01.your.domain.com &amp; DC02.your.domain.com to the FQDN of your Domian Controlls
+                
+                Write-Host &quot;Unlocking account on DC01&quot;
+                Unlock-ADAccount -Identity $user -server DC01.your.domain.com
+                
+                Write-Host &quot;Unlocking account on DC02&quot;
+                Unlock-ADAccount -Identity $user -server DC02.your.domain.com                
+
+                # ---&gt; You can add more domain controllers to list, by copying one of the lines, then Modifying the text to reflect your DCs.
+                
+
+                
+                #Get Lockedout status and set it to $Lock
+                $Lock = (Get-ADUser -Filter {samAccountName -eq $user } -Properties * | Select-Object -expand lockedout)
+
+                Write-Host &quot;&quot;
+
+                #Depending on Status, tell user if the account is locked or not.
+                switch ($Lock)
+                {
+                    &quot;False&quot; { Write-Host &quot;$user is unlocked.&quot; }
+                    &quot;True&quot; { Write-Host &quot;$user is LOCKED Out.&quot; }
+                }                
+                
+            
+                Write-Host &quot;&quot;
+                Write-Host &quot;Press any key to Exit.&quot;
+
+                
+                $y += 1
+                
+                $x = $host.UI.RawUI.ReadKey(&quot;NoEcho,IncludeKeyDown&quot;)
+    
+            }
+        
+        &quot;4&quot; {
+    
+                #exit code
+                $y += 1
+    
+            }
+            
+        default {
+                
+                Write-Host &quot;You have entered and incorrect number.&quot;
+                Write-Host &quot;&quot;
+                $option = Read-Host  &quot;Would you like to (1) Unlock user, (2) Reset user's password, (3) Unlock and reset user's password or (4) Exit?&quot;
+        
+            }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

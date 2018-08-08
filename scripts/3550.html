@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="chriskenis">
+    <title>Set-IPConfigv4 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-IPConfigv4</h1>
+<h3><a href="//scripts/3550.ps1">download</a> - <a href="//scripts/3542.md">parent</a></h3>
+<p>a WMI driven script to set IP Configuration from remote
+still trying to improve as to get a smooth working script
+some actions need to be (un)commented as required by your needs</p>
+<pre><code class="language-posh"># script parameters
+param(
+[Parameter(Position=0,ValueFromPipeline=$True)]
+[ValidateNotNullorEmpty()][string[]] $Computers = $env:computername,
+[switch] $ChangeSettings,
+[switch] $EnableDHCP,
+[switch] $IpRelease
+)
+
+# script variables
+$nl = [Environment]::NewLine
+$Domain = &quot;domain.local&quot;
+$DNSSuffix = @(&quot;domain.local,domain.com&quot;) #split DNS setting
+$DNSServers = @(&quot;10.10.0.1&quot;, &quot;10.10.0.2&quot;, &quot;10.10.0.3&quot;, &quot;10.10.0.4&quot;)
+$WINSServers = @(&quot;10.10.0.5&quot;, &quot;10.10.0.6&quot;)
+$Gateway = @(&quot;10.10.255.254&quot;)
+
+# script functions
+Function ProcessNIC($NIC, $Computer){
+	# Change settings for selected network card if option is true and show updated values
+	If ($ChangeSettings){
+		If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] &quot;Administrator&quot;)){
+			Write-Warning &quot;You need Administrator rights to run this script!&quot;
+			Break
+		}
+		If ($IpRelease){
+			#$NIC.ReleaseDHCPLease
+			$NIC.RenewDHCPLease
+			}
+		Else{
+			ChangeIPConfig $NIC $Computer
+			}
+			start-sleep -s 2
+			Write-Host $nl &quot;    ====NEW SETTINGS====&quot; $nl
+			$UpdatedNIC = Get-WMIObject -Class Win32_NetworkAdapterConfiguration -Computername $Computer -Filter &quot;Index=$($NIC.Index)&quot;
+			Write-Output $(ShowDetails $UpdatedNIC $Computer)$($nl)
+		}
+	Else{
+			$nl
+			Write-Warning &quot;For changing settings add -ChangeSettings as parameter, if not this script is output only&quot;
+			$nl
+		}
+}
+
+Function ChangeIPConfig($NIC, $Computer){
+	if ($EnableDHCP){
+		$NIC.EnableDHCP()
+		$NIC.SetDNSServerSearchOrder()
+		}
+	else{
+		$DNSServers = Get-random $DNSservers -Count 4
+		$NIC.SetDNSServerSearchOrder($DNSServers) | Out-Null
+		#$x = 0
+		#$IPaddress = @()
+		#$NetMask = @()
+		#$Gateway = @()
+		#$Metric = @()
+		#foreach ($IP in $NIC.IPAddress){
+			#$IPaddress[$x] = $NIC.IPAddress[$x]
+			#$NetMask[$x] = $NIC.IPSubnet[$x]
+			#$Gateway[$x] = $NIC.DefaultIPGateway[$x]
+			#$Metric[$x] = $NIC.GatewayCostMetric[$x]
+			#$x++
+		#}
+		#$NIC.EnableStatic($IPaddress, $NetMask)
+		#$NIC.SetGateways($Gateway, $Metric)
+		#$NIC.SetWINSServer($WINSServers)
+		}
+	$NIC.SetDynamicDNSRegistration(&quot;TRUE&quot;) | Out-Null
+	$NIC.SetDNSDomain($Domain) | Out-Null
+	# remote WMI registry method for updating DNS Suffix SearchOrder
+	$registry = [WMIClass]&quot;\\$computer\root\default:StdRegProv&quot;
+	$HKLM = [UInt32] &quot;0x80000002&quot;
+	$registry.SetStringValue($HKLM, &quot;SYSTEM\CurrentControlSet\Services\TCPIP\Parameters&quot;, &quot;SearchList&quot;, $DNSSuffix) | Out-Null
+}
+
+Function ShowDetails($NIC, $Computer){
+	Write-Output &quot;$($nl)$(&quot; IP settings on: &quot;)$($Computer.ToUpper())$($nl)$($nl)$(&quot; for&quot;) $($NIC.Description)$(&quot;:&quot;)$($nl)&quot;
+	Write-Output &quot;$(&quot;Hostname = &quot;)$($NIC.DNSHostName)&quot;
+	Write-Output &quot;$(&quot;DNSDomain= &quot;)$($NIC.DNSDomain)&quot;
+	Write-Output &quot;$(&quot;Domain DNS Registration Enabled = &quot;)$($NIC.DomainDNSRegistrationEnabled)&quot;
+	Write-Output &quot;$(&quot;Full DNS Registration Enabled = &quot;)$($NIC.FullDNSRegistrationEnabled)&quot;
+	Write-Output &quot;$(&quot;DNS Domain Suffix Search Order = &quot;)$($NIC.DNSDomainSuffixSearchOrder)&quot;
+	Write-Output &quot;$(&quot;MAC address = &quot;)$($NIC.MACAddress)&quot;
+	Write-Output &quot;$(&quot;DHCP enabled = &quot;)$($NIC.DHCPEnabled)&quot;
+	# show all IP adresses on this NIC
+	$x = 0
+	foreach ($IP in $NIC.IPAddress){
+		Write-Output &quot;$(&quot;IP address $x =&quot;)$($NIC.IPAddress[$x])$(&quot;/&quot;)$($NIC.IPSubnet[$x])&quot;
+		$x++
+	}
+	Write-Output &quot;$(&quot;Default IP Gateway = &quot;)$($NIC.DefaultIPGateway)&quot;
+	Write-Output &quot;$(&quot;DNS Server Search Order = &quot;)$($NIC.DNSServerSearchOrder)&quot;
+}
+
+# actual script execution
+foreach ($Computer in $Computers){
+	If (Test-connection $Computer -quiet -count 1){
+		Try {
+			[array]$NICs = Get-WMIObject -Class Win32_NetworkAdapterConfiguration -Computername $Computer -Filter &quot;IPEnabled = TRUE&quot; -EA Stop
+			}
+		Catch {
+			Write-Warning &quot;$($error[0])&quot;
+			Write-Output &quot;$(&quot;INACCESIBLE: &quot;)$($nl)$($Computer.ToUpper())&quot;
+			Write-Host $nl
+			continue
+			}
+		# Generate selection menu
+		$NICindex = $NICs.count
+		Write-Host &quot;$nl Selection for &quot;$Computer.ToUpper() &quot;: $nl&quot;
+		For ($i=0;$i -lt $NICindex; $i++) {
+			Write-Host -ForegroundColor Green &quot;$i --&gt; $($NICs[$i].Description)&quot;
+			Write-Output $(ShowDetails $NICs[$i] $Computer)
+			}
+		$nl
+		Write-Host -ForegroundColor Green &quot;q --&gt; Quit&quot; $nl
+		# Wait for user selection input
+		Do {
+			$SelectIndex = Read-Host &quot;Select connection by number or 'q' (=default) to quit&quot;
+			Switch -regex ($SelectIndex){
+				&quot;^q.*&quot;{$SelectIndex=&quot;quit&quot;; $kip = $true}
+				&quot;\d&quot;{$SelectIndex = $SelectIndex -as [int];$kip = $false}
+				&quot;^\s*$&quot;{$SelectIndex=&quot;quit&quot;; $kip = $true}
+			}
+		}
+		Until (($SelectIndex -lt $NICindex) -OR $SelectIndex -like &quot;q*&quot;)
+		$nl
+		Write-Host &quot;You selected: $SelectIndex&quot;
+		#skip current $computer if $true
+		If ($kip) {continue}
+		Else {ProcessNIC $NICs[$SelectIndex] $Computer}
+	}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

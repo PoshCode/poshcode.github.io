@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Get-PEHeader - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-PEHeader</h1>
+<h3><a href="//scripts/5532.ps1">download</a> - <a href="//scripts/4767.md">parent</a></h3>
+<pre><code class="language-posh">function Get-PEHeader {
+  &lt;#
+    .EXAMPLE
+        PS C:\debug&gt; (Get-PEHeader app.exe).DosHeader
+    .EXAMPLE
+        PS C:\debug&gt; (Get-PEHeader app.exe).FileHeader
+    .EXAMPLE
+        PS C:\debug&gt; (Get-PEHeader app.exe).OptionalHeader
+    .EXAMPLE
+        PS C:\debug&gt; (Get-PEHeader app.exe).DataDirectories
+    .EXAMPLE
+        PS C:\debug&gt; (Get-PEHeader app.exe).Sections
+    .NOTES
+        Author: greg zakahrov
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+    [ValidateScript({Test-Path $_})]
+    [String]$File
+  )
+  
+  begin {
+    Add-Type -AssemblyName Microsoft.Build.Tasks, System.Deployment
+    
+    $assemblies = [AppDomain]::CurrentDomain.GetAssemblies() | ? {
+      $_.ManifestModule.ScopeName -match '(?:(Microsoft.Build.Tasks)|(System.Deployment).dll)'
+    }
+    #some useful functions for quick accessing and parsing data
+    $flag = {param([Int32]$i) [Reflection.BindingFlags]$i}
+    $type = {param([String]$a, [String]$t)
+      ($assemblies | ? {$_.FullName.Contains($a)}).GetType($t)
+    }
+    $strc = {param([String]$s)
+      [Activator]::CreateInstance(
+        (&amp;$type ($a = 'System.Deployment') ($a + '.Application.PEStream')).GetNestedType(
+          $s, (&amp;$flag 32)
+        )
+      )
+    }
+    $NativeMethods = &amp;$type ($a = 'Microsoft.Build.Tasks') ($a + '.NativeMethods')
+    $nthdr = {param([Int32]$bit)
+      [Activator]::CreateInstance(
+        $NativeMethods.GetNestedType(('IMAGE_NT_HEADERS' + $bit), (&amp;$flag 32))
+      )
+    }
+    $field = {param([Object]$o, [String]$f)
+      $o.GetType().GetField($f, (&amp;$flag 36)).GetValue($o)
+    }
+    
+    $File = Convert-Path $File
+    #marshal accelerator
+    if ([Array]($script:ta = [Type]::GetType(
+      'System.Management.Automation.TypeAccelerators'
+    ))::Get.Keys -notcontains 'marshal') {
+      $ta::Add('marshal', [Type][Runtime.InteropServices.Marshal])
+    }
+    #section characteristics
+    $Sections = {param([UInt32]$i)
+      (-join (($ht = @{
+        'TypeReg'           = 0x00000000
+        'TypeDesct'         = 0x00000001
+        'TypeNoLoad'        = 0x00000002
+        'TypeNoGroup'       = 0x00000004
+        'TypeNoPadded'      = 0x00000008
+        'TypeCopy'          = 0x00000010
+        'Code'              = 0x00000020
+        'InitializedData'   = 0x00000040
+        'UninitializedData' = 0x00000080
+        'LinkOther'         = 0x00000100
+        'LinkInfo'          = 0x00000200
+        'TypeOver'          = 0x00000400
+        'LinkRemove'        = 0x00000800
+        'LinkComDat'        = 0x00001000
+        'Res0'              = 0x00002000
+        'NoDeferSpecExc'    = 0x00004000
+        'RelativeGP'        = 0x00008000
+        'Res1'              = 0x00010000
+        'MemPurgeable'      = 0x00020000
+        'MemLocked'         = 0x00040000
+        'MemPreload'        = 0x00080000
+        'Align1Bytes'       = 0x00100000
+        'Align2Bytes'       = 0x00200000
+        'Align4Bytes'       = 0x00300000
+        'Align8Bytes'       = 0x00400000
+        'Align16Bytes'      = 0x00500000
+        'Align32Bytes'      = 0x00600000
+        'Align64Bytes'      = 0x00700000
+        'Align128Bytes'     = 0x00800000
+        'Align256Bytes'     = 0x00900000
+        'Align512Bytes'     = 0x00A00000
+        'Align1024Bytes'    = 0x00B00000
+        'Align2048Bytes'    = 0x00C00000
+        'Align4096Bytes'    = 0x00D00000
+        'Align8192Bytes'    = 0x00E00000
+        'AlignMask'         = 0x00F00000
+        'LinkrelocOvflw'    = 0x01000000
+        'MemDiscardable'    = 0x02000000
+        'MemNotCached'      = 0x04000000
+        'MemNotPaged'       = 0x08000000
+        'MemShared'         = 0x10000000
+        'MemExecute'        = 0x20000000
+        'MemRead'           = 0x40000000
+        'MemWrite'          = 0x80000000
+      }).Keys | % {if ($i -band $ht[$_]) {$_ + '; '}})).Trim()
+    }
+  }
+  process {
+    try {
+      $fs = [IO.File]::OpenRead($File)
+      $br = New-Object IO.BinaryReader($fs)
+      
+      $e_magic = $br.ReadUInt16() -eq 23117 #MZ
+      $fs.Position = 0x3C #e_lfamew
+      $fs.Position = $br.ReadUInt32()
+      $pe_sign = $br.ReadUInt32() -eq 17744 #PE00
+      
+      if (!$e_magic -or !$pe_sign) {
+        throw (New-Object ArgumentException('Specified file is not valid PE.'))
+      }
+      
+      $fs.Position += 0x14
+      $Magic = $br.ReadUInt16() #PE\PE+ signature
+      
+      $fs.Position = 0 #move back and read whole file
+      $buf = New-Object &quot;Byte[]&quot; $fs.Length
+      [void]$fs.Read($buf, 0, $buf.Length)
+      
+      $gch = [Runtime.InteropServices.GCHandle]::Alloc($buf, 'Pinned')
+      $ptr = $gch.AddrOfPinnedObject()
+      #IMAGE_DOS_HEADER dump
+      $IMAGE_DOS_HEADER = &amp;$strc IMAGE_DOS_HEADER
+      $IMAGE_DOS_HEADER = [Marshal]::PtrToStructure($ptr, $IMAGE_DOS_HEADER.GetType())
+      #IMAGE_NT_HEADERS dump
+      $nt_base = $NativeMethods.GetMethod('ImageNtHeader', (&amp;$flag 40)).Invoke($null, @($ptr))
+      $IMAGE_NT_HEADERS = switch ($Magic) { 0x10B { &amp;$nthdr 32 } 0x20B { &amp;$nthdr 64 } }
+      $IMAGE_NT_HEADERS = [Marshal]::PtrToStructure($nt_base, $IMAGE_NT_HEADERS.GetType())
+      #IMAGE_FILE_HEADER dump
+      $IMAGE_FILE_HEADER = New-Object Object
+      ($raw = &amp;$field $IMAGE_NT_HEADERS fileHeader).GetType().GetFields((&amp;$flag 36)) | % {
+        $IMAGE_FILE_HEADER | Add-Member $_.Name -MemberType NoteProperty -Value $(
+          $val = $_.GetValue($raw)
+          switch ($_.Name) {
+            'Machine'         { [Reflection.ImageFileMachine]$val }
+            'TimeDateStamp'   {
+              [TimeZone]::CurrentTimeZone.ToLocalTime(([DateTime]'1.1.1970').AddSeconds($val))
+            }
+            'Characteristics' {
+               (-join (($ht = @{
+                 'RelocsStripped'    = 0x0001
+                 'Executable'        = 0x0002
+                 'LineNumsStripped'  = 0x0004
+                 'LocalSymsStripped' = 0x0008
+                 'AggressiveWSTrim'  = 0x0010
+                 'LargeAddressAware' = 0x0020
+                 'Reserved'          = 0x0040
+                 'BytesReservedLo'   = 0x0080
+                 '32BitMachine'      = 0x0100
+                 'DebugStripped'     = 0x0200
+                 'RmvblRunFromSwap'  = 0x0400
+                 'NetRunFromSwap'    = 0x0800
+                 'System'            = 0x1000
+                 'DLL'               = 0x2000
+                 'UpSystemOnly'      = 0x4000
+                 'BytesReseredHI'    = 0x8000
+               }).Keys | % {
+                 if (($val -band $ht[$_]) -eq $ht[$_]) {$_ + &quot;`n&quot;}
+               })).Trim()
+            }
+            default           { $val }
+          } #switch
+        ) #value
+      }
+      #IMAGE_OPTIONAL_HEADER dump
+      $IMAGE_OPTIONAL_HEADER = New-Object Object
+      ($raw = &amp;$field $IMAGE_NT_HEADERS optionalHeader).GetType().GetFields((&amp;$flag 36)) | % {
+        if ($_.Name -ne 'DataDirectory') {
+          $IMAGE_OPTIONAL_HEADER | Add-Member $_.Name -MemberType NoteProperty -Value $(
+            $val = $_.GetValue($raw)
+            if ($_.Name -match 'Version') {
+              $val
+            }
+            elseif ($_.Name -eq 'Subsystem') {
+              (@{
+                'Unknown'        = 0x00
+                'Native'         = 0x01
+                'WindowsGUI'     = 0x02
+                'WindowsCUI'     = 0x03
+                'POSIX_CUI'      = 0x07
+                'WindowsCE_GUI'  = 0x09
+                'EFIApplication' = 0x0A
+                'EFIBootSrvDrv'  = 0x0B
+                'EFIRuntimeDrv'  = 0x0C
+                'EFIRom'         = 0x0D
+                'XBox'           = 0x0E
+              }.GetEnumerator() | ? {$_.Value -eq $val}).Name
+            }
+            elseif ($_.Name -eq 'DllCharacteristics') {
+              (-join (($ht = @{
+                'Reserved0'      = 0x0001
+                'Reserved1'      = 0x0002
+                'Reserved2'      = 0x0004
+                'Reserved3'      = 0x0008
+                'DynamicBase'    = 0x0040
+                'ForceIntegrity' = 0x0080
+                'NXCompatible'   = 0x0100
+                'NoIsolation'    = 0x0200
+                'NoSEH'          = 0x0400
+                'NoBind'         = 0x0800
+                'Reserved4'      = 0x1000
+                'WDMDriver'      = 0x2000
+                'TermSrvAware'   = 0x8000
+              }).Keys | % {
+                if (($val -band $ht[$_]) -eq $ht[$_]) {$_ + '; '}
+              })).Trim()
+            }
+            else {
+              '0x{0:X}' -f $val
+            }
+          ) #value
+        }
+      }
+      #IMAGE_DATA_DIRECTORY[]
+      [IntPtr]$rva_ptr = $nt_base.ToInt64() + [Marshal]::SizeOf($IMAGE_NT_HEADERS) - 128
+      $IMAGE_DATA_DIRECTORY = 0..($IMAGE_OPTIONAL_HEADER.NumberOfRvaAndSizes - 1) | % {
+        $dd = &amp;$strc IMAGE_DATA_DIRECTORY
+      }{
+        [Marshal]::PtrToStructure($rva_ptr, $dd.GetType())
+        [IntPtr]$rva_ptr = $rva_ptr.ToInt64() + 0x8
+      }
+      #IMAGE_SECTION_HEADER[]
+      $IMAGE_SECTION_HEADER = 0..($IMAGE_FILE_HEADER.NumberOfSections - 1) | % {
+        $sh = &amp;$strc IMAGE_SECTION_HEADER
+        $sec_ptr = $rva_ptr #first section pointer
+      }{
+        $sec = [Marshal]::PtrToStructure($sec_ptr, $sh.GetType())
+        New-Object PSObject -Property @{
+          Name             = [Text.Encoding]::Default.GetString($sec.Name)
+          VirtualSize      = '0x{0:X}' -f $sec.VirtualSize
+          VirtualAddress   = '0x{0:X}' -f $sec.VirtualAddress
+          SizeOfRawData    = '0x{0:X}' -f $sec.SizeOfRawData
+          PointerToRawData = '0x{0:X}' -f $sec.PointerToRawData
+          Characteristics  = &amp;$Sections $sec.Characteristics
+        } | select Name, VirtualSize, VirtualAddress, SizeOfRawData, PointerToRawData, Characteristics
+        [IntPtr]$sec_ptr = $sec_ptr.ToInt64() + 0x28
+      } | ft -a
+      #compile all in one
+      $PEHeader = New-Object PSObject -Property @{
+        DosHeader       = $IMAGE_DOS_HEADER
+        FileHeader      = $IMAGE_FILE_HEADER
+        OptionalHeader  = $IMAGE_OPTIONAL_HEADER
+        DataDirectories = $IMAGE_DATA_DIRECTORY
+        Sections        = $IMAGE_SECTION_HEADER
+      }
+      $PEHeader | select DosHeader, FileHeader, OptionalHeader, DataDirectories, Sections
+    }
+    catch {
+      $_.Exception
+    }
+    finally {
+      if ($gch -ne $null) { $gch.Free() }
+      if ($br  -ne $null) { $br.Close() }
+      if ($fs  -ne $null) { $fs.Close() }
+    }
+  }
+  end {}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

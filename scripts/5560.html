@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Invoke-BackgroundTimer - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-BackgroundTimer</h1>
+<h3><a href="//scripts/5560.ps1">download</a></h3>
+<p>This is an example of how to use Timers, Events, and Jobs together in a way that doesn't block the event, but does block the host. See the Example for ... an example. More later when I have time to think of them ;-)</p>
+<pre><code class="language-posh">function Invoke-BackgroundTimer {
+    #.Synopsis
+    #   An example of how to run a script repeatedly on a timer...
+    #.Example
+    #   Invoke-BackgroundTimer {
+    #       Get-Process Sublime* | 
+    #           Select-Object ProcessName, PagedMemorySize, PagedSystemMemorySize, 
+    #                  @{ Name = &quot;Time&quot;; Expr = { Get-Date } } 
+    #   }
+    #   
+    #   Shows the memory footprint of sublime every second for 30 seconds
+    [CmdletBinding(DefaultParameterSetName=&quot;Milliseconds&quot;)]
+    param(
+        [Parameter(Position=0,Mandatory=$True)]
+        [ScriptBlock[]]$Action,
+
+        [Parameter(ParameterSetName=&quot;Milliseconds&quot;)]
+        [int]$TimerMilliseconds = 1000,
+        [Parameter(ParameterSetName=&quot;Milliseconds&quot;)]
+        [int]$LimitSeconds = &quot;30&quot;,
+
+        [Parameter(ParameterSetName=&quot;TimeSpan&quot;)]
+        [TimeSpan]$Every = &quot;0:0:1&quot;,
+        [Parameter(ParameterSetName=&quot;TimeSpan&quot;, Mandatory=$true)]
+        [TimeSpan]$For
+
+    )
+
+    if($PSCmdlet.ParameterSetName -eq &quot;Timespan&quot;) {
+        $TimerMilliseconds = $Every.Milliseconds
+        $LimitMilliseconds = $For.Milliseconds
+    } else {
+        $LimitMilliseconds = $LimitSeconds * 1000
+    }
+
+    # The resolution of the timer matters:
+    $ProcessTimer = New-Object System.Timers.Timer $TimerMilliseconds
+
+    # I'm arbitrarily using a stopwatch as the limit to this task
+    # You could just count events instead ...
+    $StopWatch = New-Object System.Diagnostics.StopWatch
+
+    $MessageData = @{
+        Action = $Action
+        StopWatch = $StopWatch
+        Limit = $LimitMilliseconds
+    }
+
+    $Job = Register-ObjectEvent $ProcessTimer -SourceIdentifier LoopTimer -EventName Elapsed -MessageData $MessageData -Action {
+        # This is the exit condition, don't run it any more
+        if($Event.MessageData.StopWatch.ElapsedMilliseconds -ge $Event.MessageData.Limit) {
+            Unregister-Event LoopTimer
+            break
+        }
+
+        # If you want to be able to tell that something's happening ...
+        # You're going to want to write something to the screen in here...
+        Write-Progress &quot;Processing&quot; -SecondsRemaining (($Event.MessageData.Limit - $Event.MessageData.StopWatch.ElapsedMilliseconds) / 1000)
+
+        # This is the actual work. In our example, we're just monitoring a process memory footprint
+        $Event.MessageData.Action | %{ &amp; $_ }
+    }
+
+    $ProcessTimer.Start()
+    $StopWatch.Start()
+
+    Write-Warning &quot;If you stop the script using Ctrl+C at this point, you need to manually Unregister-Event LoopTimer&quot;
+    # To avoid missing events sleep an order of magnitude less than the TimerResolution
+    while(!$Job.Finished.WaitOne($TimerMilliseconds/10)) {
+        $Job | Receive-Job
+    }
+    # Just to make sure the job is empty ...
+    $Job | Receive-Job
+    $Job | Remove-Job
+
+    # Clean up after ourselves
+    $ProcessTimer.Dispose()
+    $StopWatch.Stop()
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

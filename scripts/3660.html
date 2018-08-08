@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="chriskenis">
+    <title>DNS functions - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>DNS functions</h1>
+<h3><a href="//scripts/3660.ps1">download</a> - <a href="//scripts/3659.md">parent</a></h3>
+<p>copy, clean and dedup DNS zones, working code,
+needs extra code if you want additional DNS record types or zones
+1 condition is to have at least one dns record type to compare with</p>
+<pre><code class="language-posh">Param (
+[Parameter(Mandatory=$true, Position=1)][string] $SourceServer,
+[Parameter(Mandatory=$true, Position=2)][string] $SourceZone,
+[Parameter(Mandatory=$true, Position=3)][string] $DestinationServer,
+[Parameter(Mandatory=$true, Position=4)][string] $DestinationZone,
+[string[]] $RRtypes = @(&quot;MicrosoftDNS_AType&quot;),
+[switch] $Copy,
+[switch] $Clean,
+[switch] $Help
+)
+
+# script variables
+$nl = [Environment]::NewLine
+
+If ($Help){
+    Write-Host -ForegroundColor Green &quot;
+NAME
+    DNS_Functions
+SYNOPSIS
+    Copies and/or cleans DNS records from one forward zone to another
+SYNTAX
+    .\DNS_Functions SourceServer SourceZone DestinationServer DestinationZone Switches
+	
+EXAMPLES
+     Forward zone comparison report only:
+      .\DNS_Functions $SourceServer $SourceZone $DestinationServer $DestinationZone
+	  
+     Forward source zone clean up for CNAME records:
+	  .\DNS_Functions.ps1 source_dnsserver source_zone.local destination_dnsserver destination_zone.local -RRtypes `&quot;MicrosoftDNS_AType`&quot;,`&quot;MicrosoftDNS_CNAMEType`&quot; -Clean
+	  
+DESCRIPTION
+    This script can both copy and clean DNS records by comparing any 2 DNS zones, either same or different FQDN
+	&quot;
+	break
+}
+
+function GetDNSrecords($DNSserver, $DNSzone, $RRtype){
+	if ($RRtype -eq $null){$RRtype = &quot;MicrosoftDNS_ResourceRecord&quot;}
+	$DNSrecords = Get-WMIObject -Computer $DNSserver -Namespace &quot;root\MicrosoftDNS&quot; -Class $RRtype -Filter &quot;ContainerName='$DNSzone'&quot;
+	if ($DNSrecords){
+		Switch ($RRtype){
+			MicrosoftDNS_AType {
+				foreach ($rec in $DNSrecords){
+					# add simple name of dns record as extra property for comparison routine
+					Add-Member -InputObject $rec -MemberType NoteProperty -Name SimpleVal -Value $rec.OwnerName.Replace(&quot;.$DNSzone&quot;,&quot;&quot;)
+					}
+				}
+			MicrosoftDNS_CNAMEType {
+				foreach ($rec in $DNSrecords){
+					# add simple name of dns record as extra property for comparison routine
+					Add-Member -InputObject $rec -MemberType NoteProperty -Name SimpleVal -Value $rec.OwnerName.Replace(&quot;.$DNSzone&quot;,&quot;&quot;)
+					}
+				}
+			MicrosoftDNS_ResourceRecord {
+				# to be implemented
+				}
+			}
+		}
+	return $DNSrecords
+}
+
+function GetDNSrecord ($DNSserver, $DNSzone, $name, $RRtype){
+	$DnSrecord = Get-WMIObject -Computer $DNSserver -Namespace &quot;root\MicrosoftDNS&quot; -Class $RRtype -Filter &quot;OwnerName='$name.$DNSzone'&quot;
+	return $DNSrecord # returns the actual object for further processing
+}
+
+function GetDNSzones($DNSserver){
+	# server side filtering
+	$DNSzones = Get-WmiObject -ComputerName $DNSserver -Class MicrosoftDNS_Zone -Namespace root\microsoftDNS -Filter &quot;ZoneType = 1 or ZoneType = 2&quot;
+	# client side filtering
+	#$destDNSzone = Get-WmiObject -ComputerName $destServer -Class MicrosoftDNS_Zone -Namespace root\microsoftDNS | Where {$_.ZoneType -eq '1' -or  $_.ZoneType -eq '2'}
+	return $DNSzones
+}
+
+function GetDNSzone ($DNSserver, $name){
+	$DnSzone = Get-WMIObject -Computer $DNSserver -Namespace &quot;root\MicrosoftDNS&quot; -Class MicrosoftDNS_Zone -Filter &quot;Name='$name'&quot;
+	return $DnSzone # returns the actual object for further processing
+}
+
+# just for debugging and reference
+function DNSrecordInfo($DNSrecord){
+	$objOutput = New-Object PSObject -Property @{
+		$class			= $DNSrecord.__CLASS			# A, CNAME, PTR, etc.
+		$ownerName		= $DNSrecord.OwnerName			# Name column in DNS GUI, FQDN
+		$containerName	= $DNSrecord.ContainerName		# Zone FQDN
+		$domainName		= $DNSrecord.DomainName			# Zone FQDN
+		$ttl			= $DNSrecord.TTL				# TTL
+		$recordClass	= $DNSrecord.RecordClass		# Usually 1 (IN)
+		$recordData		= $DNSrecord.RecordData			# Data column in DNS GUI, value
+		$simpleval		= $ownerName.Replace(&quot;.$domainName&quot;,&quot;&quot;)
+		}
+	return $objOutput
+}
+
+function CopyRecords($DNSrecords){
+	Write-Output &quot;$($nl)$('Copying') $($DNSrecords.count) $('records to') $($DestinationServer)$($nl)&quot;
+	$Succ = $Fail = 0
+	foreach ($DnSrecord in $DNSrecords){
+		Switch ($DNSrecord.__CLASS) {
+			MicrosoftDNS_AType {
+				$destRec = [WmiClass]&quot;\\$DestinationServer\root\MicrosoftDNS:MicrosoftDNS_AType&quot;
+				if ($Copy){
+					if ($DnSrecord.SimpleVal -eq $SourceZone){
+						# skip (same as parent) A records
+						Write-Output &quot;$('copy of A:') $($DNSrecord) $('skipped')&quot;
+						break
+						}
+					try{
+						$newrec = $DNSrecord.SimpleVal + &quot;.&quot; + $DestinationZone
+						$destRec.CreateInstanceFromPropertyData($DestinationServer, $DestinationZone, $newrec, 1, $DNSrecord.TTL, $DNSrecord.RecordData) | out-null
+						$Succ ++
+						Write-Output &quot;$('copy of A:') $($newrec) $('on') $($DestinationServer)&quot;
+						}
+					catch{
+						Write-Output &quot;$('copy of A:') $($newrec) $('failed')&quot;
+						Write-Output &quot;$($error[0])&quot;
+						$Fail ++
+						}
+					}
+				}
+			MicrosoftDNS_CNAMEType {
+				$destRec = [WmiClass]&quot;\\$DestinationServer\root\MicrosoftDNS:MicrosoftDNS_CNAMEType&quot;
+				if ($Copy){
+					try{
+						$newrec = $DNSrecord.SimpleVal + &quot;.&quot; + $DestinationZone
+						$crec = $DNSrecord.RecordData.Replace(&quot;.$SourceZone&quot;,&quot;.$DestinationZone&quot;)
+						$destRec.CreateInstanceFromPropertyData($DestinationServer, $DestinationZone, $newrec, 1, $DNSrecord.TTL, $crec ) | out-null
+						$Succ ++
+						Write-Output &quot;$('copy of CNAME:') $($newrec) $('on') $($DestinationServer)&quot;
+						}
+					catch{
+						Write-Output &quot;$('copy of CNAME') $($newrec) $('failed')&quot;
+						Write-Output &quot;$($error[0])&quot;
+						$Fail ++
+						}
+					}
+				}
+			default{
+				Write-Output &quot;$('copy of:') $($DNSrecord.SimpleVal) $('failed') $('due to unknown record class')&quot;
+				$Fail ++
+				}
+			}
+		}
+	Write-Output &quot;$($nl)$($Succ) $('records copied')&quot;
+	Write-Output &quot;$($Fail) $('records failed')$($nl)&quot;
+}
+
+function ScavengeRecords($DNSrecords){
+	$Deleted = $Dead = $Live = 0
+	foreach ($DnSrecord in $DNSrecords){
+		if (Test-Connection -ComputerName  $DNSrecord.OwnerName -count 1 -ea silentlycontinue) {
+			write-output &quot;$($DNSrecord.SimpleVal) $('is still alive')&quot;
+			$Live ++
+			}
+		else{
+			write-output &quot;$($DNSrecord.SimpleVal) $('cannot be reached')&quot;
+			$Dead ++
+			if ($Clean){
+				try{
+					$DNSrecord.delete()
+					$Deleted ++
+					}
+				catch{}
+				}
+			}
+		}
+	Write-Output &quot;$($nl)$($Deleted) $('records scavenged')&quot;
+	Write-Output &quot;$($Live) $('records were live')&quot;
+	Write-Output &quot;$($Dead) $('records were dead')$($nl)&quot;
+}
+
+function DedupDNSzone ($srcRecords, $dstRecords){
+	# return only records from reference (= source zone) found in both DNS zones
+	$Records2Dedup = compare-object $srcRecords $dstRecords -IncludeEqual -ExcludeDifferent -Property SimpleVal -PassThru
+	Write-Output &quot;$($nl)$('deleting duplicate records from') $($SourceZone)&quot;
+	try{
+		$Records2Dedup | %{ $_.delete() }
+		Write-Output &quot;$($Records2Dedup.count) $('duplicate records processed')$($nl)&quot;
+		}
+	catch{
+		Write-Output &quot;$('failure deleting record(s)')$($nl)&quot;
+		}
+}
+
+function CleanDNSzone($srcRecords, $dstRecords){
+	# return unique records in source zone only
+	$Records2Clean = compare-object $srcRecords $dstRecords -Property SimpleVal -PassThru | Where-Object { $_.SideIndicator -eq '&lt;=' }
+	ScavengeRecords $Records2Clean
+}
+
+function CopyDNSzone ($srcRecords, $dstRecords){
+	# return unique records in source zone only
+	$Records2Copy = compare-object $srcRecords $dstRecords -Property SimpleVal -PassThru | Where-Object { $_.SideIndicator -eq '&lt;=' }
+	CopyRecords $Records2Copy
+}
+
+function CompareDNSservers($srcDNSzone ,$destDNSzone){
+	$dest = $src = $equ = 0
+	$zones = compare-object $srcDNSzone $destDNSzone -Property name -IncludeEqual
+	if ($zones -ne $null){
+		foreach ($zone in $zones){
+			switch ($zone.SideIndicator){
+				'=&gt;' {
+					write-output &quot;$($zone.Name) $('only exists on destination:') $($DestinationServer)&quot;
+					$dest ++
+					}
+				'&lt;=' {
+					write-output &quot;$($zone.Name) $('only exists on source:') $($SourceServer)&quot;
+					$src ++
+					}
+				'==' {
+					write-output &quot;$($zone.Name) $('exists on both source and destination')&quot;
+					$equ ++
+					}
+				}
+			}
+		write-output &quot;$($nl)$($dest) $('zones on') $($DestinationServer) $('only')&quot;
+		write-output &quot;$($src) $('zones on') $($SourceServer) $('only')&quot;
+		write-output &quot;$($equ) $('zones on both source and destination')$($nl)&quot; 
+		}
+}
+
+function CompareDNSzone($srcRecords, $dstRecords){
+	$dest = $src = $equ = 0
+	$records = compare-object $srcRecords $dstRecords -IncludeEqual -Property SimpleVal
+	if ($records -ne $null){
+		foreach ($record in $records){
+			switch ($record.SideIndicator){
+				'=&gt;' {
+					write-output &quot;$($record.SimpleVal) $('exists only in:') $($DestinationZone)&quot;
+					$dest ++
+					}
+				'&lt;=' {
+					write-output &quot;$($record.SimpleVal) $('exists only in:') $($SourceZone)&quot;
+					$src ++
+					}
+				'==' {
+					write-output &quot;$($record.SimpleVal) $('exists in both zones')&quot;
+					$equ ++
+					}
+				}
+			}
+		write-output &quot;$($nl)$($dest) $('records in') $($DestinationZone) $('on') $($DestinationServer) $('only')&quot;
+		write-output &quot;$($src) $('records in') $($SourceZone) $('on') $($SourceServer) $('only')&quot;
+		write-output &quot;$($equ) $('records in both source and destination')$($nl)&quot; 
+		}
+}
+
+function GetRecordType($Class){
+# return human readable record type :-)
+	Switch ($Class) {
+		MicrosoftDNS_AAAAType 	{return &quot;AAAA&quot;}
+		MicrosoftDNS_AFSDBType 	{return &quot;AFSDB&quot;}
+		MicrosoftDNS_ATMAType 	{return &quot;ATMA&quot;}
+		MicrosoftDNS_AType 		{return &quot;A&quot;}
+		MicrosoftDNS_CNAMEType 	{return &quot;Cname&quot;}
+		MicrosoftDNS_HINFOType 	{return &quot;H Info&quot;}
+		MicrosoftDNS_ISDNType 	{return &quot;ISDN&quot;}
+		MicrosoftDNS_KEYType 	{return &quot;Key&quot;}
+		MicrosoftDNS_MBType 	{return &quot;MB&quot;}
+		MicrosoftDNS_MDType		{return &quot;MD&quot;}
+		MicrosoftDNS_MFType 	{return &quot;MF&quot;}
+		MicrosoftDNS_MGType 	{return &quot;MG&quot;}
+		MicrosoftDNS_MINFOType 	{return &quot;M Info&quot;}
+		MicrosoftDNS_MRType 	{return &quot;MR&quot;}
+		MicrosoftDNS_MXType 	{return &quot;MX&quot;}
+		MicrosoftDNS_NSType 	{return &quot;NS&quot;}
+		MicrosoftDNS_NXTType	{return &quot;NXT&quot;}
+		MicrosoftDNS_PTRType	{return &quot;PTR&quot;}
+		MicrosoftDNS_RPType 	{return &quot;RP&quot;}
+		MicrosoftDNS_RTType 	{return &quot;RT&quot;}
+		MicrosoftDNS_SIGType	{return &quot;SIG&quot;}
+		MicrosoftDNS_SOAType	{return &quot;SOA&quot;}
+		MicrosoftDNS_SRVType	{return &quot;SRV&quot;}
+		MicrosoftDNS_TXTType	{return &quot;Text&quot;}
+		MicrosoftDNS_WINSRType	{return &quot;Wins R&quot;}
+		MicrosoftDNS_WINSType 	{return &quot;Wins&quot;}
+		MicrosoftDNS_WKSType 	{return &quot;WKS&quot;}
+		MicrosoftDNS_X25Type 	{return &quot;X25&quot;}
+		}
+}
+
+# actual script execution
+write-output &quot;$('Comparison between') $($SourceServer) $('and') $($DestinationServer) $('for all regular DNS zones')$($nl)&quot;
+if ($SourceServer -ne $DestinationServer){
+	# arrays of DNS zones to compare
+	$srcZones = GetDNSzones $SourceServer
+	$destZones = GetDNSzones $DestinationServer
+	# output of DNS zones found on both servers
+	CompareDNSservers $srcZones $destZones	
+	}
+else{write-output &quot;$('Source and Destination server are the same')$($nl)&quot;}
+# run thru loop for all DNS record types in script parameter	
+foreach ($RRtype in $RRtypes){
+	if (!(GetRecordType $RRtype)){write-warning &quot;$RRtype is not a valid DNS resource type&quot;;continue}
+	write-output &quot;$('Comparison between') $($SourceZone) $('on') $($SourceServer) $('and') $($DestinationZone) $('on') $($DestinationServer) $('for') $(GetRecordType $RRtype) $('records')$($nl)&quot;
+	# arrays of DNS records to compare
+	$sourceRecords = (GetDNSrecords $SourceServer $SourceZone $RRtype)
+	$destinRecords = (GetDNSrecords $DestinationServer $DestinationZone $RRtype)
+	# check for empty array(s)
+	if ($sourceRecords -and $destinRecords){
+		# output of DNS records found in both zones
+		CompareDNSzone $sourceRecords $destinRecords
+		# clean duplicate records on the source server
+		DedupDNSzone $sourceRecords $destinRecords
+		# copy unique records from source to destination server
+		CopyDNSzone $sourceRecords $destinRecords
+		#CleanDNSzone $sourceRecords $destinRecords
+		}
+	else{write-output &quot;$('no') $(GetRecordType $RRtype) $('records in either DNS zone')$($nl)&quot;}
+}
+write-output &quot;$('end script')$($nl)&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

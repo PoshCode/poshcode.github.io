@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="fdibot">
+    <title>Route.psm1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Route.psm1</h1>
+<h3><a href="//scripts/3464.ps1">download</a></h3>
+<p>This module provides 3 Cmdlets : Get-Route, Add-Route and Remove-Route.
+This module use WMI Classes to gathering information, be sure your account used to launch the script have the right to query them.
+This module is based on the route.exe program to add and remove routes.
+This module requires WinRM setted on all devices, check http://msdn.microsoft.com/en-us/library/windows/desktop/aa384372(v=vs.85).aspx to enable and configure it.
+This program is located on C:\Windows\System32\Route.exe (Test on Windows Server 2008 SP2, 2008 R2, 7)</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+This module provides Cmdlets that help to manage Network routes.
+.DESCRIPTION
+This module provides 3 Cmdlets : Get-Route, Add-Route and Remove-Route.
+This module use WMI Classes to gathering information, be sure your account used to launch the script have the right to query them.
+This module is based on the route.exe program to add and remove routes.
+This module requires WinRM setted on all devices, check http://msdn.microsoft.com/en-us/library/windows/desktop/aa384372(v=vs.85).aspx to enable and configure it.
+This program is located on C:\Windows\System32\Route.exe (Test on Windows Server 2008 SP2, 2008 R2, 7)
+.NOTES
+NAME: Routes.psm1
+AUTHOR: Fabien DIBOT (Twitter: @fdibot)
+LASTEDIT: 6/20/2012
+VERSION: 0.2
+.LINK
+http://posh.netau.net
+http://www.powershell-scripting.com
+#Requires -Version 2.0
+#&gt;
+Function Start-Execute {
+&lt;#
+.SYNOPSIS
+This function create a process and release prompt after the execution finish
+This function is only used in Local
+.PARAMETER Setup
+This parameter must be a String, it's the path to the .exe of the program
+.PARAMETER param
+This parameter must be a String, it's switch or parameters used by the program
+#&gt;
+param (
+[Parameter(Mandatory=$true)]
+[String]$setup,
+[Parameter(Mandatory=$true)]
+[String]$param
+)
+Try {
+$Process = [System.Diagnostics.Process]::Start($setup, $param)
+$Process.waitforexit()
+}
+Catch {
+Write-Error &quot;Error Executing Route.exe&quot;
+return $false
+}
+}
+Function Get-ErrorCode {
+&lt;#
+.SYNOPSIS
+This function return the error labels with ID entry
+This function is only used in Local
+.PARAMETER ErrorID
+This parameter must be an integer, it the error number
+.SWITCH Availability
+This switch, design what the errorcode is for getting Availability labels
+.SWITCH ConfigMngr
+This switch, design what the errorcode is for getting ConfigMngr labels
+#&gt;
+param (
+[Parameter(Mandatory=$true)]
+[Int]$ErrorID,
+[Parameter(Mandatory=$false)]
+[Switch]$Availability,
+[Parameter(Mandatory=$false)]
+[Switch]$ConfigMngr
+)
+if ($availability) {
+$ErrorCode = Switch ($ErrorID) {
+1 {&quot;Other&quot;; Break}
+2 {&quot;Unknown&quot;; Break}
+3 {&quot;Running Or Full Power&quot;; Break}
+4 {&quot;Warning&quot;; Break}
+5 {&quot;In Test&quot;; Break}
+6 {&quot;Not Applicable&quot;; Break}
+7 {&quot;Power Off&quot;; Break}
+8 {&quot;Off Line&quot;; Break}
+9 {&quot;Off Duty&quot;; Break}
+10 {&quot;Degraded&quot;; Break}
+11 {&quot;Not Installed&quot;; Break}
+12 {&quot;Install Error&quot;; Break}
+13 {&quot;Power Save - Unknown&quot;; Break}
+14 {&quot;Power Save - Low Power Mode&quot;; Break}
+15 {&quot;Power Save - Standby&quot;; Break}
+16 {&quot;Power Cycle&quot;; Break}
+17 {&quot;Power Save - Warning&quot;; Break}
+}
+}
+elseif ($ConfigMngr) {
+$ErrorCode = Switch ($ErrorID) {
+0 {&quot;Device is working properly&quot;; Break}
+1 {&quot;Device is not configured correctly.&quot;; Break}
+2 {&quot;Windows cannot load the driver for this device.&quot;; Break}
+3 {&quot;Driver for this device might be corrupted, or the system may be low on memory or other resources.&quot;; Break}
+4 {&quot;Device is not working properly. One of its drivers or the registry might be corrupted.&quot;; Break}
+5 {&quot;Driver for the device requires a resource that Windows cannot manage.&quot;; Break}
+6 {&quot;Boot configuration for the device conflicts with other devices.&quot;; Break}
+7 {&quot;Cannot filter.&quot;; Break}
+8 {&quot;Driver loader for the device is missing.&quot;; Break}
+9 {&quot;Device is not working properly. The controlling firmware is incorrectly reporting the resources for the device.&quot;; Break}
+10 {&quot;Device cannot start.&quot;; Break}
+11 {&quot;Device failed.&quot;; Break}
+12 {&quot;Device cannot find enough free resources to use.&quot;; Break}
+13 {&quot;Windows cannot verify the device's resources.&quot;; Break}
+14 {&quot;Device cannot work properly until the computer is restarted.&quot;; Break}
+15 {&quot;Device is not working properly due to a possible re-enumeration problem.&quot;; Break}
+16 {&quot;Windows cannot identify all of the resources that the device uses.&quot;; Break}
+17 {&quot;Device is requesting an unknown resource type.&quot;; Break}
+18 {&quot;Device drivers must be reinstalled.&quot;; Break}
+19 {&quot;Failure using the VxD loader.&quot;; Break}
+20 {&quot;Registry might be corrupted.&quot;; Break}
+21 {&quot;System failure. If changing the device driver is ineffective, see the hardware documentation. Windows is removing the device.&quot;; Break}
+22 {&quot;Device is disabled.&quot;; Break}
+23 {&quot;System failure. If changing the device driver is ineffective, see the hardware documentation.&quot;; Break}
+24 {&quot;Device is not present, not working properly, or does not have all of its drivers installed.&quot;; Break}
+25 {&quot;Windows is still setting up the device.&quot;; Break}
+26 {&quot;Windows is still setting up the device.&quot;; Break}
+27 {&quot;Device does not have valid log configuration.&quot;; Break}
+28 {&quot;Device drivers are not installed.&quot;; Break}
+29 {&quot;Device is disabled. The device firmware did not provide the required resources.&quot;; Break}
+30 {&quot;Device is using an IRQ resource that another device is using.&quot;; Break}
+31 {&quot;Device is not working properly. Windows cannot load the required device drivers.&quot;; Break}
+default {&quot;Device is working properly&quot;}
+}
+}
+return $ErrorCode
+}
+Function Get-Route {
+&lt;#
+.SYNOPSIS
+This function use WMI class to list all routes on the target computer
+.PARAMETER ComputerName
+This parameter must be a String, you can pass it to the pipe.
+.EXAMPLE
+Get-Route -ComputerName toto
+Get-Content &quot;C:\Path\To\List\Servers.txt&quot; | Get-Route
+Get-Route | ? { $_.InterfaID -eq 1 } | Export-Csv Path\To\test.csv
+#&gt;
+param(
+[Parameter(Position=0,Mandatory=$false,ValueFromPipeline=$true)]
+[alias('cn','computer', 'ComputerName')]
+[String]$server = $env:computername
+)
+Try {
+Write-Debug &quot;Gathering Route information from $Server...&quot;
+Invoke-Command -ComputerName $server -Scriptblock {
+$InterfaceIndexArray = @()
+Get-WmiObject Win32_NetworkAdapterConfiguration| % {
+$InterfaceIndexArray += New-Object PSObject -property @{
+'index' = $_.InterfaceIndex;
+'Description' = $_.Description
+}
+}
+Get-WmiObject win32_IP4RouteTable | % {
+$route = $_
+New-Object PSObject -property @{'Name' = $route.Name;
+'Age' = $route.Age;
+'Caption' = $route.Caption;
+'Destination' = $route.Destination;
+'Mask' = $route.Mask;
+'Metric' = $route.Metric1;
+'Gateway' = $route.NextHop;
+'ProtocolID' = $route.Protocol;
+'Protocol' = Switch ($route.Protocol) {
+1 {&quot;Other&quot;; Break}
+2 {&quot;Local&quot;; Break}
+3 {&quot;Netmgmt&quot;; Break}
+4 {&quot;icmp&quot;; Break}
+5 {&quot;egp&quot;; Break}
+6 {&quot;ggp&quot;; Break}
+7 {&quot;hello&quot;; Break}
+8 {&quot;rip&quot;; Break}
+9 {&quot;is-is&quot;; Break}
+10 {&quot;es-is&quot;; Break}
+11 {&quot;CiscoIgrp&quot;; Break}
+12 {&quot;bbnSpfIgp&quot;; Break}
+13 {&quot;ospf&quot;; Break}
+14 {&quot;bgp&quot;; Break}
+default {&quot;Other&quot;}
+}
+'Status' = $route.Status;
+'Information' = $route.Information;
+'InterfaceID' = $$route.InterfaceIndex
+'Interface' = ($InterfaceIndexArray | ? { $_.index -eq $route.InterfaceIndex } ).Description ;
+'TypeID' = $route.Type
+'Type' = Switch ($route.Type) {
+1 {&quot;Other&quot;; Break}
+2 {&quot;Invalid&quot;; Break}
+3 {&quot;Direct&quot;; Break}
+4 {&quot;Indirect&quot;; Break}
+default {&quot;Other&quot;}
+}
+}
+}
+}
+}
+Catch {
+Write-Error &quot;Error Executing the remote command. Error: $($_.Exception.Message)&quot;
+}
+}
+Function Add-Route {
+&lt;#
+.SYNOPSIS
+This function use route.exe to add Routes on target computer
+.PARAMETER ComputerName
+This parameter must be a String, you can pass it to the pipe.
+.PARAMETER Destination
+It's the network you want to reach
+.PARAMETER Mask
+It's the subnet Mask for reaching the network
+.PARAMETER Gateway
+It's the gateway to reach the network
+.PARAMETER Metric
+It's the metric of this route
+.PARAMETER Interface
+It's the network card which will receive the route. By default it's the first listed network card
+.PARAMETER Persistant
+It's a swith to significate if the route should be persistant or not.
+.EXAMPLE
+Add-Route -Server toto -destination 192.168.0.0 -mask 255.255.0.0 -gateway 192.168.0.254 -metric 105 -interface 1 -persistant
+Add-Route -destination 192.168.128.0 -mask 255.255.0.0 -gateway 192.168.0.254 -interface 12
+Get-Content &quot;C:\Path\To\List\Servers.txt&quot; | Add-Route -destination 192.168.128.0 -mask 255.255.0.0 -gateway 192.168.0.254 -interface 15
+#&gt;
+param (
+[Parameter(Position=0,Mandatory=$false,ValueFromPipeline=$true)]
+[String]$server = $env:computername,
+[Parameter(Mandatory=$true)]
+[IpAddress]$Destination,
+[Parameter(Mandatory=$true)]
+[IpAddress]$Mask,
+[Parameter(Mandatory=$true)]
+[IpAddress]$Gateway,
+[Parameter(Mandatory=$false)]
+[Int]$metric,
+[Parameter(Mandatory=$true)]
+[Int]$Interface,
+[Parameter(Mandatory=$false)]
+[Switch]$Persistant
+)
+if ($Persistant) { $persit = &quot;-p &quot; }
+if ($metric) { $met = &quot; METRIC &quot; + $metric }
+if ($Interface) { $int = &quot; IF &quot; + $Interface }
+$param = &quot;ADD &quot; + $persist + $Destination + &quot; Mask &quot; + $Mask + &quot; &quot; + $Gateway + $met + $int
+$setup = &quot;route.exe&quot;
+Try {
+Write-Debug &quot;Adding the route $Destination to interface n° $Interface&quot;
+Invoke-Command -ComputerName $server -Scriptblock -ErroAction Silentlycontinue {
+if (Test-Path (&quot;C:\WINDOWS\system32\route.exe&quot;)) {
+Write-Debug &quot;Checking if network Adaptater $Interface is working properly...&quot;
+$InterfaceIndexArray = @()
+Get-WmiObject Win32_NetworkAdapter | % {
+$InterfaceIndexArray += New-Object PSObject -property @{
+'index' = $_.InterfaceIndex;
+'Availability' = $_.Availability;
+'ConfigManagerErrorCode' = $_.ConfigManagerErrorCode;
+'Description' = $_.Description
+}
+}
+$CheckedInterface = $InterfaceIndexArray | ? { $_.index -eq $Interface }
+if ($CheckedInterface) {
+if ( ( $CheckedInterface.Availability -eq 3 ) -and ( $CheckedInterface.ConfigManagerErrorCode -eq 0 ) ) {
+Write-Debug &quot;$($CheckedInterface.Description) status: OK. Adding the route&quot;
+Start-Execute -setup $setup -param $param
+return $true
+}
+else {
+$ErrorAvailable = Get-ErrorCode -ErrorId $CheckedInterface.Availability -Availability
+$ErrorCode = Get-ErrorCode -ErrorId $CheckedInterface.ConfigManagerErrorCode -ConfigMngr
+Write-Error &quot;$($CheckedInterface.Description) Availability: $ErrorAvailable - Error: $ErrorCode&quot;
+return $false
+}
+}
+else {
+Write-Error &quot;Network Interface $Interface doesn't exists.&quot;
+return $false
+}
+}
+else {
+Write-Error &quot;Route.exe missing in C:\Windows\System32.&quot;
+return $false
+}
+}
+}
+Catch {
+Write-Error &quot;Error Executing the remote command. Error: $($_.Exception.Message)&quot;
+return $false
+}
+}
+Function Remove-Route {
+&lt;#
+.SYNOPSIS
+This function use route.exe to remove Routes on target computer
+.PARAMETER ComputerName
+This parameter must be a String, you can pass it to the pipe.
+.PARAMETER Destination
+It's the network you want to reach. You can use * or ?
+.PARAMETER Mask
+It's the subnet Mask for reaching the network
+.PARAMETER Gateway
+It's the gateway to reach the network
+.PARAMETER Metric
+It's the metric of this route
+.PARAMETER Interface
+It's the network card which will receive the route. By default it's the first listed network card
+.EXAMPLE
+Remove-Route -Server toto -destination 192.168.0.0 -mask 255.255.0.0 -gateway 192.168.0.254 -metric 105 -interface 11
+Remove-Route -destination 192.168.128.0 -mask 255.255.0.0 -gateway 192.168.0.254 -interface 15
+Get-Content &quot;C:\Path\To\List\Servers.txt&quot; | Remove-Route -destination 192.168.128.0 -mask 255.255.0.0 -gateway 192.168.0.254 -interface 22
+#&gt;
+param (
+[Parameter(Position=0,Mandatory=$false,ValueFromPipeline=$true)]
+[String]$server = $env:computername,
+[Parameter(Mandatory=$true)]
+[String]$Destination,
+[Parameter(Mandatory=$false)]
+[String]$Mask,
+[Parameter(Mandatory=$false)]
+[String]$Gateway,
+[Parameter(Mandatory=$false)]
+[Int]$metric,
+[Parameter(Mandatory=$true)]
+[Int]$Interface
+)
+if ($metric) { $met = &quot; METRIC &quot; + $metric }
+if ($Interface) { $int = &quot; IF &quot; + $Interface }
+if ($Mask) { $SubnetMask = &quot; MASK &quot; + $Mask }
+if ($Gateway) { $gate = &quot; &quot; + $gateway }
+$param = &quot;DELETE &quot; + $Destination + $SubnetMask + $Gate + $met + $int
+$setup = &quot;route.exe&quot;
+Try {
+Write-Debug &quot;Removing the route $Destination to interface n° $Interface&quot;
+Invoke-Command -ComputerName $server -Scriptblock -ErroAction Silentlycontinue {
+if (Test-Path (&quot;C:\WINDOWS\system32\route.exe&quot;)) {
+Write-Debug &quot;Checking if network Adaptater $Interface is working properly...&quot;
+$InterfaceIndexArray = @()
+Get-WmiObject Win32_NetworkAdapter | % {
+$InterfaceIndexArray += New-Object PSObject -property @{
+'index' = $_.InterfaceIndex;
+'Availability' = $_.Availability;
+'ConfigManagerErrorCode' = $_.ConfigManagerErrorCode;
+'Description' = $_.Description
+}
+}
+$CheckedInterface = $InterfaceIndexArray | ? { $_.index -eq $Interface }
+if ($CheckedInterface) {
+if ( ( $CheckedInterface.Availability -eq 3 ) -and ( $CheckedInterface.ConfigManagerErrorCode -eq 0 ) ) {
+Write-Debug &quot;$($CheckedInterface.Description) status: OK. Adding the route&quot;
+Start-Execute -setup $setup -param $param
+return $true
+}
+else {
+$ErrorAvailable = Get-ErrorCode -ErrorId $CheckedInterface.Availability -Availability
+$ErrorCode = Get-ErrorCode -ErrorId $CheckedInterface.ConfigManagerErrorCode -ConfigMngr
+Write-Error &quot;$($CheckedInterface.Description) Availability: $ErrorAvailable - Error: $ErrorCode&quot;
+return $false
+}
+}
+else {
+Write-Error &quot;Network Interface $Interface doesn't exists.&quot;
+return $false
+}
+}
+else {
+Write-Error &quot;Route.exe missing in C:\Windows\System32.&quot;
+return $false
+}
+}
+}
+Catch {
+Write-Error &quot;Error Executing the remote command. Error: $($_.Exception.Message)&quot;
+return $false
+}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

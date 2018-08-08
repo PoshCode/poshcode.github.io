@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Brian Wahoff">
+    <title>Stop-ProcessRemote - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Stop-ProcessRemote</h1>
+<h3><a href="//scripts/1944.ps1">download</a></h3>
+<p>In an interesting design choice, Get-Process lets you work with processes on remote machines, but Stop-Process does not. This cmdlet uses WMI to stop a process on a remote machine.</p>
+<p>The cmdlet uses your current credentials, I would like to expand it to run under alternate credentials if necessary.</p>
+<pre><code class="language-posh">Function Stop-ProcessRemote()
+{
+&lt;#
+.SYNOPSIS
+	Stops a process on a remote computer
+.DESCRIPTION
+	Uses WMI to connect to a remote computer and terminate a process.
+	Assumes the user has administrative priviledges on the remote 
+	computer.
+.NOTES
+	Author      : Brian Wahoff
+	Requires    : Powershell V2
+.PARAMETER ComputerName
+	The remote computer to which you want to connect
+.PARAMETER Id
+	The PID of the process to stop (See Get-Process)
+.PARAMETER ProcessName
+	The name of the process to stop. Will stop all processes with the same name
+#&gt;
+	param(
+		[Parameter(Position=0, Mandatory=$TRUE)]
+		[string]$ComputerName, 
+		
+		[Parameter(ParameterSetName=&quot;p1&quot;,Position=1,ValueFromPipeline=$TRUE)]
+		[int]$Id,
+		
+		[Parameter(ParameterSetName=&quot;p2&quot;,Position=1, ValueFromPipeline=$TRUE)]
+		[string]$ProcessName)
+			
+	if ($Id) {
+		$query = &quot;select * from Win32_Process Where ProcessID = {0}&quot; -f $Id
+	} else {
+		if ($ProcessName) {
+			$query = &quot;select * from Win32_Process Where Name = '{0}'&quot; -f $ProcessName
+		} else {
+			throw 'Either $Id or $ProcessName is required'
+		}
+	}
+	
+	$process = Get-WMIObject -computer $ComputerName -query $query
+	if ($process) {
+		if ($process.count -gt 1) {
+			foreach ($p in $process) {
+				Stop-WMIProcess($p)
+			}
+		} else {
+			Stop-WMIProcess($process)
+		}
+	} else {
+		if ($ProcessName)
+		{
+			&quot;Process '{0}' was not running on \\{1}&quot; -f $ProcessName, $ComputerName
+		} else {
+			&quot;Process '{0}' was not running on \\{1}&quot; -f $Id, $ComputerName
+		}
+	}
+}
+
+Function Stop-WMIProcess($WmiProcess) {
+&lt;#
+.SYNOPSIS
+	Stop a WmiProcess
+.DESCRIPTION
+	Wrapper function around WmiProcess.Terminate. Displays message 
+	based on all documented return values. Not intended to be called
+	directly.
+.NOTES
+	Author		: Brian Wahoff
+	Requires	: Powershell V2
+.PARAMETER WmiProcess
+	The WMI Process object to terminate
+#&gt;
+	$ret = $WmiProcess.Terminate()
+	
+	switch ($ret.ReturnValue)
+	{
+		0 {
+			&quot;Process {0}:{1} terminated&quot; -f $WmiProcess.Name, $WmiProcess.ProcessID
+		}
+		2 {
+			&quot;Access was denied terminating {0}&quot; -f $WmiProcess.Name
+		}
+		3 {
+			&quot;Insufficient Privilege terminating {0}&quot; -f $WmiProcess.Name
+		}
+		8 {
+			&quot;Unknown failure terminating {0}&quot; -f $WmiProcess.Name
+		}
+		9
+		{
+			&quot;Path Not Found&quot;
+		}
+		21
+		{
+			&quot;WMI Parameter Invalid&quot;
+		}
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

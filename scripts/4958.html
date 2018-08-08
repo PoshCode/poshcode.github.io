@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chris Feilen">
+    <title>Logger.psm1 0.4 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Logger.psm1 0.4</h1>
+<h3><a href="//scripts/4958.ps1">download</a> - <a href="//scripts/1752.md">parent</a></h3>
+<p>The simplest logger. In your script just import-module Logger and debug, verbose, warnings and errors are logged to file.</p>
+<p>This is a simple wrapper around Log4Net which (by default) causes Write-Verbose, Write-Warning, Write-Debug, and Write-Error to log their output when called from (any) script.  By default it logs to file, but it can log to the event log, console, .net trace or debug, udp, xml, etc by simply using the Get-Logger function to configure new loggers (help is next)</p>
+<p>There are a few extra helper methods in here, including Push-Context/Pop-Context (which you can call in your functions to enable stack tracing), and still more to come.</p>
+<p><em>New in this release</em>:</p>
+<ul>
+<li>Fixed a couple of typo bugs</li>
+<li>Added documentation comments (help) for Get-Logger</li>
+<li><em>Changed a few parameter names (sorry) to make them more unique</em></li>
+<li>Fixed the default log folder</li>
+<li>Enhanced XML output (if you &quot;download the stylesheet&quot;:http://poshcode.org/1750 which formats it)</li>
+</ul>
+<p>cfeilen - Fixed Typo in header version.  Updating to match change list (v0.4)</p>
+<pre><code class="language-posh">&lt;#
+   Name     : Universal Log4Net Logging Module (Logger.psm1)
+   Version  : 0.4
+   Author   : Joel Bennett (MVP)
+   Site     : http://www.HuddledMasses.org/
+
+   Version History:
+   0.4 - Bugfix, Viewer and Documentation release.
+         Fixed a few typo-bugs
+         Added documentation (man page) comments for Get-Logger.
+         Changed a few parameter names (sorry) to make the default parameters more unique (so you have to type less on the command-line)
+         Changed the default logger to use the logger module's folder as a backup
+            (Some people might not have the Profile path -- this module could be installed anywhere and loaded by file name)
+         Fixed up the xml output with a nice stylesheet http`://poshcode.org/1750 that formats and makes the page refresh.
+   
+   0.3 - Cleanupable release.
+         Added Udp, Email,  Xml and RollingXml, as well as a &quot;Chainsaw&quot;:http`://logging.apache.org/log4j/docs/chainsaw.html logger based on &quot;Szymon Kobalczyk's configuration&quot;:http`://geekswithblogs.net/kobush/archive/2005/07/15/46627.aspx.
+         Note: there is a &quot;KNOWN BUG with Log4Net UDP&quot;:http`://odalet.wordpress.com/2007/01/13/log4net-ip-parsing-bug-when-used-with-framework-net-20/ which can be patched, but hasn't been released.
+         Added a Close-Logger method to clean up the Xml logger 
+         NOTE: the Rolling XML Logger produces invalid XML, and the XML logger only produces valid xml after it's been closed...
+               I did contribute an &quot;XSLT stylesheet for Log4Net&quot;:http`://poshcode.org/1746 which you could use as well
+         
+   0.2 - Configless release. 
+         Now configures with inline XML, and supports switches to create &quot;reasonable&quot; default loggers
+         Changed all the functions to Write-*Log so they don't overwrite the cmdlets
+         Added -Logger parameter to take the name of the logger to use (it must be created beforehand via Get-Logger)
+         Created aliases for Write-* to override the cmdlets -- these are easy for users to remove without breaking the module
+         ** NEED to write some docs, but basically, this is stupid simple to use, just:
+            Import-Module Logger
+            Write-Verbose &quot;This message will be saved in your profile folder in a file named PowerShellLogger.log (by default)&quot;
+         To change the defaults for your system, edit the last line in the module!!
+   0.1 - Initial release. http`://poshcode.org/1744 (Required config: http`://poshcode.org/1743)
+
+   Uses Log4Net : http`://logging.apache.org/log4net/download.html
+   Documentation: http`://logging.apache.org/log4net/release/sdk/
+   
+   NOTES:
+   By default, this overwrites the Write-* cmdlets for Error, Warning, Debug, Verbose, and even Host.
+   This means that you may end up logging a lot of stuff you didn't intend to log (ie: verbose output from other scripts)
+   
+   To avoid this behavior, remove the aliases after importing it
+   Import-Module Logger; Remove-Item Alias:Write-*
+   Write-Warning &quot;This is your warning&quot;
+   Write-Debug   &quot;You should know that...&quot;
+   Write-Verbose &quot;Everything would be logged, otherwise&quot;
+
+   ***** NOTE: IT ONLY OVERRIDES THE DEFAULTS FOR SCRIPTS *****
+   It currently has no effect on error/verbose/warning that is logged from cmdlets.
+   
+#&gt;
+
+Add-Type -Path $PSScriptRoot\log4net.dll
+
+function Get-RelativePath {
+&lt;#
+.SYNOPSIS
+   Get a path to a file (or folder) relative to another folder
+.DESCRIPTION
+   Converts the FilePath to a relative path rooted in the specified Folder
+.PARAMETER Folder
+   The folder to build a relative path from
+.PARAMETER FilePath
+   The File (or folder) to build a relative path TO
+.PARAMETER Resolve
+   If true, the file and folder paths must exist
+.Example
+   Get-RelativePath ~\Documents\WindowsPowerShell\Logs\ ~\Documents\WindowsPowershell\Modules\Logger\log4net.xslt
+   
+   ..\Modules\Logger\log4net.xslt
+   
+   Returns a path to log4net.xslt relative to the Logs folder
+#&gt;
+[CmdletBinding()]
+param(
+   [Parameter(Mandatory=$true, Position=0)]
+   [string]$Folder
+, 
+   [Parameter(Mandatory=$true, Position=1, ValueFromPipelineByPropertyName=$true)]
+   [Alias(&quot;FullName&quot;)]
+   [string]$FilePath
+,
+   [switch]$Resolve
+)
+process {
+   $from = $Folder = split-path $Folder -NoQualifier -Resolve:$Resolve
+   $to = $filePath = split-path $filePath -NoQualifier -Resolve:$Resolve
+
+   while($from -and $to -and ($from -ne $to)) {
+      if($from.Length -gt $to.Length) {
+         $from = split-path $from
+      } else {
+         $to = split-path $to
+      }
+   }
+
+   $filepath = $filepath -replace &quot;^&quot;+[regex]::Escape($to)+&quot;\\&quot;
+   $from = $Folder
+   while($from -and $to -and $from -gt $to ) {
+      $from = split-path $from
+      $filepath = join-path &quot;..&quot; $filepath
+   }
+   Write-Output $filepath
+}
+}
+
+function Get-Logger {
+&lt;#
+.SYNOPSIS
+   Get an existing Logger by name, or create a new logger
+.DESCRIPTION
+   Returns a logger matching the name (wildcards allowed) provided. 
+   
+   If the logger already exists, it is returned with it's settings as-is, unless the -Force switch is specified, in which case the new settings are used
+   
+   If only one logger matches the name, that logger becomes the new default logger.
+
+.PARAMETER Name
+   The name of the logger to find or create. If no name is specified, all existing loggers are returned.
+
+.PARAMETER Level
+   The level at which to log in this new logger. Defaults to &quot;DEBUG&quot; 
+   Possible levels are as follows (each level includes all levels above it):
+   
+   FATAL
+   ERROR
+   WARN  (aka WARNING)
+   INFO  (aka VERBOSE, HOST)
+   DEBUG
+   
+.PARAMETER MessagePattern
+   The pattern for loggers which use patterns (mostly the file loggers). Defaults to: 
+   &quot;%date %-5level %logger [%property{NDC}] - %message%newline&quot;
+   
+   For a complete list of possible pattern names, see:
+   http://logging.apache.org/log4net/release/sdk/log4net.Layout.PatternLayout.html
+   
+.PARAMETER Folder
+   The folder where log files are kept. Defaults to your Documents\WindowsPowerShell folder.
+   NOTE: if the specified folder does not exist, the fallback is your Documents\WindowsPowerShell folder,
+         but if that doesn't exist, the folder where this file is stored is used.
+
+.PARAMETER EmailTo
+   An email address to send WARNING or above messages to. REQUIRES that your $PSEmailServer variable be set
+.PARAMETER Console
+   Creates a colored console logger
+.PARAMETER EventLog
+   Creates an EventLog logger
+.PARAMETER TraceLog
+   Creates a .Net Trace logger
+.PARAMETER DebugLog
+   Creates a .Net Debug logger
+.PARAMETER FileLog
+   Creates a file logger. Note the LogLock parameter!
+.PARAMETER RollingFileLog
+   Creates a rolling file logger with a max size of 250KB. Note the LogLock parameter!   
+.PARAMETER XmlLog
+   Creates an Xml-formatted file logger. Note the LogLock parameter!
+   
+   Note: the XmlLog will output an XML Header and will add a footer when the logger is closed.
+   This results in a log file which is readable in xml viewers like IE, particularly if you have a copy of the XSLT stylesheet for Log4Net (http://poshcode.org/1750) named log4net.xslt in the same folder with the log file.
+   
+   WARNING: Because of this, it does not APPEND to the file, but overwrites it each time you create the logger.
+.PARAMETER RollingXmlLog
+   Creates a rolling file Xml logger with a max size of 500KB. Note the LogLock parameter!
+   
+   Note: the rolling xml logger cannot create &quot;valid&quot; xml because it appends to the end of the file (and therefore can't guarantee the file is well-formed XML).
+   In order to get a valid Xml file, you can use a &quot;*View.xml&quot; file with contents like this (which this script will create):
+   
+   &lt;?xml version=&quot;1.0&quot; ?&gt;
+   &lt;?xml-stylesheet type=&quot;text/xsl&quot; href=&quot;log4net.xslt&quot;?&gt;
+   &lt;!DOCTYPE events [&lt;!ENTITY data SYSTEM &quot;PowerShellLogger.xml&quot;&gt;]&gt;
+   &lt;log4net:events version=&quot;1.2&quot; xmlns:log4net=&quot;http://logging.apache.org/log4net/schemas/log4net-events-1.2&quot;&gt;
+      &amp;data;
+   &lt;/log4net:events&gt;
+.PARAMETER LogLock
+   Determines the type of file locking used (defaults to SHARED): 
+   SHARED is the &quot;MinimalLocking&quot; model which opens the file once for each AcquireLock/ReleaseLock cycle, thus holding the lock for the minimal amount of time. This method of locking is considerably slower than...
+   
+   EXCLUSIVE is the &quot;ExclusiveLocking&quot; model which opens the file once for writing and holds it open until the logger is closed, maintaining an exclusive lock on the file the whole time..
+.PARAMETER UdpSend
+   Creates an UdpAppender which sends messages to the localmachine port 8080
+   We'll probably tweak this in a future release, but for now if you need to change that you need to edit the script
+.PARAMETER ChainsawSend
+   Like UdpSend, creates an UdpAppender which sends messages to the localmachine port 8080. 
+   This logger uses the log4j xml formatter which is somewhat different than the default, and uses their namespace.   
+.PARAMETER Force
+   Force resetting the logger switches even if the logger already exists
+#&gt;
+param( 
+   [Parameter(Mandatory=$false, Position=0)]
+   [string]$Name = &quot;*&quot;
+,
+   [Parameter(Mandatory=$false)]
+   [ValidateSet(&quot;DEBUG&quot;,&quot;INFO&quot;,&quot;WARN&quot;,&quot;ERROR&quot;,&quot;FATAL&quot;,&quot;VERBOSE&quot;,&quot;HOST&quot;,&quot;WARNING&quot;)]
+   [string]$Level = &quot;DEBUG&quot;
+,
+   [Parameter(Mandatory=$false)]
+   $MessagePattern = &quot;%date %-5level %logger [%property{NDC}] - %message%newline&quot;
+,
+   [Parameter(Mandatory=$false)]
+   [string]$Folder = $(Split-Path $Profile.CurrentUserAllHosts)
+   
+,  [String]$EmailTo
+,  [Switch]$Force
+,  [Switch]$ConsoleLog
+,  [Switch]$EventLog
+,  [Switch]$TraceLog
+,  [Switch]$DebugLog
+,  [Switch]$FileLog
+,  [Switch]$RollingFileLog
+,  [Switch]$XmlLog
+,  [Switch]$RollingXmlLog
+,  [Switch]$UdpSend
+,  [Switch]$ChainsawSend
+,
+   [Parameter(Mandatory=$false, Position=99)]
+   [ValidateSet(&quot;Shared&quot;,&quot;Exclusive&quot;)]
+   [String]$LogLock = &quot;Shared&quot;
+)
+   ## Make sure the folder exists
+   if(!(Test-Path $Folder)) {
+      $Folder = Split-Path $Profile.CurrentUserAllHosts
+      if(!(Test-Path $Folder)) {
+         $Folder = $PSScriptRoot
+      }
+   }
+   
+   
+   Remove-Variable Loggers -EA 0
+   [log4net.LogManager]::GetCurrentLoggers() | Where-Object { $_.Logger.Name -Like $Name } | Tee-Object -Variable Loggers
+   if((!$Loggers -or $Force) -and !$Name.Contains('*')) {
+      if($Level -eq &quot;VERBOSE&quot;) { $Level = &quot;INFO&quot; }
+      if($Level -eq &quot;HOST&quot;)    { $Level = &quot;INFO&quot; }
+      if($Level -eq &quot;WARNING&quot;) { $Level = &quot;WARN&quot; }
+
+      $AppenderRefs = ''
+      if($Email)        { 
+         if(!$PSEmailServer) { throw &quot;You need to specify your SMTP mail server by setting the global $PSEmailServer variable&quot; }
+         $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;SmtpAppender&quot;&quot; /&gt;`n&quot;
+         $Null,$Domain = $email -split &quot;@&quot;,2
+      } 
+      
+      if($LogLock -eq &quot;Shared&quot;) { 
+         $LockMode = &quot;MinimalLock&quot;
+      } else {
+         $LockMode = &quot;ExclusiveLock&quot;
+      }
+      $xslt = &quot;&quot;
+      if(Test-Path $PSScriptRoot\log4net.xslt) {
+         $xslt = @&quot;
+&lt;?xml-stylesheet type=&quot;text/xsl&quot; href=&quot;$(Get-RelativePath $Folder $PSScriptRoot\log4net.xslt)&quot;?&gt;
+&quot;@
+      }
+
+
+      if($EventLog)        { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;EventLogAppender&quot;&quot; /&gt;`n&quot; }
+      if($TraceLog)        { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;TraceAppender&quot;&quot; /&gt;`n&quot; }
+      if($DebugLog){ $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;DebugAppender&quot;&quot; /&gt;`n&quot; }
+      if($FileLog)         { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;FileAppender&quot;&quot; /&gt;`n&quot; }
+      if($RollingFileLog)  { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;RollingFileAppender&quot;&quot; /&gt;`n&quot; }
+      if($UdpSend)         { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;UdpAppender&quot;&quot; /&gt;`n&quot; } 
+      if($ChainsawSend)    { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;UdpLog4JAppender&quot;&quot; /&gt;`n&quot; } 
+      if($XmlLog)          { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;XmlAppender&quot;&quot; /&gt;`n&quot; } 
+      if($RollingXmlLog)   { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;RollingXmlAppender&quot;&quot; /&gt;`n&quot;
+         if($VerbosePreference -gt &quot;SilentlyContinue&quot;) { &quot;Created XML viewer for you at: ${Folder}\${Name}View.Xml&quot; }
+         Set-Content &quot;${Folder}\${Name}View.Xml&quot; @&quot;
+&lt;?xml version=&quot;1.0&quot; ?&gt;
+$xslt
+&lt;!DOCTYPE events [&lt;!ENTITY data SYSTEM &quot;$Name.xml&quot;&gt;]&gt;
+&lt;events version=&quot;1.2&quot; xmlns:log4net=&quot;http`://logging.apache.org/log4net/schemas/log4net-events-1.2&quot;&gt;
+&lt;logname&gt;$Name&lt;/logname&gt;
+   &amp;data;
+&lt;/events&gt;
+&quot;@      
+      }
+      $xslt = $xslt -replace &quot;&lt;&quot;,&quot;&amp;lt;&quot; -replace &quot;&gt;&quot;,&quot;&amp;gt;&quot; -replace '&quot;',&quot;'&quot;
+      
+      if($ConsoleLog -or ($AppenderRefs.Length -eq 0)) { $AppenderRefs += &quot;&lt;appender-ref ref=&quot;&quot;ColoredConsoleAppender&quot;&quot; /&gt;`n&quot; }
+
+      [log4net.LogManager]::GetLogger($Name) | Tee-Object -Variable Script:Logger | Where { $Loggers -notcontains $_ }
+     
+      [xml]$config = @&quot;
+&lt;log4net&gt;
+   &lt;appender name=&quot;ColoredConsoleAppender&quot; type=&quot;log4net.Appender.ColoredConsoleAppender&quot;&gt;
+      &lt;mapping&gt;
+         &lt;level value=&quot;FATAL&quot; /&gt;
+         &lt;foreColor value=&quot;Red, HighIntensity&quot; /&gt;
+         &lt;backColor value=&quot;White, HighIntensity&quot; /&gt;
+      &lt;/mapping&gt;
+      &lt;mapping&gt;
+         &lt;level value=&quot;ERROR&quot; /&gt;
+         &lt;foreColor value=&quot;Red, HighIntensity&quot; /&gt;
+      &lt;/mapping&gt;
+      &lt;mapping&gt;
+         &lt;level value=&quot;DEBUG&quot; /&gt;
+         &lt;foreColor value=&quot;Green, HighIntensity&quot; /&gt;
+      &lt;/mapping&gt;
+      &lt;mapping&gt;
+         &lt;level value=&quot;INFO&quot; /&gt;
+         &lt;foreColor value=&quot;Cyan, HighIntensity&quot; /&gt;
+      &lt;/mapping&gt;
+      &lt;mapping&gt;
+         &lt;level value=&quot;WARN&quot; /&gt;
+         &lt;foreColor value=&quot;Yellow, HighIntensity&quot; /&gt;
+      &lt;/mapping&gt;
+      &lt;layout type=&quot;log4net.Layout.PatternLayout&quot;&gt;
+         &lt;conversionPattern value=&quot;$MessagePattern&quot; /&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;EventLogAppender&quot; type=&quot;log4net.Appender.EventLogAppender&quot; &gt;
+      &lt;applicationName value=&quot;$Name&quot; /&gt;
+      &lt;layout type=&quot;log4net.Layout.PatternLayout&quot;&gt;
+         &lt;conversionPattern value=&quot;$MessagePattern&quot; /&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;TraceAppender&quot; type=&quot;log4net.Appender.TraceAppender&quot;&gt;
+      &lt;layout type=&quot;log4net.Layout.PatternLayout&quot;&gt;
+         &lt;conversionPattern value=&quot;$MessagePattern&quot; /&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;DebugAppender&quot; type=&quot;log4net.Appender.DebugAppender&quot;&gt;
+      &lt;layout type=&quot;log4net.Layout.PatternLayout&quot;&gt;
+         &lt;conversionPattern value=&quot;$MessagePattern&quot; /&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;FileAppender&quot; type=&quot;log4net.Appender.FileAppender&quot;&gt;
+      &lt;file value=&quot;$Folder\$Name.Log&quot; /&gt;
+      &lt;appendToFile value=&quot;true&quot; /&gt;
+      &lt;lockingModel type=&quot;log4net.Appender.FileAppender+$LockMode&quot; /&gt;
+      &lt;layout type=&quot;log4net.Layout.PatternLayout&quot;&gt;
+         &lt;conversionPattern value=&quot;$MessagePattern&quot; /&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;XmlAppender&quot; type=&quot;log4net.Appender.FileAppender&quot;&gt;
+      &lt;file value=&quot;$Folder\$Name.xml&quot; /&gt;
+      &lt;appendToFile value=&quot;false&quot; /&gt;
+      &lt;lockingModel type=&quot;log4net.Appender.FileAppender+$LockMode&quot; /&gt;
+      &lt;layout type=&quot;log4net.Layout.XmlLayout&quot;&gt;
+         &lt;Header value=&quot;&amp;lt;?xml version='1.0' ?&amp;gt;
+$xslt
+&amp;lt;events version='1.2' xmlns='http`://logging.apache.org/log4net/schemas/log4net-events-1.2'&amp;gt;
+&quot;/&gt;
+         &lt;Footer value=&quot;&amp;lt;/events&amp;gt;&quot;/&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;RollingFileAppender&quot; type=&quot;log4net.Appender.RollingFileAppender&quot;&gt;
+      &lt;file value=&quot;$Folder\$Name.Log&quot; /&gt;
+      &lt;appendToFile value=&quot;true&quot; /&gt;
+      &lt;maximumFileSize value=&quot;250KB&quot; /&gt;
+      &lt;maxSizeRollBackups value=&quot;2&quot; /&gt;
+      &lt;lockingModel type=&quot;log4net.Appender.FileAppender+$LockMode&quot; /&gt;
+      &lt;layout type=&quot;log4net.Layout.PatternLayout&quot;&gt;
+         &lt;conversionPattern value=&quot;$MessagePattern&quot; /&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;RollingXmlAppender&quot; type=&quot;log4net.Appender.RollingFileAppender&quot;&gt;
+      &lt;file value=&quot;$Folder\$Name.xml&quot; /&gt;
+      &lt;appendToFile value=&quot;true&quot; /&gt;
+      &lt;maximumFileSize value=&quot;500KB&quot; /&gt;
+      &lt;maxSizeRollBackups value=&quot;2&quot; /&gt;
+      &lt;lockingModel type=&quot;log4net.Appender.FileAppender+$LockMode&quot; /&gt;
+      &lt;layout type=&quot;log4net.Layout.XmlLayout&quot;&gt;
+         &lt;prefix value=&quot;&quot; /&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;UdpAppender&quot; type=&quot;log4net.Appender.UdpAppender&quot;&gt;
+      &lt;RemoteAddress value=&quot;localhost&quot; /&gt;
+      &lt;RemotePort value=&quot;8080&quot; /&gt;
+      &lt;Encoding value=&quot;utf-8&quot; /&gt;
+      &lt;layout type=&quot;log4net.Layout.XmlLayout&quot;&gt;
+         &lt;Prefix value=&quot;&quot; /&gt;
+      &lt;/layout&gt;
+      &lt;threshold value=&quot;DEBUG&quot; /&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;UdpLog4JAppender&quot; type=&quot;log4net.Appender.UdpAppender&quot;&gt;
+      &lt;RemoteAddress value=&quot;127.0.0.1&quot; /&gt;
+      &lt;RemotePort value=&quot;8080&quot; /&gt;
+      &lt;Encoding value=&quot;utf-8&quot; /&gt;
+      &lt;layout type=&quot;log4net.Layout.XmlLayoutSchemaLog4j, log4net&quot; /&gt;
+      &lt;threshold value=&quot;DEBUG&quot; /&gt;
+   &lt;/appender&gt;
+   &lt;appender name=&quot;SmtpAppender&quot; type=&quot;log4net.Appender.SmtpAppender&quot;&gt;
+      &lt;to value=&quot;$EmailTo&quot; /&gt;
+      &lt;from value=&quot;PoshLogger@$Domain&quot; /&gt;
+      &lt;subject value=&quot;PowerShell Logger Message&quot; /&gt;
+      &lt;smtpHost value=&quot;$PSEmailServer&quot; /&gt;
+      &lt;bufferSize value=&quot;512&quot; /&gt;
+      &lt;lossy value=&quot;true&quot; /&gt;
+      &lt;evaluator type=&quot;log4net.Core.LevelEvaluator&quot;&gt;
+         &lt;threshold value=&quot;WARN&quot;/&gt;
+      &lt;/evaluator&gt;
+      &lt;layout type=&quot;log4net.Layout.PatternLayout&quot;&gt;
+         &lt;conversionPattern value=&quot;%newline$MessagePattern%newline%newline&quot; /&gt;
+      &lt;/layout&gt;
+   &lt;/appender&gt;
+   &lt;root&gt;
+      &lt;level value=&quot;DEBUG&quot; /&gt;
+   &lt;/root&gt;
+   &lt;logger name=&quot;$Name&quot;&gt;
+      &lt;level value=&quot;$Level&quot; /&gt;
+      $AppenderRefs
+   &lt;/logger&gt;
+&lt;/log4net&gt;
+&quot;@
+      [log4net.Config.XmlConfigurator]::Configure( $config.log4net )
+   } 
+   elseif($Loggers -and @($Loggers).Count -eq 1) {
+      $script:Logger = @($Loggers)[0]
+   }
+}
+
+function Set-Logger {
+param(
+   [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+   [log4net.Core.LogImpl]$Logger
+)
+   $script:Logger = $Logger
+}
+
+function Close-Logger {
+param(
+   [Parameter(Mandatory=$false, ValueFromPipeline=$true)]
+   [log4net.Core.LogImpl]$Logger
+)
+PROCESS {
+   if($Logger) {
+      $Logger.Logger.CloseNestedAppenders()
+      $Logger.Logger.RemoveAllAppenders()
+   } else {
+      [log4net.LogManager]::Shutdown()
+   }
+}
+}
+
+
+
+function Push-LogContext {
+param( 
+   [Parameter(Mandatory=$true)]
+   [string]$Name
+)
+   [log4net.NDC]::Push($Name)
+}
+function Pop-LogContext {
+   [log4net.NDC]::Pop()
+}
+
+function Write-DebugLog {
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]
+    [Alias('Msg')]
+    [AllowEmptyString()]
+    [System.String]
+    ${Message}
+,
+   [Parameter(Mandatory=$false, Position=99)]
+   ${Logger})
+
+begin
+{
+    try {
+        if($PSBoundParameters.ContainsKey(&quot;Logger&quot;)) {
+            if($Logger -is [log4net.Core.LogImpl]) { Set-Logger $Logger } else { $script:Logger = Get-Logger &quot;$Logger&quot; }
+            $null = $PSBoundParameters.Remove(&quot;Logger&quot;)
+        }
+        
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Debug', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {&amp; $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $script:logger.debug($Message) #Write-Debug
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+&lt;#
+
+.ForwardHelpTargetName Write-Debug
+.ForwardHelpCategory Cmdlet
+
+#&gt;
+}
+function Write-VerboseLog {
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]
+    [Alias('Msg')]
+    [AllowEmptyString()]
+    [System.String]
+    ${Message}
+,
+   [Parameter(Mandatory=$false, Position=99)]
+   ${Logger})
+
+begin
+{
+    try {
+        if($PSBoundParameters.ContainsKey(&quot;Logger&quot;)) {
+            if($Logger -is [log4net.Core.LogImpl]) { Set-Logger $Logger } else { $script:Logger = Get-Logger &quot;$Logger&quot; }
+            $null = $PSBoundParameters.Remove(&quot;Logger&quot;)
+        }
+
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Verbose', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {&amp; $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $script:logger.info($Message)
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+&lt;#
+
+.ForwardHelpTargetName Write-Verbose
+.ForwardHelpCategory Cmdlet
+
+#&gt;
+}
+function Write-WarningLog {
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]
+    [Alias('Msg')]
+    [AllowEmptyString()]
+    [System.String]
+    ${Message}
+,
+   [Parameter(Mandatory=$false, Position=99)]
+   ${Logger})
+
+begin
+{
+    try {
+        if($PSBoundParameters.ContainsKey(&quot;Logger&quot;)) {
+            if($Logger -is [log4net.Core.LogImpl]) { Set-Logger $Logger } else { $script:Logger = Get-Logger &quot;$Logger&quot; }
+            $null = $PSBoundParameters.Remove(&quot;Logger&quot;)
+        }
+
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Warning', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {&amp; $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $script:logger.warn($Message)  #Write-Warning
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+&lt;#
+
+.ForwardHelpTargetName Write-Warning
+.ForwardHelpCategory Cmdlet
+
+#&gt;
+}
+function Write-ErrorLog {
+[CmdletBinding(DefaultParameterSetName='NoException')]
+param(
+    [Parameter(ParameterSetName='WithException', Mandatory=$true)]
+    [System.Exception]
+    ${Exception},
+
+    [Parameter(ParameterSetName='NoException', Mandatory=$true, Position=0, ValueFromPipeline=$true)]
+    [Parameter(ParameterSetName='WithException')]
+    [Alias('Msg')]
+    [AllowNull()]
+    [AllowEmptyString()]
+    [System.String]
+    ${Message},
+
+    [Parameter(ParameterSetName='ErrorRecord', Mandatory=$true)]
+    [System.Management.Automation.ErrorRecord]
+    ${ErrorRecord},
+
+    [Parameter(ParameterSetName='NoException')]
+    [Parameter(ParameterSetName='WithException')]
+    [System.Management.Automation.ErrorCategory]
+    ${Category},
+
+    [Parameter(ParameterSetName='WithException')]
+    [Parameter(ParameterSetName='NoException')]
+    [System.String]
+    ${ErrorId},
+
+    [Parameter(ParameterSetName='NoException')]
+    [Parameter(ParameterSetName='WithException')]
+    [System.Object]
+    ${TargetObject},
+
+    [System.String]
+    ${RecommendedAction},
+
+    [Alias('Activity')]
+    [System.String]
+    ${CategoryActivity},
+
+    [Alias('Reason')]
+    [System.String]
+    ${CategoryReason},
+
+    [Alias('TargetName')]
+    [System.String]
+    ${CategoryTargetName},
+
+    [Alias('TargetType')]
+    [System.String]
+    ${CategoryTargetType}
+,
+   [Parameter(Mandatory=$false, Position=99)]
+   ${Logger})
+
+begin
+{
+    try {
+        if($PSBoundParameters.ContainsKey(&quot;Logger&quot;)) {
+            if($Logger -is [log4net.Core.LogImpl]) { Set-Logger $Logger } else { $script:Logger = Get-Logger &quot;$Logger&quot; }
+            $null = $PSBoundParameters.Remove(&quot;Logger&quot;)
+        }
+
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Error', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {&amp; $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $script:logger.error($Message,$Exception) #Write-Error
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+&lt;#
+
+.ForwardHelpTargetName Write-Error
+.ForwardHelpCategory Cmdlet
+
+#&gt;
+}
+function Write-HostLog {
+[CmdletBinding()]
+param(
+    [Parameter(Position=0, ValueFromPipeline=$true, ValueFromRemainingArguments=$true)]
+    [System.Object]
+    ${Object},
+
+    [Switch]
+    ${NoNewline},
+
+    [System.Object]
+    ${Separator} = $OFS,
+
+    [System.ConsoleColor]
+    ${ForegroundColor},
+
+    [System.ConsoleColor]
+    ${BackgroundColor}
+,
+   [Parameter(Mandatory=$false, Position=99)]
+   ${Logger})
+
+begin
+{
+    try {
+        if($PSBoundParameters.ContainsKey(&quot;Logger&quot;)) {
+            if($Logger -is [log4net.Core.LogImpl]) { Set-Logger $Logger } else { $script:Logger = Get-Logger &quot;$Logger&quot; }
+            $null = $PSBoundParameters.Remove(&quot;Logger&quot;)
+        }
+
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Host', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {&amp; $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $script:logger.info(($Object -join $Separator))  #Write-Verbose
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+&lt;#
+
+.ForwardHelpTargetName Write-Host
+.ForwardHelpCategory Cmdlet
+
+#&gt;
+}
+
+Set-Alias Write-Debug Write-DebugLog
+Set-Alias Write-Verbose Write-VerboseLog
+Set-Alias Write-Warning Write-WarningLog
+Set-Alias Write-Error Write-ErrorLog
+#Set-Alias Write-Host Write-HostLog
+
+Export-ModuleMember -Function * -Alias *
+
+$script:Logger = Get-Logger &quot;PowerShellLogger&quot; -RollingFile
+
+## THIS IS THE DEFAULT LOGGER. CONFIGURE AS YOU SEE FIT
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

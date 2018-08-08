@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Get-MWSOrder - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-MWSOrder</h1>
+<h3><a href="//scripts/3045.ps1">download</a></h3>
+<p>Get seller orders from Amazon's MWS web services ... with items optionally included</p>
+<pre><code class="language-posh">// --------------------------------------------------------------------------------------------------------------------
+// &lt;copyright file=&quot;GetOrderCmdlet.cs&quot; company=&quot;Huddled Masses&quot;&gt;
+//   Copyright (c) 2011 Joel Bennett
+// &lt;/copyright&gt;
+// &lt;summary&gt;
+//   Defines the Get-Order Cmdlet for Amazon Marketplace Orders WebService.
+// &lt;/summary&gt;
+// --------------------------------------------------------------------------------------------------------------------
+
+namespace PoshOrders
+{
+   using System;
+   using System.Management.Automation;
+
+   // I'm using Amazon's MarketplaceWebServiceOrders Apache-licensed web-service access code.
+   using MarketplaceWebServiceOrders;
+   using MarketplaceWebServiceOrders.Model;
+
+   /// &lt;summary&gt;
+   /// Get Amazon Marketplace Orders from the WebService
+   /// &lt;/summary&gt;
+   [Cmdlet(VerbsCommon.Get, &quot;Order&quot;)]
+   public class GetOrderCmdlet : Cmdlet
+   {
+      // Access Key ID and Secret Access Key ID for the Amazon MWS
+
+      /// &lt;summary&gt;The Amazon Access Key ID&lt;/summary&gt;
+      private const string AccessKeyId = &quot;INSERT YOUR MWS ACCESS KEY HERE&quot;;
+
+      /// &lt;summary&gt;The Amazon Secret Key&lt;/summary&gt;
+      private const string SecretAccessKey = &quot;INSERT YOUR MWS SECRET ACCESS KEY HERE&quot;;
+
+      /// &lt;summary&gt;The Application Name is sent to MWS as part of the HTTP User-Agent header&lt;/summary&gt;
+      private const string ApplicationName = &quot;INSERT YOUR APPLICATION NAME HERE&quot;;
+
+      /// &lt;summary&gt;The Application Version is sent to MWS as part of the HTTP User-Agent header&lt;/summary&gt;
+      private const string ApplicationVersion = &quot;1.0&quot;;
+
+      /// &lt;summary&gt;Default value for the service URL is for the USA&lt;/summary&gt;
+      private string serviceUrl = &quot;https://mws.amazonservices.com/Orders/2011-01-01&quot;;
+
+      /// &lt;summary&gt;The web service client&lt;/summary&gt;
+      private MarketplaceWebServiceOrdersClient marketplaceWebServiceOrdersClient;
+
+      /// &lt;summary&gt;Default value for &quot;Created After&quot; is 1 day ago.&lt;/summary&gt;
+      private DateTime createdAfter = DateTime.MinValue;
+
+      /// &lt;summary&gt;Default value for &quot;Created Before&quot; is infinitely in the future&lt;/summary&gt;
+      private DateTime createdBefore = DateTime.MaxValue;
+
+      /// &lt;summary&gt;The Default order status is Unshipped or PartiallyShipped&lt;/summary&gt;
+      private OrderStatusEnum[] orderStatus = new[] { OrderStatusEnum.Unshipped, OrderStatusEnum.PartiallyShipped };
+
+      /// &lt;summary&gt;
+      /// Gets or sets the merchant id.
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// The merchant id.
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = true, Position = 0, ValueFromPipelineByPropertyName = true)]
+      public string MerchantId
+      {
+         get; 
+         set;
+      }
+
+      /// &lt;summary&gt;
+      /// Gets or sets the marketplace id.
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// The marketplace id.
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = true, ValueFromPipelineByPropertyName = true)]
+      public string[] Marketplace
+      {
+         get; 
+         set;
+      }
+
+      /// &lt;summary&gt;
+      /// Gets or sets the service URL.
+      /// Defaults to the USA service URL.
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// The service URL.
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true)]
+      public string ServiceUrl
+      {
+         get
+         {
+            return this.serviceUrl;
+         }
+
+         set
+         {
+            this.serviceUrl = value;
+         }
+      }
+
+      /// &lt;summary&gt;
+      /// Gets or sets a date orders must prescede.
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// The date.
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true)]
+      public DateTime CreatedBefore
+      {
+         get
+         {
+            return this.createdBefore;
+         }
+
+         set
+         {
+            this.createdBefore = value;
+         }
+      }
+
+      /// &lt;summary&gt;
+      /// Gets or sets a date the orders must come aftercreated after.
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// The created after.
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true)]
+      public DateTime CreatedAfter
+      {
+         get
+         {
+            return this.createdAfter;
+         }
+
+         set
+         {
+            this.createdAfter = value;
+         }
+      }
+
+      /// &lt;summary&gt;
+      /// Gets or sets the order status.
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// The order status.
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true)]
+      public OrderStatusEnum[] OrderStatus
+      {
+         get
+         {
+            return orderStatus;
+         }
+
+         set
+         {
+            orderStatus = value;
+         }
+      }
+
+      /// &lt;summary&gt;
+      /// Gets or sets the buyer email.
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// The buyer email.
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true)]
+      public string BuyerEmail
+      {
+         get;
+         set;
+      }
+
+      /// &lt;summary&gt;
+      /// Gets or sets the seller order id.
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// The seller order id.
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = false, ValueFromPipelineByPropertyName = true)]
+      public string SellerOrderId
+      {
+         get;
+         set;
+      }
+
+      /// &lt;summary&gt;
+      /// Gets or sets whether to include the Order Items
+      /// &lt;/summary&gt;
+      /// &lt;value&gt;
+      /// True to included the Order Items
+      /// &lt;/value&gt;
+      [Parameter(Mandatory = false)]
+      public SwitchParameter IncludeItems
+      {
+         get;
+         set;
+      }
+
+      /// &lt;summary&gt;
+      /// Implement the Begin step for PowerShell Cmdlets
+      /// &lt;/summary&gt;
+      protected override void BeginProcessing()
+      {
+         base.BeginProcessing();
+         var config = new MarketplaceWebServiceOrdersConfig
+         {
+            ServiceURL = &quot;https://mws.amazonservices.com/Orders/2011-01-01&quot;
+         };
+
+         this.marketplaceWebServiceOrdersClient = new MarketplaceWebServiceOrdersClient(
+            ApplicationName, ApplicationVersion, AccessKeyId, SecretAccessKey, config);
+      }
+
+      /// &lt;summary&gt;
+      /// Implement the Process step for PowerShell Cmdlets
+      /// &lt;/summary&gt;
+      protected override void ProcessRecord()
+      {
+         base.ProcessRecord();
+
+         /*
+         // If no dates are specificied, start a day ago ...
+         if (CreatedBefore == DateTime.MaxValue &amp;&amp; CreatedAfter == DateTime.MinValue)
+         {
+            CreatedAfter = DateTime.UtcNow.AddDays(-1);
+         }
+         */
+
+         // Amazon's policy doesn't allow calling with a CreatedBefore after two minutes before the request time
+         if (CreatedBefore == DateTime.MaxValue)
+         {
+            CreatedBefore = DateTime.Now.AddMinutes(-2);
+         }
+
+         var orderRequest = new ListOrdersRequest
+         {
+            MarketplaceId = new MarketplaceIdList(),
+            OrderStatus = new OrderStatusList(),
+            BuyerEmail = this.BuyerEmail,
+            SellerId = this.MerchantId,
+            SellerOrderId = this.SellerOrderId,
+            CreatedAfter = this.CreatedAfter,
+            CreatedBefore = this.CreatedBefore
+         };
+
+         orderRequest.OrderStatus.Status.AddRange(OrderStatus);
+         orderRequest.MarketplaceId.Id.AddRange(Marketplace);
+
+         var response = marketplaceWebServiceOrdersClient.ListOrders(orderRequest);
+
+         foreach (var order in response.ListOrdersResult.Orders.Order)
+         {
+            var output = new PSObject(order);
+            if (IncludeItems.ToBool())
+            {
+               var itemRequest = new ListOrderItemsRequest
+               {
+                  AmazonOrderId = order.AmazonOrderId,
+                  SellerId = this.MerchantId,
+               };
+
+               var items = marketplaceWebServiceOrdersClient.ListOrderItems(itemRequest);
+               output.Properties.Add(new PSNoteProperty(&quot;Items&quot;, items.ListOrderItemsResult.OrderItems.OrderItem));
+            }
+
+            WriteObject(output);
+         }
+      }
+   }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

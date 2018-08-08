@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Prashant Pandey">
+    <title>Windows server health - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Windows server health</h1>
+<h3><a href="//scripts/6558.ps1">download</a> - <a href="//scripts/6557.md">parent</a></h3>
+<p>windows server health check for 2008 2012 2012r2</p>
+<pre><code class="language-posh">########################################################
+# Created by Prashant Dev Pandey
+#   pandey.nic@rediffmail.com
+#   prashantdev.pandey@gmail.com
+
+########################################################
+#Server Service Health for windows server 2008 and above versions
+########################################################
+
+
+
+
+$Outputreport=&quot;&quot;
+$Outputreport +=&quot;&lt;style&gt;TABLE{ border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse;align:center;width:100%;}
+TH{border-width: 1px;background-color: lightblue;bgcolor=blue;padding: 3px;border-style: solid;border-color: black;}
+TD{border-width: 1px;color: white;background-color: gray;padding: 3px;border-style: solid;border-color: black;}
+ 
+h1{text-shadow: 1px 1px 1px #000,3px 3px 5px blue; text-align: center;font-style: calibri;font-family: Calibri;&lt;/style&gt;&quot;
+
+
+
+## Get Host Name
+$Hostname = hostname | Out-String
+
+## Get version
+$Version = (Get-WmiObject -class Win32_OperatingSystem).Caption | Out-String
+
+## Get Uptime
+$UPTIME=Get-WmiObject Win32_OperatingSystem
+$up = [Management.ManagementDateTimeConverter]::ToDateTime($UPTIME.LastBootUpTime) | Out-String
+
+## Get Disk Spaces
+$Disk = Get-WmiObject Win32_logicaldisk -ComputerName LocalHost -Filter &quot;DriveType=3&quot; |select -property DeviceID,@{Name=&quot;Size(GB)&quot;;Expression={[decimal](&quot;{0:N0}&quot; -f($_.size/1gb))}},@{Name=&quot;Free Space(GB)&quot;;Expression={[decimal](&quot;{0:N0}&quot; -f($_.freespace/1gb))}},@{Name=&quot;Free (%)&quot;;Expression={&quot;{0,6:P0}&quot; -f(($_.freespace/1gb) / ($_.size/1gb))}}|ConvertTo-Html
+
+## Get Critical Service Status
+$Private:wmiService =gsv -include &quot;*SQL*&quot; -Exclude &quot;*ySQL*&quot;,&quot;*spo*&quot;|select Name,DisplayName,Status|ConvertTo-Html
+$Services =gsv -include &quot;*SQL*&quot; -Exclude &quot;*ySQL*&quot;,&quot;*spo*&quot;|select Name,DisplayName,Status|ConvertTo-Html 
+
+## Get CPU Utilization
+$CPU_Utilization = Get-Process|Sort-object -Property CPU -Descending| Select -first 5 -Property ID,ProcessName,@{Name = 'CPU In (%)';Expression = {$TotalSec = (New-TimeSpan -Start $_.StartTime).TotalSeconds;[Math]::Round( ($_.CPU * 100 /$TotalSec),2)}},@{Expression={$_.threads.count};Label=&quot;Threads&quot;;},@{Name=&quot;Mem Usage(MB)&quot;;Expression={[math]::round($_.ws / 1mb)}},@{Name=&quot;VM(MB)&quot;;Expression={&quot;{0:N3}&quot; -f($_.VM/1mb)}}|ConvertTo-Html
+#$proc =get-counter -Counter &quot;\Processor(_Total)\% Processor Time&quot; -SampleInterval 2 
+#$cpu=($proc.readings -split &quot;:&quot;)[-1]
+#$CPU_Utilization = [System.Math]::Round($cpu, 2) | Out-String
+ 
+
+## Get Each Processor Utilization
+$arr=@()
+$ProcessorObject=gwmi win32_processor
+foreach($processor in $ProcessorObject)
+{
+   $arr += $processor.Caption
+   $arr += $processor.LoadPercentage
+}
+
+## Security Patches
+$SecPatch = get-hotfix -Description &quot;Security Update&quot; |sort &quot;Description&quot; -desc | select Description,installedon -first 1 | Out-String
+
+## RAM Usage
+$Private:perfmem = Get-WmiObject -namespace root\cimv2 Win32_PerfFormattedData_PerfOS_Memory
+$Private:totmem = Get-WmiObject -namespace root\cimv2 CIM_PhysicalMemory 
+[Int32]$Private:totalcapacity = 0 
+foreach ($Mem in $totmem) 
+{ 
+$totalcapacity += $Mem.Capacity / 1Mb 
+} 
+#Get-WmiObject Win32_PhysicalMemory | ForEach-Object {$totalcapacity += $_.Capacity / 1Mb} 
+
+$Private:tmp = New-Object -TypeName System.Object 
+$tmp | Add-Member -Name CapacityMB -Value $totalcapacity -MemberType NoteProperty 
+$tmp | Add-Member -Name AvailableMB -Value $perfmem.AvailableMBytes -MemberType NoteProperty
+$ram_usage = $tmp |ConvertTo-Html
+
+## Physical Memory
+function Get-MemoryUsage ($ComputerName=$ENV:ComputerName) {
+if (Test-Connection -ComputerName $ComputerName -Count 1 -Quiet) {
+$ComputerSystem = Get-WmiObject -ComputerName $ComputerName -Class Win32_operatingsystem -Property TotalVisibleMemorySize, FreePhysicalMemory
+$MachineName = $ComputerSystem.CSName
+$FreePhysicalMemory = ($ComputerSystem.FreePhysicalMemory) / (1mb)
+$TotalVisibleMemorySize = ($ComputerSystem.TotalVisibleMemorySize) / (1mb)
+$TotalVisibleMemorySizeR = &quot;{0:N2}&quot; -f $TotalVisibleMemorySize
+$TotalFreeMemPerc = ($FreePhysicalMemory/$TotalVisibleMemorySize)*100
+$TotalFreeMemPercR = &quot;{0:N2}&quot; -f $TotalFreeMemPerc
+# print the machine details:
+&quot;&lt;table border=1 width=100&gt;&quot;
+&quot;&lt;tr&gt;&lt;th&gt;RAM&lt;/th&gt;&lt;td&gt;$TotalVisibleMemorySizeR GB&lt;/td&gt;&lt;/tr&gt;&quot;
+&quot;&lt;tr&gt;&lt;th&gt;Free Physical Memory&lt;/th&gt;&lt;td&gt;$TotalFreeMemPercR %&lt;/td&gt;&lt;/tr&gt;&quot;
+&quot;&lt;/table&gt;&quot;
+
+}}
+$PhyMem = Get-MemoryUsage
+$Hotfix=(get-hotfix | sort installedon)|select -first 5 HotFixID,InstalledBy,InstalledOn,Description|ConvertTo-Html
+$Processor_Counter=Get-Counter &quot;\Processor(_total)\% Processor Time&quot;|ConvertTo-Html
+$Total_Threads=(Get-Process |Select-Object -ExpandProperty Threads).Count
+## Paging
+
+function Get-PageFile { 
+param( 
+    [string]$computer=&quot;.&quot; 
+)    
+        Get-WmiObject -Class Win32_PageFileUsage  -ComputerName $computer | 
+        Select  @{Name=&quot;File&quot;;Expression={ $_.Name }}, 
+        @{Name=&quot;Base Size(MB)&quot;; Expression={$_.AllocatedBaseSize}}, 
+        @{Name=&quot;Peak Size(MB)&quot;; Expression={$_.PeakUsage}},  
+        TempPageFile 
+  }
+  
+$PhysicalRAM = (Get-WMIObject -class Win32_PhysicalMemory  |
+Measure-Object -Property capacity -Sum | % {[Math]::Round(($_.sum / 1GB),2)})
+$ht = @{}
+$ht.Add('Total_Ram(GB)',$PhysicalRAM)
+$OSRAM = gwmi Win32_OperatingSystem  |
+foreach {$_.TotalVisibleMemorySize,$_.FreePhysicalMemory}
+$ht.Add('Total Visable RAM GB',([Math]::Round(($OSRAM[0] /1MB),4)))
+$ht.Add('Available_Ram(GB)',([Math]::Round(($OSRAM[1] /1MB),4)))
+$RAM = New-Object -TypeName PSObject -Property $ht|ConvertTo-Html
+$Paging1=Get-PageFile|ConvertTo-Html
+$Paging =  Get-WMIObject Win32_PageFileSetting |  select Name, InitialSize, MaximumSize|ConvertTo-Html
+
+$Available_Bytes=Get-Counter -Counter &quot;\Memory\Available Bytes&quot;|Select -ExpandProperty CounterSamples|Select CookedValue |ft -HideTableHeaders|out-string
+$att=Get-Counter -Counter &quot;\Memory\Committed Bytes&quot;|Select -ExpandProperty CounterSamples|Select CookedValue |ft -HideTableHeaders|out-string
+$Comitted_Bytes=&quot;{0:N0}&quot; -f (($att.trim())/1024/1024)
+$Handle_Count=Get-Counter -Counter &quot;\Process(_Total)\Handle Count&quot;|Select -ExpandProperty CounterSamples|Select CookedValue |ft -HideTableHeaders|out-string
+$Thread_Count=Get-Counter -Counter &quot;\Process(_Total)\Thread Count&quot;|Select -ExpandProperty CounterSamples|Select CookedValue |ft -HideTableHeaders|out-string
+$ftt=Get-Counter -Counter &quot;\memory\Pool Paged Bytes&quot;|Select -ExpandProperty CounterSamples|Select CookedValue |ft -HideTableHeaders|out-string
+$Pool_Paged=&quot;{0:N0}&quot; -f (($ftt.trim())/1024/1024)
+$dtt=Get-Counter -Counter &quot;\memory\Pool Nonpaged Bytes&quot;|Select -ExpandProperty CounterSamples|Select CookedValue |ft -HideTableHeaders|out-string
+$Pool_NonPaged=&quot;{0:N0}&quot; -f (($dtt.trim())/1024/1024)
+$Total_process=(get-process).count
+
+$Outputreport +=&quot;&lt;BODY&gt;&lt;HTML&gt;&quot;
+
+$Outputreport +=&quot;&lt;table border=1 &gt;&lt;tr&gt;&lt;td&gt;&quot;
+$Outputreport +=&quot;&lt;table border=1 width=100%&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Hostname&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$Hostname+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Version&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$Version+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Uptime&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$up+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Physical Memory(MB)&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$RAM+&quot;&lt;/td&gt;&lt;/tr&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;tr&gt;&lt;th&gt;&lt;B&gt;System&lt;/B&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th&gt;Total Handles&lt;/th&gt;&lt;td&gt;&quot;+$Handle_Count.trim()+&quot;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th&gt;Total Thread&lt;/th&gt;&lt;td&gt;&quot;+$Thread_Count.trim()+&quot;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th&gt;Total Process&lt;/th&gt;&lt;td&gt;&quot;+$Total_process+&quot;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th&gt;Commit(MB)&lt;/th&gt;&lt;td&gt;&quot;+$Comitted_Bytes.trim()+&quot;&lt;/td&gt;&lt;/tr&gt;&lt;/td&gt;&quot;
+$Outputreport +=&quot;&lt;td&gt;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Kernel Memory(MB)&lt;/B&gt;&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th&gt;Paged&lt;/th&gt;&lt;td&gt;&quot;+$Pool_Paged.trim()+&quot;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;th&gt;Non Paged&lt;/th&gt;&lt;td&gt;&quot;+$Pool_NonPaged.trim()+&quot;&lt;/td&gt;&lt;/tr&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&quot;
+$Outputreport += &quot;&lt;/table&gt;&lt;/BODY&gt;&lt;/HTML&gt;&quot;
+$Outputreport +=&quot;&lt;/br&gt;&quot;
+$Outputreport +=&quot;&lt;/br&gt;&quot;
+$Outputreport +=&quot;&lt;BODY&gt;&lt;HTML&gt;&quot;
+$Outputreport +=&quot;&lt;table border=1 width=50%&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Disk Size&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$Disk+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Services&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$Services+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Top5 Process&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$CPU_Utilization+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Ram_Usage&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$ram_usage+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Physical Memory&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$PhyMem+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+#$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Processor Counter&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$Processor_Counter+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Last 5 HotFix&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$Hotfix+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Paging&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$Paging+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+#$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;No Of Threads&lt;/B&gt;&lt;/th&gt;&lt;td&gt;&quot;+$Total_Threads+&quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+#$Outputreport +=&quot;&lt;tr&gt;&lt;th&gt;&lt;B&gt;Average process&lt;/B&gt;&lt;/th&gt;&lt;table border=1&gt;&lt;tr&gt;&lt;th&gt;Cpu Load&lt;/th&gt;&lt;th&gt;Mem Load&lt;/th&gt;&lt;th&gt;$CDrive&lt;/th&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&quot;+$CPULoad+&quot;&lt;/td&gt;&lt;td&gt;&quot;+$MemLoad+&quot;&lt;/td&gt;&lt;td&gt;&quot;+$CDrive+&quot;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;&lt;/tr&gt;&quot;
+$Outputreport += &quot;&lt;/table&gt;&lt;/BODY&gt;&lt;/HTML&gt;&quot;
+$Outputreport | out-file C:\Scripts\Windows_Server_Health_Status.html
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

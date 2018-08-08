@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="John Mello">
+    <title>Get Active Sync devices - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get Active Sync devices</h1>
+<h3><a href="//scripts/3953.ps1">download</a></h3>
+<p>Get-InactiveActiveSyncDevices pulls all user mailboxes with an Active Sync partnership and then selects the Active Sync devices that haven't synced in the specified period. These devices are sorted in ascending order and placed in a HTML table which is emailed to the specified user using a specified reply to address and SMTP server
+PLEASE TEST BEFORE RUNNING THIS SCRIPT IN PRODUCTION</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+Get-InactiveActiveSyncDevices pulls all user mailboxes with an Active Sync partnership and then selects the Active Sync devices that haven't synced in the specified period. These devices are sorted in ascending order and placed in a HTML table which is emailed to the specified user using a specified reply to address and SMTP server
+PLEASE TEST BEFORE RUNNING THIS SCRIPT IN PRODUCTION
+.DESCRIPTION
+The script 1st checks to see if Implicit remoting is needed to load the required PSsnapin (Microsoft.Exchange.Management.PowerShell.E2010), this is done by seeing it the $ExchangeConnectionUri variable does not have a $NULL value. If it contains a URI then create a new PSsession using the current credentials and import the session. If Implict remoting isn't needed then verify that the required PSsnapin (Microsoft.Exchange.Management.PowerShell.E2010) is loaded and if not try to load it locally. Then  Get-InactiveActiveSyncDevices uses Get-CasMailbox to pull all the user mailboxes (Not Discovery or CAS mailboxes) with Active Sync device partnerships and saves them to a variable called $ActiveSyncMailboxes. It then walks through each mailbox and uses Get-ActiveSyncDeviceStatistics to pull DeviceType, DeviceUserAgent, DeviceID, LastSyncAttemptTime, LastSuccessSync for each mailbox’s separate Active Sync device partnership and puts these properties in addition to the full name associated with the mailbox into a hashtable called $UserActiveSyncStats. The reason why Get- ActiveSyncDeviceStatistics isn’t used exclusively is because it does not have a property that stores just the name of the user who owns the Active Sync device, only a full Active Directory path to the Active Sync device. This hash table is used to create a custom PowerShell Object which is then added to $ActiveSyncDeviceList. A variable called $MatchingActiveSyncDevices holds all the Active Sync devices in $ActiveSyncDeviceList that haven’t synced to the Exchanger server in less than or equal to the number of hours specified in $HourInterval . $MatchingActiveSyncDevices is then checked to see if it’s an empty array or not. If it contains items an HTML header is created to format the table for the HTML email report and saved in a variable called $HTMLHeader . Then The Body of the email contains all of the criteria matching Active Sync devices from $MatchingActiveSyncDevices in ascending order which is converted to HTML using the HTML header information created earlier in $HTMLHeader. Otherwise a the body contains a message stating that no devices matched the given criteria.. An Email is then sent out to the user specified in $to from the address specified in $from using the email server specified in $SmtpServer. The body is generated from the sorted Active Synce Devices in $ActiveSyncDeviceList.
+.PARAMETER to
+The email address the email report will go to
+.PARAMETER from
+The email address the email report will come from
+.PARAMETER SmtpServer
+The IP address or DNS name of the SMTP server that will be used to send the email report
+.PARAMETER HourInterval
+The interval in hours. Any mailbox that hasn't synced to the Exchnage server
+.PARAMETER ExchangeConnectionUri
+URI of Powershell Session on an Exchange 2010 server. Used if the PC running this script does not have the required PSsnapin loaded
+.EXAMPLE
+Get-InactiveActiveSyncDevices -to User@company.com -from ActiveSyncDeviceReport@Company.com -SmtpServer Mail.company.com -HourInterval 24
+Send an email report of all Active Sync devices that haven't synced to the mail server in the past 24 hours to User@company.com from ActiveSyncDeviceReport@Company.com through the email server with the DNS name of Mail.company.com
+.EXAMPLE
+Get-InactiveActiveSyncDevices -to User@company.com -from ActiveSyncDeviceReport@Company.com -SmtpServer 10.10.50.100 -HourInterval 24
+Send an email report of all Active Sync devices that haven't synced to the mail server in the past 24 hours to User@company.com from ActiveSyncDeviceReport@Company.com through the email server with the DNS name of Mail.company.com
+.EXAMPLE
+Get-InactiveActiveSyncDevices -to User@company.com -from ActiveSyncDeviceReport@Company.com -SmtpServer 10.10.50.100 -HourInterval 24 -ExchangeConnectionUri http://mail.company.com/PowerShell/
+Send an email report of all Active Sync devices that haven't synced to the mail server in the past 24 hours to User@company.com from ActiveSyncDeviceReport@Company.com through the email server with the DNS name of Mail.company.com using the Exchange Connection Uri of http://mail.company.com/PowerShell/ in order to use implicit remoting to pull in the required PSsnapin
+.NOTES
+NAME: Get-InactiveActiveSyncDevices
+AUTHOR: John Mello
+AUTHOR WEBSITE: mellositmusings.com
+LASTEDIT: 02/17/2013
+KEYWORDS: Exchange 2010, Active Synce
+.LINK
+Latest version can be found at : 
+http://gallery.technet.microsoft.com/scriptcenter/Get-Active-Sync-devices-9bfb5116
+
+#Requires -Version 2.0 
+#&gt;
+
+[cmdletbinding()]
+
+Param (
+    [Parameter(Mandatory=$True,HelpMessage=&quot;Enter a email address to send the report too&quot;)]
+    [string]$to,
+
+    [Parameter(Mandatory=$True,HelpMessage=&quot;Enter the email address the report should come from&quot;)]
+    [string]$from,
+
+    [Parameter(Mandatory=$True,HelpMessage=&quot;Enter the IP or DNS name of the mail server that will send the report&quot;)]
+    [string]$SmtpServer,
+
+    [Parameter(Mandatory=$True,HelpMessage=&quot;Enter the hour interval to check against (e.g. 24)&quot;)]
+    [int]$HourInterval,
+	
+	$ExchangeConnectionUri = $NULL
+)
+
+Write-Verbose &quot;Checking if implict remoting to an Exchnage 2010 server was specified&quot;
+if ($ExchangeConnectionUri -eq $NULL)
+	{
+		Write-Verbose &quot;Checking for Microsoft.Exchange.Management.PowerShell.E2010 PSSnapin&quot;
+		if ( (Get-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.E2010 -ErrorAction SilentlyContinue) -eq $NULL )
+			{
+				Write-Verbose &quot;Microsoft.Exchange.Management.PowerShell.E2010 not installed, intalling now&quot;
+				Add-PSSnapin -Name Microsoft.Exchange.Management.PowerShell.E2010
+			}
+		Else
+			{
+				Write-Verbose &quot;Microsoft.Exchange.Management.PowerShell.E2010 PSSnapin is installed&quot;
+			}
+	}
+Else
+	{
+		Write-Verbose &quot;Creating Implict remoting to $ExchangeConnectionUri&quot;
+		$ExchangeImplictSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri $ExchangeConnectionUri -Authentication Kerberos
+		Write-Verbose &quot;Importing session&quot;
+		Import-PSSession $ExchangeImplictSession
+	}
+	
+Write-Verbose &quot;Get all Mailboxes using Get-CASMailbox and filter by the HasActiveSyncDevicePartnership property but do not include CAS or Discovery Mailboxes&quot;
+$ActiveSyncMailboxes = Get-CASMailbox -ResultSize unlimited -Filter{(HasActiveSyncDevicePartnership -eq $true) -AND (name -notlike &quot;cas_*&quot;) -AND (name -notlike &quot;DiscoverysearchMailbox*&quot;)} 
+
+Write-Verbose &quot;Start Processing list&quot;
+$ActiveSyncDeviceList = $ActiveSyncMailboxes |
+
+	ForEach-Object { 
+		Write-Verbose 'Pull the active sync device/devices from the current mailbox in $ActiveSyncMailboxes'
+		$CurrentDevice = Get-ActiveSyncDeviceStatistics –Mailbox $_.Identity
+		$VerboseNameHold=$_.Name
+		Write-Verbose &quot;Use an IF statement to check if the Mailbox belonging to $VerboseNameHold has multiple Active Sync Devices&quot;
+		If ($CurrentDevice -is [Array])
+			{	
+				Write-Verbose &quot;User $VerboseNameHold has multiple Active Sync devices&quot;
+				$Index = 0
+				Write-Verbose &quot;Active sync device index = $Index&quot;
+				$VerboseTotalDeviceHold = $CurrentDevice.count
+				$VerboseIndexHold = $Index + 1
+				ForEach($Device in $CurrentDevice)
+				{
+					Write-Verbose &quot;Current mailbox belonging to $VerboseNameHold has multiple devices currently on device # $VerboseIndexHold of $VerboseTotalDeviceHold&quot;
+					Write-Verbose &quot;Putting Active Device Statistics into a hash table&quot;
+					$UserActiveSyncStats = @{
+						Name=$_.Name
+						DeviceType=$CurrentDevice[$index].DeviceType
+						DeviceUserAgent=$CurrentDevice[$index].DeviceUserAgent
+						DeviceID=$CurrentDevice[$index].DeviceID
+						LastSyncAttemptTime=$CurrentDevice[$index].LastSyncAttemptTime
+						LastSuccessSync=$CurrentDevice[$index].LastSuccessSync
+					}
+					
+					Write-Verbose 'Creating a new Object using the $UserActiveSyncStats hashtable to create the properties, this will become an array entry in $ActiveSyncDeviceList'
+					New-Object -TypeName PSObject -Property $UserActiveSyncStats
+					$index++
+					$VerboseIndexHold++
+					Write-Verbose &quot;Active Sync Device index incremented to $index&quot;
+				}
+			}
+		Else
+			{
+				Write-Verbose &quot;Current mailbox beloning to $VerboseNameHold does not have multiple devices&quot;
+				Write-Verbose &quot;Putting Active Device Statistics into a hash table&quot;
+				$UserActiveSyncStats = @{
+					Name=$_.Name
+					DeviceType=$CurrentDevice.DeviceType
+					DeviceUserAgent=$CurrentDevice.DeviceUserAgent
+					DeviceID=$CurrentDevice.DeviceID
+					LastSyncAttemptTime=$CurrentDevice.LastSyncAttemptTime
+					LastSuccessSync=$CurrentDevice.LastSuccessSync
+				}
+					Write-Verbose 'Creating a new Object using the $UserActiveSyncStats hashtable to create the properties, this will become an array entry in $ActiveSyncDeviceList'
+					New-Object -TypeName PSObject -Property $UserActiveSyncStats
+			}
+	}
+
+$CurrentDateandTime = Get-date
+Write-Verbose &quot;Saving Current date ($CurrentDateandTime) to a variable so that the same date is used for comparison to specified interval ($HoustsInterval)&quot;
+
+$date = $CurrentDateandTime.AddHours(-$HourInterval)
+Write-Verbose &quot;Subtracting ${HourInterval}hrs from todays date&quot;
+
+Write-Verbose &quot;Finding devices that haven't synced since $date&quot;
+$MatchingActiveSyncDevices = $ActiveSyncDeviceList | Where-Object {$_.LastSuccessSync -le $date}
+
+Write-Verbose 'Checking $MatchingActiveSyncDevices to see if it contains any devices that match tne criteria'
+If ($MatchingActiveSyncDevices.count -gt 0) 
+	{
+		Write-Verbose '$MatchingActiveSyncDevices is not an empty array, devices that match the criteria have been found'
+
+		Write-Verbose &quot;Creating html header for email body&quot;
+		$HTMLHeader = &quot;&lt;Style&gt;&quot;
+		$HTMLHeader = $HTMLHeader + &quot;TABLE{border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse}&quot;
+		$HTMLHeader = $HTMLHeader + &quot;TH{border-width: 1px;padding: 0px;border-style: solid;border-color: black;background-color: DarkGray}&quot;
+		$HTMLHeader = $HTMLHeader + &quot;TD{border-width: 1px;padding: 0px;border-style: solid;border-color: black;background-color: PaleTurquoise}&quot;
+		$HTMLHeader = $HTMLHeader + &quot;&lt;/Style&gt;&quot;
+		
+		Write-Verbose &quot;Creating email body which incldues all devices that havent synced in the ${HourInterval}hrs&quot;
+		$body = $MatchingActiveSyncDevices | 
+			sort LastSuccessSync | 
+			ConvertTo-html -head $HTMLHeader -Property Name,LastSuccessSync,DeviceType,DeviceUserAgent,DeviceID,LastSyncAttemptTime | 
+			Out-String
+	}
+Else
+	{
+		Write-Verbose '$MatchingActiveSyncDevices is an empty array, no devices that match the criteria have been found'
+		$body = &quot;All Active Sync devices have synced with the Exchange Server within the past ${HourInterval}hrs&quot;
+	}
+
+Write-Verbose &quot;Creating Email Subject&quot;
+$Subject = &quot;Active Sync device report for &quot; 
+$Subject += $CurrentDateandTime.ToShortDateString()
+$Subject += &quot; : &quot;
+$Subject += $MatchingActiveSyncDevices.count
+$Subject += &quot; devices haven't synced in the past ${HourInterval}hrs since &quot;
+$Subject += $CurrentDateandTime.ToShortTimeString()
+$Subject += &quot; today&quot;
+		
+Write-Verbose &quot;Sending email from $from to $to via the following email server : $SmtpServer&quot;
+Send-MailMessage -to $to -Subject $Subject -From $from -SmtpServer $SmtpServer -Body $Body -BodyAsHtml
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

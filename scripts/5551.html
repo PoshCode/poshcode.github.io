@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jim Ficarra">
+    <title>Write-Log updt 2014Oct29 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Write-Log updt 2014Oct29</h1>
+<h3><a href="//scripts/5551.ps1">download</a> - <a href="//scripts/4066.md">parent</a></h3>
+<p>Update to Write-Log.  In line 55 $Parameters = $PSBoundParameters.Clone(), the Clone() method is not available in PowerShell 4.0. Replaced with $Parameters = @{} + $PSBoundParameters</p>
+<pre><code class="language-posh">function Write-Log {
+  #.Synopsis
+  #  Write to a rotating log file
+  #.Example
+  #  Get-ChildItem C:\ -Recurse | Select FullName, CreationTimeUtc, LastWriteTimeUtc | Write-Log Files.txt -Rotate 5mb
+  #
+  #  Writes a file list to disc, breaking it into multiple files of approximately 5MB of data each
+  [CmdletBinding()]
+  param(
+    # The file path to log to
+    [Parameter(ValueFromPipelineByPropertyName=$true, Mandatory=$true, Position=0)]
+    [Alias(&quot;PSPath&quot;)]
+    $FilePath,
+
+    [Parameter(Position=1)]
+    [ValidateSet('unknown','string','unicode','bigendianunicode','utf8','utf7','utf32','ascii','default','oem')]
+    [ValidateNotNullOrEmpty()]
+    [string]
+    ${Encoding} = 'utf8',
+
+    [ValidateRange(2, 2147483647)]
+    [int]
+    ${Width},
+
+    # A max file size at which to rotate the log file
+    [Parameter()]
+    [Alias(&quot;Rotate&quot;,&quot;Length&quot;)]
+    [int]$SizeLimit = 10MB,
+
+    # A max file size at which to rotate the log file
+    [Parameter()]
+    [Alias(&quot;Count&quot;)]
+    [int]$FileCountLimit = 5,
+
+    # The data to log
+    [Parameter(ValueFromPipeline=$true, Mandatory=$true)]
+    $InputObject
+  )
+  begin { 
+
+
+    try {
+        if($PSBoundParameters.ContainsKey('OutBuffer')) {
+          $PSBoundParameters.Remove('OutBuffer')
+        }
+        if($PSBoundParameters.ContainsKey('SizeLimit')) {
+          $PSBoundParameters.Remove('SizeLimit')
+        }
+        if(!$PSBoundParameters.ContainsKey('Encoding')) {
+          $PSBoundParameters.Add('Encoding', $Encoding)
+        }
+
+        # Pipeline-bound parameters will be set on $PSBoundParameters later (in the process block)
+        # Since we have to (re)create the steppablePipeline, we need a copy of them as they are now
+        @@$Parameters = @{} + $PSBoundParameters
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand(
+                          'Microsoft.PowerShell.Utility\Out-File',
+                          [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {&amp; $wrappedCmd @Parameters -Append }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+  }
+  process {
+    try {
+      $steppablePipeline.Process($_)
+
+      # If the file triggers rotation:
+      if(($file = Get-Item $FilePath) -and $file.Length -gt $SizeLimit) {
+        # Remove the last item if it would go over the limit
+        $steppablePipeline.End()
+
+        if(Test-Path &quot;$FilePath.$FileCountLimit)&quot;) { 
+          Write-Verbose &quot;Removing $FilePath.$FileCountLimit)&quot;
+          Remove-Item &quot;$FilePath.$FileCountLimit)&quot;
+        }
+        foreach($i in ($FileCountLimit)..1) {
+          if(test-path &quot;$FilePath.$($i-1)&quot;) {
+            Move-Item &quot;$FilePath.$($i-1)&quot; &quot;$FilePath.$i&quot;
+          }
+        }
+        Move-Item $FilePath &quot;$FilePath.$i&quot;
+        $null = New-Item $FilePath -Type File
+
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+      }
+    } catch {
+        throw
+    }    
+  }
+  end
+  {
+    try {
+      $steppablePipeline.End()
+    } catch {
+      throw
+    }
+  }
+}
+
+
+## Bonus: the log rotation logic as a stand alone function...
+function Rotate-Log {
+  #.Synopsis
+  #   Rotate a log file if it's gotten too big
+  [CmdletBinding()]
+  param(
+    # The file of the path to test and rotate
+    [Parameter(ValueFromPipelineByPropertyName=$true, Mandatory=$true, Position=0)]
+    [Alias(&quot;PSPath&quot;)]
+    $FilePath,
+
+    # When a log file goes over this size, rotate it
+    $SizeLimit = 10MB,
+
+    # How many backup logs (besides the primary log file) to keep
+    $LogLimit  = 5
+  )
+  process {
+    foreach($LogFile in Resolve-Path $FilePath) {
+      # If the file triggers rotation:
+      if(($file = Get-Item $LogFile) -and $file.Length -gt $SizeLimit) {
+        # Remove the last item if it would go over the limit
+        if(Test-Path &quot;$LogFile.$LogLimit&quot;) { Remove-Item &quot;$LogFile.$LogLimit&quot; }
+        foreach($i in $LogLimit..1) {
+          if(test-path &quot;$LogFile.$($i-1)&quot;) {
+            Move-Item &quot;$LogFile.$($i-1)&quot; &quot;$LogFile.$i&quot;
+          }
+        }
+        Move-Item $LogFile &quot;$LogFile.$i&quot;
+        $null = New-Item $LogFile -Type File
+      }
+    }
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

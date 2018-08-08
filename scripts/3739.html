@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>DefaultParameterValues - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>DefaultParameterValues</h1>
+<h3><a href="//scripts/3739.ps1">download</a> - <a href="//scripts/3256.md">parent</a></h3>
+<p>For PowerShell 3: Export and Import DefaultParameterValues, optionally overwrite existing ones</p>
+<p>This version adds default aliases, and fixes parameter binding for set-defaultparameter and get-defaultparameter (and makes Set-DefaultParameter work properly when you type an alias instead of a full cmdlet name).</p>
+<pre><code class="language-posh"># DefaultParameters Module
+# 1.4 - removed extra parameter set to get parameter binding working better
+#     - added default aliases (sdp/gdp/rmdp)
+#requires -version 3.0
+# 1.3 - fixed denable/disable, added get and remove, and improved import and set
+# 1.2 - added help and commands to enable/disable the defaults
+# 1.0 - initial release
+
+function Export-DefaultParameter {
+#.Synopsis
+#  Exports the current default parameter values
+[CmdletBinding()]
+param(
+   # The path to export default parameter values to (defaults to &quot;DefaultParameterValues.clixml&quot; in your profile directory)
+   [String]$Path = $(Join-Path (Split-Path $Profile.CurrentUserAllHosts -Parent) DefaultParameterValues.clixml)
+)
+   Export-CliXml -InputObject $Global:PSDefaultParameterValues -Path $Path
+}
+
+function Import-DefaultParameter {
+#.Synopsis
+#  Imports new default parameter values
+[CmdletBinding()]
+param(
+   # The path to import default parameter values from (defaults to &quot;DefaultParameterValues.clixml&quot; in your profile directory)
+   [String]$Path = $(Join-Path (Split-Path $Profile.CurrentUserAllHosts -Parent) DefaultParameterValues.clixml),
+   # If set, overwrite current values (otherwise, keep current values)
+   [Switch]$Force
+)
+   $TempParameterValues = $Global:PSDefaultParameterValues
+   if(Test-Path $Path) {
+      [System.Management.Automation.DefaultParameterDictionary]$NewValues = 
+            Import-CliXml  -Path ${ProfileDir}\DefaultParameterValues.clixml
+      
+      $repeats = @()
+      foreach($key in $NewValues.Keys) {
+         # don't import the disabled state, that's just silly
+         if($key -eq &quot;disabled&quot;) { continue }
+         if($Global:PSDefaultParameterValues.ContainsKey($key)) {
+            $command,$parameter = $key -split &quot;:&quot;
+            if($Force) {
+               $repeats += [PSCustomObject]@{Command=$Command;Parameter=$Parameter;NewDefault=$NewValues.$key;OldDefault=$Global:PSDefaultParameterValues.$Key}
+               $Global:PSDefaultParameterValues.$Key = $NewValues.$key
+            } else {
+               $repeats += [PSCustomObject]@{Command=$Command;Parameter=$Parameter;CurrentDefault=$Global:PSDefaultParameterValues.$Key;SkippedValue=$NewValues.$key}
+            }
+         } else {
+            $Global:PSDefaultParameterValues.$Key = $NewValues.$key
+         }
+      }
+      if($repeats.Count) {
+         $Width = &amp;{
+            $Local:ErrorActionPreference = &quot;SilentlyContinue&quot;
+            $Width = $Host.UI.RawUI.BufferSize.Width - 2
+            if($Width) { $Width } else { 80 }
+         }
+         if($Force) {
+            Write-Warning (&quot;Some defaults overwritten:`n{0}&quot; -f ($repeats | Out-String -Width $Width))
+         } else {
+            Write-Warning (&quot;Some defaults already defined, use -Force to overwrite:`n{0}&quot; -f ($repeats | Out-String -Width $Width))
+         }
+      }
+      # Make sure that everything is enabled
+      $Global:PSDefaultParameterValues[&quot;Disabled&quot;] = $false
+   } else {
+      Write-Warning &quot;Default Parameter file not found: '$Path'&quot;
+   }
+}
+
+function Set-DefaultParameter {
+#.Synopsis
+#  Sets a default parameter value for a command
+#.Description
+#  Safely sets the default parameter value for a command, making sure that you've correctly typed the command and parameter combination
+[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact=&quot;Low&quot;)]
+param(
+   # The command that you want to change the default value of a parameter for
+   [parameter(Position=0,Mandatory=$true)]
+   $Command,
+   # The name of the parameter that you want to change the default value for
+   [parameter(Position=1,Mandatory=$true)]
+   [String]$Parameter,
+   # The new default parameter value
+   [parameter(Position=2,Mandatory=$true)]
+   $Value   
+)
+    Write-Verbose ($PSBoundParameters | Out-String)
+
+   if($parameter.StartsWith(&quot;-&quot;)) {
+      $parameter = $parameter.TrimStart(&quot;-&quot;)
+   }
+ 
+   ## Resolve the parameter to be sure
+   $cmd = Get-Command $command | Select -First 1
+   while($cmd.CommandType -eq &quot;Alias&quot;) {
+      $cmd = Get-Command $cmd.Definition | Select -First 1
+   }
+   $parameters = $cmd.Parameters.Values
+   $param = @($parameters | Where-Object { $_.Name -match $parameter -or $_.Aliases -match $parameter} | Select -Expand Name -Unique)
+   if(!$param) {
+      $param = @($parameters | Where-Object { $_.Name -match &quot;${parameter}*&quot;} | Select -First 1 -Expand Name)
+      if(!$param) {
+         $param = @($parameters | Where-Object { $_.Aliases -match &quot;${parameter}*&quot;} | Select -First 1 -Expand Name)
+      }
+   }
+   if($param.Count -eq 1) {
+      $Command = $Cmd.Name
+      Write-Verbose &quot;Setting Parameter $parameter on ${Command} to default: $($param[0])&quot;
+      
+      $Key = &quot;${Command}:$($param[0])&quot;
+      if( $Global:PSDefaultParameterValues.ContainsKey($Key) ) {
+         $WI = &quot;Overwrote the default parameter value for '$Key' with $Value&quot;
+         $CF = &quot;Overwrite the existing default parameter value for '$Key'? ($($Global:PSDefaultParameterValues.$Key))&quot;
+      } else {
+         $WI = &quot;Added a default parameter value for '$Key' = $Value&quot;
+         $CF = &quot;Add a default parameter value for '$Key'? ($($Global:PSDefaultParameterValues.$Key))&quot;
+      }
+      if($PSCmdlet.ShouldProcess( $WI, $CI, &quot;Setting Default Parameter Values&quot; )) {
+         $Global:PSDefaultParameterValues.$Key = $Value
+      }
+   } else {
+      Write-Warning &quot;Parameter $parameter not found on ${Command}&quot;
+   }
+}
+
+function Get-DefaultParameter {
+#.Synopsis
+#  Gets the default parameter value for a command, if it's been set
+#.Description
+#  Gets the default parameter value for a command from $PSDefaultParameterValues
+[CmdletBinding()]
+param(
+   # The command that you want to change the default value of a parameter for (allows wildcards)
+   [parameter(Position=0,Mandatory=$false)]
+   [string]$Command = &quot;*&quot;,
+   # The name of the parameter that you want to change the default value for (allows wildcards)
+   [parameter(Position=1,Mandatory=$true)]
+   [string]$Parameter = &quot;*&quot;
+)
+
+   if($parameter.StartsWith(&quot;-&quot;)) {
+      $parameter = $parameter.TrimStart(&quot;-&quot;)
+   }
+ 
+   $repeats = @()
+   foreach($key in $Global:PSDefaultParameterValues.Keys) {
+      # Handle the disabled state:
+      if($key -eq &quot;disabled&quot; -and $Global:PSDefaultParameterValues[&quot;Disabled&quot;]) { 
+         Write-Warning &quot;Default Parameter Values are DISABLED and will not be used:&quot;
+         continue
+      }
+      if($key -like &quot;${Command}:${Parameter}*&quot;) {
+         $Cmd,$Param = $key -split &quot;:&quot;
+         $repeats += [PSCustomObject]@{Command=$Cmd;Parameter=$Param;CurrentDefault=$Global:PSDefaultParameterValues.$Key}
+      } else {
+         Write-Verbose &quot;'$key' is -not -like '${Command}:${Parameter}*'&quot;
+      }
+   }
+   $repeats
+}
+
+
+function Remove-DefaultParameter {
+#.Synopsis
+#  Removed the default parameter value for a command, if it's been set
+#.Description
+#  Removes the default parameter value for a command from $PSDefaultParameterValues
+[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact=&quot;Low&quot;)]
+param(
+   # The command that you want to change the default value of a parameter for (allows wildcards)
+   [parameter(Position=0,Mandatory=$false)]
+   [string]$Command = &quot;*&quot;,
+   # The name of the parameter that you want to change the default value for (allows wildcards)
+   [parameter(Position=1,Mandatory=$true)]
+   [string]$Parameter
+)
+
+
+   if($parameter.StartsWith(&quot;-&quot;)) {
+      $parameter = $parameter.TrimStart(&quot;-&quot;)
+   }
+ 
+   $keys
+   foreach($key in $Global:PSDefaultParameterValues.Keys | Where { $_ -like &quot;${Command}:${Parameter}*&quot; }) {
+      # Handle the disabled state:
+      if($key -ne &quot;disabled&quot;) {
+         if($PSCmdlet.ShouldProcess( &quot;Removed the default parameter value for '$Key'&quot;,
+                                     &quot;Remove the default parameter value for '$Key'?&quot;,
+                                     &quot;Removing Default Parameter Values&quot; )) {
+            $Global:PSDefaultParameterValues.Remove($key)
+         }
+      }
+   }
+}
+
+
+
+function Disable-DefaultParameter {
+#.Synopsis
+#  Turns OFF default parameters
+#.Description
+#  By setting $PSDefaultParameterValues[&quot;Disabled&quot;] to $true, we make sure that NONE of our default parameter values will be used
+[CmdletBinding()]
+param()
+   $Global:PSDefaultParameterValues[&quot;Disabled&quot;]=$true
+}
+
+function Enable-DefaultParameter {
+#.Synopsis
+#  Turns ON default parameters
+#.Description
+#  By setting $PSDefaultParameterValues[&quot;Disabled&quot;] to $false, we make sure that all of our default parameter values will be used
+[CmdletBinding()]
+param()
+   $Global:PSDefaultParameterValues[&quot;Disabled&quot;]=$false
+}
+
+Set-Alias Add-DefaultParameter Set-DefaultParameter -ErrorAction SilentlyContinue
+Set-Alias sdp Set-DefaultParameter -ErrorAction SilentlyContinue
+Set-Alias gdp Get-DefaultParameter -ErrorAction SilentlyContinue
+Set-Alias rmdp Remove-DefaultParameter -ErrorAction SilentlyContinue
+Set-Alias ipdp Import-DefaultParameter -ErrorAction SilentlyContinue
+Set-Alias exdp Export-DefaultParameter -ErrorAction SilentlyContinue
+# Set-Alias ddp Disable-DefaultParameter -ErrorAction SilentlyContinue
+# Set-Alias edp Disable-DefaultParameter -ErrorAction SilentlyContinue
+Import-DefaultParameter
+
+Export-ModuleMember -Alias * -Function Set-DefaultParameter, Get-DefaultParameter, Remove-DefaultParameter, `
+                                       Import-DefaultParameter, Export-DefaultParameter, `
+                                       Enable-DefaultParameter, Disable-DefaultParameter
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

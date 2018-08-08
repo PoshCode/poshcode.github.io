@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>New-ISEMenu - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>New-ISEMenu</h1>
+<h3><a href="//scripts/2796.ps1">download</a></h3>
+<p>This is just a little tweak of &quot;Ravikanth's Script&quot;:http://www.ravichaganti.com/blog/?p=2258 to generate a dialog for adding menu items in PowerShell ISE.  All I did was just clean it up a little bit following a few guidelines:</p>
+<h1>Use WPF's layout abilities:</h1>
+<p>** when you want data input layout with labels and fields, use a grid <em>and specify column and row</em> on the child controls.
+** learn to use stackpanels or dockpanels too ;)
+** use margins to add whitespace around controls, not to position them
+** nest panels as needed, nested panels are almost always more flexible than hard-coded top/left (or margins)
+** When using grids:
+*** Use a star width on one column and one row (either * or number*) to specify where the growth occurs (try resizing this version of the New-ISEMenu script, vs. &quot;the original&quot;:http://www.ravichaganti.com/blog/?p=2258)
+*** Use &quot;Auto&quot; on other columns and rows unless you need to force a specific size
+** Feel free to use -MinHeight an -MinWidth to specify a <em>minimum</em> starting size, without limiting growth</p>
+<h1>You should never have to specify the -Content parameter name in ShowUI</h1>
+<h1>On buttons and menus[1], a &quot;_&quot; will mark the next letter as the hotkey. E.g.: &quot;_Save&quot; is a great label for the save button, and makes Alt+S save.</h1>
+<h1>Most boolean properties are switch parameters:</h1>
+<p>** Button has an -IsDefault and -IsCancel ... you should use them when appropriate</p>
+<p>[1]: NOTE: You can also set hotkeys with an underscore on Label controls, but you have to be sure to set the -Target too.  This can be a bit tricky. The simplest thing is to create the target control first, and then the label -- which is easy to do when you're using a grid, because the order of the controls doesn't matter when you specify the <em>Column</em> parameter. Also, you <em>can</em> use Tee-Object to set the variable <em>and</em> output the control instead of the parentheses trick.</p>
+<pre><code class="language-posh">Import-Module ShowUI
+Function New-ISEMenu {
+   New-Grid -AllowDrop:$true -Name &quot;ISEAddonCreator&quot; -columns Auto, * -rows Auto,Auto,Auto,*,Auto,Auto -Margin 5 {
+      New-Label -Name Warning -Foreground Red -FontWeight Bold -Column 1
+      ($target = New-TextBox -Name txtName -Column 1 -Row ($Row=1))
+      New-Label &quot;Addon Menu _Name&quot; -Target $target  -Row $Row
+      ($target = New-TextBox -Name txtShortcut -Column 1 -Row ($Row+=1))
+      New-Label &quot;Shortcut _Key&quot; -Row $Row -Target $target
+      ($target = New-TextBox -Name txtScriptBlock  -Column 1 -Row ($Row+=1) -MinHeight 141 -MinWidth 336 -AcceptsReturn:$true -HorizontalScrollBarVisibility Auto -VerticalScrollBarVisibility Auto)
+      New-Label &quot;Script _Block&quot; -Row $Row -Target $target
+      New-CheckBox &quot;_Add to ISE Profile&quot; -Name chkProfile -Row ($Row+=1)
+      New-StackPanel -Orientation Horizontal  -Column 1 -Row ($Row+=1) -HorizontalAlignment Right {
+         New-Button &quot;_Save&quot; -Name btnSave -Width 75 -Margin &quot;0,0,5,0&quot; -IsDefault -On_Click {
+            if ($txtName.Text.Trim() -eq &quot;&quot; -or $txtShortcut.text.Trim() -eq &quot;&quot; -or $txtScriptBlock.text.Trim() -eq &quot;&quot;) {
+                $Warning.Content = &quot;You must supply all parameters&quot;
+            } else {
+               $menuItems = $psise.CurrentPowerShellTab.AddOnsMenu.Submenus | Select -ExpandProperty DisplayName
+               if ($menuItems -Contains $txtName.Text) {
+                  $Warning.Content = &quot;Select another Name for the menu&quot;
+                  return
+               }            
+               
+               try {
+                   $ScriptBlock = [ScriptBlock]::Create($txtScriptBlock.Text)
+                   $psISE.CurrentPowerShellTab.AddOnsMenu.SubMenus.Add($txtName.Text,$ScriptBlock,$txtShortcut.Text) | Out-Null
+               }
+               catch {
+                  $Warning.Content = &quot;Fatal Error Creating MenuItem:`n$_&quot;
+                  return
+               }
+               if ($chkProfile.IsChecked) {
+                  $profileText = &quot;`n`#Added by ISE Menu Creator Addon if (`$psISE) { `$psISE.CurrentPowerShellTab.AddOnsMenu.SubMenus.Add(`&quot;$($txtName.Text)`&quot;,`{$ScriptBlock`},`&quot;$($txtShortcut.Text)`&quot;) | Out-Null } &quot;
+                  Add-Content -Path $profile -Value $profileText
+               }
+               $window.Close()
+            }
+         }
+         New-Button &quot;Cancel&quot; -Name btnCancel -Width 75 -IsCancel
+      }
+   } -show
+}
+# this will add a the &quot;New ISE menu&quot; menu item and load it every time you run this script!
+$psISE.CurrentPowerShellTab.AddOnsMenu.SubMenus.Add(&quot;New ISE menu&quot;,{New-ISEMenu},&quot;ALT+M&quot;) | Out-Null
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

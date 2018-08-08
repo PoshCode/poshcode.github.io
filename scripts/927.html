@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Bergle">
+    <title>ScriptSVN.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ScriptSVN.ps1</h1>
+<h3><a href="//scripts/927.ps1">download</a></h3>
+<p>Script from SVN Utility</p>
+<p>This script processes template files and produces and output file.
+Its a simple macro processor really.
+We use it to extract the latest version of our database procedurrads and functions
+from our source code control server to create deployment scripts.</p>
+<p>This will assume you have svn command line client in your path.
+This currently cannot authenticate with svn to retrieve data. So just simple svn: supported.
+This is written and tested with Microsoft Windows Powershell v1.0.</p>
+<pre><code class="language-posh">#
+# Script from SVN Utility
+# ~~~~~~~~~~~~~~~~~~~~~~~
+# This script processes template files and produces and output file.
+# Its a simple macro processor really.
+# We use it to extract the latest version of our database procedurrads and functions
+# from our source code control server to create deployment scripts.
+#
+# This will assume you have svn command line client in your path.
+# This currently cannot authenticate with svn to retrieve data. So just simple svn: supported.
+# This is written and tested with Microsoft Windows Powershell v1.0.
+#
+# When run it will look for all files with &quot;.dro&quot; extension in the current
+# directory and process them. If the &quot;.dro&quot; file does not specify the 
+# OuputFile directive then the output file will have the same name as the
+# input file with &quot;.dro&quot; replaced by &quot;.out&quot;
+#
+# GETTING STARTED
+# ~~~~~~~~~~~~~~~
+# Go to a directory containing a .dro file and execute &quot;ScriptSVN.ps1&quot; It will process all .dro files it finds.
+# Look at $exampleInputFile below to see a sample input file content.
+#
+# This example will fail to get this example to work you will need
+#	1. SVN Server called sccserver.
+#   2. Files under the following path on SVN server
+#		svn://sccserver/trunk/database/maindb/Procedure/ProcedureA.sql
+#		svn://sccserver/trunk/database/maindb/Procedure/ProcedureB.sql
+#		svn://sccserver/trunk/database/maindb/Procedure/ProcedureD.sql
+#	3. The ProcedureD file must have a revision 43 available.
+#
+# File Format SYNTAX
+# ~~~~~~~~~~~~~~~~~~
+# 1.	'#' marks start of script comment
+#		Comments characters are converted to $comment on output to match output format.
+#		Currently understands Single Quote strings and will mostly not identify a # in a string as a comment.
+# 2.	'{' '}' mark start and end of a script directive.
+#		Only recognised if the '{' is first non white space on a line. [simplifies search match a lot]
+#		Only recognised if both start and end on same line.
+#		The result of the directive is output to the file.
+#		The output result is bracketed before and after by comments identifying the directive and parameters.
+#		White space preceding a directive is prepended to each line output from directive [maintains indenting].
+#		Extra data following a directive is completely ignored at the moment. 
+# 3.	Other lines are output as they are
+#
+# A directive may have parameters.
+# Directive parameters must use double quotes to quote things with spaces.
+# For simplicity will always end up with a newline as last char in file.
+# Simple understanding of single quoted strings wont find comment characters inside single quoted strings.
+# Single quoted strings are supported because this was primarilly setup for SQL rollout scripts.
+# Double quoted strings are not supported anywhere but inside directives.
+#
+# DIRECTIVES
+# ~~~~~~~~~~
+# OutputFile
+#	set the name of file to write output.
+#	No lines that produce output in file must precede the line its on [so make it first]
+#	Or only after SourceControl line.
+# SourceControl
+#	Set the source control access string base path.
+#	Must have trailing slash [ no it does not check it has it ]
+#	eg.  svn://scc/project/trunk/Database/DBName/ for DBName procedures
+# Reference
+#	Extract a file from SourceControl with given path. eg. path  &quot;Procedures/spnEmailMessageInsert.sql&quot;
+#	First parameter is path to file to fetch from source control.
+#	Second parameter is an optional revision to retrieve of that file
+#	Third paremter is an optional string to output to file as well [not sure how useful this is]
+#		Inside this third parameter the string is processed for some special characters
+#		&quot;\n&quot; represents a new line. useful for &quot;GO\n&quot;.
+#		&quot;\t&quot; represents a tab.
+#		The conversion only occurs for output data not for the trace data output to file.
+#
+# Example. Build.cmd file that converts the .dro file(s) into our file
+#	&quot;powershell C:\Scripts\rollscript.ps1&quot;
+#
+# HISTORY
+# 2008/12/11 rluiten	Created.
+# 2008/12/15 rluiten	Setup a v3.2 folder to test and fixed a bug or three.
+#						Useful now maybe.
+# 2008/12/17 rluiten	Added explicit revision retrieval to Reference.
+#						Reference now looks up the revision to be able to output to file.
+# 2009/02/23 rluiten	Corrected end of line outputs to CRLF.
+#
+# SOME EXTRA NOTES
+# ~~~~~~~~~~~~~~~~
+# We export our procedures and functions as a unit that drop themseles if they exist
+# create themselves and then set permissions. This is the functional block of code we manage
+# and track in our source code control server. This allows us to export the code from SQL again
+# with another small script and do a file comparison to check we havnt missed a change or
+# something hasnt snuck out to production without being in source control.
+#
+# Dont put identation in front of a {Reference} directive to a procedure as it will add indenting
+# to the start of every line and your exported code if you wish to diff your database back to
+# your source code control server will cause every line to be different.
+#
+# This utility is general and could be used for other stuff than SQL.
+# However the single quote processing of strings not inside directives may limit some scenarios.
+# This is the first script I have written so probably lots of things I can do better.
+# Happy to have feedback.
+# Hope someone finds this useful saves us here a lot of time keeping our deployment scripts
+# correct as we work.
+#
+$exampleInputFile = @&quot;
+{SourceControl &quot;svn://sccserver/trunk/database/maindb/&quot;}
+{OutputFile &quot;Test2.sql&quot;}
+#{hello world}
+
+{Reference &quot;Procedure/ProcedureA.sql&quot; }
+{Reference &quot;Procedure/ProcedureB.sql&quot; &quot;&quot; &quot;print 'dont forget to do job 222'\n&quot;}
+#{Reference &quot;Procedure/ProcedureC.sql&quot; } -- commented out for now
+{Reference &quot;Procedure/ProcedureD.sql&quot; &quot;43&quot;}	-- extract specific revision file
+
+select 'This is a test'
+select 'What a nice day.'
+	#{Me to}
+# not here
+-- Zzzz ' this and # that '  # and here
+-- Aaaa# ' foiousf ds'  # and here
+-- Bbbb # ' foiousf ds  # and here
+--select 'Yyyy'
+&quot;@
+
+$commentStart = &quot;#&quot;
+$comment = &quot;--&quot;
+$version = &quot;3&quot;
+
+# directives must be first non white space on line and not be empty.
+# doesnt matter what follows a directive
+# the content of the directive will always be group 3 of regex.
+# group 4 is data following directive
+$matchDirective=[Regex]&quot;^(\s*)({([^{]+)})(.*)$&quot;
+
+# matching only single quote strings for now - and assume a string goes from first quote on line to last quote on line.
+# groups 0 whole match, 1 - before string, 2 - string, 3 - after string
+$matchSingleQuoteString=[Regex]@&quot;
+^([^']*)(['].*?['])([^']*)$
+&quot;@
+
+# returns array. 
+# array 0 - prefix string to directive. [will always be whitespace]
+# array 1 - directive text inside brackets
+# array 2 - post fix data after directive
+function split-directive([string]$str)
+{
+	$myMatches = $matchDirective.match($str)
+	if ($myMatches.Success)
+	{
+		return $myMatches.Groups[1], $myMatches.Groups[3], $myMatches.Groups[4]
+	}
+}
+
+# return the index of the comment character on the line. -1 if no comment on line 
+function get-commentindex([string]$str)
+{
+	$startCommentIndex = -1
+	$myMatches = $matchSingleQuoteString.match($str)
+
+	# check for comment char before and after string in group 1 and 3.
+	if ($myMatches.Success)	# found a string in our line so look around it for comments
+	{
+		$commentIndex = ([string]$myMatches.Groups[1]).IndexOf($commentStart)
+		if ($commentIndex -gt -1)
+		{	# comment in group 1
+			$startCommentIndex = $myMatches.Groups[1].Index + $commentIndex
+		}
+		else
+		{
+			$commentIndex = ([string]$myMatches.Groups[3]).IndexOf($commentStart)
+			if ($commentIndex -gt -1)
+			{
+				$startCommentIndex = $myMatches.Groups[3].Index + $commentIndex
+			}
+		}
+	}
+	else	# no string so just first index of comment
+	{
+		$startCommentIndex = $str.IndexOf($commentStart)
+	}
+	return $startCommentIndex
+}
+
+# returns array
+# array 0 - non comment part of line
+# array 1 - comment part of line including comment char
+function split-comment([string]$str)
+{
+	$startCommentIndex = get-commentindex $str
+	if ($startCommentIndex -gt -1)
+	{
+		return $str.Substring(0, $startCommentIndex), $str.Substring($startCommentIndex)
+	}
+	else
+	{
+		return $str
+	}
+}
+
+## got from http://poshcode.org/496 thank you Jaykul :)
+################################################################################
+## Convert-Delimiter - A function to convert between different delimiters. 
+## E.g.: commas to tabs, tabs to spaces, spaces to commas, etc.
+################################################################################
+	## Written primarily as a way of enabling the use of Import-CSV when
+	## the source file was a columnar text file with data like services.txt:
+	##         ip              service         port
+	##         13.13.13.1      http            8000
+	##         13.13.13.2      https           8001
+	##         13.13.13.1      irc             6665-6669
+	## 
+	## Sample Use:  
+	##    Get-Content services.txt | Convert-Delimiter &quot; +&quot; &quot;,&quot; | Set-Content services.csv
+	##         would convert the file above into something that could passed to:
+	##         Import-Csv services.csv
+	##
+	##    Get-Content Delimited.csv | Convert-Delimiter &quot;,&quot; &quot;`t&quot; | Set-Content Delimited.tab
+	##         would convert a simple comma-separated-values file to a tab-delimited file
+	################################################################################
+	## Version History
+	## Version 1.0
+	##	  First working version
+	## Version 2.0
+	##    Fixed the quoting so it adds quotes in case they're neeeded
+	## Version 2.1
+	##    Remove quotes which aren't needed
+	## Version 2.2
+	##    Trim spaces off the ends, they confuse things
+	## Version 2.3
+	##    Allow empty columns: as in: there,are,six,&quot;comma, delimited&quot;,,columns
+	## Version 2.3
+	##    Replaced Trim() with regex to do similar job.
+	##    if a parameter is &quot;&quot; &lt;-- empty string this captures the &quot;Quotes&quot; as its value not empty string ???
+Function Convert-Delimiter([regex]$from,[string]$to) 
+{
+   begin
+   {
+	  $z = [char](222)
+   }
+   process
+   {
+	  #$_ = $_.Trim()	# converted Trim into regex replace as powershell 1 does not have it ?
+	  $_ = $_ -replace &quot;^\s+&quot;, &quot;&quot; -replace &quot;\s+$&quot;, &quot;&quot;
+	  $_ = $_ -replace &quot;(?:`&quot;((?:(?:[^`&quot;]|`&quot;`&quot;))+)(?:`&quot;$from|`&quot;`$))|(?:$from)|(?:((?:.(?!$from))*.)(?:$from|`$))&quot;,&quot;$z`$1`$2$z$to&quot;
+	  $_ = $_ -replace &quot;$z(?:$to|$z)?`$&quot;,&quot;$z&quot;
+	  $_ = $_ -replace &quot;`&quot;`&quot;&quot;,&quot;`&quot;&quot; -replace &quot;`&quot;&quot;,&quot;`&quot;`&quot;&quot; 
+	  $_ = $_ -replace &quot;$z((?:[^$z`&quot;](?!$to))+)$z($to|`$)&quot;,&quot;`$1`$2&quot;
+	  $_ = $_ -replace &quot;$z&quot;,&quot;`&quot;&quot; -replace &quot;$z&quot;,&quot;`&quot;&quot;
+	  $_
+   }
+}
+
+# Use source code control client [svn] to retrieve referenced file.
+Function get-reference([string]$scc, [string]$filePath, [string]$rev, [string]$post, [string]$whiteSpacePre)
+{
+	$svn = 'svn.exe'
+
+	if ($rev -eq $null -or $rev -eq &quot;&quot;)
+	{
+		# figure out the revision of head if we dont have it.
+		$result = @(&amp; $svn info $scc$filePath)	# ensure its an array even if only one
+		$revResult = @($result -like &quot;Revision: *&quot;)
+		if ($revResult.Length -eq 1)
+		{
+			$tmp = $revResult[0]
+			$regexRevision = [regex]&quot;^Revision: (\d+)$&quot;
+			$myMatches = $regexRevision.match($tmp)
+			if ($myMatches.Success)
+			{
+				$rev = $myMatches.Groups[1]
+			}
+		}
+		else
+		{
+			write-error &quot;Cannot find revision for $scc$filePath.&quot;
+			exit
+		}
+	}
+	
+	# example of svn 'svn -r 1234 cat svn://scc/project/trunk/database/DBName/Procedure/procedure.sql'
+	write-host &quot;Reference [$rev] $filePath&quot;
+	#write-host &quot;$svn -r $rev cat $scc$filePath&quot;
+	$result = &amp; $svn -r $rev cat $scc$filePath
+	 
+	# prefix each line
+	for ($i = 0; $i -lt $result.Length; $i++)
+	{
+		$result[$i] =  $whiteSpacePre + $result[$i]
+	}
+	
+	$fileContent = [string]::join(&quot;`r`n&quot;, $result)
+	
+	append-outputString &quot;$comment ** Start Reference [$scc] [$filePath] [$rev] [$post]`r`n&quot;; 
+	append-outputString &quot;$fileContent`r`n&quot;				# additional newline after data
+	if ($post -ne $null -and $post -ne &quot;&quot;)
+	{
+		$convertedPost = $post -replace &quot;\\n&quot;, &quot;`r`n&quot;  -replace &quot;\\t&quot;, &quot;`t&quot;
+		append-outputString $convertedPost
+	}
+	append-outputString &quot;$comment ** End Reference [$scc] [$filePath] [$rev] [$post]`r`n&quot;; 
+}
+
+# procedures to wrap up global string buffer for processed output.
+function init-outputString()
+{
+	$global:outputString = &quot;&quot;
+	$global:sourceControl = &quot;&quot;
+	$global:outputFile = &quot;&quot;
+}
+function append-outputString([string]$str)
+{
+	$global:outputString += $str
+}
+function write-outputString([string]$file)
+{
+	write-output $global:outputString | out-file -filePath $file -encoding oem
+}
+
+function execute-directive($splitDirective, [string]$whiteSpacePre)
+{
+	$keyword = $splitDirective[0]
+	switch ($keyword)
+	{
+		&quot;SourceControl&quot;
+		{
+			write-host  &quot;$comment $keyword `&quot;$($splitDirective[1])`&quot;&quot;
+			append-outputString &quot;$whiteSpacePre$comment $keyword `&quot;$($splitDirective[1])`&quot;&quot;
+			$global:sourceControl = $splitDirective[1]
+		}
+		&quot;OutputFile&quot;	
+		{
+			append-outputString &quot;$whiteSpacePre$comment $keyword `&quot;$($splitDirective[1])`&quot;&quot;
+			$global:outputFile = $splitDirective[1]
+		}
+		&quot;Reference&quot;
+		{
+			get-reference $global:sourceControl $splitDirective[1] $splitDirective[2] $splitDirective[3] $whiteSpacePre
+		}
+		default
+		{
+			write-error &quot;Unknown directive `&quot;$keyword`&quot; exiting...&quot;
+			exit
+		}
+	}
+}
+
+function process-directive([string]$directive, [string]$whiteSpacePre)
+{
+	$reDelimit = $directive | Convert-Delimiter &quot; &quot; &quot;!&quot;
+	$splitDirective = $reDelimit.Split(&quot;!&quot;)
+	
+	for ($i = 0; $i -lt $splitDirective.Length; $i++)
+	{
+		$tmp = $splitDirective[$i]
+		if ($tmp -eq &quot;`&quot;`&quot;`&quot;`&quot;&quot;)		# convert &quot;&quot;&quot;&quot; to empty string -- side effect of Convert-Delimiter
+		{
+			$splitDirective[$i] = &quot;&quot;;		# empty string
+		}
+	}
+	execute-directive $splitDirective $whiteSpacePre
+}
+
+function process-file([string]$inputFile, [string]$outputFile)
+{
+	init-outputString
+	$global:outputFile = $outputFile
+	
+	if (!(test-path -pathType Leaf $inputFile))
+	{
+		write-error &quot;Cannot open input file `&quot;$inputFile`&quot;&quot;
+		exit
+	}
+	
+	$outmsg = &quot;$comment ScriptSVN $version processing file `&quot;$inputFile`&quot;&quot;
+	write-host $outmsg
+	append-outputString &quot;$outmsg`r`n&quot;
+	
+	$inputLines = @(get-content -path $inputFile)	# read file @ to ensure we get an array
+	foreach ($line in $inputLines)
+	{
+		$activeStr, $commentStr = split-comment $line
+		$whiteSpacePre, $directive, $poststr = split-directive $activeStr
+		if ($directive -eq $null -or $directive.Length -eq 0)
+		{
+			append-outputString &quot;$activeStr&quot;	# no directive to just output the line
+		}
+		else
+		{
+			process-directive $directive $whiteSpacePre
+		}
+	
+		# output comment
+		if ($commentStr.Length -gt 0)
+		{
+			# convert input comment format to output format
+			$afterComment = $commentStr.Substring($commentStart.Length)
+			append-outputString &quot;$comment$afterComment`r`n&quot;
+		}
+		else
+		{
+			append-outputString &quot;`r`n&quot; # just new line
+		}
+	}
+	write-host  &quot;$comment OutputFile `&quot;$($global:outputFile)`&quot;&quot;
+	write-outputString $global:outputFile 
+}
+
+# by default process all file ending in file extension in current directory
+$files = @(get-childitem &quot;*.dro&quot;)
+
+if ($files.Length -eq 0)
+{
+	write-host &quot;No files found for processing.&quot;
+	write-host &quot;This utility processes files ending in `&quot;.dro`&quot; &quot;
+}
+
+foreach ($f in $files)
+{
+	$outFile = $f -replace &quot;.dro&quot;,&quot;.out&quot;
+	process-file $f $outFile
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

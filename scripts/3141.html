@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="sixeyed">
+    <title>WCF code coverage - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>WCF code coverage</h1>
+<h3><a href="//scripts/3141.ps1">download</a></h3>
+<p>Script for running unit tests over WCF services to get code coverage for the whole service stack</p>
+<pre><code class="language-posh">param($msBuildTarget, $configurationName, [bool]$deleteInstrumentedAssemblies) 
+
+#-------------------------------------
+# Script to compile coverage for a WCF
+# solution running in IIS.
+# See:
+# http://geekswithblogs.net/EltonStoneman/archive/2011/10/14/end-to-end-wcf-code-coverage-with-powershell.aspx 
+#-------------------------------------
+
+#-------------------------------------
+# Function to get the running app pool 
+#-------------------------------------
+function get-apppool{
+    [regex]$pattern=&quot;-ap &quot;&quot;($appPoolName)&quot;&quot;&quot;
+    gwmi win32_process -filter 'name=&quot;w3wp.exe&quot;' | % {
+        $name=$_.name
+        $cmd = $pattern.Match($_.commandline).Groups[1].Value
+        $procid = $_.ProcessId
+        New-Object psobject | Add-Member -MemberType noteproperty -PassThru Name $name |
+            Add-Member -MemberType noteproperty -PassThru AppPoolID $cmd |
+            Add-Member -MemberType noteproperty -PassThru PID $procid 
+    }
+}
+
+#---------------------------------------
+# Function to get the id of the app pool 
+#---------------------------------------
+function get-apppoolpid{
+	$appPoolPid = 0
+	$appPools = get-apppool
+	foreach ($appPool in $appPools){
+		if ($appPool.AppPoolID -eq &quot;$appPoolName&quot;){
+			$appPoolPid = $appPool.PID
+		}
+	}
+	write-host &quot;$solutionFriendlyName app pool PID: $appPoolPID&quot;
+	return $appPoolPid
+}
+
+#------------------------------------------------
+# Starts the app pool by making a service request
+#------------------------------------------------
+function start-apppool{
+	#ping the service to start a new app pool process:
+	$uri = new-object System.Uri(&quot;$wakeUpServiceUrl&quot;)
+	$client = new-object System.Net.WebClient
+	$client.DownloadString($uri) | out-null
+}
+
+#-------------------
+# Kills the app pool
+#-------------------
+function kill-apppool{
+	$procId = get-apppoolpid
+	if ($procId -ne 0){
+		write-host &quot;Killing app pool process&quot;
+		$proc = [System.Diagnostics.Process]::GetProcessById($procId)
+		$proc.Kill()      
+	}
+}
+
+#------------------------------------------------------------------------------
+# Instruments an assembly for code coverage, excluding the specified namespaces
+#------------------------------------------------------------------------------
+function instrument2([string]$assemblyName, [string[]]$excludes){
+	$assy = &quot;$websiteBinDirectory\$assemblyName&quot;
+	$excludeLine = &quot;&quot;
+	if ($excludes -ne $null){
+        foreach ($x in $excludes){
+		    write-host &quot;Excluding: $x.*&quot;	     
+		    $excludeLine = &quot;$excludeLine-exclude:$x.* &quot;
+	  }
+	}
+    $cmd = &quot;C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe&quot;
+    write-host &quot;Executing $cmd /coverage $excludeLine $assy&quot; 
+	&amp; $cmd /coverage &quot;$excludeLine&quot; &quot;$assy&quot; 
+}
+
+#------------------------------------------------------------------------------
+# Instruments an assembly for code coverage, excluding the specified namespaces
+#------------------------------------------------------------------------------
+function instrument([string]$assemblyName, [string[]]$excludes){
+	$assy = &quot;$websiteBinDirectory\$assemblyName&quot;
+
+	#ES - this doesn't work as the &quot;:&quot; in exlucde gets parsed out by PS:
+	#$excludeParms = &quot;&quot;
+	#$args
+	#foreach($exclude in $args){
+	#	$excludeParms = $excludeParms + '/exclude:' + $exclude + '.* '
+	#}
+	#$excludeParms
+	#&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $excludeParms $assy 
+
+	if ($excludes -eq $null){
+		write-host &quot;Excluding 0 funcspecs&quot;
+		&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $assy 
+	}
+	elseif ($excludes.Length -eq 0){
+		write-host &quot;Excluding 0 funcspecs&quot;
+		&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $assy 
+	}
+	elseif ($excludes.Length -eq 1){
+		write-host &quot;Excluding 1 funcspecs&quot;
+		$exclude1 = '-exclude:' + $excludes[0] 
+		&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $exclude1 $assy 
+	}
+	elseif ($excludes.Length -eq 2){
+		write-host &quot;Excluding 2 funcspecs&quot;
+		$exclude1 = '-exclude:' + $excludes[0]
+		$exclude2 = '-exclude:' + $excludes[1]
+		&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $exclude1 $exclude2  $assy 
+	}
+	elseif ($excludes.Length -eq 3){
+		write-host &quot;Excluding 3 funcspecs&quot;
+		$exclude1 = '-exclude:' + $excludes[0]
+		$exclude2 = '-exclude:' + $excludes[1]
+		$exclude3 = '-exclude:' + $excludes[2]
+		&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $exclude1 $exclude2 $exclude3 $assy 
+	}
+	elseif ($excludes.Length -eq 4){
+		write-host &quot;Excluding 4 funcspecs&quot;
+		$exclude1 = '-exclude:' + $excludes[0]
+		$exclude2 = '-exclude:' + $excludes[1]
+		$exclude3 = '-exclude:' + $excludes[2]
+		$exclude4 = '-exclude:' + $excludes[3]
+		&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $exclude1 $exclude2 $exclude3 $exclude4 $assy 
+	}
+	elseif ($excludes.Length -eq 5){
+		write-host &quot;Excluding 5 funcspecs&quot;
+		$exclude1 = '-exclude:' + $excludes[0]
+		$exclude2 = '-exclude:' + $excludes[1]
+		$exclude3 = '-exclude:' + $excludes[2]
+		$exclude4 = '-exclude:' + $excludes[3]
+		$exclude5 = '-exclude:' + $excludes[4]		
+		&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $exclude1 $exclude2 $exclude3 $exclude4 $exclude5 $assy 
+	}	
+	elseif ($excludes.Length -eq 6){
+		write-host &quot;Excluding 6 funcspecs&quot;
+		$exclude1 = '-exclude:' + $excludes[0]
+		$exclude2 = '-exclude:' + $excludes[1]
+		$exclude3 = '-exclude:' + $excludes[2]
+		$exclude4 = '-exclude:' + $excludes[3]
+		$exclude5 = '-exclude:' + $excludes[4]		
+		$exclude6 = '-exclude:' + $excludes[5]		
+		&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsinstr.exe' /coverage $exclude1 $exclude2 $exclude3 $exclude4 $exclude5 $exclude6 $assy 
+	}
+}
+
+#-----------------------------------
+# Starts instrumenting W3WP app pool
+#------------------------------------
+function start-instrumentation{
+	#set instrumentation on:
+	&amp;  'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsperfclrenv' /globaltraceon 
+
+	#restart the app pool and store the ID:
+	kill-apppool
+	start-apppool
+	$procId = get-apppoolpid
+
+	#start instrumenting:
+	&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsperfcmd' /START:COVERAGE /OUTPUT:$coverageOutputPath /CS /USER:$appPoolIdentity
+	&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsperfcmd' /ATTACH:$procId
+	&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsperfcmd' /status
+}
+
+#--------------------
+# Stops instrumenting
+#--------------------
+function stop-instrumentation{
+	#stop instrumenting &amp; reset app pool:
+	&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsperfcmd' /DETACH
+	kill-apppool
+	&amp; 'C:\Program Files\Microsoft Visual Studio 10.0\Team Tools\Performance Tools\vsperfcmd' /SHUTDOWN 
+}
+
+#------------------------
+# Exports coverage to XML
+#------------------------
+function export-coverage{
+	#export the coverage file to XML:
+	[System.Reflection.Assembly]::LoadFile(&quot;C:\Program Files\Microsoft Visual Studio 10.0\Common7\IDE\PrivateAssemblies\Microsoft.VisualStudio.Coverage.Analysis.dll&quot;)
+	$coverage = [Microsoft.VisualStudio.Coverage.Analysis.CoverageInfo]::CreateFromFile(&quot;$coverageOutputPath&quot;)
+	$dataSet = $coverage.BuildDataSet()
+	$dataSet.WriteXml(&quot;$coverageOutputPath&quot; + 'xml')
+}
+
+#----------------------------------------------------------------------------------
+# Deletes instrumented assemblies, and reinstates original un-instrumented versions
+#----------------------------------------------------------------------------------
+function delete-intstrumentedassemblies{
+	$dir = new-object IO.DirectoryInfo($websiteBinDirectory)
+	$originalAssemblies = $dir.GetFiles(&quot;*.dll.orig&quot;)
+	foreach ($originalAssembly in $originalAssemblies){
+		$targetName = $originalAssembly.FullName.TrimEnd(&quot;.orig&quot;.ToCharArray())
+		#overwrite the instrumented DLL with the original:
+		[IO.File]::Copy($originalAssembly.FullName, $targetName, $true)
+		[IO.File]::Delete($originalAssembly.FullName)
+		#delete the instrumented PDB:
+		$instrumentedPdbName = $originalAssembly.FullName.TrimEnd(&quot;.dll.orig&quot;.ToCharArray()) + &quot;.instr.pdb&quot;
+		[IO.File]::Delete($instrumentedPdbName)
+	}
+}
+
+#--------------
+# Script begins
+#--------------
+
+#set variables:
+$solutionFriendlyName = 'XYZ'
+$wakeUpServiceUrl = 'http://localhost/x.y.z/Service.svc'
+$appPoolName = 'ap_XYZ'
+$appPoolIdentity = 'domain\svc_user'
+$websiteBinDirectory = 'c:\websites\xyz\x.y.z.Services\bin'
+$coverageOutputPath = &quot;Test.coverage&quot;
+
+#instrument assemblies:
+# - instrument assembly so ALL namespaces are included in coverage
+instrument   &quot;x.y.z.Services.dll&quot;  
+# - instrument assembly so anything from the Ignore1 and Ignore2 namespaces are excluded from coverage
+instrument   &quot;x.y.z.Core.dll&quot;   'x.y.z.Core.Ignore1.*' , 'x.y.z.Core.Ignore2.*'  
+
+write-host &quot;Before starting instrumentation, last exit code: $LASTEXITCODE&quot;
+
+#instrument W3WP, run tests &amp; export results:
+start-instrumentation
+
+write-host &quot;Before running tests, last exit code: $LASTEXITCODE&quot;
+&amp; 'C:\Windows\Microsoft.NET\Framework\v4.0.30319\msbuild.exe' Build.proj /t:$msBuildTarget /p:ConfigurationName=$configurationName
+
+$realExitCode = $LASTEXITCODE
+
+write-host &quot;Before stopping instrumentation, last exit code: $LASTEXITCODE, real exit code: $realExitCode&quot;
+stop-instrumentation
+export-coverage
+export-coverage
+
+if ($deleteInstrumentedAssemblies -eq $true){
+	delete-intstrumentedassemblies
+}
+
+write-host &quot;Before existing, last exit code: $LASTEXITCODE, real exit code: $realExitCode&quot;
+exit $realExitCode
+
+#------------
+# Script ends
+#------------
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

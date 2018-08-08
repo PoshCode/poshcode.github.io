@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Bing - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Bing</h1>
+<h3><a href="//scripts/4375.ps1">download</a> - <a href="//scripts/4374.md">parent</a></h3>
+<p>A new Bing module that supports command-line search against the new datamarket APIs.</p>
+<p>NOTE: The &quot;BetterCredentials Module&quot;:http://poshcode.org/4373 is just for setting the $Credential parameter with your API key. You can replace that if you like ;)</p>
+<pre><code class="language-posh">#requires -module BetterCredentials
+
+# REQUIRED:
+# Get a key from https://datamarket.azure.com/account/keys 
+# Make sure you have a subscription to http://datamarket.azure.com/dataset/bing/search
+
+# FIRST USE:
+# Each user needs to pass an ApiKey the first time you import this module
+# Replace your key for the AAA key below:
+# Import-Module Bing -ArgumentList AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= -Force
+# After that you can just Import-Module Bing
+param(
+  $ApiKey,
+
+  [System.Management.Automation.PSCredential]
+  [System.Management.Automation.Credential()]
+  $Credential = $(if($ApiKey){ Get-Credential -User BingApiKey -Password $ApiKey -Store } else { Get-Credential -User BingApiKey })
+)
+
+Add-Type -Assembly System.Web
+
+$Ofs = &quot; &quot;
+
+$Selectors = @{
+  Web = @{
+    Format = &quot;{0} {1}&quot;
+    Fields = &quot;Title&quot;,&quot;Url&quot;
+  }
+  News = @{
+    Format = &quot;{0} (from {2}) {1}&quot;
+    Fields = &quot;Title&quot;,&quot;Url&quot;,&quot;Source&quot;
+  }
+  Image = @{
+    Format = &quot;{0} ({2}x{3}) {1}&quot;
+    Fields = &quot;Title&quot;,&quot;MediaUrl&quot;,&quot;Width&quot;,&quot;Height&quot;
+  }
+  SpellingSuggestions = @{ 
+    Format = &quot;{0}&quot;
+    Fields = &quot;Value&quot;
+  }
+}
+
+function Search-Bing {
+  #.Synopsis
+  #   Search Bing Web, News, Images, or SpellingSuggestions
+  #.Notes
+  #   Version 1.0 - Wrote this version after Bing switched to datamarket APIs
+  param(
+    # The search terms
+    [Parameter(Position=0, Mandatory=$true, ValueFromRemainingArguments=$true, ValueFromPipeline=$true)]
+    [String[]]$Query,
+
+    # The type of search
+    [ValidateSet(&quot;Web&quot;,&quot;News&quot;,&quot;Image&quot;,&quot;SpellingSuggestions&quot;)]
+    $Noun = &quot;Web&quot;,
+
+    # The number of results to fetch
+    [ValidateRange(0,5)]
+    [int]$Count = 3,
+
+    # The number of results to skip
+    [int]$Skip = 0
+  )
+  $Query = [Web.HttpUtility]::UrlEncode(&quot;'$Query'&quot;)
+
+  $Search = &quot;https://api.datamarket.azure.com/Bing/Search/${Noun}?Query=${Query}&amp;`$top=$Count&amp;`$skip=$Skip&quot;
+
+  $global:BingResults = Invoke-WebRequest -Credential $Credential -Uri $Search
+  $global:BingEntries = ([xml]$BingResults.Content).feed.entry.content.properties
+
+  $Selector = $Selectors.$Noun.Fields -join &quot;' or local-name() = '&quot;
+  $Selector =  &quot;*[local-name() = '$Selector']/text()&quot;
+  foreach($entry in $BingEntries) {
+    $Selectors.$Noun.Format -f $entry.SelectNodes($Selector).Value
+  }
+
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

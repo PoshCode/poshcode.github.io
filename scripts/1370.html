@@ -1,0 +1,1494 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="John Robbins">
+    <title>Compiled-Help 1.1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Compiled-Help 1.1</h1>
+<h3><a href="//scripts/1370.ps1">download</a></h3>
+<p>An update of Jeff Hillman's outstanding Compile-Help (http://poshcode.org/99) that brings PowerShell 2.0 support and fixes a few bugs.</p>
+<pre><code class="language-posh">#requires -version 2.0
+# Compile-Help.ps1
+# by Jeff Hillman
+#
+# this script uses the text and XML PowerShell help files to generate HTML help
+# for all PowerShell Cmdlets, PSProviders, and &quot;about&quot; topics.  the help topics 
+# are compiled into a .chm file using HTML Help Workshop.
+# 
+# Minor tweak by John Robbins to work on x64 when looking for HHC.EXE.
+
+# More tweaks by John Robbins. (October 2, 2009)
+# - Fixed a problem where PowerShell 2.0 examples now have &quot;Description&quot; and
+#   &quot;-----------&quot; and was messing up parsing. Those two strings are now skipped.
+# - Fixed a problem where Related Links were not put into the output correctly. 
+#   This fix required minor changes to to cmdlets, providers, and about items 
+#   processing.
+# - Now that PowerShell 2.0 help reports the online version for cmdlet help, I 
+#   added support so you can see the documentation on TechNet.microsoft.com
+# - Added an index to the help file. 
+# - Added a requires statement to the script as I'm sure this no longer works
+#   on PowerShell 1.0.
+# - Fixed a problem where about help was assumed to not have dashes in the name.
+
+param( [string] $outDirectory = &quot;.\PSHelp&quot;, [switch] $GroupByPSSnapIn )
+
+function Html-Encode( [string] $value )
+{
+    # System.Web.HttpUtility.HtmlEncode() doesn't quite get everything, and 
+    # I don't want to load the System.Web assembly just for this.  I'm sure 
+    # I missed something here, but these are the characters I saw that needed 
+    # to be encoded most often
+    $value = $value -replace &quot;&amp;(?![\w#]+;)&quot;, &quot;&amp;amp;&quot;
+    $value = $value -replace &quot;&lt;(?!!--)&quot;, &quot;&amp;lt;&quot;
+    $value = $value -replace &quot;(?&lt;!--)&gt;&quot;, &quot;&amp;gt;&quot;
+    $value = $value -replace &quot;’&quot;, &quot;&amp;#39;&quot;
+    $value = $value -replace '[&quot;“”]', &quot;&amp;quot;&quot;
+    
+    $value = $value -replace &quot;\n&quot;, &quot;&lt;br /&gt;&quot;
+
+    $value
+}
+
+function Capitalize-Words( [string] $value )
+{
+    $capitalizedString = &quot;&quot;
+
+    # convert the string to lower case and split it into individual words. for each one,
+    # capitalize the first character, and append it to the converted string
+    [regex]::Split( $value.ToLower(), &quot;\s&quot; ) | ForEach-Object {
+        $capitalizedString += ( [string]$_.Chars( 0 ) ).ToUpper() + $_.SubString( 1 ) + &quot; &quot;
+    }
+
+    $capitalizedString.Trim()
+}
+
+function Get-ParagraphedHtml( [string] $xmlText )
+{
+    $value = &quot;&quot;
+    
+    if ( $xmlText -match &quot;&lt;(\w+:)?para&quot; )
+    {
+        $value = &quot;&quot;
+        $options = [System.Text.RegularExpressions.RegexOptions]::Singleline
+
+        foreach ( $match in [regex]::Matches( $xmlText, 
+            &quot;&lt;(?:\w+:)?para[^&gt;]*&gt;(?&lt;Text&gt;.*?)&lt;/(?:\w+:)?para&gt;&quot;, $options ) )
+        {
+            $value += &quot;&lt;p&gt;$( Html-Encode $match.Groups[ 'Text' ].Value )&lt;/p&gt;&quot;    
+        }
+    }
+    else
+    {
+        $value = Html-Encode $xmlText
+    }
+    
+    $value
+}
+
+function Get-SyntaxHtml( [xml] $syntaxXml )
+{
+    $syntaxHtml = &quot;&quot;
+
+    # generate the HTML for each form of the Cmdlet syntax
+    foreach ( $syntaxItem in $syntaxXml.syntax.syntaxItem )
+    {
+        if ( $syntaxHtml -ne &quot;&quot; )
+        {
+            $syntaxHtml += &quot;&lt;br /&gt;&lt;br /&gt;`n&quot;
+        }
+
+        $syntaxHtml += &quot;        $( $syntaxItem.name.get_InnerText().Trim() ) &quot;
+
+        if ( $syntaxItem.parameter )
+        {
+            foreach ( $parameter in $syntaxItem.parameter )
+            {
+                $required = [bool]::Parse( $parameter.required )
+
+                $syntaxHtml += &quot;&lt;nobr&gt;[-$( $parameter.name.get_InnerText().Trim() )&quot;
+
+                if ( $required )
+                {
+                    $syntaxHtml += &quot;]&quot;
+                }
+
+                if ( $parameter.parameterValue )
+                {
+                    $syntaxHtml += 
+                        &quot; &amp;lt;$( $parameter.parameterValue.get_InnerText().Trim() )&amp;gt;&quot;
+                }
+
+                if ( !$required )
+                {
+                    $syntaxHtml += &quot;]&quot;
+                }
+
+                $syntaxHtml += &quot;&lt;/nobr&gt; &quot;
+            }
+        }
+
+        $syntaxHtml += &quot; &lt;nobr&gt;[&amp;lt;CommonParameters&amp;gt;]&lt;/nobr&gt;&quot;
+    }
+
+    $syntaxHtml.Trim()
+}
+
+function Get-ParameterHtml( [xml] $parameterXml )
+{
+    $parameterHtml = &quot;&quot;
+
+    # generate HTML for each parameter
+    foreach ( $parameter in $parameterXml.parameters.parameter )
+    {
+        if ( $parameterHtml -ne &quot;&quot; )
+        {
+            $parameterHtml += &quot;        &lt;br /&gt;&lt;br /&gt;`n&quot;
+        }
+
+        $parameterHtml += 
+            &quot;        &lt;nobr&gt;&lt;span class=`&quot;boldtext`&quot;&gt;-$( $parameter.name.get_InnerText().Trim() )&quot;
+
+        if ( $parameter.parameterValue )
+        {
+            $parameterHtml += &quot; &amp;lt;$( $parameter.parameterValue.get_InnerText().Trim() )&amp;gt;&quot;
+        }
+
+        $parameterHtml += &quot;&lt;/span&gt;&lt;/nobr&gt;`n&quot;
+
+        $parameterHtml += @&quot;
+        &lt;br /&gt;
+        &lt;div id=&quot;contenttext&quot;&gt;
+          $( Get-ParagraphedHtml $parameter.description.get_InnerXml().Trim() )
+
+&quot;@
+        if ( $parameter.possibleValues )
+        {
+            foreach ( $possibleValue in $parameter.possibleValues.possibleValue )
+            {
+                $parameterHtml += @&quot;
+          $( $possibleValue.value.Trim() )&lt;br /&gt;
+
+&quot;@
+                if ( $possibleValue.description.get_InnerText().Trim() -ne &quot;&quot; )
+                {
+                    $parameterHtml += @&quot;
+          &lt;div id=&quot;contenttext&quot;&gt;
+            $( Get-ParagraphedHtml $possibleValue.description.get_InnerXml().Trim() )
+          &lt;/div&gt;
+
+&quot;@
+                }
+            }
+        }
+        
+        $parameterHtml += @&quot;
+        &lt;br /&gt;
+        &lt;/div&gt;
+        &lt;table class=&quot;parametertable&quot;&gt;
+          &lt;tr&gt;
+            &lt;td&gt;Required&lt;/td&gt;
+            &lt;td&gt;$( $parameter.required )&lt;/td&gt;
+          &lt;/tr&gt;
+          &lt;tr&gt;
+            &lt;td&gt;Position&lt;/td&gt;
+            &lt;td&gt;$( $parameter.position )&lt;/td&gt;
+          &lt;/tr&gt;
+          &lt;tr&gt;
+            &lt;td&gt;Accepts pipeline input&lt;/td&gt;
+            &lt;td&gt;$( $parameter.pipelineInput )&lt;/td&gt;
+          &lt;/tr&gt;
+          &lt;tr&gt;
+            &lt;td&gt;Accepts wildcard characters&lt;/td&gt;
+            &lt;td&gt;$( $parameter.globbing )&lt;/td&gt;
+          &lt;/tr&gt;
+
+&quot;@
+
+        if ( $parameter.defaultValue )
+        {
+            if( $parameter.defaultValue.get_InnerText().Trim() -ne &quot;&quot; )
+            {
+                $parameterHtml += @&quot;
+          &lt;tr&gt;
+            &lt;td&gt;Default Value&lt;/td&gt;
+            &lt;td&gt;$( $parameter.defaultValue.get_InnerText().Trim() )&lt;/td&gt;
+          &lt;/tr&gt;
+
+&quot;@
+            }
+        }
+
+        $parameterHtml += @&quot;
+        &lt;/table&gt;
+
+&quot;@
+    }
+
+    if ( $parameterHtml -ne &quot;&quot; )
+    {
+        $parameterHtml += &quot;        &lt;br /&gt;&lt;br /&gt;`n&quot;
+    }
+
+    $parameterHtml += @&quot;
+        &lt;nobr&gt;&lt;span class=&quot;boldtext&quot;&gt;&amp;lt;CommonParameters&amp;gt;&lt;/span&gt;&lt;/nobr&gt;
+        &lt;br /&gt;
+        &lt;div id=&quot;contenttext&quot;&gt;
+          &lt;p&gt;
+            For more information about common parameters, type &quot;Get-Help about_commonparameters&quot;.
+          &lt;/p&gt;
+        &lt;/div&gt;
+
+&quot;@
+
+    $parameterHtml.Trim()
+}
+
+function Get-InputHtml( [xml] $inputXml )
+{
+    $inputHtml = &quot;&quot;
+    $inputCount = 0
+
+    # generate HTML for each input type
+    foreach ( $inputType in $inputXml.inputTypes.inputType )
+    {
+        if ( $inputHtml -ne &quot;&quot; )
+        {
+            $inputHtml += &quot;        &lt;br /&gt;&lt;br /&gt;`n&quot;
+        }
+
+        if ( $inputType.type.name.get_InnerText().Trim() -ne &quot;&quot; -or 
+            $inputType.type.description.get_InnerText().Trim() -ne &quot;&quot; )
+        {
+            $inputHtml += &quot;      $( $inputType.type.name.get_InnerText().Trim() )`n&quot;
+            $inputHtml += @&quot;
+      &lt;div id=&quot;contenttext&quot;&gt;
+        $( Get-ParagraphedHtml $inputType.type.description.get_InnerXml().Trim() )
+      &lt;/div&gt;
+
+&quot;@
+            $inputCount++
+        }
+    }
+
+    $inputHtml.Trim()
+    $inputCount
+}
+
+function Get-ReturnHtml( [xml] $returnXml )
+{
+    $returnHtml = &quot;&quot;
+    $returnCount = 0
+
+    # generate HTML for each return value
+    foreach ( $returnValue in $returnXml.returnValues.returnValue )
+    {
+        if ( $returnHtml -ne &quot;&quot; )
+        {
+            $returnHtml += &quot;        &lt;br /&gt;&lt;br /&gt;`n&quot;
+        }
+
+        if ( $returnValue.type.name.get_InnerText().Trim() -ne &quot;&quot; -or 
+            $returnValue.type.description.get_InnerText().Trim() -ne &quot;&quot; )
+        {
+            $returnHtml += &quot;      $( $returnValue.type.name.get_InnerText().Trim() )`n&quot;
+            $returnHtml += @&quot;
+      &lt;div id=&quot;contenttext&quot;&gt;
+        $( Get-ParagraphedHtml $returnValue.type.description.get_InnerXml().Trim() )
+      &lt;/div&gt;
+
+&quot;@
+            $returnCount++
+        }
+    }
+
+    $returnHtml.Trim()
+    $returnCount
+}
+
+function Get-ExampleHtml( [xml] $exampleXml )
+{
+    $exampleHtml = &quot;&quot;
+    $exampleTotalCount = 0
+    $exampleCount = 0
+
+    foreach ( $example in $exampleXml.examples.example )
+    {
+        $exampleTotalCount++
+    }
+
+    # generate HTML for each example
+    foreach ( $example in $exampleXml.examples.example )
+    {
+        if ( $example.code -and $example.code.get_InnerText().Trim() -ne &quot;&quot; )
+        {
+            if ( $exampleHtml -ne &quot;&quot; )
+            {
+                $exampleHtml += &quot;        &lt;br /&gt;`n&quot;
+            }
+    
+            if ( $exampleTotalCount -gt 1 )
+            {
+                $exampleHtml += 
+                    &quot;        &lt;nobr&gt;&lt;span class=`&quot;boldtext`&quot;&gt;Example $( $exampleCount + 1 )&lt;/span&gt;&lt;/nobr&gt;`n&quot;
+            }
+    
+            $exampleCodeHtml = &quot;$( Html-Encode $example.introduction.get_InnerText().Trim() )&quot; + 
+                &quot;$( Html-Encode $example.code.get_InnerText().Trim() )&quot;
+            
+            $exampleHtml += &quot;        &lt;div class=`&quot;syntaxregion`&quot;&gt;$exampleCodeHtml&lt;/div&gt;`n&quot;
+
+            $foundFirstPara = $false
+    
+            foreach ( $para in $example.remarks.para )
+            {
+                if ( &quot;&quot;, &quot;Description&quot;, &quot;-----------&quot;  -notcontains $para.get_InnerText().Trim() )
+                {
+                    # the first para is generally the description of the example.
+                    # other para tags usually contain sample output
+                    if ( !$foundFirstPara )
+                    {
+                        $exampleHtml += @&quot;
+        &lt;div id=&quot;contenttext&quot;&gt;
+          &lt;p&gt;
+            $( Html-Encode $para.get_InnerText().Trim() )
+          &lt;/p&gt;
+        &lt;/div&gt;
+
+&quot;@
+                        $foundFirstPara = $true
+                    }
+                    else
+                    {
+                        $exampleHtml += @&quot;
+        &lt;pre class=&quot;syntaxregion&quot;&gt;$( $( ( Html-Encode $para.get_InnerText().Trim() )  -replace &quot;&lt;br /&gt;&quot;, &quot;`n&quot; ) )&lt;/pre&gt;
+
+&quot;@
+                    }
+                }
+            }
+    
+            $exampleCount++
+        }
+    }
+
+    $exampleHtml.Trim()
+    $exampleCount
+}
+
+function Get-TaskExampleHtml( [xml] $exampleXml )
+{
+    $exampleHtml = &quot;&quot;
+    $exampleCount = 0
+    $exampleTotalCount = 0
+
+    foreach ( $example in $exampleXml.examples.example )
+    {
+        $exampleTotalCount++
+    }
+
+    # generate HTML for each example
+    foreach ( $example in $exampleXml.examples.example )
+    {
+        if ( $exampleHtml -ne &quot;&quot; )
+        {
+            $exampleHtml += &quot;        &lt;br /&gt;`n&quot;
+        }
+
+        if ( $exampleTotalCount -gt 1 )
+        {
+            $exampleHtml += &quot;        &lt;nobr&gt;&lt;span class=`&quot;boldtext`&quot;&gt;Example $( $exampleCount + 1 )&lt;/span&gt;&lt;/nobr&gt;`n&quot;
+        }
+
+        $exampleHtml += &quot;        &lt;div&gt;$( Get-ParagraphedHtml $example.introduction.get_InnerXml().Trim() )&lt;/div&gt;`n&quot;
+        
+        $exampleCodeHtml = ( Html-Encode $example.code.Trim() ) -replace &quot;&lt;br /&gt;&quot;, &quot;`n&quot;
+
+        $exampleHtml += &quot;        &lt;pre class=`&quot;syntaxregion`&quot;&gt;$exampleCodeHtml&lt;/pre&gt;&quot;
+
+        $exampleHtml += &quot;        &lt;div&gt;$( Get-ParagraphedHtml $example.remarks.get_InnerXml().Trim() )&lt;/div&gt;`n&quot;
+
+        $exampleCount++
+    }
+
+    $exampleHtml.Trim()
+}
+
+function Get-LinkHtml( [xml] $linkXml )
+{
+    $linkHtml = &quot;&quot;
+    $linkCount = 0
+
+    # generate HTML for each related link
+    foreach ( $navigationLink in $linkXml.relatedLinks.navigationLink )
+    {
+        if ( $navigationLink.linkText -and `
+            ( $helpHash.Keys | Foreach-Object { $_.ToUpper() } ) -match $navigationLink.linkText.Trim().ToUpper() )
+        {
+            $linkHtml += &quot;        $( $navigationLink.linkText.Trim() )&lt;br /&gt;`n&quot;
+            $linkCount++
+        }
+        elseif ( $navigationLink.linkText -eq &quot;Online version:&quot; )
+        {
+            $linkHtml += &quot;        &lt;a href=$( $navigationLink.uri.Trim() ) target=_blank&gt;TechNet Online Version&lt;/a&gt;&lt;br /&gt;`n&quot;
+            $linkCount++
+        }
+    }
+
+    $linkHtml.Trim()
+    $linkCount
+}
+
+function Get-TaskHtml( [xml] $taskXml )
+{
+    $taskHtml = &quot;&quot;
+    $taskCount = 0
+
+    foreach ( $task in $taskXml.tasks.task )
+    {
+        if ( $taskHtml -ne &quot;&quot; )
+        {
+            $taskHtml += &quot;        &lt;br /&gt;`n&quot;
+        }
+
+        $taskHtml += &quot;        &lt;nobr&gt;&lt;span class=`&quot;boldtext`&quot;&gt;Task:&lt;/span&gt; $( $task.title.Trim() )&lt;/nobr&gt;`n&quot;
+        
+        $taskDescriptionHtml = ( Get-ParagraphedHtml $task.description.get_InnerXml().Trim() )
+        
+        $taskHtml += &quot;        &lt;div id=`&quot;contenttext`&quot;&gt;$taskDescriptionHtml&lt;/div&gt;`n&quot;
+
+        # add the example sections
+        if ( $task.examples )
+        {
+            $taskHtml += @&quot;
+        &lt;div id=&quot;contenttext&quot;&gt;
+          &lt;p&gt;
+            $( Get-TaskExampleHtml ( [xml]$task.examples.get_OuterXml() ) )
+          &lt;/p&gt;
+        &lt;/div&gt;
+    
+&quot;@
+        }
+
+        $taskCount++
+    }
+    
+    $taskHtml.Trim()
+    $taskCount
+}
+
+function Get-DynamicParameterHtml( [xml] $dynamicParameterXml )
+{
+    $dynamicParameterHtml = &quot;&quot;
+    
+    # generate HTML for each dynamic parameter
+    foreach ( $dynamicParameter in $dynamicParameterXml.dynamicparameters.dynamicparameter )
+    {
+        $dynamicParameterHtml += &quot;        &lt;nobr&gt;&lt;span class=`&quot;boldtext`&quot;&gt;-$( $dynamicParameter.name.Trim() )&quot;
+
+        if ( $dynamicParameter.type )
+        {
+            $dynamicParameterHtml += &quot; &amp;lt;$( $dynamicParameter.type.name.Trim() )&amp;gt;&quot;
+        }
+
+        $dynamicParameterHtml += &quot;&lt;/span&gt;&lt;/nobr&gt;`n&quot;
+
+        $dynamicParameterHtml += @&quot;
+        &lt;br /&gt;
+        &lt;div id=&quot;contenttext&quot;&gt;
+          &lt;p&gt;
+            $( Html-Encode $dynamicParameter.description.Trim() )
+          &lt;/p&gt;
+
+&quot;@
+        if ( $dynamicParameter.possiblevalues )
+        {
+            foreach ( $possibleValue in $dynamicParameter.possiblevalues.possiblevalue )
+            {
+                $dynamicParameterHtml += @&quot;
+          &lt;div id=&quot;contenttext&quot;&gt;
+            &lt;span class=`&quot;boldtext`&quot;&gt;$( $possibleValue.value )&lt;/span&gt;
+            &lt;div id=&quot;contenttext&quot;&gt;
+              $( Get-ParagraphedHtml $possibleValue.description.get_InnerXml().Trim() )
+            &lt;/div&gt;
+          &lt;/div&gt;
+
+&quot;@
+            }
+        }
+
+        $dynamicParameterHtml += @&quot;
+          &lt;br /&gt;
+          &lt;span class=`&quot;boldtext`&quot;&gt;Cmdlets Supported&lt;/span&gt;
+          &lt;div id=&quot;contenttext&quot;&gt;
+            &lt;p&gt;
+              $( Html-Encode $dynamicParameter.cmdletsupported.Trim() )
+            &lt;/p&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;br /&gt;
+
+&quot;@
+    }
+
+    $dynamicParameterHtml.Trim()
+}
+
+function Write-AboutTopic( [string] $topicName, [string] $topicPath )
+{
+    # just dump the contents of the about topic exactly as it is.  the only changes needed
+    # are to encode the special HTML characters and add topic links
+    $topicHtml = @&quot;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;powershell.css&quot; /&gt;
+    &lt;title&gt;About $( Capitalize-Words ( $topicName -replace &quot;(about)?_&quot;, &quot; &quot; ).Trim() )&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div id=&quot;topicheading&quot;&gt;
+      &lt;div id=&quot;topictitle&quot;&gt;PowerShell Help&lt;/div&gt;
+      About $( Capitalize-Words ( $topicName -replace &quot;(about)?_&quot;, &quot; &quot; ).Trim() )
+    &lt;/div&gt;
+    &lt;pre&gt;
+$( ( Html-Encode ( [string]::Join( [Environment]::NewLine, ( Get-Content -Path $topicPath ) ) ) ) -replace &quot;&lt;br /&gt;&quot; )
+    &lt;/pre&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+&quot;@
+
+    $topicHtml = Add-Links $topicName $topicHtml
+
+    Out-File -FilePath &quot;$outDirectory\Topics\$topicName.html&quot; -Encoding Ascii -Input $topicHtml
+}
+
+function Write-ProviderTopic( [string] $providerFullName, [xml] $providerXml )
+{
+    $providerName = $providerXml.providerhelp.Name.Trim()
+    
+    $topicHtml = @&quot;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;powershell.css&quot; /&gt;
+    &lt;title&gt;$providerName Help&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div id=&quot;topicheading&quot;&gt;
+      &lt;div id=&quot;topictitle&quot;&gt;PowerShell Help&lt;/div&gt;
+      $providerName Provider
+      &lt;div style=&quot;text-align: right; padding-right: 3px;&quot;&gt;
+         $( $providerFullName -replace &quot;^\w+\.&quot; )
+      &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;categorytitle&quot;&gt;Drives&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $( Get-ParagraphedHtml $providerXml.providerhelp.drives.get_InnerXml().Trim() )
+    &lt;/div&gt;
+    &lt;div class=&quot;categorytitle&quot;&gt;Synopsis&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;p&gt;$( Html-Encode $providerXml.providerhelp.synopsis.Trim() )&lt;/p&gt;
+    &lt;/div&gt;
+
+&quot;@
+    
+    $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Description&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $( Get-ParagraphedHtml $providerXml.providerhelp.detaileddescription.get_InnerXml().Trim() )
+    &lt;/div&gt;
+
+&quot;@
+
+    if ( $providerXml.providerhelp.capabilities.get_InnerText().Trim() -ne &quot;&quot; )
+    {
+        $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Capabilities&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $( Get-ParagraphedHtml $providerXml.providerhelp.capabilities.get_InnerXml().Trim() )
+    &lt;/div&gt;
+
+&quot;@
+    }
+
+    $taskHtml, $taskCount = Get-TaskHtml( $providerXml.providerhelp.tasks.get_OuterXml() )
+    
+    if ( $taskCount -gt 0 )
+    {
+        $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Task$( if ( $taskCount -gt 1 ) { &quot;s&quot; } )&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $taskHtml
+    &lt;/div&gt;
+
+&quot;@
+    }
+
+    if ( $providerXml.providerhelp.dynamicparameters )
+    {
+        $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Dynamic Parameters&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $( Get-DynamicParameterHtml( $providerXml.providerhelp.dynamicparameters.get_OuterXml() ) )
+    &lt;/div&gt;
+
+&quot;@
+    }
+
+    if ( $providerXml.providerhelp.notes.Trim() -ne &quot;&quot; )
+    {
+        $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Notes&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;p&gt;$( Html-Encode $providerXml.providerhelp.notes.Trim() )&lt;/p&gt;
+    &lt;/div&gt;
+
+&quot;@
+    }
+
+        $linkHtml, $linkCount = Get-LinkHtml ( [xml]$providerXml.providerhelp.relatedlinks.get_OuterXml() )
+
+        if ( $linkCount -gt 0 )
+        {
+            $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Related Link$( if ( $linkCount -gt 1 ) { &quot;s&quot; } )&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;p&gt;
+        $linkHtml
+      &lt;/p&gt;
+    &lt;/div&gt;
+    &lt;br /&gt;
+
+&quot;@
+        }
+        else
+        {
+            $topicHtml +=  &quot;        &lt;br /&gt;`n&quot;
+        }
+
+    $topicHtml += @&quot;
+  &lt;/body&gt;
+&lt;/html&gt;
+&quot;@
+
+    $topicHtml = Add-Links $providerName $topicHtml
+
+    Out-File -FilePath &quot;$outDirectory\Topics\$providerFullName.html&quot; -Encoding Ascii -Input $topicHtml
+}
+
+function Write-CmdletTopic( [string] $cmdletFullName, [xml] $cmdletXml )
+{
+    $cmdletName = $cmdletXml.command.details.name.Trim()
+    
+    # add the heading, syntax section, and description
+    $topicHtml = @&quot;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;powershell.css&quot; /&gt;
+    &lt;title&gt;$cmdletName Help&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;div id=&quot;topicheading&quot;&gt;
+      &lt;div id=&quot;topictitle&quot;&gt;PowerShell Help&lt;/div&gt;
+      $cmdletName Cmdlet
+      &lt;div style=&quot;text-align: right; padding-right: 3px;&quot;&gt;
+         $( $cmdletFullName -replace &quot;^\w+-\w+\.&quot; )
+      &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;categorytitle&quot;&gt;Synopsis&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $( Get-ParagraphedHtml $cmdletXml.command.details.description.get_InnerXml().Trim() )
+    &lt;/div&gt;
+    &lt;div class=&quot;categorytitle&quot;&gt;Syntax&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;div class=&quot;syntaxregion&quot;&gt;$( Get-SyntaxHtml ( [xml]$cmdletXml.command.syntax.get_OuterXml() ) )&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class=&quot;categorytitle&quot;&gt;Description&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $( Get-ParagraphedHtml $cmdletXml.command.description.get_InnerXml().Trim() )
+    &lt;/div&gt;
+
+&quot;@
+
+    # add the parameters section
+    if ( $cmdletXml.command.parameters )
+    {
+        $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Parameters&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;p&gt;
+        $( Get-ParameterHtml ( [xml]$cmdletXml.command.parameters.get_OuterXml() ) )
+      &lt;/p&gt;
+    &lt;/div&gt;
+
+&quot;@
+    }
+    else
+    {
+        $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Parameters&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;p&gt;
+       &lt;nobr&gt;&lt;span class=&quot;boldtext&quot;&gt;&amp;lt;CommonParameters&amp;gt;&lt;/span&gt;&lt;/nobr&gt;&lt;br /&gt;
+       &lt;div id=&quot;contenttext&quot;&gt;
+         &lt;p&gt;
+            For more information about common parameters, type &quot;Get-Help about_commonparameters&quot;.
+         &lt;/p&gt;
+        &lt;/div&gt;
+      &lt;/p&gt;
+    &lt;/div&gt;
+
+&quot;@
+    }
+
+    # add the input types section
+    if ( $cmdletXml.command.inputTypes )
+    {
+        $inputHtml, $inputCount = Get-InputHtml ( [xml]$cmdletXml.command.inputTypes.get_OuterXml() )
+    
+        if ( $inputCount -gt 0 )
+        {
+            $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Input Type$( if ( $inputCount -gt 1 ) { &quot;s&quot; } )&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $inputHtml
+    &lt;/div&gt;
+
+&quot;@
+        }
+    }
+
+    # add the return values section
+    if ( $cmdletXml.command.returnValue )
+    {
+        $returnHtml, $returnCount = Get-ReturnHtml ( [xml]$cmdletXml.command.returnValues.get_OuterXml() )
+    
+        if ( $returnCount -gt 0 )
+        {
+            $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Return Value$( if ( $returnCount -gt 1 ) { &quot;s&quot; } )&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $returnHtml
+    &lt;/div&gt;
+
+&quot;@
+        }
+    }
+
+    # add the notes section
+    if ( $cmdletXml.command.alertSet )
+    {
+        if ( $cmdletXml.command.alertSet.get_InnerText().Trim() -ne &quot;&quot; )
+        {
+            $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Notes&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      $( Get-ParagraphedHtml $cmdletXml.command.alertSet.get_InnerXml().Trim() )
+    &lt;/div&gt;
+
+&quot;@
+        }
+    }
+
+    # add the example section
+    if ( $cmdletXml.command.examples )
+    {
+        $exampleHtml, $exampleCount = Get-ExampleHtml ( [xml]$cmdletXml.command.examples.get_OuterXml() )
+
+        if ( $exampleCount -gt 0 )
+        {
+            $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Example$( if ( $exampleCount -gt 1 ) { &quot;s&quot; } )&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;p&gt;
+        $exampleHtml
+      &lt;/p&gt;
+    &lt;/div&gt;
+
+&quot;@
+        }
+    }
+
+    # add the related links section
+    if ( $cmdletXml.command.relatedLinks )
+    {
+        $linkHtml, $linkCount = Get-LinkHtml ( [xml]$cmdletXml.command.relatedLinks.get_OuterXml() )
+
+        if ( $linkCount -gt 0 )
+        {
+            $topicHtml += @&quot;
+    &lt;div class=&quot;categorytitle&quot;&gt;Related Link$( if ( $linkCount -gt 1 ) { &quot;s&quot; } )&lt;/div&gt;
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;p&gt;
+        $linkHtml
+      &lt;/p&gt;
+    &lt;/div&gt;
+    &lt;br /&gt;
+
+&quot;@
+        }
+        else
+        {
+            $topicHtml +=  &quot;        &lt;br /&gt;`n&quot;
+        }
+    }
+    else
+    {
+        $topicHtml +=  &quot;        &lt;br /&gt;`n&quot;
+    }
+
+    $topicHtml += @&quot;
+  &lt;/body&gt;
+&lt;/html&gt;
+&quot;@
+
+    $topicHtml = Add-Links $cmdletName $topicHtml
+
+    Out-File -FilePath &quot;$outDirectory\Topics\$cmdletFullName.html&quot; -Encoding Ascii -Input $topicHtml
+}
+
+function Add-Links( [string] $topicName, [string] $topicHtml )
+{
+    # we only want to add links for Cmdlets and about topics
+    $helpHash.Keys | Where-Object { $_ -match &quot;(^\w+-\w+|^about_)&quot; } | Foreach-Object {
+        $searchText = $_
+    
+        # keys representing Cmdlets are formatted like this:
+        # &lt;Cmdlet Name&gt;.&lt;PSProvider name&gt;
+        if ( $_ -match &quot;^\w+-\w+&quot; )
+        {
+            # we only want to search for the Cmdlet name
+            $searchText = $matches[ 0 ]
+        }
+
+        # if the search text isn't the topic being processed
+        if ( $searchText -ne $topicName )
+        {
+            $topicHtml = $topicHtml -replace &quot;\b($searchText)\b&quot;, &quot;&lt;a href=`&quot;Topics\$_.html`&quot;&gt;&lt;nobr&gt;`$1&lt;/nobr&gt;&lt;/a&gt;&quot;
+        }
+    }
+
+    $topicHtml
+}
+
+# file dumping functions
+
+function Write-Hhp
+{
+    # write the contents of the Html Help Project file
+    Out-File -FilePath &quot;$outDirectory\powershell.hhp&quot; -Encoding Ascii -Input @&quot;
+[OPTIONS]
+Auto Index=Yes
+Binary TOC=Yes
+Compatibility=1.1 or later
+Compiled file=PowerShell.chm
+Contents file=powershell.hhc
+Index file=PowerShell.hhk
+Default topic=Topics/default.html
+Full-text search=Yes
+Language=0x409 English (United States)
+Title=PowerShell 2.0 Help
+
+[INFOTYPES]
+&quot;@
+}
+
+function Write-DefaultPage
+{
+    $defaultHtml =  @&quot;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;link rel=&quot;stylesheet&quot; type=&quot;text/css&quot; href=&quot;powershell.css&quot; /&gt;
+    &lt;title&gt;PowerShell Help&lt;/title&gt;
+  &lt;/head&gt;
+  &lt;body style=&quot;margin: 5px 5px 5px 5px; color: #FFFFFF; background-color: #C86400;&quot;&gt;
+    &lt;h2&gt;Windows PowerShell Help&lt;/h2&gt;
+    &lt;br /&gt;
+    This complied help manual contains the help for all of the built-in PowerShell Cmdlets 
+    and PSProviders, as well as the help for any Cmdlets or PSProviders added through 
+    Add-PSSnapin, if help for them is available.  Also included are all of the &quot;about&quot; topics.
+    &lt;br /&gt;&lt;br /&gt;
+    To use this manual from the PowerShell command line, add the following function and 
+    alias to your PowerShell profile:
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;pre class=&quot;syntaxregion&quot;&gt;function Get-CompiledHelp( [string] `$topic )
+{
+    if ( `$topic )
+    {
+        # Get-Command will fail if the topic is a PSProvider or an &quot;about&quot; topic.
+        `$ErrorActionPreference = &quot;SilentlyContinue&quot;
+
+        # we don't want Get-Command to resolve to an application or a function 
+        `$command = Get-Command `$topic | Where-Object { `$_.CommandType -match &quot;Alias|Cmdlet&quot; }
+
+        # if the topic is an alias or a Cmdlet, combine its name with
+        # its PSProvider to get the full name of the help file
+        if ( `$command -and `$command.CommandType -eq &quot;Alias&quot; )
+        {
+            `$topic = &quot;`$( `$command.Definition ).`$( `$command.ReferencedCommand.PSSnapIn.Name )&quot;
+        }
+        elseif ( `$command -and `$command.CommandType -eq &quot;Cmdlet&quot; )
+        {
+            `$topic = &quot;`$( `$command.Name ).`$( `$command.PSSnapIn.Name )&quot;
+        }
+        else
+        {
+            # check to see if we have a PSProvider
+            `$psProvider = Get-PSProvider `$topic
+
+            if ( `$psProvider )
+            {
+                `$topic = &quot;`$( `$psProvider.Name ).`$( `$psProvider.PSSnapIn.Name )&quot;
+            }
+        }
+
+        hh.exe &quot;mk:@MSITStore:$( Resolve-Path &quot;$outDirectory&quot; )\PowerShell.chm::/Topics/`$topic.html&quot;
+    }
+    else
+    {
+        hh.exe &quot;$( Resolve-Path &quot;$outDirectory&quot; )\PowerShell.chm&quot;
+    }
+}
+
+Set-Alias chelp Get-CompiledHelp&lt;/pre&gt;
+    &lt;/div&gt;
+    &lt;br /&gt;
+    The path in the Get-CompliedHelp function corresponds to the location where this compiled 
+    help manual was originally created.  If this file is moved to another location, the path 
+    in the function will need to be updated.
+    &lt;br /&gt;
+    &lt;br /&gt;
+    To view the help topic for Get-ChildItem, type the following:
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;div class=&quot;syntaxregion&quot;&gt;PS$ Get-CompiledHelp Get-ChildItem&lt;/div&gt;
+    &lt;/div&gt;
+    &lt;br /&gt;
+    Because &quot;ls&quot; is an alias for Get-ChildItem, and &quot;chelp&quot; is an alias for Get-CompliedHelp, the following also works:
+    &lt;div id=&quot;contenttext&quot;&gt;
+      &lt;div class=&quot;syntaxregion&quot;&gt;PS$ chelp ls&lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+&quot;@
+
+    $defaultHtml = Add-Links &quot;&quot; $defaultHtml
+
+    Out-File -FilePath &quot;$outDirectory\Topics\default.html&quot; -Encoding Ascii -Input $defaultHtml
+}
+
+function Write-Css
+{
+    Out-File -FilePath &quot;$outDirectory\powershell.css&quot; -Encoding Ascii -Input @&quot;
+body
+{
+  margin: 0px 0px 0px 0px;
+  padding: 0px 0px 0px 0px;
+  font-family: Verdana, Arial, Helvetica, sans-serif;
+  font-size: 70%;
+  width: 100%;
+}
+
+div#topicheading
+{
+  position: relative;
+  left: 0px;
+  padding: 5px 0px 5px 10px;
+  border-bottom: 1px solid #999999;
+  color: #FFFFFF;
+  background-color: #C86400;
+  font-size: 110%;
+  font-weight: bold;
+  text-align: left;
+}
+
+div#topictitle
+{
+  padding: 5px 5px 5px 5px;
+  color: #FFFFFF
+  font-size: 90%;
+  font-weight: normal;
+}
+
+div#contenttext
+{
+  top: 0px;
+  padding: 0px 25px 0px 25px;
+}
+
+p { margin: 5px 0px 5px 0px; }
+
+a:link    { color: #0000FF; }
+a:visited { color: #0000FF; }
+a:hover   { color: #3366FF; }
+
+table.parametertable
+{
+  margin-left: 25px;
+  font-size: 100%;
+  border-collapse:collapse
+}
+
+table.parametertable td
+{
+  font-size: 100%;
+  border: solid #999999 1px;
+  padding: 0in 5.4pt 0in 5.4pt
+}
+
+pre.syntaxregion, div.syntaxregion
+{
+  background: #DDDDDD;
+  padding: 4px 8px;
+  cursor: text;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  margin-left: .6em;
+  color: #000000;
+  border-width: 1px;
+  border-style: solid;
+  border-color: #999999;
+}
+
+.categorytitle
+{
+  padding-top: .8em;
+  font-size: 110%;
+  font-weight: bold;
+  text-align: left;
+  margin-left: 5px;
+}
+
+.boldtext { font-weight: bold; }
+&quot;@
+}
+
+### main ###
+
+# create the topics directory
+New-Item -Type Directory -Path &quot;$outDirectory&quot; -Force | Out-Null
+New-Item -Type Directory -Path &quot;$outDirectory\Topics&quot; -Force | Out-Null
+
+&quot;`nRetrieving help content...`n&quot;
+
+# initialize variables for HHC file
+$hhcContentsHtml = &quot;&quot;
+$cmdletCategoryHtml = &quot;&quot;
+$cmdletCategoryHash = @{}
+
+# help content hash
+$helpHash = @{}
+
+# get the Cmdlet help
+Get-PSSnapIn | Sort-Object -Property Name | Foreach-Object { 
+    $psSnapInName = $_.Name
+    
+    $helpFilePath = Join-Path $_.ApplicationBase ( ( Get-Command -PSSnapIn $_ ) | Select-Object -First 1 ).HelpFile
+    
+    # the culture needs to be added to the path on Vista    
+    if ( !( Test-Path $helpFilePath ) )
+    {
+        $helpFilePath = &quot;$( $_.ApplicationBase )\$( $Host.CurrentUICulture.Name )\$( Split-Path -Leaf $helpFilePath )&quot;
+    }
+
+    if ( Test-Path $helpFilePath )
+    {
+        $helpXml = [xml]( Get-Content $helpFilePath )
+    
+        $cmdletCategoryContents = &quot;&quot;
+    
+        Get-Command -PSSnapIn $_ | Foreach-Object {
+            $commandName = $_.Name
+    
+            $helpXml.helpitems.command | Where-Object { 
+                $_.details.name -and $_.details.name.Trim() -imatch &quot;\b$commandName\b&quot; 
+            } | Foreach-Object {
+                # add the Xml Help of the Cmdlet to the help hashtable
+                $helpHash[ &quot;{0}.{1}&quot; -f $commandName, $psSnapInName ] = $_.get_OuterXml()
+
+                $cmdletTopicItem = @&quot;
+          &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+            &lt;param name=&quot;Name&quot; value=&quot;$commandName&quot;&gt;
+            &lt;param name=&quot;Local&quot; value=&quot;Topics\$( &quot;{0}.{1}&quot; -f $commandName, $psSnapInName ).html&quot;&gt;
+          &lt;/object&gt;
+
+&quot;@
+                if ( $GroupByPSSnapIn )
+                {    
+                    $cmdletCategoryContents += $cmdletTopicItem
+                }
+                else
+                {
+                    # save the topics so they can be sorted properly and added to the HHC later
+                    $cmdletCategoryHash[ &quot;{0}.{1}&quot; -f $commandName, $psSnapInName ] = $cmdletTopicItem
+                }
+            }
+        } 
+    
+        if ( $GroupByPSSnapIn )
+        {
+            # add a category in the HHC for this PSSnapIn and its Cmdlets
+            $cmdletCategoryHtml += @&quot;
+        &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+          &lt;param name=&quot;Name&quot; value=&quot;$psSnapInName&quot;&gt;
+        &lt;/object&gt;
+        &lt;ul&gt;
+          $( $cmdletCategoryContents.Trim() )
+        &lt;/ul&gt;
+
+&quot;@
+        }
+    }
+}
+
+# sort the Cmdlets so they are added to the HHC in a logical order
+if ( !$GroupByPSSnapIn )
+{
+    $cmdletCategoryHash.Keys | Sort-Object | Foreach-Object {
+        $cmdletCategoryHtml += $cmdletCategoryHash[ $_ ]
+    }
+}
+
+# add the Cmdlet category to the HHC
+$hhcContentsHtml += @&quot;
+      &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+        &lt;param name=&quot;Name&quot; value=&quot;Cmdlet Help&quot;&gt;
+      &lt;/object&gt;
+      &lt;ul&gt;
+        $( $cmdletCategoryHtml.Trim() )
+      &lt;/ul&gt;
+
+&quot;@
+
+$providerCategoryHtml = &quot;&quot;
+$providerCategoryHash = @{}
+
+# get the PSProvider help
+Get-PSSnapIn | Sort-Object -Property Name | Foreach-Object {
+    $psSnapInName = $_.Name
+
+    $helpFilePath = Join-Path $_.ApplicationBase ( ( Get-Command -PSSnapIn $_ ) | Select-Object -First 1 ).HelpFile
+
+    # the culture needs to be added to the path on Vista    
+    if ( !( Test-Path $helpFilePath ) )
+    {
+        $helpFilePath = &quot;$( $_.ApplicationBase )\$( $Host.CurrentUICulture.Name )\$( Split-Path -Leaf $helpFilePath )&quot;
+    }
+
+    if ( Test-Path $helpFilePath )
+    {
+        $helpXml = [xml]( Get-Content $helpFilePath )
+        
+        $providerCategoryContents = &quot;&quot;
+
+        Get-PSProvider | Where-Object { $_.PSSnapin.Name -eq $psSnapInName } | Foreach-Object {
+            $psProviderName = $_.Name
+
+            $helpXml.helpitems.providerhelp | 
+            Where-Object { $_.name.Trim() -imatch &quot;\b$psProviderName\b&quot; } | 
+            Foreach-Object {
+                $helpHash[ &quot;{0}.{1}&quot; -f $psProviderName, $psSnapInName ] = $_.get_OuterXml()
+    
+                # add a category in the HHC for this PSProvider
+                $providerTopicItem = @&quot;
+        &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+          &lt;param name=&quot;Name&quot; value=&quot;$psProviderName&quot;&gt;
+          &lt;param name=&quot;Local&quot; value=&quot;Topics\$( &quot;{0}.{1}&quot; -f $psProviderName, $psSnapInName ).html&quot;&gt;
+        &lt;/object&gt;
+
+&quot;@
+                if ( $GroupByPSSnapIn )
+                {    
+                    $providerCategoryContents += $providerTopicItem
+                }
+                else
+                {
+                    # save the topics so they can be sorted properly and added to the HHC later
+                    $providerCategoryHash[ &quot;{0}.{1}&quot; -f $psProviderName, $psSnapInName ] = $providerTopicItem
+                }
+            }
+        }
+    
+        if ( $GroupByPSSnapIn -and $providerCategoryContents -ne &quot;&quot; )
+        {
+            # add a category in the HHC for this PSSnapIn and its Cmdlets
+            $providerCategoryHtml += @&quot;
+        &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+          &lt;param name=&quot;Name&quot; value=&quot;$psSnapInName&quot;&gt;
+        &lt;/object&gt;
+        &lt;ul&gt;
+          $( $providerCategoryContents.Trim() )
+        &lt;/ul&gt;
+
+&quot;@
+        }
+    }
+}
+
+# sort the PSProviders so they are added to the HHC in a logical order
+if ( !$GroupByPSSnapIn )
+{
+    $providerCategoryHash.Keys | Sort-Object | Foreach-Object {
+        $providerCategoryHtml += $providerCategoryHash[ $_ ]
+    }
+}
+
+# add the PSProvider category to the HHC
+$hhcContentsHtml += @&quot;
+      &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+        &lt;param name=&quot;Name&quot; value=&quot;Provider Help&quot;&gt;
+      &lt;/object&gt;
+      &lt;ul&gt;
+        $( $providerCategoryHtml.Trim() )
+      &lt;/ul&gt;
+
+&quot;@
+
+# get the about topics
+$about_TopicPaths = @()
+
+$helpPath = &quot;&quot;
+
+if ( Resolve-Path &quot;$pshome\about_*.txt&quot; )
+{
+    $helpPath = &quot;$pshome&quot;
+}
+elseif ( Resolve-Path &quot;$pshome\$( $Host.CurrentUICulture.Name )\about_*.txt&quot; )
+{
+    $helpPath = &quot;$pshome\$( $Host.CurrentUICulture.Name )&quot;
+}
+
+if ( Test-Path $helpPath )
+{
+    $about_TopicPaths += Get-ChildItem &quot;$helpPath\about_*.txt&quot;
+}
+
+# we SilentlyContinue with Get-ChildItem errors because the ModuleName
+# for the built-in PSSnapins doesn't resolve to anything, since the assemblies
+# are only in the GAC.
+$about_TopicPaths += Get-PSSnapin | Foreach-Object { 
+    ( Get-ChildItem $_.ModuleName -ErrorAction &quot;SilentlyContinue&quot; ).DirectoryName 
+} | Foreach-Object { 
+    Get-ChildItem &quot;$_\about_*.txt&quot; 
+}
+
+if ( $about_TopicPaths.Count -gt 0 )
+{
+    $aboutCategoryHtml = &quot;&quot;
+    
+    $about_TopicPaths | Sort-Object -Unique -Property @{ Expression = { $_.Name.ToUpper() } }| Foreach-Object {
+        # pull the topic name out of the file name
+        $name = ( $_.Name -replace &quot;(.xml)?.help.txt&quot;, &quot;`$1&quot; )
+    
+        # add the path of the topic to the help hashtable
+        $helpHash[ $name ] = $_.FullName
+    
+        $topicName = Capitalize-Words ( $name -replace &quot;(about)?_&quot;, &quot; &quot; ).Trim()
+    
+        # add a category in the HHC for this about topic
+        $aboutCategoryHtml += @&quot;
+        &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+          &lt;param name=&quot;Name&quot; value=&quot;$topicName&quot;&gt;
+          &lt;param name=&quot;Local&quot; value=&quot;Topics\$name.html&quot;&gt;
+        &lt;/object&gt;
+
+&quot;@
+    }
+
+    # add the About Topics category to the HHC
+    $hhcContentsHtml += @&quot;
+      &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+        &lt;param name=&quot;Name&quot; value=&quot;About Topics&quot;&gt;
+      &lt;/object&gt;
+      &lt;ul&gt;
+        $( $aboutCategoryHtml.Trim() )
+      &lt;/ul&gt;
+
+&quot;@
+}
+
+# write the contents file
+Out-File -FilePath &quot;$outDirectory\powershell.hhc&quot; -Encoding Ascii -Input @&quot;
+&lt;!doctype html public &quot;-//ietf//dtd html//en&quot;&gt;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;meta name=&quot;Generator&quot; content=&quot;Microsoft&amp;reg; HTML Help Workshop 4.1&quot;&gt;
+    &lt;!-- Sitemap 1.0 --&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;object type=&quot;text/site properties&quot;&gt;
+      &lt;param name=&quot;Window Styles&quot; value=&quot;0x800025&quot;&gt;
+    &lt;/object&gt;
+    &lt;ul&gt;
+      &lt;li&gt;&lt;object type=&quot;text/sitemap&quot;&gt;
+        &lt;param name=&quot;Name&quot; value=&quot;PowerShell Help&quot;&gt;
+        &lt;param name=&quot;Local&quot; value=&quot;Topics\default.html&quot;&gt;
+      &lt;/object&gt;
+      $( $hhcContentsHtml.Trim() )
+    &lt;/ul&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+&quot;@
+
+# write the index file
+Out-File -FilePath &quot;$outDirectory\powershell.hhk&quot; -Encoding Ascii -Input @&quot;
+&lt;!doctype html public &quot;-//ietf//dtd html//en&quot;&gt;
+&lt;html&gt;
+  &lt;head&gt;
+    &lt;meta name=&quot;Generator&quot; content=&quot;Microsoft&amp;reg; HTML Help Workshop 4.1&quot;&gt;
+    &lt;!-- Sitemap 1.0 --&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;object type=&quot;text/site properties&quot;&gt;
+      &lt;param name=&quot;Window Styles&quot; value=&quot;0x800025&quot;&gt;
+    &lt;/object&gt;
+    &lt;ul&gt;
+      $( $hhcContentsHtml.Trim() )
+    &lt;/ul&gt;
+  &lt;/body&gt;
+&lt;/html&gt;
+&quot;@
+
+$helpHash.Keys | Sort-Object | Foreach-Object {
+    switch -regex ( $_ )
+    {
+        # about topic
+        &quot;about_&quot;
+        {
+            &quot;Creating help for the $_ about topic...&quot;
+            Write-AboutTopic $_ $helpHash[ $_ ]
+        }
+
+        # Verb-Noun: Cmdlet
+        &quot;\w+-\w+&quot;
+        {
+            # Some of the about values have dashes in the names now. I'm to 
+            # lazy to come up with the regular expression here. :)
+            if ( $_ -notmatch &quot;about_&quot; )
+            {
+                &quot;Creating help for the $( $_ -replace '(^\w+-\w+).*', '$1' ) Cmdlet...&quot;
+                Write-CmdletTopic $_ $helpHash[ $_ ]
+            }
+        }
+        
+        # PSProvider
+        default
+        {
+            &quot;Creating help for the $( $_ -replace '(^\w+).*', '$1' ) PSProvider...&quot;
+            Write-ProviderTopic $_ $helpHash[ $_ ]
+        }
+    }
+}
+
+Write-DefaultPage
+Write-Css
+Write-Hhp
+
+$progDir = &quot;C:\Program Files&quot;
+if ( $(Test-Path env:&quot;ProgramFiles(x86)&quot;) -eq $True )
+{
+	$progDir = $(get-item env:&quot;ProgramFiles(x86)&quot;).value
+}
+if ( Test-Path ($progDir + &quot;\HTML Help Workshop\hhc.exe&quot;) )
+{
+    # compile the help
+    &quot;`nCompiling the help manual...`n&quot;
+    Push-Location
+    Set-Location $outDirectory
+    &amp; ($progDir + &quot;\HTML Help Workshop\hhc.exe&quot;) powershell.hhp
+    Pop-Location
+    
+    # open the help file
+    &amp; &quot;$outDirectory\PowerShell.chm&quot;
+}
+else
+{
+    Write-Host -ForegroundColor Red @&quot;
+
+HTML Help Workshop is not installed, or it was not installed in its default
+location of &quot;C:\Program Files [x86]\HTML Help Workshop&quot;.
+
+HTML Help Workshop is required to compile the help manual.  It can be downloaded
+free of charge from Microsoft:
+
+http://www.microsoft.com/downloads/details.aspx?familyid=00535334-c8a6-452f-9aa0-d597d16580cc&amp;displaylang=en
+
+If you do not want to install HTML Help Workshop on this machine, all of the
+files necessary to compile the manual have been created here:
+
+$( Resolve-Path $outDirectory ) 
+
+Copy these files to a machine with HTML Help Workshop, and you can compile the
+manual there, with the following command:
+
+&lt;HTML Help Workshop location&gt;\hhc.exe powershell.hhp
+
+&quot;@
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

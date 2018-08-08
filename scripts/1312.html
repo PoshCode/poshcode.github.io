@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Luc Dekens">
+    <title>vProfile - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>vProfile</h1>
+<h3><a href="//scripts/1312.ps1">download</a></h3>
+<p>The script will export recursively all objects and properties of a VI/vSphere entity to a XML file.</p>
+<pre><code class="language-posh"># vProfiler.ps1	: vSphere profiling script
+# This script will export recursively all objects and properties of a VI/vSphere entity to a XML file
+# Parameters:
+#	$entityName	: the name of the vSphere entity for which the properties should be written to the XML file
+#	$childShow	: Boolean switch, export all children of $entityName, and their properties, to the XML file
+#	$configShow	: Boolean switch, export the properties to the XML file
+#	$vmDump		: Boolean switch, include VirtualMachines in the XML file
+#	$profileDir	: directory where the XML file will be written
+# Author:	LucD
+# History:
+#	v1.0 27/08/09	first version, handles Folder, VirtualMachine, Datacenter, HostSystem, ClusterComputeResource, ResourcePool
+#
+
+# Parameters
+$entityName = &quot;Clus1&quot;
+$childShow = $true
+$configShow = $false
+$vmDump = $true
+$profileDir = &quot;C:\&quot;
+
+# Root of the XML file
+$vInventory = [xml]&quot;&lt;Inventory&gt;&lt;/Inventory&gt;&quot;
+
+function New-XmlNode{
+	param($node, $nodeName)
+
+	$tmp = $global:vInventory.CreateElement($nodeName)
+	$node.AppendChild($tmp)
+}
+
+function Set-XmlAttribute{
+	param($node, $name, $value)
+
+	$node.SetAttribute($name, $value)
+}
+
+function Get-XmlNode{
+	param($path)
+
+	$global:vInventory.SelectNodes($path)
+}
+
+function Get-Properties{
+	param($BaseName, $Property, $XMLnode)
+
+	if(-not($Property -match &quot;DynamicProperty$|DynamicType$&quot;)){
+
+		if($Property.Length -eq 0){
+			$XMLnewnode = New-XmlNode $XMLnode $BaseName.Substring(1)
+		}
+		else{
+			$XMLnewnode = New-XmlNode $XMLnode $Property
+		}
+
+		if((Invoke-Expression $BaseName) -ne $null){
+			$result = Invoke-Expression $BaseName
+			$type = Invoke-Expression ($BaseName + &quot;.GetType()&quot;)
+			Set-XmlAttribute $XMLnewnode &quot;Type&quot; $type.Name
+			if($type.IsArray){
+				$ArrCount = Invoke-Expression ($BaseName + &quot;.Count&quot;)
+				Set-XmlAttribute $XMLnewnode &quot;Count&quot; $ArrCount
+				for($i = 0; $i -lt $ArrCount; $i++){
+					Get-Properties ($BaseName + &quot;[&quot; + $i + &quot;]&quot;) ($Property + &quot;-&quot; + $i + &quot;-&quot;) $XMLnewnode
+				}
+			}
+			elseif($type.IsPrimitive -or $type.Name -eq &quot;String&quot; -or $type.Name -eq &quot;DateTime&quot;){
+				Set-XmlAttribute $XMLnewnode &quot;Value&quot; $result
+			}
+			else{
+				$props = $result | gm -memberType Property,NoteProperty
+				foreach($prop in $props){
+					Get-Properties ($BaseName + &quot;.&quot; + $prop.Name) $prop.Name $XMLnewnode
+				}
+			}
+		}
+	}
+}
+
+function Get-Configuration{
+	param($object, $XMLnode, $label)
+
+	New-Variable -Name $label -Value $object
+	$properties = Get-Properties ('$' + $label) '' $XMLnode
+}
+
+function Get-Children{
+	param($entity, $path, $XMLnode, $recurse, $config)
+
+	if(&quot;vm&quot;,&quot;host&quot; -notcontains $entity.Name){
+		$path += (&quot;/&quot; + $entity.Name)
+	}
+	switch -regex ($entity.gettype().name){
+		&quot;Folder&quot; {
+			if(&quot;vm&quot;,&quot;host&quot; -notcontains $entity.Name){
+				$XMLnewnode = New-XmlNode $XMLnode &quot;Folder&quot; 
+				Set-XmlAttribute $XMLnewnode &quot;Name&quot; $entity.Name
+			}
+			if($recurse -and $entity.ChildEntity -ne $null){
+				foreach($childfld in (Get-View -Id $entity.ChildEntity)){
+					Get-Children $childfld $path $XMLnewnode $recurse $config
+				}
+			}
+		}
+		&quot;VirtualMachine&quot;{
+			if($vmDump){
+				if($entity.Config.Template){$VMtype = &quot;Template&quot;} else {$VMtype = &quot;VM&quot;}
+				$XMLnewnode = New-XmlNode $XMLnode $VMtype
+				Set-XmlAttribute $XMLnewnode &quot;Name&quot; $entity.Name
+				if($config){
+					Get-Configuration $entity.Config $XMLnewnode &quot;Config&quot;
+				}
+			}
+		}
+		&quot;Datacenter&quot;{
+			$XMLnewnode = New-XmlNode $XMLnode &quot;Datacenter&quot; 
+			Set-XmlAttribute $XMLnewnode &quot;Name&quot; $entity.Name
+			if($recurse -and $entity.HostFolder -ne $null){
+				foreach($childfld in (Get-View -Id $entity.HostFolder)){
+					Get-Children $childfld $path $XMLnewnode $recurse $config
+				}
+			}
+		}
+		&quot;HostSystem|^ComputeResource$&quot;{
+			$XMLnewnode = New-XmlNode $XMLnode &quot;Host&quot; 
+			Set-XmlAttribute $XMLnewnode &quot;Name&quot; $entity.Name
+			if($config){
+				Get-Configuration $entity.Config $XMLnewnode &quot;Config&quot;
+			}
+			if($recurse -and $entity.ChildEntity -ne $null){
+				foreach($childfld in (Get-View -Id $entity.ChildEntity)){
+					Get-Children $childfld $path $XMLnewnode $recurse $config
+				}
+			}
+		}
+		&quot;ClusterComputeResource&quot; {
+			$XMLnewnode = New-XmlNode $XMLnode &quot;Cluster&quot; 
+			Set-XmlAttribute $XMLnewnode &quot;Name&quot; $entity.Name
+			if($config){
+				Get-Configuration $entity.ConfigurationEx $XMLnewnode &quot;ConfigurationEx&quot;
+			}
+			if($recurse){
+				foreach($esx in (Get-View -Id $entity.Host)){
+					Get-Children $esx $path $XMLnewnode $recurse $config
+				}
+
+				$resourcePoolparent = Get-View -Id $entity.ResourcePool
+				if($resourcePoolParent.Vm -ne $null){
+					foreach($vm in (Get-View -Id $resourcePoolParent.Vm)){
+						Get-Children $vm $path $XMLnewnode $recurse $config
+					}
+				}
+				if($resourcePoolParent.resourcePool -ne $null){
+					foreach($respool in (Get-View -Id $resourcePoolParent.resourcePool)){
+						Get-Children $respool $path $XMLnewnode $recurse $config
+					}
+				}
+			}
+		}
+		&quot;ResourcePool&quot;{
+			$XMLnewnode = New-XmlNode $XMLnode &quot;ResourcePool&quot;
+			Set-XmlAttribute $XMLnewnode &quot;Name&quot; $entity.Name
+			if($config){
+				Get-Configuration $entity.Config $XMLnewnode &quot;Config&quot;
+			}
+			if($recurse -and $entity.Vm -ne $null){
+				foreach($childfld in (Get-View -Id $entity.Vm)){
+					Get-Children $childfld $path $XMLnewnode $recurse $config
+				}
+			}
+		}
+		Default{
+			write-host &quot;Unhandled type&quot; $entity.gettype().name
+		}
+	}
+}
+
+# Main function
+Get-Inventory -Name $entityName | Get-View | % {
+	Get-Children $_ $path (Get-XmlNode &quot;Inventory&quot;) $childShow $configShow
+}
+
+# Create vProfile XML file
+$vInventory.Save($profileDir + &quot;vProfile-&quot; + $entityName + &quot;.xml&quot;)
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

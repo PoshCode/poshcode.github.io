@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="glnsize">
+    <title>IPv4 Helpers - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>IPv4 Helpers</h1>
+<h3><a href="//scripts/975.ps1">download</a></h3>
+<p>A collection of V1 functions to assist with most IPv4 math. A majority of the code was translated from VBScript found http://www.highorbit.co.uk/?p=270=1</p>
+<pre><code class="language-posh">Function ConvertTo-BinaryIP {
+    #.Synopsis
+    # Convert an IP address to binary
+    #.Example 
+    # ConvertTo-BinaryIP -IP 192.168.1.1
+    Param (
+        [string]
+        $IP
+    )
+    Process {
+        $out = @()
+        Foreach ($octet in $IP.split('.')) {
+            $strout = $null
+            0..7|% {
+                IF (($octet - [math]::pow(2,(7-$_)))-ge 0) { 
+                    $octet = $octet - [math]::pow(2,(7-$_))
+                    [string]$strout = $strout + &quot;1&quot;
+                } else {
+                    [string]$strout = $strout + &quot;0&quot;
+                }   
+            }
+            $out += $strout
+        }
+        return [string]::join('.',$out)
+    }
+}
+
+Function ConvertFrom-BinaryIP {
+    #.Synopsis 
+    # Convert from Binary to an IP address
+    #.Example 
+    # Convertfrom-BinaryIP -IP 11000000.10101000.00000001.00000001
+    Param (
+        [string]
+        $IP
+    )
+    Process {
+        $out = @()
+        Foreach ($octet in $IP.split('.')) {
+            $strout = 0
+            0..7|% {
+                $bit = $octet.Substring(($_),1)
+                IF ($bit -eq 1) { 
+                    $strout = $strout + [math]::pow(2,(7-$_))
+                } 
+            }
+            $out += $strout
+        }
+        return [string]::join('.',$out)
+    }
+}
+
+Function ConvertTo-MaskLength {
+    #.Synopsis 
+    # Convert from a netmask to the masklength
+    #.Example 
+    # ConvertTo-MaskLength -Mask 255.255.255.0
+    Param (
+        [string]
+        $mask
+    )
+    Process {
+        $out = 0
+        Foreach ($octet in $Mask.split('.')) {
+            $strout = 0
+            0..7|% {
+                IF (($octet - [math]::pow(2,(7-$_)))-ge 0) { 
+                    $octet = $octet - [math]::pow(2,(7-$_))
+                    $out++
+                }
+            }
+        }
+        return $out
+    }
+}
+
+Function ConvertFrom-MaskLength {
+    #.Synopsis 
+    # Convert from masklength to a netmask
+    #.Example 
+    # ConvertFrom-MaskLength -Mask /24
+    #.Example 
+    # ConvertFrom-MaskLength -Mask 24
+    Param (
+        [int]
+        $mask
+    )
+    Process {
+        $out = @()
+        
+        [int]$wholeOctet = ($mask - ($mask % 8))/8
+        if ($wholeOctet -gt 0) {
+            1..$($wholeOctet) |%{
+                $out += &quot;255&quot;
+            }
+        }
+        $subnet = ($mask - ($wholeOctet * 8))
+        if ($subnet -gt 0) {
+            $octet = 0
+            0..($subnet - 1) | %{
+                 $octet = $octet + [math]::pow(2,(7-$_))
+                 
+            }
+            $out += $octet
+        }
+        for ($i=$out.count;$i -lt 4; $I++) {
+            $out += 0
+        }
+        return [string]::join('.',$out)
+    }
+}
+
+Function Get-NetworkAddress {
+    #.Synopsis 
+    # Get the network address of a given lan segment
+    #.Example 
+    # Get-NetworkAddress -IP 192.168.1.36 -mask 255.255.255.0
+    Param (
+        [string]
+        $IP, 
+        
+        [string]
+        $Mask, 
+        
+        [switch]
+        $Binary
+    )
+    Process {
+        $BinaryIP = ConvertTo-BinaryIP $IP
+        $BinaryMask = ConvertTo-BinaryIP $Mask
+        0..34 | %{
+            $IPBit = $BinaryIP.Substring($_,1)
+            $MaskBit = $BinaryMask.Substring($_,1)
+            IF ($IPBit -eq '1' -and $MaskBit -eq '1') {
+                $NetAdd = $NetAdd + &quot;1&quot;
+            } elseif ($IPBit -eq &quot;.&quot;) {
+                $NetAdd = $NetAdd +'.'
+            } else {
+                $NetAdd = $NetAdd + &quot;0&quot;
+            }
+        }
+        if ($Binary) {
+            return $NetAdd
+        } else {
+            return ConvertFrom-BinaryIP $NetAdd
+        }
+    }
+}
+
+Function Get-BroadcastAddress {
+    #.Synopsis 
+    # Get the Broadcast address of a given Lan segment
+    #.Example 
+    # Get-BroadcastAddress -IP 192.168.1.36 -Mask 255.255.255.0
+    Param (
+        [string]
+        $IP, 
+        
+        [string]
+        $Mask,
+        
+        [switch]
+        $Binary
+    )
+    Process {
+        $BinaryIP = ConvertTo-BinaryIP $IP
+        $BinaryMask = ConvertTo-BinaryIP $Mask 
+        0..34 | %{
+            $IPBit = $BinaryIP.Substring($_,1)
+            $MaskBit = $BinaryMask.Substring($_,1)
+            IF ($IPBit -eq '1' -or $MaskBit -eq '0') {
+                $Broadcast = $Broadcast + &quot;1&quot;
+            } elseif ($IPBit -eq &quot;.&quot;) {
+                $Broadcast = $Broadcast +'.'
+            } else {
+                $Broadcast = $Broadcast + &quot;0&quot;
+            }
+        }
+        if ($Binary) {
+            return $Broadcast
+        } else {
+            return ConvertFrom-BinaryIP $Broadcast
+        }
+    }
+}
+
+Function Get-IPRange {
+    #.Synopsis 
+    # Given an Ip and subnet, return every IP in that lan segment
+    #.Example 
+    # Get-IPRange -IP 192.168.1.36 -Mask 255.255.255.0
+    #.Example 
+    # Get-IPRange -IP 192.168.5.55 -Mask /23
+    Param (
+        [string]
+        $IP,
+        
+        [string]
+        $netmask
+    )
+    Process {
+        iF ($netMask.length -le 3) {
+            $masklength = $netmask.replace('/','')
+            $Subnet = ConvertFrom-MaskLength $masklength
+        } else {
+            $masklength = ConvertTo-MaskLength $netmask
+        }
+        $network = Get-NetworkAddress $IP $Subnet 
+        
+        [int]$FirstOctet,[int]$SecondOctet,[int]$ThirdOctet,[int]$FourthOctet = $network.split('.')
+        $TotalIPs = ([math]::pow(2,(32-$masklength)) -2)
+        $blocks = ($TotalIPs - ($TotalIPs % 256))/256
+        if ($Blocks -gt 0) {
+            1..$blocks | %{
+                0..255 |%{
+                    if ($FourthOctet -eq 255) {
+                        If ($ThirdOctet -eq 255) {
+                            If ($SecondOctet -eq 255) {
+                                $FirstOctet++
+                                $secondOctet = 0
+                            } else {
+                                $SecondOctet++
+                                $ThirdOctet = 0
+                            }
+                        } else {
+                            $FourthOctet = 0
+                            $ThirdOctet++
+                        }  
+                    } else {
+                        $FourthOctet++
+                    }
+                    Write-Output (&quot;{0}.{1}.{2}.{3}&quot; -f `
+                    $FirstOctet,$SecondOctet,$ThirdOctet,$FourthOctet)
+                }
+            }
+        }
+        $sBlock = $TotalIPs - ($blocks * 256)
+        if ($sBlock -gt 0) {
+            1..$SBlock | %{
+                if ($FourthOctet -eq 255) {
+                    If ($ThirdOctet -eq 255) {
+                        If ($SecondOctet -eq 255) {
+                            $FirstOctet++
+                            $secondOctet = 0
+                        } else {
+                            $SecondOctet++
+                            $ThirdOctet = 0
+                        }
+                    } else {
+                        $FourthOctet = 0
+                        $ThirdOctet++
+                    }  
+                } else {
+                    $FourthOctet++
+                }
+                Write-Output (&quot;{0}.{1}.{2}.{3}&quot; -f `
+                $FirstOctet,$SecondOctet,$ThirdOctet,$FourthOctet)
+            }
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

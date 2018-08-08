@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Start-IRCJabberBridge - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Start-IRCJabberBridge</h1>
+<h3><a href="//scripts/106.ps1">download</a> - <a href="//scripts/103.md">parent</a></h3>
+<p>Creates a bridge between (any) MUC chatroom and a Jabber user -- by default it joins the #PowerShell channel at IRC.FreeNode.net and echos everything said there to you, and everything you say to it ... to the chat room.  Really quite useless, except as a demonstration.</p>
+<pre><code class="language-posh">##########################################################################################
+## Depends on the PsXmppHelper.dll from http://CodePlex.com/PowerXmpp
+## CONTAINS Read-HostMasked http://powershellcentral.com/scripts/104
+## CONTAINS Out-Working http://powershellcentral.com/scripts/105
+##########################################################################################
+## NOTICE: THERE IS WAY TOO LITTLE ERROR HANDLING HERE!!!! 
+## IF EVERYTHING does not go very well, you will likely get very little explanation
+## MAKE SURE YOU ARE USING a registered jabber id and password
+
+##########################################################################################
+## Read-HostMasked
+## See: http://powershellcentral.com/scripts/104
+function Read-HostMasked([string]$prompt=&quot;Password&quot;) {
+  $password = Read-Host -AsSecureString $prompt; 
+  $BSTR = [System.Runtime.InteropServices.marshal]::SecureStringToBSTR($password);
+  $password = [System.Runtime.InteropServices.marshal]::PtrToStringAuto($BSTR);
+  [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR);
+  return $password;
+}
+
+##########################################################################################
+## Out-Working
+## See: http://powershellcentral.com/scripts/105
+$fore=&quot;White&quot;; $back=&quot;red&quot;;
+$work = @( $Host.UI.RawUI.NewBufferCellArray(@(&quot;|&quot;),$fore,$back),
+           $Host.UI.RawUI.NewBufferCellArray(@(&quot;/&quot;),$fore,$back),
+           $Host.UI.RawUI.NewBufferCellArray(@(&quot;-&quot;),$fore,$back),
+           $Host.UI.RawUI.NewBufferCellArray(@(&quot;\&quot;),$fore,$back) );
+
+[int]$script:w = 0;
+
+filter out-working($wait=0) {
+   $cur = $Host.UI.RawUI.Get_CursorPosition(); 
+   $cur.X = 0; $cur.Y -=1;
+   $Host.UI.RawUI.SetBufferContents($cur,$work[$script:w++]);
+   if($script:w -gt 3) {$script:w = 0 }
+   Start-Sleep -milli $wait
+   $_
+}
+
+##########################################################################################
+## Start-IrcJabberBridge - an Xmpp script
+## Depends on the PsXmppHelper.dll from http://CodePlex.com/PowerXmpp
+##
+function Start-IRCJabberBridge {
+   param (
+      $From = $( Read-Host &quot;Your Jabber ID&quot; )
+      ,$Password = $( Read-HostMasked &quot;Password&quot;)
+      ,$Message = $( Read-Host &quot;Your Message!&quot; )
+      ,$To = $( Read-Host &quot;Recipient's Jabber ID&quot; )
+      ,$Chat = &quot;PowerShell%irc.FreeNode.net@irc.im.flosoft.biz&quot;   # An IRC channel to join!
+      ,$ChatNick = &quot;PowerBot&quot; # Your nickname in IRC
+      ,$ChatPassword = $null
+   )
+
+   # Set path appropriately...
+   [reflection.assembly]::LoadFrom( &quot;agsXMPP.dll&quot; ) | fl Location, FullName, GlobalAssemblyCache
+   [reflection.assembly]::LoadFrom( &quot;PsXmppHelper.dll&quot; ) | fl Location, FullName, GlobalAssemblyCache
+   
+   $jidSender        = New-Object agsxmpp.jid $From
+   $jidChat          = New-Object agsxmpp.jid $chat
+   $jidReceiver      = New-Object agsxmpp.jid $To 
+   
+   $xmpp             = New-Object agsxmpp.XmppClientConnection( [string]$jidSender.Server )
+
+   ## Use SRV lookups to determine correct XMPP server if different from the server
+   ## portion of your JID.  e.g. user@gmail.com, the server is really talk.google.com
+   # $xmpp.AutoResolveConnectServer     = $TRUE
+   $xmpp.SocketConnectionType = [agsXMPP.net.SocketConnectionType]::HttpPolling;
+   $xmpp.ConnectServer = &quot;http://im.flosoft.biz:5280/http-poll/&quot;;
+
+   # Since this function is only used to send a message, we don't care about doing the 
+   # normal discovery and requesting a roster.  Leave disabled to quicken the login period.
+   $xmpp.AutoAgents  = $false
+   $xmpp.AutoRoster  = $false
+   
+   # The following switches may assist in troubleshooting connection issues.
+   # If SSL and StartTLS are disabled, then you can use a network sniffer to inspect the XML
+   #$xmpp.UseSSL      = $false
+   #$xmpp.UseStartTLS = $false
+
+   ### SOME CONSTANTS
+   $MSG  = &quot;agsXMPP.protocol.client.Message&quot;
+   $ChatMessage  = [agsXMPP.protocol.client.MessageType]::chat
+   $GroupMessage = [agsXMPP.protocol.client.MessageType]::groupchat
+   
+   $queue = New-Object PsXmppClient.MessageQueue $xmpp
+   $muc   = New-Object agsXMPP.protocol.x.muc.MucManager   $xmpp
+
+   # Connect and wait ...
+   $xmpp.Open($jidSender.User, $Password)
+   while ( !$xmpp.Authenticated ) {
+      Write-Verbose (&quot;{0} - {1}&quot; -f $xmpp.XmppConnectionState, $xmpp.Authenticated )
+      [Threading.Thread]::Sleep(200)
+   }
+   Write-Verbose (&quot;{0} - {1}&quot; -f $xmpp.XmppConnectionState, $xmpp.Authenticated )
+         
+   # Set our status so we're visible
+   $xmpp.Show = &quot;chat&quot;
+   $xmpp.Status = &quot;I'm a PowerShell Bot&quot;
+   $xmpp.SendMyPresence()
+   
+   # Join the chat room (the same as &quot;SendMyPresence&quot;, except to a MUC)
+   $muc.JoinRoom($jidChat, $ChatNick, $ChatPassword)
+
+   # Send the initial message
+   $xmpp.Send((New-Object $MSG $jidReceiver, $ChatMessage, $Message))
+   
+   $counter = 0
+   &quot;  Press any key to continue&quot;
+   while (!$Host.UI.RawUI.KeyAvailable)
+   {
+      foreach ($m in $queue.Messages)
+      {
+         &quot; &lt;{0}&gt; {1}&quot; -f $m.From.Resource, $m.Body
+         if ($m.From.Bare -eq $To)
+         {
+            $xmpp.Send((New-Object $MSG $jidChat, $GroupMessage, $M.Body))
+         }
+         else
+         {
+            ## &quot;{0}=={1}&quot; -f $m.From.Bare,$To
+            $xmpp.Send((New-Object $MSG $jidReceiver, $ChatMessage, (&quot;&lt;{0}&gt; {1}&quot; -f $m.From.Resource, $m.Body)))
+         }
+      }
+      $counter++
+
+      # Every so often, re-broadcast our continued presence 
+      # Over http polling, not doing this was causing vanishing problems...
+      if(($counter % 50) -eq 0 ) {
+         $xmpp.SendMyPresence()
+         $muc.JoinRoom($jidChat, $ChatNick)
+      }
+      out-working 100
+   }
+
+   $muc.LeaveRoom($jidChat, $ChatNick);
+   $xmpp.Close();
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="David Sjstrand">
+    <title>Wpf with powershell - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Wpf with powershell</h1>
+<h3><a href="//scripts/5452.ps1">download</a> - <a href="//scripts/5450.md">parent</a></h3>
+<p>I know there already are a bunch of approaches to this, but this is my somewhat hacky contribution to wpf with powershell. I wanted to be able to draw my ui in visual studio or blend and then use the xaml with my powershell script in a simple way. It certainly has room for improvements, but I think it has potential. I'm quite sure that there are other (nicer) ways to do some of the more hacky stuff.
+So this is how to use this:</p>
+<ol>
+<li>draw your ui in visual studio or blend (c# wpf project). Be sure to name all controls and assign handlers for the events you want to use (don't implement them, just name them).</li>
+<li>copy the .xaml file and wpftools.ps1 (the script below) to your script project folder</li>
+<li>dot-source wpftools.ps1</li>
+<li>run Get-WpfSnippet -xamlPath &lt;path to the .xaml&gt; &gt; myScript.ps1</li>
+<li>open myScript.ps1 and implement the functions (there will be a function for each event handler you assigned)</li>
+<li>run myScript.ps1 (enjoy)</li>
+</ol>
+<pre><code class="language-posh">#Requires -Version 2
+Add-Type -Assembly PresentationFramework
+Add-Type -Assembly PresentationCore
+#Add-Type –AssemblyName WindowsBase
+
+function Get-Runspace ($ScriptPath)
+{
+	if ($runspaceCreated -or [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.apartmentstate -eq &quot;STA&quot;)
+	{
+		Write-Debug &quot;No new runspace was created&quot;
+		return
+	}
+
+	if ($PSBoundParameters.ContainsKey('ScriptPath'))
+	{
+		$ScriptPath = Resolve-Path $ScriptPath
+	}
+	elseif ($host.version.major -ge 3) 
+	{
+		$ScriptPath = $MyInvocation.PSCommandPath
+	} 
+	else
+	{
+		$ScriptPath = Resolve-Path (Get-PSCallStack)[-2].InvocationInfo.InvocationName
+	} 
+
+	Write-Debug &quot;Script path: $ScriptPath&quot;
+	Write-Debug &quot;Creating a new STA runspace ...&quot;
+	# Create a new runspace
+	$rs = [Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($Host)
+	$rs.ApartmentState = &quot;STA&quot;
+	$rs.ThreadOptions = “ReuseThread”
+	$rs.Open()
+	$rs.SessionStateProxy.SetVariable(&quot;runspaceCreated&quot;,$true)
+	$rs.SessionStateProxy.SetVariable(&quot;debugPreference&quot;,$debugPreference)
+	# Rerun the script in the new apartment
+	$psCmd = [System.Management.Automation.PowerShell]::Create()
+	$psCmd.Runspace = $rs
+	Write-Debug &quot;Rerunning $ScriptPath&quot;
+	[void]$psCmd.AddCommand(&quot;Set-Location&quot;)
+	[void]$pscmd.AddParameter(&quot;Path&quot;,(Get-Location).Path)
+	[void]$psCmd.AddScript($ScriptPath)
+	[void]$psCmd.Invoke()
+	$rs.Close()
+	exit
+}
+
+function Get-WindowsClasses
+{
+	$exportedClasses = [System.Reflection.Assembly]::GetAssembly([System.Windows.Window]).exportedTypes
+	$exportedControlClasses = $exportedClasses | Where-Object {$_.isclass -and $_.fullname -like &quot;System.Windows.*&quot;}
+	
+	$controlClasses = @{}
+	foreach ($controlClass in $exportedControlClasses)
+	{
+		$controlClasses[$controlClass.Name] = $controlClass.FullName
+	} 
+	$controlClasses
+}
+
+function Show-WpfWindow ([string]$XamlPath=&quot;.\MainWindow.xaml&quot;, [string]$HashTableName)
+{	
+	if (!(Test-Path $XamlPath))
+	{
+		throw &quot;Could not find file $XamlPath&quot;
+	}
+    [xml]$xaml = Get-Content $XamlPath
+	$nsmgr = new-object system.xml.xmlnamespacemanager($xaml.nametable)
+	$nsmgr.AddNamespace(&quot;x&quot;,$xaml.DocumentElement.x)
+	$xaml.window.RemoveAttribute(&quot;x:Class&quot;)
+	$controlEvents = @{}
+	$controlClasses = Get-WindowsClasses
+	:outer foreach ($element in $xaml.SelectNodes('//*[@x:Name]', $nsmgr))
+	{
+	    $name = $element.name
+	    $typename = $controlClasses[$element.LocalName]
+	    $type = $null
+	    try { $type = [type]$typename } catch { Write-Debug &quot;type $typename does not exist&quot;; continue outer}
+	    Write-Debug &quot;$typeName`: $name ($(@($type.GetEvents()).count))&quot;
+	    foreach ($event in $type.GetEvents())
+	    {
+	        $attributeName = $event.Name
+	        $attributeValue = $element.GetAttribute($attributeName)
+	        
+		    if ($attributeValue -and (Test-Path &quot;function:$attributeValue&quot;))
+	        {
+                Write-Debug &quot;Found event handler: $attributeName - $attributeValue&quot;
+	            $controlEvents[$name] += @{$attributeName=$attributeValue}
+	        }
+		    elseif (Test-Path &quot;function:${name}_$attributeName&quot;)
+		    {
+                Write-Debug &quot;Found eventhandler $name_$attributeName&quot;
+	            $controlEvents[$name] += @{$attributeName=&quot;${name}_$attributeName&quot;}
+		    }
+		    if ($AttributeValue)
+		    {
+			    $element.RemoveAttribute($attributeName)
+		    }
+	    }
+	    
+	}
+	
+	$reader = New-Object System.Xml.XmlNodeReader($xaml)
+	$Window = [Windows.Markup.XamlReader]::Load( $reader )
+    if ($PSBoundParameters.ContainsKey(&quot;HashTableName&quot;))
+    {
+        if (Test-Path &quot;Variable:$HashTableName&quot;)
+        {
+            Remove-Variable $HashTableName
+        }
+
+        $HashTable = (new-variable -name $HashTableName -value @{} -PassThru -Option Constant).Value
+    }
+            
+	foreach ($element in $xaml.SelectNodes('//*[@x:Name]', $nsmgr))
+	{
+	    $name = $element.name
+	    $control = $Window.FindName($name)
+	
+	    if ($control)
+	    {
+            if ($PSBoundParameters.ContainsKey(&quot;HashTableName&quot;))
+            {
+                $HashTable[$name] = $control
+            }
+            else
+            {
+                if (Test-Path &quot;Variable:$name&quot;)
+                {
+                    Remove-Variable $name
+                }
+	            New-Variable -Name $name -Value $control -Option Constant -ErrorAction SilentlyContinue
+            }
+	    }
+	}
+	
+	foreach ($controlName in $controlEvents.Keys)
+	{
+	    $control = $Window.FindName($controlName)
+	    if (!$control)
+	    {
+	        continue
+	    }
+	    foreach ($eventName in $controlEvents[$controlName].Keys)
+	    {
+	        $scriptBlock = [System.Management.Automation.ScriptBlock]::Create($controlEvents[$controlName][$eventName])
+	        Write-Debug &quot;$controlname.add_$eventName&quot;
+	        ($control.&quot;add_$eventName&quot;).Invoke($scriptBlock)
+	    }
+	}
+	[void]$Window.ShowDialog()
+}
+
+function Get-ScriptStub ($XamlPath=&quot;.\MainWindow.xaml&quot;, [string]$HashTableName,
+	[parameter()]
+	[ValidateSet(&quot;None&quot;, &quot;Normal&quot;, &quot;High&quot;, &quot;Full&quot;)]
+	[String[]]
+	$CommentDetail=&quot;Normal&quot;,
+	$CommentBorderLength = 85)
+{
+    if ([System.Management.Automation.Runspaces.Runspace]::DefaultRunspace.apartmentstate -ne &quot;STA&quot;)
+	{
+        throw &quot;Generate-ScriptStub must be run in a single threaded apartment. Start PowerShell with the -STA flag and rerun the script.&quot;
+        exit
+    }
+
+	[xml]$xaml = Get-Content $XamlPath
+	$nsmgr = new-object system.xml.xmlnamespacemanager($xaml.nametable)
+	$nsmgr.AddNamespace('x',$xaml.DocumentElement.x)
+	#$xaml.window.RemoveAttribute(&quot;x:Class&quot;)
+        if ($CommentDetail -ne 'None')
+        {
+	    '#' * $CommentBorderLength
+	    '# Controls:'
+	    '#'
+        }
+
+	$controlEvents = @{}
+	$controlTypes = @{}
+	$controlClasses = Get-WindowsClasses
+	:outer foreach ($element in $xaml.SelectNodes('//*[@x:Name]', $nsmgr))
+	{
+	    $name = $element.name
+	    $typename = $controlClasses[$element.LocalName]
+	    Write-Debug &quot;$typeName`: $name&quot;
+	    $type = $null
+        if ($controlTypes.ContainsKey($typename))
+        {
+            $type = $controlTypes[$typename]
+        }
+        else
+        {
+	        try { $type = [type]$typename } catch { Write-Debug &quot;Unknown error getting type $typename&quot;; continue outer}
+            $controlTypes[$typename] = $type
+        }
+        
+        if ($CommentDetail -ne 'None')
+        {
+            if ($PSBoundParameters.ContainsKey(&quot;HashTableName&quot;))
+            {
+                '#  ${0}{1,-20} ({2})' -F $HashTableName,&quot;['$name']&quot;,$typename
+            }
+            else
+            {
+                '#  ${0,-20} ({1})' -F $name,$typename
+            }
+	    }
+	    foreach ($event in $type.GetEvents())
+	    {
+	        $attributeName = $event.Name
+	        $attributeValue = $element.GetAttribute($attributeName)
+		    if ($attributeValue)
+	        {
+	            Write-Debug &quot;Found event handler: $attributeName - $attributeValue&quot;
+	            $controlEvents[$attributeValue] += @{$name=$attributeName}
+	            #$element.RemoveAttribute($attributeName)
+	        }
+	    }
+	    
+	}
+    if (&quot;High&quot;,&quot;Full&quot; -contains $CommentDetail)
+    {
+	    '#' * $CommentBorderLength
+	    '# Types:'
+	    '#'
+	    foreach ($typename in $controlTypes.Keys)
+	    {
+	        &quot;# $typename&quot;
+            $str = '#     Events:'
+		    $count = 0
+            foreach ($eventName in ($controlTypes[$typename].GetEvents() | Select-Object -ExpandProperty Name))
+            {
+                if (!($count++ % 3))
+                {
+                    $str += &quot;`n#      &quot;
+                }
+                $str += &quot;$eventName &quot;.PadRight(30)
+            }
+		    $str.Split(&quot;`n&quot;)
+		    if ($CommentDetail -ne &quot;Full&quot;)
+		    {
+		        continue
+            }
+            &quot;#     Properties:&quot;
+            foreach ($Property in $controlTypes[$typename].GetProperties())
+            {
+                '#      {0,-30} ({1})' -F $property.name,$property.propertyType.fullname
+            }
+
+        }
+    } 
+    if ($CommentDetail -ne 'None')
+    {
+	    '#'
+	    '#' * $CommentBorderLength
+            ''
+    }
+    '#Requires -Version 2'
+    '. .\wpftools.ps1'
+	'Get-Runspace $MyInvocation.MyCommand.Definition'
+	''
+	'# Event handlers:'
+	''
+	foreach ($eventName in $controlEvents.Keys)
+	{
+	    foreach ($controlName in $controlEvents[$eventName].Keys)
+	    {
+	        &quot;# $controlName $($controlevents[$eventName][$controlName])&quot;
+        }
+	    &quot;function $eventName&quot;
+        '{'
+        '}'
+        ''	    
+	}
+	
+    if ($PSBoundParameters.ContainsKey(&quot;HashTableName&quot;))
+    {
+        &quot;Show-WpfWindow -XamlPath '$XamlPath' -HashTableName '$HashTableName'&quot;
+    }
+    else
+    {
+	    &quot;Show-WpfWindow -XamlPath '$XamlPath'&quot;
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

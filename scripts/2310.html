@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="denty">
+    <title>Get-DhcpClient - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-DhcpClient</h1>
+<h3><a href="//scripts/2310.ps1">download</a></h3>
+<p>More C# than PowerShell. A script to return DHCP client leases from a DHCP server.</p>
+<pre><code class="language-posh">&lt;#
+  .Description
+    A C# P/Invoke wrapper for DhcpEnumSubnetClients from the DHCP API
+  .Parameter Server
+    A DHCP server to query
+  .Parameter Scope
+    The IP address representing the scope to query
+#&gt;
+
+[CmdLetBinding()]
+Param(
+  [Parameter(Mandatory = $True)]
+  [Net.IPAddress]$Server,
+  [Parameter(Mandatory = $True)]
+  [Net.IPAddress]$Scope
+)
+
+#
+# Add the namespace
+#
+
+Try { [Void][Dhcp.DhcpClient] } Catch { }
+If (!$?) {
+
+Add-Type @&quot;
+  using System;
+  using System.Collections;
+  using System.Net;
+  using System.Runtime.InteropServices;
+  using Dhcp;
+
+  namespace Dhcp
+  {
+    public class ConvertTo {
+
+      public static IPAddress IP(UInt32 Value)
+      {
+        Byte[] IPArray = new Byte[4];
+
+        for (int i = 3; i &gt; -1; i--) {
+          Double Remainder = Value % Math.Pow(256, i);
+          IPArray[3 - i] = (Byte)((Value - Remainder) / Math.Pow(256, i));
+          Value = (UInt32)Remainder;
+        }
+
+        return IPAddress.Parse(String.Format(&quot;{0}.{1}.{2}.{3}&quot;, 
+          IPArray[0],
+          IPArray[1],
+          IPArray[2],
+          IPArray[3]));
+      }
+
+      public static UInt32 UInt32(IPAddress IP)
+      {
+        UInt32 Value = 0;
+        Byte[] Bytes = IP.GetAddressBytes();
+        for (int i = 0; i &lt; 4; i++) {
+          Value = Value | (UInt32)(Bytes[i] &lt;&lt; (8 * (3 - i)));
+        }
+        return Value;
+      }
+    }
+
+    public class Functions {
+
+      [DllImport(&quot;dhcpsapi.dll&quot;)]
+      public static extern UInt32 DhcpEnumSubnetClients(
+        [MarshalAs(UnmanagedType.LPWStr)]
+        String ServerIpAddress,
+        uint SubnetAddress,
+        ref uint ResumeHandle,
+        uint PreferredMaximum,
+        out IntPtr ClientInfo,
+        out uint ClientsRead,
+        out uint ClientsTotal
+      );
+
+    }
+
+    public class Structures {
+
+      [StructLayout(LayoutKind.Sequential)]
+      public struct DATE_TIME
+      {
+        public UInt32 dwLowDateTime;
+        public UInt32 dwHighDateTime;
+
+        public DateTime ToDateTime()
+        {
+          if (dwHighDateTime == 0 &amp;&amp; dwLowDateTime == 0)
+          {
+            return DateTime.MinValue;
+          }
+          if (dwHighDateTime == int.MaxValue &amp;&amp; dwLowDateTime == UInt32.MaxValue)
+          {
+            return DateTime.MaxValue;
+          }
+          return DateTime.FromFileTime((((long)dwHighDateTime) &lt;&lt; 32) | dwLowDateTime);
+        }
+      }
+
+      [StructLayout(LayoutKind.Sequential)]
+      public struct DHCP_BINARY_DATA
+      {
+        public uint DataLength;
+        public IntPtr Data;
+
+        public override String ToString()
+        {
+          return String.Format(&quot;{0:X2}:{1:X2}:{2:X2}:{3:X2}:{4:X2}:{5:X2}&quot;,
+            Marshal.ReadByte(this.Data),
+            Marshal.ReadByte(this.Data, 1),
+            Marshal.ReadByte(this.Data, 2),
+            Marshal.ReadByte(this.Data, 3),
+            Marshal.ReadByte(this.Data, 4),
+            Marshal.ReadByte(this.Data, 5));
+        }
+      };
+
+      [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+      public struct DHCP_CLIENT_INFO_ARRAY
+      {
+        public uint NumElements;
+        public IntPtr Clients;
+      }
+
+      [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+      public struct DHCP_CLIENT_INFO
+      {
+        public uint ClientIpAddress;
+        public uint SubnetMask;
+        public DHCP_BINARY_DATA ClientHardwareAddress;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string ClientName;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string ClientComment;
+        public DATE_TIME ClientLeaseExpires;
+        public DHCP_HOST_INFO OwnerHost;
+      }
+
+      [StructLayout(LayoutKind.Sequential)]
+      public struct DHCP_HOST_INFO
+      {
+        uint IpAddress;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        String NetBiosName;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        String HostName;
+      }
+    }
+
+    public class DhcpClient
+    {
+      public String Name;
+      public String MACAddress;
+      public IPAddress IpAddress;
+      public IPAddress SubnetMask;
+      public String Description;
+      public DateTime LeaseExpires;
+
+      internal DhcpClient(Structures.DHCP_CLIENT_INFO RawReservation)
+      {
+        this.IpAddress = ConvertTo.IP(RawReservation.ClientIpAddress);
+        this.SubnetMask = ConvertTo.IP(RawReservation.SubnetMask);
+        this.MACAddress = RawReservation.ClientHardwareAddress.ToString();
+        this.Name = RawReservation.ClientName;
+        this.Description = RawReservation.ClientComment;
+        this.LeaseExpires = RawReservation.ClientLeaseExpires.ToDateTime();
+      }
+
+      public static DhcpClient[] Get(IPAddress ServerIP, IPAddress ScopeIP) {
+        ArrayList Clients = new ArrayList();
+        uint resumeHandle = 0;
+        IntPtr info_array_ptr;
+        uint numClientsRead = 0;
+        uint totalClients = 0;
+
+        String Server = ServerIP.ToString();
+        UInt32 Scope = ConvertTo.UInt32(ScopeIP);
+
+        UInt32 ReturnCode = Functions.DhcpEnumSubnetClients(  
+          Server,
+          Scope,
+          ref resumeHandle,
+          65536,
+          out info_array_ptr,
+          out numClientsRead,
+          out totalClients
+        );
+
+        Structures.DHCP_CLIENT_INFO_ARRAY rawClients =  
+          (Structures.DHCP_CLIENT_INFO_ARRAY)Marshal.PtrToStructure(info_array_ptr, typeof(Structures.DHCP_CLIENT_INFO_ARRAY));
+        IntPtr current = rawClients.Clients;
+
+        for (int i = 0; i &lt; (int)rawClients.NumElements; i++) {
+          Structures.DHCP_CLIENT_INFO rawMachine =  
+            (Structures.DHCP_CLIENT_INFO)Marshal.PtrToStructure(Marshal.ReadIntPtr(current), typeof(Structures.DHCP_CLIENT_INFO));
+
+          Clients.Add(new DhcpClient(rawMachine));
+
+          current = (IntPtr)((int)current + (int)Marshal.SizeOf(typeof(IntPtr)));  
+        }
+
+        return (DhcpClient[])Clients.ToArray(typeof(DhcpClient));
+      }
+    }
+  }
+&quot;@
+
+}
+
+#
+# Execute Get()
+#
+
+[Dhcp.DhcpClient]::Get($Server, $Scope)
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

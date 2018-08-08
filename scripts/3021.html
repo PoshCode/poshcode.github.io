@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Chad Miller">
+    <title>SqlProxy.psm1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SqlProxy.psm1</h1>
+<h3><a href="//scripts/3021.ps1">download</a> - <a href="//scripts/2997.md">parent</a></h3>
+<p>Based on functions in SQLPSX. SqlProxy.psm1 module is used for administering SQL Server logins, users, and roles. Designed to be used with PS Remoting.  All actions audited to a custom Eventlog.  See Write-SqlProxyLog for log setup details</p>
+<pre><code class="language-posh"># ---------------------------------------------------------------------------
+### &lt;Author&gt;
+### Chad Miller 
+### &lt;/Author&gt;
+### &lt;Description&gt;
+### Based on functions in SQLPSX. SqlProxy.psm1 module is used for administering
+### SQL Server logins, users, and roles. Designed to be used with PS Remoting.
+### All actions audited to a custom Eventlog. 
+### See Write-SqlProxyLog for log setup details
+### &lt;/Description&gt;
+# ---------------------------------------------------------------------------
+try {add-type -AssemblyName &quot;Microsoft.SqlServer.ConnectionInfo, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot; -EA Stop}
+catch {add-type -AssemblyName &quot;Microsoft.SqlServer.ConnectionInfo&quot;}
+
+try {add-type -AssemblyName &quot;Microsoft.SqlServer.Smo, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot; -EA Stop; $smoVersion = 10}
+catch {add-type -AssemblyName &quot;Microsoft.SqlServer.Smo&quot;; $smoVersion = 9}
+
+try {add-type -AssemblyName &quot;Microsoft.SqlServer.SqlEnum, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot; -EA Stop; $smoVersion = 10}
+catch {add-type -AssemblyName &quot;Microsoft.SqlServer.SqlEnum&quot;; $smoVersion = 9}
+
+try
+{
+    try {add-type -AssemblyName &quot;Microsoft.SqlServer.SMOExtended, Version=10.0.0.0, Culture=neutral, PublicKeyToken=89845dcd8080cc91&quot; -EA Stop}
+    catch {add-type -AssemblyName &quot;Microsoft.SqlServer.SMOExtended&quot; -EA Stop}
+}
+catch {Write-Warning &quot;SMOExtended not available&quot;}
+
+$EventID = @{
+&quot;Add-SqlDatabaseRoleMember&quot;=0
+&quot;Add-SqlLogin&quot;=1
+&quot;Add-SqlServerRoleMember&quot;=2
+&quot;Add-SqlUser&quot;=3
+&quot;Remove-SqlDatabaseRoleMember&quot;=4
+&quot;Remove-SqlLogin&quot;=5
+&quot;Remove-SqlServerRoleMember&quot;=6
+&quot;Remove-SqlUser&quot;=7
+&quot;Rename-SqlLogin&quot;=8
+&quot;Set-SqlLogin&quot;=9
+&quot;Set-SqlLoginDefaultDatabase&quot;=10
+}
+
+#######################
+&lt;#
+.SYNOPSIS
+Gets a ServerConnection.
+.DESCRIPTION
+The Get-SqlConnection function  gets a ServerConnection to the specified SQL Server.
+.INPUTS
+None
+    You cannot pipe objects to Get-SqlConnection 
+.OUTPUTS
+Microsoft.SqlServer.Management.Common.ServerConnection
+    Get-SqlConnection returns a Microsoft.SqlServer.Management.Common.ServerConnection object.
+.EXAMPLE
+Get-SqlConnection &quot;Z002\sql2K8&quot;
+This command gets a ServerConnection to SQL Server Z002\SQL2K8.
+.EXAMPLE
+Get-SqlConnection &quot;Z002\sql2K8&quot; &quot;sa&quot; &quot;Passw0rd&quot;
+This command gets a ServerConnection to SQL Server Z002\SQL2K8 using SQL authentication.
+.LINK
+Get-SqlConnection 
+#&gt;
+function Get-SqlConnection
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] [string]$sqlserver,
+    [Parameter(Position=1, Mandatory=$false)] [string]$username, 
+    [Parameter(Position=2, Mandatory=$false)] [string]$password
+    )
+
+    Write-Verbose &quot;Get-SqlConnection $sqlserver&quot;
+    
+    if($Username -and $Password)
+    { $con = new-object (&quot;Microsoft.SqlServer.Management.Common.ServerConnection&quot;) $sqlserver,$username,$password }
+    else
+    { $con = new-object (&quot;Microsoft.SqlServer.Management.Common.ServerConnection&quot;) $sqlserver }
+	
+    $con.Connect()
+
+    Write-Output $con
+    
+} #Get-ServerConnection
+
+#######################
+&lt;#
+.SYNOPSIS
+Gets an SMO Server object.
+.DESCRIPTION
+The Get-SqlServer function  gets a SMO Server object for the specified SQL Server.
+.INPUTS
+None
+    You cannot pipe objects to Get-SqlServer 
+.OUTPUTS
+Microsoft.SqlServer.Management.Smo.Server
+    Get-SqlServer returns a Microsoft.SqlServer.Management.Smo.Server object.
+.EXAMPLE
+Get-SqlServer &quot;Z002\sql2K8&quot;
+This command gets an SMO Server object for SQL Server Z002\SQL2K8.
+.EXAMPLE
+Get-SqlServer &quot;Z002\sql2K8&quot; &quot;sa&quot; &quot;Passw0rd&quot;
+This command gets a SMO Server object for SQL Server Z002\SQL2K8 using SQL authentication.
+.LINK
+Get-SqlServer 
+#&gt;
+function Get-SqlServer
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] [string]$sqlserver,
+    [Parameter(Position=1, Mandatory=$false)] [string]$username, 
+    [Parameter(Position=2, Mandatory=$false)] [string]$password,
+    [Parameter(Position=3, Mandatory=$false)] [string]$StatementTimeout=0
+    )
+    #When $sqlserver passed in from the SMO Name property, brackets
+    #are automatically inserted which then need to be removed
+    $sqlserver = $sqlserver -replace &quot;\[|\]&quot;
+
+    Write-Verbose &quot;Get-SqlServer $sqlserver&quot;
+
+    $con = Get-SqlConnection $sqlserver $Username $Password
+
+    $server = new-object (&quot;Microsoft.SqlServer.Management.Smo.Server&quot;) $con
+    #Some operations might take longer than the default timeout of 600 seconnds (10 minutes). Set new default to unlimited
+    $server.ConnectionContext.StatementTimeout = $StatementTimeout
+    $server.SetDefaultInitFields([Microsoft.SqlServer.Management.SMO.StoredProcedure], &quot;IsSystemObject&quot;)
+    $server.SetDefaultInitFields([Microsoft.SqlServer.Management.SMO.Table], &quot;IsSystemObject&quot;)
+    $server.SetDefaultInitFields([Microsoft.SqlServer.Management.SMO.View], &quot;IsSystemObject&quot;)
+    $server.SetDefaultInitFields([Microsoft.SqlServer.Management.SMO.UserDefinedFunction], &quot;IsSystemObject&quot;)
+    #trap { &quot;Check $SqlServer Name&quot;; continue} $server.ConnectionContext.Connect() 
+    Write-Output $server
+    
+} #Get-SqlServer
+
+#######################
+&lt;#
+.SYNOPSIS
+Gets an SMO Database object.
+.DESCRIPTION
+The Get-SqlDatabase function  gets an SMO Database object for the specified SQL Database or collection of Database objects.
+.INPUTS
+None
+    You cannot pipe objects to Get-SqlDatabase 
+.OUTPUTS
+Microsoft.SqlServer.Management.Smo.Database
+    Get-SqlDatabase returns a Microsoft.SqlServer.Management.Smo.Database object.
+.EXAMPLE
+Get-SqlDatabase &quot;Z002\sql2K8&quot;
+This command gets a collection of SMO Database objects for SQL Server Z002\SQL2K8.
+.EXAMPLE
+Get-SqlDatabase $(Get-SqlServer &quot;Z002\sql2K8&quot; &quot;sa&quot; &quot;Passw0rd&quot;) &quot;pubs&quot;
+This command gets a SMO Database object for SQL database pubs on the SQL Server Z002\SQL2K8 using SQL authentication.
+.LINK
+Get-SqlDatabase 
+#&gt;
+function Get-SqlDatabase
+{ 
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$false)] [string]$dbname,
+    [Parameter(Position=2, Mandatory=$false)] [switch]$force
+    )
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Get-SqlDatabase:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Get-SqlDatabase $($server.Name) $dbname&quot;
+
+    if ($dbname)
+    { if ($server.Databases.Contains(&quot;$dbname&quot;) -and $server.Databases[$dbname].IsAccessible)
+        {$server.Databases[$dbname]} 
+      else
+        {throw &quot;Database $dname does not exist or is not accessible.&quot;}
+    }
+    elseif ($force)
+    { $server.Databases | where {$_.IsAccessible -eq $true} }
+    #Skip systems databases
+    else
+    { $server.Databases | where {$_.IsSystemObject -eq $false -and $_.IsAccessible -eq $true} }
+
+} # Get-SqlDatabase
+
+#######################
+&lt;#
+.SYNOPSIS
+Executes a query and returns an array of System.Data.DataRow.
+.DESCRIPTION
+The Get-SqlData function executes a query and returns an array of System.Data.DataRow.
+.INPUTS
+None
+    You cannot pipe objects to Get-SqlData 
+.OUTPUTS
+System.Data.DataRow
+    Get-SqlData returns an array of System.Data.DataRow.
+.EXAMPLE
+Get-SqlData &quot;Z002\sql2K8&quot; &quot;pubs&quot; &quot;select * from authors&quot;
+This command executes the specified SQL query using Windows authentication.
+.EXAMPLE
+$server = Get-SqlServer &quot;Z002\sql2K8&quot; &quot;sa&quot; &quot;Passw0rd&quot;
+Get-SqlData $server &quot;pubs&quot; &quot;select * from authors&quot;
+This command executes the specified SQL query using SQL authentication.
+.LINK
+Get-SqlData 
+#&gt;
+function Get-SqlData
+{
+    param(
+    [Parameter(Position=0, Mandatory=$false)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] $dbname,
+    [Parameter(Position=2, Mandatory=$true)] [string]$qry
+    )
+
+    switch ($dbname.GetType().Name)
+    {
+        'String' { $database = Get-SqlDatabase $sqlserver $dbname }
+        'Database' { $database = $dbname }
+        default { throw &quot;Get-SqlData:Param '`$dbname' must be a String or Database object.&quot; }
+    }
+
+    #Write-Verbose &quot;Get-SqlData $($database.Parent.Name) $($database.Name) $qry&quot;
+    Write-Verbose &quot;Get-SqlData $($database.Parent.Name) $($database.Name)&quot;
+
+    $ds = $database.ExecuteWithResults(&quot;$qry&quot;)
+    $ds.Tables | foreach { $_.Rows}    
+
+}# Get-SqlData
+
+#######################
+&lt;#
+.SYNOPSIS
+ Executes a query that does not return a result set.
+.DESCRIPTION
+The Set-SqlData function executes a query that does not return a result set.
+.INPUTS
+None
+    You cannot pipe objects to Set-SqlData 
+.OUTPUTS
+None
+    Set-SqlData does not produce any output.
+.EXAMPLE
+Set-SqlData &quot;Z002\sql2K8&quot; &quot;pubs&quot; &quot;Update authors set au_lname = 'Brown' WHERE au_lname = 'White'&quot;
+This command executes the specified SQL query using Windows authentication.
+.EXAMPLE
+$server = Set-SqlServer &quot;Z002\sql2K8&quot; &quot;sa&quot; &quot;Passw0rd&quot;
+Set-SqlData $server &quot;pubs&quot; &quot;Update authors set au_lname = 'Brown' WHERE au_lname = 'White'&quot;
+This command executes the specified SQL query using SQL authentication.
+.LINK
+Set-SqlData 
+#&gt;
+function Set-SqlData
+{
+    param(
+    [Parameter(Position=0, Mandatory=$false)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] [string]$dbname,
+    [Parameter(Position=2, Mandatory=$true)] [string]$qry
+    )
+
+    switch ($dbname.GetType().Name)
+    {
+        'String' { $database = Get-SqlDatabase $sqlserver $dbname }
+        'Database' { $database = $dbname }
+        default { throw &quot;Set-SqlData:Param '`$dbname' must be a String or Database object.&quot; }
+    } 
+    
+    #Write-Verbose &quot;Set-SqlData $($database.Parent.Name) $($database.Name) $qry&quot;
+    Write-Verbose &quot;Set-SqlData $($database.Parent.Name) $($database.Name)&quot;
+    
+    $database.ExecuteNonQuery(&quot;$qry&quot;)
+
+}# Set-SqlData
+
+#######################
+&lt;#
+.SYNOPSIS
+Gets an SMO Login object.
+.DESCRIPTION
+The Get-SqlLogin function  gets a collection of SMO Login objects for the specified SQL Server.
+.INPUTS
+None
+    You cannot pipe objects to Get-SqlLogin 
+.OUTPUTS
+Microsoft.SqlServer.Management.Smo.Login
+    Get-SqlLogin returns a Microsoft.SqlServer.Management.Smo.Login object.
+.EXAMPLE
+Get-SqlLogin &quot;Z002\sql2K8&quot;
+This command gets a collection of SMO Login objects for SQL Server Z002\SQL2K8.
+.LINK
+Get-SqlLogin 
+#&gt;
+function Get-SqlLogin
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver
+    )
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Get-SqlLogin:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Get-SqlLogin $($server.Name)&quot;
+
+    foreach ($login in $server.Logins | where {$_.LoginType.ToString() -ne 'Certificate'})
+    {
+        #Return Login Object
+        $login 
+
+    }
+
+} # Get-SqlLogin
+
+#######################
+&lt;#
+.SYNOPSIS
+Adds a login to a SQL Server.
+.DESCRIPTION
+The Add-SqlLogin function adds a new login to the specified SQL server.
+.INPUTS
+None
+    You cannot pipe objects to Add-SqlLogin
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Add-SqlLogin &quot;Z002\sql2k8&quot; &quot;TestPSUnit&quot; &quot;SQLPSXTesting&quot; 'SqlLogin' 
+This command adds the TestPSUnit login to the Z002\sql2k8 server.
+.EXAMPLE
+$server = Get-SqlServer &quot;Z002\sql2k8&quot;
+Add-SqlLogin $server &quot;TestPSUnit&quot; &quot;SQLPSXTesting&quot; 'SqlLogin'
+This command adds the TestPSUnit login to the Z002\sql2k8 server.
+.LINK
+Add-SqlLogin 
+#&gt;
+function Add-SqlLogin
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] [string]$name,
+    [Parameter(Position=2, Mandatory=$false)] [System.Security.SecureString]$password,
+    [Parameter(Position=3, Mandatory=$false)] [Microsoft.SqlServer.Management.Smo.LoginType]$logintype='WindowsUser',
+    [Parameter(Position=4, Mandatory=$false)] [string]$DefaultDatabase='master',
+    [Parameter(Position=5, Mandatory=$false)] [switch]$PasswordExpirationEnabled,
+    [Parameter(Position=6, Mandatory=$false)] [switch]$PasswordPolicyEnforced,
+    [Parameter(Position=7, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=8, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Add-SqlLogin:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Add-SqlLogin $($server.Name) $name&quot;
+
+    $login = new-object ('Microsoft.SqlServer.Management.Smo.Login') $server, $name
+    $login.DefaultDatabase = $defaultDatabase
+
+    if ($logintype -eq 'SqlLogin')
+    {
+        $login.LoginType = $logintype
+        if ($server.Information.Version.Major -ne '8')
+		{
+		    $login.PasswordExpirationEnabled = $($PasswordExpirationEnabled.IsPresent)
+        	    $login.PasswordPolicyEnforced = $($PasswordPolicyEnforced.IsPresent)
+		}
+        try { 
+            $login.Create($password)
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+        }
+        catch {
+                $message = $_.Exception.GetBaseException().Message
+                $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+                write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+                Write-Error $message
+        }
+    }
+    elseif ($logintype -eq 'WindowsUser' -or $logintype -eq 'WindowsGroup')
+    { 
+        $login.LoginType = $logintype
+        try {
+            $login.Create()
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+        }
+        catch {
+                $message = $_.Exception.GetBaseException().Message
+                $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | % {&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+                write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+                Write-Error $message
+        }
+
+    }
+
+} #Add-SqlLogin
+
+#######################
+&lt;#
+.SYNOPSIS
+Removes a login from a SQL Server.
+.DESCRIPTION
+The Remove-SqlLogin function removes a login from the specified SQL server.
+.INPUTS
+None
+    You cannot pipe objects to Remove-SqlLogin
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Remove-SqlLogin &quot;Z002\sql2k8&quot; &quot;TestPSUnit&quot;
+This command removes the TestPSUnit login from the Z002\sql2k8 server.
+.EXAMPLE
+$server = Get-SqlServer &quot;Z002\sql2k8&quot;
+Remove-SqlLogin $server &quot;TestPSUnit&quot;
+This command removes the TestPSUnit login from the Z002\sql2k8 server.
+.LINK
+Remove-SqlLogin 
+#&gt;
+function Remove-SqlLogin
+{
+
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] [string]$name,
+    [Parameter(Position=2, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=3, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Remove-SqlLogin:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Remove-SqlLogin $($server.Name) $name&quot;
+
+    $login = Get-SqlLogin $server | where {$_.name -eq $name}
+    try {
+        if ($login) {
+            $login.Drop()
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+        }
+        else
+        { throw &quot;Login $name does not exist on server $($server.Name).&quot; }
+    }
+    catch {
+        $message = $_.Exception.GetBaseException().Message
+        $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+        write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+        Write-Error $message
+    }
+
+} #Remove-SqlLogin
+
+#######################
+&lt;#
+.SYNOPSIS
+Removes a login from a SQL Server.
+.DESCRIPTION
+The Set-SqlLogin function changes a SQL Login Password.
+.INPUTS
+None
+    You cannot pipe objects to Set-SqlLogin
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+$pwd_secure_string = read-host &quot;Enter a Password:&quot; -assecurestring
+Set-SqlLogin &quot;Z002\sql2k8&quot; &quot;TestPSUnit&quot; $pwd_secure_string
+This command sets the password for TestPSUnit login.
+.LINK
+Set-SqlLogin 
+#&gt;
+function Set-SqlLogin
+{
+
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] [string]$name,
+    [Parameter(Position=2, Mandatory=$true)] [System.Security.SecureString]$password,
+    [Parameter(Position=3, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=4, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Set-SqlLogin:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Set-SqlLogin $($server.Name) $name&quot;
+
+    $login = Get-SqlLogin $server | where {$_.name -eq $name}
+    try {
+        if ($login) {
+            $login.ChangePassword($password,$true,$false)
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+        }
+        else
+        { throw &quot;Login $name does not exist on server $($server.Name).&quot; }
+    }
+    catch {
+        $message = $_.Exception.GetBaseException().Message
+        $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+        write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+        Write-Error $message
+    }
+
+} #Set-SqlLogin
+
+#######################
+&lt;#
+.SYNOPSIS
+Removes a login from a SQL Server.
+.DESCRIPTION
+The Set-SqlLoginDefaultDatabase function changes a SQL Login default database.
+.INPUTS
+None
+    You cannot pipe objects to Set-SqlLoginDefaultDatabase
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Set-SqlLoginDefaultDatabase &quot;Z002\sql2k8&quot; &quot;TestPSUnit&quot; 'master'
+This command sets the default database for TestPSUnit login.
+.LINK
+Set-SqlLoginDefaultDatabase 
+#&gt;
+function Set-SqlLoginDefaultDatabase
+{
+
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] [string]$name,
+    [Parameter(Position=2, Mandatory=$true)] [string]$DefaultDatabase,
+    [Parameter(Position=3, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=4, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Set-SqlLoginDefaultDatabase:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Set-SqlLoginDefaultDatabase $($server.Name) $name&quot;
+
+    $login = Get-SqlLogin $server | where {$_.name -eq $name}
+    try {
+        if ($login) {
+            $login.DefaultDatabase = $DefaultDatabase
+            $login.Alter()
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+        }
+        else
+        { throw &quot;Login $name does not exist on server $($server.Name).&quot; }
+    }
+    catch {
+        $message = $_.Exception.GetBaseException().Message
+        $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+        write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+        Write-Error $message
+    }
+
+} #Set-SqlLoginDefaultDatabase
+
+#######################
+&lt;#
+.SYNOPSIS
+Removes a login from a SQL Server.
+.DESCRIPTION
+The Rename-SqlLogin function renames a SQL Login.
+.INPUTS
+None
+    You cannot pipe objects to Rename-SqlLogin
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Rename-SqlLogin &quot;Z002\sql2k8&quot; &quot;TestPSUnit&quot; &quot;CheckPSUnit&quot;
+This command renames the login TestPSUnit.
+.LINK
+Rename-SqlLogin 
+#&gt;
+function Rename-SqlLogin
+{
+
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] [string]$name,
+    [Parameter(Position=2, Mandatory=$true)] [string]$newname,
+    [Parameter(Position=3, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=4, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Rename-SqlLogin:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Rename-SqlLogin $($server.Name) $name $newname&quot;
+
+    $login = Get-SqlLogin $server | where {$_.name -eq $name}
+    try {
+        if ($login) {
+            $login.Rename(&quot;$newName&quot;)
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+        }
+        else
+        { throw &quot;Login $name does not exist on server $($server.Name).&quot; }
+    }
+    catch {
+        $message = $_.Exception.GetBaseException().Message
+        $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+        write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+        Write-Error $message
+    }
+
+} #Rename-SqlLogin
+
+#######################
+&lt;#
+.SYNOPSIS
+Adds a new user to a database.
+.DESCRIPTION
+The Add-SqlUser function adds a new user to the specified database.
+.INPUTS
+None
+    You cannot pipe objects to Add-SqlUser
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Add-SqlUser &quot;Z002\sql2k8&quot; &quot;pubs&quot; &quot;TestPSUnit&quot;
+This command adds the TestPSUnit login to the pubs database.
+.EXAMPLE
+$database = Get-SqlDatabase &quot;Z002\sql2k8&quot; &quot;pubs&quot;
+Add-SqlUser -dbname $database &quot;TestPSUnit&quot;
+This command adds the TestPSUnit login to the pubs database.
+.LINK
+Add-SqlUser 
+#&gt;
+function Add-SqlUser
+{
+    param(
+    [Parameter(Position=0, Mandatory=$false)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] $dbname,
+    [Parameter(Position=2, Mandatory=$true)] [string]$name,
+    [Parameter(Position=3, Mandatory=$false)] [string]$login=$name,
+    [Parameter(Position=4, Mandatory=$false)] [string]$defaultSchema='dbo',
+    [Parameter(Position=5, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=6, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($dbname.GetType().Name)
+    {
+        'String' { $database = Get-SqlDatabase $sqlserver $dbname }
+        'Database' { $database = $dbname }
+        default { throw &quot;Add-SqlUser:Param '`$dbname' must be a String or Database object.&quot; }
+    }
+
+    Write-Verbose &quot;Add-SqlUser $($database.Name) $name&quot;
+
+    $user = new-object ('Microsoft.SqlServer.Management.Smo.User') $database, $name
+    $user.Login = $login
+	if ($db.parent.Information.Version.Major -ne '8')
+	{ $user.DefaultSchema = $defaultschema }
+    try {
+        $user.Create()
+        $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+        write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+    }
+    catch {
+        $message = $_.Exception.GetBaseException().Message
+        $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+        write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+        Write-Error $message
+    }
+
+} #Add-SqlUser
+
+#######################
+&lt;#
+.SYNOPSIS
+Removes a user from a database.
+.DESCRIPTION
+The Remove-SqlUser function removes a user from the specified database.
+.INPUTS
+None
+    You cannot pipe objects to Remove-SqlUser
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Remove-SqlUser &quot;Z002\sql2k8&quot; &quot;pubs&quot; &quot;TestPSUnit&quot;
+This command Removes the TestPSUnit user from the pubs database.
+.EXAMPLE
+$database = Get-SqlDatabase &quot;Z002\sql2k8&quot; &quot;pubs&quot;
+Remove-SqlUser -dbname $database &quot;TestPSUnit&quot;
+This command Removes the TestPSUnit user from the pubs database.
+.LINK
+Remove-SqlUser 
+#&gt;
+function Remove-SqlUser
+{
+    param(
+    [Parameter(Position=0, Mandatory=$false)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] $dbname,
+    [Parameter(Position=2, Mandatory=$true)] [string]$name,
+    [Parameter(Position=3, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=4, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($dbname.GetType().Name)
+    {
+        'String' { $database = Get-SqlDatabase $sqlserver $dbname }
+        'Database' { $database = $dbname }
+        default { throw &quot;Remove-SqlUser:Param '`$dbname' must be a String or Database object.&quot; }
+    }
+
+    Write-Verbose &quot;Remove-SqlUser $($database.Name) $name&quot;
+
+    $user = $database.Users[$name]
+    try {
+        if ($user) {
+            $user.Drop()
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+        }
+        else
+        { throw &quot;User $name does not exist in database $($database.Name).&quot; }
+    }
+    catch {
+        $message = $_.Exception.GetBaseException().Message
+        $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+        write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+        Write-Error $message
+    }
+
+} #Remove-SqlUser
+
+#######################
+&lt;#
+.SYNOPSIS
+Gets an SMO ServerRole object.
+.DESCRIPTION
+The Get-SqlServerRole function  gets a collection of SMO ServerRole objects for the specified SQL Server.
+.INPUTS
+None
+    You cannot pipe objects to Get-SqlServerRole 
+.OUTPUTS
+Microsoft.SqlServer.Management.Smo.ServerRole
+    Get-SqlServerRole returns a Microsoft.SqlServer.Management.Smo.ServerRole object.
+.EXAMPLE
+Get-SqlServerRole &quot;Z002\sql2K8&quot;
+This command gets a collection of SMO ServerRole objects for SQL Server Z002\SQL2K8.
+.LINK
+Get-SqlServerRole 
+#&gt;
+function Get-SqlServerRole
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver
+    )
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Get-SqlServerRole:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Get-SqlServerRole $($server.Name)&quot;
+ 
+    foreach ($svrole in $server.Roles)
+    {
+        #Return ServerRole Object
+        $svrole 
+    }
+
+} #Get-SqlServerRole
+
+#######################
+&lt;#
+.SYNOPSIS
+Adds a login to a server role.
+.DESCRIPTION
+The Add-SqlServerRoleMember function adds a login to the specified server role.
+.INPUTS
+None
+    You cannot pipe objects to Add-SqlServerRoleMember
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Add-SqlServerRoleMember &quot;Z002\sql2k8&quot; &quot;TestPSUnit&quot; &quot;bulkadmin&quot;
+This command adds the TestPSUnit login to the bulkadmin server role.
+.EXAMPLE
+$server = Get-SqlServer &quot;Z002\sql2k8&quot;
+Add-SqlServerRoleMember $server &quot;TestPSUnit&quot; &quot;bulkadmin&quot;
+This command adds the TestPSUnit login to the bulkadmin server role.
+.LINK
+Add-SqlServerRoleMember 
+#&gt;
+function Add-SqlServerRoleMember
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] [string]$loginame,
+    [Parameter(Position=2, Mandatory=$true)] [string]$rolename,
+    [Parameter(Position=3, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=4, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Add-SqlServerRoleMember:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Add-SqlServerRoleMember $($server.Name) $name&quot;
+
+    if($server.Logins | where {$_.name -eq $loginame})
+    {
+        $svrole = Get-SqlServerRole $server | where {$_.name -eq $rolename}
+
+        try {
+            if ($svrole) {
+                $svrole.AddMember($loginame)
+                $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+                write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+            }
+            else
+            { throw &quot;ServerRole $rolename does not exist on server $($server.Name).&quot; }
+        }
+        catch {
+            $message = $_.Exception.GetBaseException().Message
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+            Write-Error $message
+            }
+    }
+    else
+    { throw &quot;Login $loginame does not exist on server $($server.Name).&quot; }
+
+} #Add-SqlServerRoleMember
+
+#######################
+&lt;#
+.SYNOPSIS
+Removes a login from a server role.
+.DESCRIPTION
+The Remove-SqlServerRoleMember function removes a login from the specified server role.
+.INPUTS
+None
+    You cannot pipe objects to Remove-SqlServerRoleMember
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Remove-SqlServerRoleMember &quot;Z002\sql2k8&quot; &quot;TestPSUnit&quot; &quot;bulkadmin&quot;
+This command Removes the TestPSUnit login from the bulkadmin server role.
+.EXAMPLE
+$server = Get-SqlServer &quot;Z002\sql2k8&quot;
+Remove-SqlServerRoleMember $server &quot;TestPSUnit&quot; &quot;bulkadmin&quot;
+This command Removes the TestPSUnit login from the bulkadmin server role.
+.LINK
+Remove-SqlServerRoleMember 
+#&gt;
+function Remove-SqlServerRoleMember
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] [string]$loginame,
+    [Parameter(Position=2, Mandatory=$true)] [string]$rolename,
+    [Parameter(Position=3, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=4, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($sqlserver.GetType().Name)
+    {
+        'String' { $server = Get-SqlServer $sqlserver }
+        'Server' { $server = $sqlserver }
+        default { throw 'Remove-SqlServerRoleMember:Param `$sqlserver must be a String or Server object.' }
+    }
+
+    Write-Verbose &quot;Remove-SqlServerRoleMember $($server.Name) $name&quot;
+
+    if($server.Logins | where {$_.name -eq $loginame})
+    {
+        $svrole = Get-SqlServerRole $server | where {$_.name -eq $rolename}
+
+        try {
+            if ($svrole) {
+                $svrole.DropMember($loginame)
+                $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+                write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+            }
+            else
+            { throw &quot;ServerRole $rolename does not exist on server $($server.Name).&quot; }
+        }
+    catch {
+        $message = $_.Exception.GetBaseException().Message
+        $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+        write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+        Write-Error $message
+        }
+    }
+    else
+    { throw &quot;Login $loginame does not exist on server $($server.Name).&quot; }
+
+} #Remove-SqlServerRoleMember
+
+#######################
+&lt;#
+.SYNOPSIS
+Returns a SMO DatabaseRole object with additional properties.
+.DESCRIPTION
+The Get-SqlDatabaseRole function  gets a collection of SMO DatabaseRole objects for the specified SQL Database. 
+.INPUTS
+Microsoft.SqlServer.Management.Smo.Database
+    You can pipe database objects to Get-SqlDatabaseRole 
+.OUTPUTS
+Microsoft.SqlServer.Management.Smo.DatabaseRole
+    Get-SqlDatabaseRole returns a Microsoft.SqlServer.Management.Smo.DatabaseRole object.
+.EXAMPLE
+Get-SqlDatabaseRole $(Get-SqlDatabase &quot;Z002\sql2K8&quot; pubs)
+This command gets a collection of SMO DatabaseRole objects for SQL Server Z002\SQL2K8, pubs database.
+.EXAMPLE
+Get-SqlDatabase &quot;Z002\sql2K8&quot; | Get-SqlDatabaseRole
+This command gets a collection SMO DatabaseRole objects for all SQL databases on the SQL Server Z002\SQL2K8.
+.LINK
+Get-SqlDatabaseRole 
+#&gt;
+function Get-SqlDatabaseRole
+{
+   param(
+    [Parameter(Position=0, Mandatory=$true, ValueFromPipeline = $true)] [Microsoft.SqlServer.Management.Smo.Database]$database
+    )
+
+    process
+    {
+        foreach ($role in $database.Roles)
+        {
+            #Return DatabaseRole Object
+            $role 
+        }
+    }
+    
+} #Get-SqlDatabaseRole
+
+#######################
+&lt;#
+.SYNOPSIS
+Adds a user or role to a database role.
+.DESCRIPTION
+The Add-SqlDatabaseRoleMember function adds a user or role to the specified database role.
+.INPUTS
+None
+    You cannot pipe objects to Add-SqlDatabaseRoleMember
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Add-SqlDatabaseRoleMember &quot;Z002\sql2k8&quot; &quot;pubs&quot; &quot;TestPSUnit&quot; &quot;TestPSUnitDBRole&quot; 
+This command adds the TestUnit user to the TestPSUnitDBRole database role.
+.EXAMPLE
+$database = Get-SqlDatabase &quot;Z002\sql2k8&quot; &quot;pubs&quot;
+Add-SqlDatabaseRoleMember -dbname $database -name &quot;TestPSUnit&quot; -rolename &quot;TestPSUnitDBRole&quot; 
+This command adds the TestUnit user to the TestPSUnitDBRole database role.
+.LINK
+Add-SqlDatabaseRoleMember 
+#&gt;
+function Add-SqlDatabaseRoleMember
+{
+    param(
+    [Parameter(Position=0, Mandatory=$false)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] $dbname,
+    [Parameter(Position=2, Mandatory=$true)] [string]$name,
+    [Parameter(Position=3, Mandatory=$true)] [string]$rolename,
+    [Parameter(Position=4, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=5, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($dbname.GetType().Name)
+    {
+        'String' { $database = Get-SqlDatabase $sqlserver $dbname }
+        'Database' { $database = $dbname }
+        default { throw &quot;Add-SqlDatabaseRoleMember:Param '`$dbname' must be a String or Database object.&quot; }
+    }
+
+    Write-Verbose &quot;Add-SqlDatabaseRoleMember $($database.Name) $name $rolename&quot;
+
+    if(($database.Users | where {$_.name -eq $name}) -or ($database.Roles | where {$_.name -eq $name}))
+    {
+        $role = Get-SqlDatabaseRole $database | where {$_.name -eq $rolename}
+
+        try {
+            if ($role) {
+                $role.AddMember($name)
+                $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+                write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+            }
+            else
+            { throw &quot;DatabaseRole $rolename does not exist in database $($database.Name).&quot; }
+        }
+        catch {
+            $message = $_.Exception.GetBaseException().Message
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+            Write-Error $message
+        }
+    }
+    else
+    { throw &quot;Role or User $name does not exist in database $($database.Name).&quot; }
+
+} #Add-SqlDatabaseRoleMember
+
+#######################
+&lt;#
+.SYNOPSIS
+Removes a user or role from a database role.
+.DESCRIPTION
+The Remove-SqlDatabaseRoleMember function removes a user or role from the specified database role.
+.INPUTS
+None
+    You cannot pipe objects to Remove-SqlDatabaseRoleMember
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+Remove-SqlDatabaseRoleMember &quot;Z002\sql2k8&quot; &quot;pubs&quot; &quot;TestPSUnit&quot; &quot;TestPSUnitDBRole&quot; 
+This command removes the TestUnit user to the TestPSUnitDBRole database role.
+.EXAMPLE
+$database = Get-SqlDatabase &quot;Z002\sql2k8&quot; &quot;pubs&quot;
+Remove-SqlDatabaseRoleMember -dbname $database -name &quot;TestPSUnit&quot; -rolename &quot;TestPSUnitDBRole&quot; 
+This command removes the TestUnit user to the TestPSUnitDBRole database role.
+.LINK
+Remove-SqlDatabaseRoleMember 
+#&gt;
+function Remove-SqlDatabaseRoleMember
+{
+    param(
+    [Parameter(Position=0, Mandatory=$false)] $sqlserver,
+    [Parameter(Position=1, Mandatory=$true)] $dbname,
+    [Parameter(Position=2, Mandatory=$true)] [string]$name,
+    [Parameter(Position=3, Mandatory=$true)] [string]$rolename,
+    [Parameter(Position=4, Mandatory=$true)] [string]$ChangeOrder,
+    [Parameter(Position=5, Mandatory=$false)] [string]$Description
+    )
+
+    $ErrorActionPreference = &quot;Stop&quot;
+
+    $PSUserName = $PSSenderInfo.UserInfo.Identity.Name
+
+    switch ($dbname.GetType().Name)
+    {
+        'String' { $database = Get-SqlDatabase $sqlserver $dbname }
+        'Database' { $database = $dbname }
+        default { throw &quot;Remove-SqlDatabaseRoleMember:Param '`$dbname' must be a String or Database object.&quot; }
+    }
+
+    Write-Verbose &quot;Remove-SqlDatabaseRoleMember $($database.Name) $name $rolename&quot;
+
+    if(($database.Users | where {$_.name -eq $name}) -or ($database.Roles | where {$_.name -eq $name}))
+    {
+        $role = Get-SqlDatabaseRole $database | where {$_.name -eq $rolename}
+
+        try {
+            if ($role) {
+                $role.DropMember($name)
+                $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;})
+                write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage
+            }
+            else
+            { throw &quot;DatabaseRole $rolename does not exist in database $($database.Name).&quot; }
+        }
+        catch {
+            $message = $_.Exception.GetBaseException().Message
+            $logmessage =  &quot;PSUserName=$PSUserName&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;`n$($_.Key)=$($_.Value)&quot;}) + &quot;`n$message&quot;
+            write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $logmessage -EntryType 'Error'
+            Write-Error $message
+        }
+    }
+    else
+    { throw &quot;Role or User $name does not exist in database $($database.Name).&quot; }
+
+} #Remove-SqlDatabaseRoleMember
+
+#######################
+&lt;#
+.SYNOPSIS
+Writes an entry to SqlProxy Log File.
+.DESCRIPTION
+The Write-SqlProxyLog function writes an entry to the SqlProxy Log File.
+.INPUTS
+None
+    You cannot pipe objects to Write-SqlProxyLog
+.OUTPUTS
+None
+    This function does not generate any output.
+.EXAMPLE
+$message =  &quot;PSUserName=$PSUserName`n&quot; + $($psBoundParameters.GetEnumerator() | %{&quot;$($_.Key)=$($_.Value)&quot;})
+write-sqlproxylog -eventID $eventID.&quot;$($myinvocation.mycommand.name)&quot; -message $message
+This command writes a message to the SQLProxy Log
+.NOTES
+This must be run as administrator to create the new EventLog and EventLog Source!!!
+New-EventLog -LogName SqlProxy -Source SqlProxy
+.LINK
+Write-SqlProxyLog 
+#&gt;
+function Write-SqlProxyLog
+{
+    param(
+    [Parameter(Position=0, Mandatory=$true)] $EventID,
+    [Parameter(Position=1, Mandatory=$true)] $Message,
+    [Parameter(Position=2, Mandatory=$false)] $EntryType='SuccessAudit'
+    )
+
+    write-eventlog -logname SqlProxy -source SqlProxy -eventID $eventID -message $message -EntryType $EntryType
+    
+} #Write-SqlProxyLog
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

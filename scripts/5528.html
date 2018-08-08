@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Edit-Function 2.1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Edit-Function 2.1</h1>
+<h3><a href="//scripts/5528.ps1">download</a> - <a href="//scripts/5527.md">parent</a></h3>
+<p>Opens a function in a text editor....</p>
+<pre><code class="language-posh">#requires -Version 3.0
+#function Edit-Function
+#{
+
+
+&lt;#
+    .SYNOPSIS
+        Creates and edits functions in the session in a script editor.
+    
+    .DESCRIPTION
+        The Edit-Function command lets you create or edit functions in your session in your favorite text editor.
+
+        It opens the specified function in the editor that you specify, and when you finish editing the function and close the editor, the script updates the function in your session with the new function code.
+
+        Functions are tricky to edit, because most code editors require a file, and determine syntax highlighting based on the extension of that file. Edit-Function creates a temporary file with the function code.
+
+        If you have a favorite editor, you can use the Editor parameter to specify it once, and the script will save it as your preference. If you don't specify an editor, it tries to determine an editor using the PSEditor preference variable, the EDITOR environment variable, or your configuration for git.  As a fallback it searches for Sublime, and finally falls back to Notepad. 
+
+        REMEMBER: Because functions are specific to a session, your function edits are lost when you close the session unless you save them in a permanent file, such as your Windows PowerShell profile.
+    
+    .EXAMPLE
+        Edit-Function Prompt
+
+        Opens the prompt function in a default editor (gitpad, Sublime, Notepad, whatever)
+
+    .EXAMPLE
+        dir Function:\cd* | Edit-Function -Editor &quot;C:\Program Files\Sublime Text 3\subl.exe&quot; -Param &quot;-n -w&quot;
+
+        Pipes all functions starting with cd to Edit-Function, which opens them one at a time in a new sublime window (opens each one after the other closes).
+
+    .EXAMPLE
+        Get-Command TabExpan* | Edit-Function -Editor 'C:\Program Files\SAPIEN Technologies, Inc\PowerShell Studio 2014\PowerShell Studio.exe
+        
+        Edits the TabExpansion and/or TabExpansion2 (whichever exists) in PowerShell Studio 2014 using the full path to the .exe file.
+        Note that this also sets PowerShell Studio as your default editor for future calls.
+
+    .NOTES
+        By Joel Bennett (@Jaykul) and June Blender (@juneb_get_help)
+        
+        If you'd like anything changed  ... feel free to push new version on PoshCode, or tweet at me :-)
+        - Do you not like that I make every editor the default?
+        - Think I should detect notepad2 or notepad++ or something?
+        
+        About ISE: it doesn't support waiting for the editor to close, sorry.
+
+        ## Version History:
+        2.1 - fixed the fix: always remove temp file, persist across-sessions in environment
+        2.0 - fixed persistence of editor options, made detection more clever
+        1.1 - refactored by June to (also) work on her machine (and have help)
+        1.0 - first draft, worked on my machine
+#&gt;
+    [CmdletBinding()]
+    param
+    (
+        # Specifies the name of the function to create or edit. Enter a function name or pipe a function to Edit-Function.ps1. This parameter is required. If the function doesn't exist in the session, Edit-Function creates it.
+        [Parameter(Mandatory = $true,
+                   ValueFromPipelineByPropertyName = $true)]
+        [System.String]
+        $Name,
+
+        # Specifies a code editor. If the editor is in the Path environment variable (Get-Command &lt;editor&gt;), you can enter just the editor name. Otherwise, enter the path to the executable file for the editor.
+        # Defaults to the value of $PSEditor.Command or $PSEditor or Env:Editor if any of them are set.
+        [System.String]
+        $Editor = $(if($global:PSEditor.Command){ $global:PSEditor.Command } else { $global:PSEditor } ),
+
+        # Specifies commandline parameters for the editor. 
+        # Edit-Function.ps1 passes these editor-specific parameters to the editor you select. 
+        # For example, sublime uses -n -w to trigger a mode where closing the *tab* will return
+        [System.String]
+        $Parameters = $global:PSEditor.Parameters
+    )
+    begin
+    {
+        function Split-Command {
+            # The normal (unix) &quot;Editor&quot; environment variable can include parameters
+            # so it can be executed from command by just appending the file name.
+            # However, PowerShell can't deal with that, so:
+            param(
+                [Parameter(Mandatory=$true)]
+                [string]$Command
+            )
+            $Parts = @($Command -Split &quot; &quot;)
+
+            for($count=$Parts.Length; $count -gt 1; $count--) {
+                $Editor = ($Parts[0..$count] -join &quot; &quot;).Trim(&quot;'&quot;,'&quot;')
+                if((Test-Path $Editor) -and (Get-Command $Editor -ErrorAction SilentlyContinue)) { 
+                    $Editor
+                    $Parts[$($Count+1)..$($Parts.Length)] -join &quot; &quot;
+                    break
+                }
+            }
+        }
+    }
+    process
+    {
+        #Creates a temporary file in your temp directory with a .tmp.ps1 extension.
+        $file = [IO.Path]::GetTempFileName() | Rename-Item -NewName { [IO.Path]::ChangeExtension($_, &quot;.tmp.ps1&quot;) } -PassThru
+
+        #If you have a function with this name, it saves the function code in the temporary file.
+        if (Test-Path Function:\$Name) {
+            Set-Content -Path $file -Value (Get-Content Function:\$Name)
+        }
+        $LastWriteTime = (Get-Item $File).LastWriteTime
+
+        do { # This is the GOTO hack: use break to skip to the end once we find it:
+            # In this test, we let the Get-Command error leak out on purpose
+            if($Editor -and (Get-Command $Editor)) { break }
+
+            if ($Editor -and !(Get-Command $Editor -ErrorAction SilentlyContinue))
+            {
+                Write-Verbose &quot;Editor is not a valid command, split it:&quot;
+                $Editor, $Parameters = Split-Command $Editor
+                if($Editor) { break }
+            }
+
+
+            if (Test-Path Env:Editor)
+            {
+                Write-Verbose &quot;Editor was not passed in, trying Env:Editor&quot;
+                $Editor, $Parameters = Split-Command $Env:Editor
+                if($Editor) { break }
+            }
+
+
+            # If no editor is specified, try looking in git config
+            if (Get-Command Git -ErrorAction SilentlyContinue)
+            {
+                Write-Verbose &quot;PSEditor and Env:Editor not found, searching git config&quot;
+                $Editor, $Parameters = Split-Command (git config core.editor)
+                if($Editor) { break }
+            }
+
+            # Search for Sublime
+            Write-Verbose &quot;Editor not found, trying Sublime&quot;
+            if ($Editor = Get-ChildItem C:\Program*\* -recurse -filter &quot;sublime_text.exe&quot; -ErrorAction SilentlyContinue | Select-Object -First 1)
+            {
+                $Parameters = &quot;-n -w&quot;
+                break
+            }
+
+            # Settling for Notepad (should probably try some other searches search for Notepad++ probably, but whatever)
+            Write-Verbose &quot;Editor not found, trying notepad&quot;
+            $Editor = &quot;notepad&quot;
+
+            if(!$Editor -or !(Get-Command $Editor -ErrorAction SilentlyContinue -ErrorVariable NotFound)) { 
+                if($NotFound) { $PSCmdlet.ThrowTerminatingError( $NotFound[0] ) }
+                else { 
+                    throw &quot;Could not find an editor (not even notepad!)&quot;
+                }
+            }
+        } while($false)
+
+        # There are several reasons we might need to update the editor variable
+        if($PSBoundParameters.ContainsKey(&quot;Editor&quot;) -or 
+           $PSBoundParameters.ContainsKey(&quot;Parameters&quot;) -or 
+           !(Test-Path variable:global:PSeditor) -or 
+           ($PSEditor.Command -ne $Editor))
+        {
+            # Store it pre-parsed and everything in the current session:
+            Write-Verbose &quot;Setting global preference variable for Editor: PSEditor&quot;
+            $global:PSEditor = New-Object PSObject -Property @{
+                Command = &quot;$Editor&quot;
+                Parameters = &quot;$Parameters&quot;
+            } | Add-Member ScriptMethod ToString -Value { &quot;'&quot; + $this.Command + &quot;' &quot; + $this.Parameters } -Force -PassThru
+
+            # Store it stickily in the environment variable
+            if(![Environment]::GetEnvironmentVariable(&quot;Editor&quot;, &quot;User&quot;)) {
+                Write-Verbose &quot;Setting user environment variable: Editor&quot;
+                [Environment]::SetEnvironmentVariable(&quot;Editor&quot;, &quot;$PSEditor&quot;, &quot;User&quot;)
+            }
+
+        }
+
+        # Avoid errors if Parameter is null/empty.
+        Write-Verbose &quot;$PSEditor '$File'&quot;
+        if ($Parameters)
+        {
+            Start-Process -FilePath $Editor -ArgumentList $Parameters, $file -Wait
+        }
+        else
+        {
+            Start-Process -FilePath $Editor -ArgumentList $file -Wait
+        }
+        
+        if($LastWriteTime -ne (Get-Item $File).LastWriteTime) {
+            Write-Verbose &quot;Changed $Name function&quot;
+        
+            #Recreates the function from the code in the temporary file and then deletes the file.
+            Set-Content -Path Function:\$Name -Value ([scriptblock]::create((Get-Content $file -Raw)))
+        } else {
+            Write-Warning &quot;No change to $Name function&quot;
+        }
+        Remove-Item $File
+    }
+#}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

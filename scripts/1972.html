@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="George Howarth">
+    <title>Add-Namespace v1.1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Add-Namespace v1.1</h1>
+<h3><a href="//scripts/1972.ps1">download</a> - <a href="//scripts/1964.md">parent</a></h3>
+<p>Version 1.1</p>
+<p>Imports the types in the specified namespaces in the specified assemblies.</p>
+<p>I plan to support -WhatIf in a future version.</p>
+<p>Changes from V1.0:</p>
+<ul>
+<li>Cleaned up type resolution error message</li>
+<li>Added Get-ExecutingAssemblies function</li>
+<li>Optimized main algorithm slightly</li>
+</ul>
+<p>Special thanks to &quot;Oisin Grehan for his great work&quot;:http://www.nivot.org/2008/12/25/ListOfTypeAcceleratorsForPowerShellCTP3.aspx</p>
+<pre><code class="language-posh">trap [System.Management.Automation.RuntimeException]
+{
+    $entryException = $_
+    
+    if ($_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::InvalidOperation)
+    {
+        if ($_.FullyQualifiedErrorId -eq &quot;TypeNotFound&quot;)
+        {
+            $targetName = $_.CategoryInfo.TargetName
+            
+            try
+            {
+                $isAmbiguous = $global:__ambiguousTypeNames.Contains($targetName)
+            }
+            catch
+            {
+                throw $entryException
+            }
+            
+            if ($isAmbiguous)
+            {
+                $message = New-Object System.Text.StringBuilder
+                $message.AppendFormat(&quot;The type [{0}] is ambiguous. Specify one of the following: &quot;, $targetName).AppendLine() | Out-Null
+                
+                [System.Type]::GetType(&quot;System.Management.Automation.TypeAccelerators&quot;)::Get.GetEnumerator() | ForEach-Object {
+                    if (($_.Key.Split('.'))[-1] -eq $targetName)
+                    {
+                        $message.Append($_.Key).AppendLine() | Out-Null
+                    }
+                }
+                
+                $message.AppendLine() | Out-Null
+                $message.AppendFormat(&quot;At {0}:{1} char:{2}&quot;, $_.InvocationInfo.ScriptName, $_.InvocationInfo.ScriptLineNumber, $_.InvocationInfo.OffsetInLine).AppendLine() | Out-Null
+                
+                $erroneousToken = $_.InvocationInfo.Line.Substring(0, $_.InvocationInfo.OffsetInLine - 1)
+                $remainder = $_.InvocationInfo.Line.Substring($_.InvocationInfo.OffsetInLine - 1)
+                
+                $message.AppendFormat(&quot;+ {0} &lt;&lt;&lt;&lt; {1}&quot;, $erroneousToken, $remainder).AppendLine() | Out-Null
+                $message.AppendFormat(&quot;`t+ CategoryInfo          : {0} : ({1}:{2}) [], {3}&quot;, $_.CategoryInfo.Category, $targetName, $_.TargetObject.GetType().Name, $_.Exception.GetType().Name).AppendLine() | Out-Null
+                $message.AppendFormat(&quot;`t+ FullyQualifiedErrorId : {0}&quot;, $_.FullyQualifiedErrorId).AppendLine() | Out-Null
+                                
+                Write-Host $message.ToString() -ForegroundColor Red
+                
+                continue
+            }
+        }
+    }
+}
+
+&lt;#
+    .SYNOPSIS
+        Imports the types in the specified namespaces in the specified assemblies.
+
+    .DESCRIPTION
+        The Add-Namespace function adds a type accelerator for each type found in the specified namespaces in the specified assemblies that satisfy a set of conditions. For more information see the NOTES section.
+
+    .PARAMETER Assembly
+        Specifies one or more assemblies to import the specified namespaces from.
+
+    .PARAMETER Namespace
+        Specifies one or more namespaces to import.
+
+    .INPUTS
+        System.Reflection.Assembly
+            You can pipe an assembly to Add-Namespace.
+
+    .OUTPUTS
+        None
+            This function does not return any output.
+
+    .NOTES
+        The type accelerator for the type is added if the type:
+        
+        - Has a base type which is not System.Attribute, System.Delegate or System.MulticastDelegate
+        - Is not abstract
+        - Is not an interface
+        - Is not nested
+        - Is public
+        - Is visible
+        - Is qualified by the namespace specified in the Namespace parameter
+        
+        This function also comes with an exception handler in the form of a trap block. Type name collisions occur when a type has the same name of another type which is in a different namespace. When this happens, the function adds or replaces the type accelerator for that type using its fully-qualified type name. If a type resolution occurs during runtime, the trap block will determine if the type was unresolved during any of the calls made to Add-Namespace and throw an exception listing valid replacements.
+        
+        Be aware that namspaces can span multiple assemblies, in which case you would have to import the namespace for each assembly that it exists in.
+        
+        This function will not attempt to add or replace types which already exist under the same name.
+        
+        This function assumes that the variable $global:__ambiguousTypeNames is exclusively available for use.
+        
+        The type accelerators added by this function exist only in the current session. To use the type accelerators in all sessions, add them to your Windows PowerShell profile. For more information about the profile, see about_profiles.
+                    
+    .EXAMPLE
+        C:\PS&gt; [System.Reflection.Assembly]::LoadWithPartialName(&quot;mscorlib&quot;) | Add-Namespace System.Reflection
+        
+        C:\PS&gt; [Assembly]::LoadWithPartialName(&quot;System.Windows.Forms&quot;)
+        
+        This example shows how to import namespaces from an assembly. The assembly must be loaded non-reflectively into the current application domain.
+    
+    .EXAMPLE
+        C:\PS&gt; $assemblies = Get-ExecutingAssemblies -Filter mscorlib, System, System.Windows.Forms, System.Xml
+        
+        C:\PS&gt; $assemblies | Add-Namespace System, System.Collections, System.Collections.Generic, System.Net, System.Net.NetworkInformation, System.Reflection, System.Windows.Forms, System.Xml
+        
+        This example shows how to import multiple namespaces from multiple assemblies using the Get-ExecutingAssemblies function to filter the required assemblies.
+    
+    .LINK
+        about_trap
+#&gt;
+function Add-Namespace
+{
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param (
+        [Parameter(ValueFromPipeline = $true)]
+        [System.Reflection.Assembly]$Assembly,
+        [Parameter(Mandatory = $true, Position = 0)]
+        [ValidateNotNullOrEmpty()]
+        [String[]]$Namespace
+    )
+    
+    begin
+    {
+        if ($global:__ambiguousTypeNames -eq $null)
+        { 
+            $global:__ambiguousTypeNames = New-Object 'System.Collections.Generic.List[System.String]'
+        }
+        
+        $genericRegex = [Regex]'(?&lt;Name&gt;.*)`\d+'
+        
+        $typeAccelerators = [System.Type]::GetType(&quot;System.Management.Automation.TypeAccelerators&quot;)
+        $typeDictionary = $typeAccelerators::Get
+    }
+    
+    process
+    {
+        $_.GetTypes() | Where-Object { 
+            ($_.BaseType -ne [System.Attribute]) -and 
+            ($_.BaseType -ne [System.Delegate]) -and 
+            ($_.BaseType -ne [System.MulticastDelegate]) -and 
+            !$_.IsAbstract -and
+            !$_.IsInterface -and 
+            !$_.IsNested -and 
+            $_.IsPublic -and 
+            $_.IsVisible -and 
+            ($_.Namespace -ne $null) -and 
+            ($Namespace -contains $_.Namespace)
+        } | ForEach-Object { 
+            $name = $_.Name
+            $fullName = $_.FullName
+        
+            if ($_.IsGenericType)
+            {                
+                if ($_.FullName -match $genericRegex)
+                {
+                    $fullName = $Matches[&quot;Name&quot;]
+                    $name = $fullName.Split('.')[-1]
+                }
+            }
+            
+            if ($typeDictionary.ContainsKey($name))
+            {
+                if ($typeDictionary[$name] -eq $_)
+                {
+                    return
+                }
+            }
+            
+            if ($typeDictionary.ContainsKey($fullName))
+            {
+                if ($typeDictionary[$fullName] -eq $_)
+                {
+                    return
+                }
+            }
+            
+            if ($global:__ambiguousTypeNames.Contains($name))
+            {
+                $typeAccelerators::Add($fullName, $_)
+                return
+            }
+            
+            if ($typeDictionary.ContainsKey($name))
+            {
+                $type = $typeDictionary[$name]
+                
+                if ($_ -ne $type)
+                {
+                    $global:__ambiguousTypeNames.Add($name)
+                    
+                    $newName = $type.FullName
+                    
+                    if ($type.IsGenericType)
+                    {
+                        if ($newName -match $genericRegex)
+                        {
+                            $newName = $Matches[&quot;Name&quot;]
+                        }
+                    }
+                    
+                    $typeAccelerators::Remove($name)
+                    $typeAccelerators::Add($newName, $type)
+                    
+                    $typeAccelerators::Add($fullName, $_)
+                }
+                
+                return
+            }
+            
+            $typeAccelerators::Add($name, $_)
+        } | Out-Null
+    }
+    
+    end { }
+}
+
+&lt;#
+    .SYNOPSIS
+        Gets assemblies that are currently executing in the current application domain.
+
+    .DESCRIPTION
+        The Get-Assemblies function retrieves Assembly objects from assemblies that are executing in the current application domain.
+
+    .PARAMETER Filter
+        Specifies one or more Assembly objects to retrieve.
+
+    .INPUTS
+        None
+            You cannot pipe objects to Get-ExecutingAssemblies.
+
+    .OUTPUTS
+        System.Reflection.Assembly
+            A collection of Assembly objects.
+
+    .NOTES
+        You can get a list of currently executing assemblies by calling this function. Sometimes, it is not necessary to load some assemblies as they are loaded into the current application domain by default.
+                    
+    .EXAMPLE
+        C:\PS&gt; $assemblies = Get-ExecutingAssemblies -Filter mscorlib, System, System.Windows.Forms
+        
+        C:\PS&gt; $assemblies | Add-Namespace System, System.Collections, System.Collections.Generic, System.Net, System.Net.NetworkInformation, System.Reflection, System.Windows.Forms
+        
+        This example shows how Get-ExecutingAssemblies can be used in conjunction with Add-Namespace.
+    
+    .LINK
+        
+#&gt;
+function Get-ExecutingAssemblies
+{
+    param (
+        [Parameter(Mandatory = $false, Position = 0)]
+        [String[]]$Filter
+    )
+    
+    if (($Filter -eq $null) -or ($Filter.Length -eq 0))
+    {
+        return [System.AppDomain]::CurrentDomain.GetAssemblies()
+    }
+    
+    return [System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $Filter -contains [System.IO.Path]::GetFileNameWithoutExtension($_.Location) }
+}
+
+# Sample usage
+# You can do this as an initialization task for your script
+
+Get-ExecutingAssemblies -Filter mscorlib, System, System.Windows.Forms, System.Xml | Add-Namespace -Namespace `
+    System, 
+    System.Collections, 
+    System.Collections.Generic, 
+    System.Net, 
+    System.Net.NetworkInformation, 
+    System.Reflection, 
+    System.Windows.Forms, 
+    System.Xml
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

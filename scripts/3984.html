@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>Power state - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Power state</h1>
+<h3><a href="//scripts/3984.cs">download</a></h3>
+<p>This is old code on C# (written on v2). The code demonstrates how to put the computer into standby, hibernation, how to restart and turn it off (and logoff).</p>
+<pre><code class="language-csharp">using System;
+using System.IO;
+using System.Reflection;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.InteropServices;
+
+[assembly: AssemblyCompany(&quot;greg zakharov&quot;)]
+[assembly: AssemblyCopyright(&quot;Copyleft (C) 2007 greg zakharov&quot;)]
+[assembly: AssemblyCulture(&quot;&quot;)]
+[assembly: AssemblyDescription(&quot;Power management utility&quot;)]
+[assembly: AssemblyProduct(&quot;pwrman.exe&quot;)]
+[assembly: AssemblyTitle(&quot;Power management utility&quot;)]
+[assembly: AssemblyVersion(&quot;2.0.0.0&quot;)]
+
+namespace PowerManagement {
+  internal class AssemblyInfo {
+    private Type asm;
+    public AssemblyInfo() { asm = typeof(Program); }
+
+    public string Copyleft {
+      get {
+        Type atr = typeof(AssemblyCopyrightAttribute);
+        object[] arr = asm.Assembly.GetCustomAttributes(atr, false);
+        AssemblyCopyrightAttribute cr = (AssemblyCopyrightAttribute) arr[0];
+        return cr.Copyright;
+      }
+    }
+
+    public string Description {
+      get {
+        Type atr = typeof(AssemblyDescriptionAttribute);
+        object[] arr = asm.Assembly.GetCustomAttributes(atr, false);
+        AssemblyDescriptionAttribute des = (AssemblyDescriptionAttribute) arr[0];
+        return des.Description;
+      }
+    }
+
+    public string Module {
+      get { return Path.GetFileName(asm.Assembly.Location); }
+    }
+
+    public string Title {
+      get { return asm.Assembly.GetName().Name; }
+    }
+
+    public string Version {
+      get { return asm.Assembly.GetName().Version.ToString(2); }
+    }
+  }
+
+  internal static class NativeMethods {
+    public enum ExitWinCmd : uint {
+      EWX_LOGOFF      = 0x00000000,
+      EWX_SHUTDOWN    = 0x00000001,
+      EWX_REBOOT      = 0x00000002,
+      EWX_FORCE       = 0x00000004
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    internal struct TokPriv1Luid {
+      public int Count;
+      public long Luid;
+      public int Attrb;
+    }
+
+    [DllImport(&quot;advapi32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool AdjustTokenPrivileges(IntPtr TokenHandle,
+                [MarshalAs(UnmanagedType.Bool)]bool DisableAllPrivileges,
+                            ref TokPriv1Luid NewState, uint BufferLength,
+                              IntPtr PreviousState, IntPtr ReturnLength);
+
+    [DllImport(&quot;advapi32.dll&quot;, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool LookupPrivilegeValue(string lpSystemName,
+                                         string lpName, ref long lpLuid);
+
+    [DllImport(&quot;advapi32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool OpenProcessToken(IntPtr ProcessHandle,
+                          uint DesiredAccess, ref IntPtr TokenHandle);
+
+    [DllImport(&quot;kernel32.dll&quot;)]
+    internal static extern IntPtr GetCurrentProcess();
+
+    [DllImport(&quot;powrprof.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.U1)]
+    internal static extern bool SetSuspendState(
+      [In, MarshalAs(UnmanagedType.U1)]bool Hibernate,
+      [In, MarshalAs(UnmanagedType.U1)]bool ForceCritical,
+      [In, MarshalAs(UnmanagedType.U1)]bool DisableWakeEvent
+    );
+
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ExitWindowsEx(ExitWinCmd uFlags, uint dwReason);
+
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool LockWorkStation();
+    //
+    //combine calls into shared functions
+    //
+    internal static void ChangeSystemState(ExitWinCmd flags) {
+      TokPriv1Luid tpl;
+      IntPtr hdl = GetCurrentProcess();
+      IntPtr tkn = IntPtr.Zero;
+      //TOKEN_ADJUST_PRIVELEGES = 0x00000020
+      //TOKEN_QUERY             = 0x00000008
+      OpenProcessToken(hdl, (uint)32 | (uint)8, ref tkn);
+      tpl.Count = 1;
+      tpl.Luid  = 0;
+      tpl.Attrb = 2; //SE_PRIVILEGE_ENABLED
+      LookupPrivilegeValue(null, &quot;SeShutdownPrivilege&quot;, ref tpl.Luid);
+      AdjustTokenPrivileges(tkn, false, ref tpl, 0, IntPtr.Zero, IntPtr.Zero);
+      //SHTDN_REASON_MAJOR_OTHER = 0x00000000
+      //SHTDN_REASON_MINOR_OTHER = 0x00000000
+      ExitWindowsEx(flags, (uint)0 | (uint)0);
+    }
+
+    internal static void Logoff() {
+      ChangeSystemState(ExitWinCmd.EWX_LOGOFF | ExitWinCmd.EWX_FORCE);
+    }
+
+    internal static void Shutdown() {
+      ChangeSystemState(ExitWinCmd.EWX_SHUTDOWN | ExitWinCmd.EWX_FORCE);
+    }
+
+    internal static void Reboot() {
+      ChangeSystemState(ExitWinCmd.EWX_REBOOT | ExitWinCmd.EWX_FORCE);
+    }
+  }
+
+  internal sealed class Program {
+    static void Main(string[] args) {
+      try {
+        //argument should always starts with &quot;-&quot; or &quot;/&quot;
+        char chr = args[0].ToCharArray()[0];
+        //validate delimiter
+        if (chr == '-' || chr == '/') {
+          //validate argument
+          string par = args[0].ToLower(CultureInfo.CurrentCulture).TrimStart('-', '/');
+
+          switch (par) {
+            case &quot;h&quot;: NativeMethods.SetSuspendState(true, true, true); break;
+            case &quot;l&quot;: NativeMethods.LockWorkStation(); break;
+            case &quot;o&quot;: NativeMethods.Logoff(); break;
+            case &quot;r&quot;: NativeMethods.Reboot(); break;
+            case &quot;s&quot;: NativeMethods.Shutdown(); break;
+            case &quot;w&quot;: NativeMethods.SetSuspendState(false, true, true); break;
+            case &quot;?&quot;: PrintHelpInfo(); break;
+            default: Console.WriteLine(&quot;Error: unknown parameter {0}.&quot;, args[0]); break;
+          }
+        }
+        else Console.WriteLine(&quot;Invalid parameter. Use \&quot;/?\&quot; for additional info.&quot;);
+      }
+      catch (IndexOutOfRangeException e) { Console.WriteLine(e.Message); }
+    }
+
+    static void PrintHelpInfo() {
+      AssemblyInfo ai = new AssemblyInfo();
+
+      Console.WriteLine(&quot;{0} v{1} - {2}&quot;, ai.Title, ai.Version, ai.Description);
+      Console.WriteLine(ai.Copyleft);
+      Console.WriteLine(&quot;\nUsage: {0} [-h][-l][-o][-r][-s][-w]&quot;, ai.Module);
+      Console.WriteLine(&quot;  -h - hibernate mode&quot;);
+      Console.WriteLine(&quot;  -l - lock workstation&quot;);
+      Console.WriteLine(&quot;  -o - logoff&quot;);
+      Console.WriteLine(&quot;  -r - reboot system&quot;);
+      Console.WriteLine(&quot;  -s - shutdown system&quot;);
+      Console.WriteLine(&quot;  -w - standby mode&quot;);
+      Console.WriteLine(&quot;  -? - this message&quot;);
+    }
+  }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

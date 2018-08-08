@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jeremy D Pavleck">
+    <title>Check-LotusHealth - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Check-LotusHealth</h1>
+<h3><a href="//scripts/723.ps1">download</a></h3>
+<p>Check-LotusHealth is a multi server, multi port ping script. Originally designed to handle the port checks for a client's entire Lotus Notes environment, I've removed the actual servers and replaced them with placeholders. You'll need to adjust this to your environment.</p>
+<pre><code class="language-posh"># ==============================================================================================
+# 
+# Microsoft PowerShell Source File -- Created with SAPIEN Technologies PrimalScript 4.1
+# 
+# NAME: Check-LotusHealth.ps1
+# 
+# AUTHOR: Jeremy D. Pavleck , Pavleck.NET
+# DATE  : 5/19/2008
+# 
+# COMMENT: This script queries the ports of a Lotus notes environment, verifying that the various 
+#	services are up and running, such as LDAP, SameTime, SMTP, Notes, SSL, etc. Script has been 
+#	cleansed of customer data, but placeholder values were left in place to show how to use it.
+#	Odds are this will need customization in your environment.
+# 
+# ==============================================================================================
+
+# Construct constants
+Set-Variable -name SMTPPort -value 25 -option constant
+Set-Variable -name WWWPort -value 80 -option constant
+Set-Variable -name LDAPPort -value 389 -option constant
+Set-Variable -name Port410 -value 410 -option constant
+Set-Variable -name SSLPort -value 443 -option constant
+Set-Variable -name NOTESPort -value 1352 -option constant 
+
+# Create hashtables to hold failed checks, sametime specific fails, and successes
+$afails = @{}
+$astfails = @{}
+$agood = @{}
+
+# Instantiate array to hold server information
+$aservers = @{}
+# Now, to populate it
+# We will monitor one or more of the following ports - SMTP (25), WWW (80), LDAP (389)
+# Port 410, SSL (443), Notes (1352) or several SameTime ports. 
+$aservers[&quot;SERVER01&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER02&quot;] = @{SMTP=$True; WWW=$True; Notes=$True;}
+$aservers[&quot;SERVER03&quot;] = @{SMTP=$True; WWW=$True; Notes=$True;}
+$aservers[&quot;SERVER04&quot;] = @{WWW=$True; Notes=$True;}
+$aservers[&quot;SERVER05&quot;] = @{WWW=$True; Notes=$True;}
+$aservers[&quot;SERVER06&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER07&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER08&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER09&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER10&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER11&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER12&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER13&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER14&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER15&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER16&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER17&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER18&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER19&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER20&quot;] = @{SMTP=$True; Notes=$True;}
+$aservers[&quot;SERVER21&quot;] = @{SMTP=$True; Notes=$True;}
+$aservers[&quot;SERVER22&quot;] = @{SMTP=$True; Notes=$True;}
+$aservers[&quot;SERVER23&quot;] = @{SMTP=$True; Notes=$True;}
+$aservers[&quot;SERVER24&quot;] = @{WWW=$True; SSL=$True; Notes=$True;}
+$aservers[&quot;SERVER25&quot;] = @{Notes=$True;}
+$aservers[&quot;SERVER26&quot;] = @{WWW=$True; Notes=$True; SameTime=$True;}
+# And so on and so forth
+
+# Array of SameTime ports - if SameTime is on a server, then all of these ports will be there.
+# So we'll just make a seperate array holding them to make it easier
+$astime = 1516, 1533, 8081, 8082, 1503, 554
+
+# function Ping-Port is used to connect to the server on the designated port. 
+# Returns $True if it connect, $False if not. 
+function Ping-Port([string]$server, [int]$port)
+{
+$tcpClient = New-Object System.Net.Sockets.TcpClient
+trap { # Generic trap object, we don't care what the error is, the check still fails.
+	$False
+	continue;
+}
+$tcpClient.Connect($server,$port)
+if ($tcpClient.Connected) {$True}           
+}
+
+# Create Ping object
+# This function only checks for a server response	
+function Ping-Server([string]$server) 
+{
+$ping = New-Object System.Net.NetworkInformation.Ping
+  trap { # Generic trap object, we don't care what the error is, the check still fails.
+   $False
+    continue;
+  }
+If ($ping.send($server).status -eq &quot;Success&quot;) {$True}
+$ping = $null
+}
+
+# Now, here we go
+# First we will iterate through all of the servers, then iterate through each server
+# If we have a particular port marked as supposed to being available, then we attempt to
+# ping it, otherwise we move onto the next item.
+# We also attempt to ping the server itself first - if that fails, we automagically
+# mark all of the ports as failed. It is completely possible that your particular 
+# environment may block pings, if so you'll need to adjust this. 
+$aservers.Keys | ForEach-Object {
+ If (Ping-Server $_) {
+ 			Write-Host &quot;$_ responded.&quot; -ForeGroundColor Green
+ 			$agood[$_] += @{HOST=$True;}
+ 			If ($aservers[$_].notes) { # If Lotus Notes is on this machine
+ 				If (Ping-Port $_ $NOTESPort) { # Check it
+ 					Write-Host &quot;$_: Lotus Notes Port ($NOTESPort) Responding&quot; -ForeGroundColor Green
+ 					$agood[$_] += @{NOTES=$True;}
+ 					} else {
+ 					Write-Host &quot;$_: Host is reported to have Notes ($NOTESPort) but it is not responding.&quot; -ForeGroundColor Red
+ 					$afails[$_] += @{NOTES=$True;} 				
+ 					}
+ 				}
+ 			If ($aservers[$_].smtp) { # If SMTP is here
+ 				If (Ping-Port $_ $SMTPPort) { # Check it
+ 					Write-Host &quot;$_: SMTP ($SMTPPort) Responding&quot; -Foregroundcolor green	
+ 					$agood[$_] += @{SMTP=$True;}
+ 					} else {
+ 					Write-Host &quot;$_: Host is reported to have SMTP, but it is not responding.&quot; -Foregroundcolor red
+ 					$afails[$_] += @{SMTP=$True;}
+ 					}
+ 				}
+ 			If ($aservers[$_].www) { # If WWW is here
+ 				If (Ping-Port $_ $WWWPort) { #Check it
+ 					Write-Host &quot;$_: WWW ($WWWPort) Responding&quot; -foregroundcolor green
+ 					$agood[$_] += @{WWW=$True;}
+ 					} else {
+ 					Write-Host &quot;$_: Host is reported to have WWW, but it is not responding.&quot; -foregroundcolor red
+ 					$afails[$_] += @{WWW=$True;}
+ 					}
+ 				}
+ 			If ($aservers[$_].ldap) { # If LDAP is here
+ 				If (Ping-Port $_ $LDAPPort) { # check it
+ 					Write-Host &quot;$_: LDAP ($LDAPPOrt) Responding&quot; -foregroundcolor green
+ 					$agood[$_] += @{LDAP=$True;}
+ 					} else {
+ 					Write-Host &quot;$_: Host is reported to have LDAP, but it is not responding.&quot; -foregroundcolor red
+ 					$afails[$_] += @{LDAP=$True;}
+ 					}
+ 				}
+ 			If ($aservers[$_].port410) { # If port 410 is here
+ 				If (Ping-Port $_ $port410) { # check it
+ 					Write-Host &quot;$_: Port 410 ($port410) Responding&quot; -foregroundcolor green
+ 					$agood[$_] += @{Port410=$True;}
+ 					} else {
+ 					Write-Host &quot;$_: Host is reported to have port 410, but it is not responding.&quot; -foregroundcolor red
+ 					$afails[$_] += @{Port410=$True;}
+ 					}
+ 				} 		
+ 			If ($aservers[$_].ssl) { # If SSL is here
+ 				If (Ping-Port $_ $SSLPort) { # check it
+ 					Write-Host &quot;$_: SSL ($SSLPort) Responding&quot; -foregroundcolor green
+ 					$agood[$_] += @{SSL=$True;}
+ 					} else {
+ 					Write-Host &quot;$_: Host is reported to have SSL, but it is not responding.&quot; -foregroundcolor red
+ 					$afails[$_] += @{SSL=$True;}
+ 					}
+ 				}
+ 			If ($aservers[$_].sametime) { # If SameTime is here
+ 			  $st = $_
+ 			  $astime | ForEach-Object { 
+ 			  	If (Ping-Port $st $_) {
+ 			  		Write-Host &quot;$st: SameTime Port $_ Success.&quot; -foregroundcolor green
+ 			  		} else {
+ 			  		Write-Host &quot;$st: SameTime Port $_ Not Responding.&quot; -foregroundcolor red
+ 			  		$astfails[$st] += @{$_=$True;}
+ 			  		}
+ 			  	}
+ 			  }
+ 			} else {
+ 			Write-Host &quot;Host $_ is not responding.&quot; -ForeGroundColor Red
+ 			$afails[$_] += @{HOST=$True;}
+ 			}
+ }
+	
+
+If ($afails.count -gt 0) {
+	Write-Host &quot;`n`nCompleted - Errors reported - the following ping tests failed:&quot; -ForeGroundColor Magenta
+	Write-Host &quot;`nServer `t`tFailed Ports&quot; -Foregroundcolor Magenta
+	Write-Host &quot;----------------------------------------&quot; -ForegroundColor Magenta
+	$afails.Keys | ForEach-Object {
+			Write-host &quot;$($_): `t$($afails[$_].Keys)&quot; -ForeGroundColor Magenta
+			}
+    } else {
+    Write-Host &quot;`n`nCompleted - All ports are responding.&quot; -ForegroundColor Green
+}
+
+If ($astfails.count -gt 0) {
+	Write-Host &quot;Errors reported within the SameTime environment&quot; -Foregroundcolor Magents
+	} else {
+	Write-Host &quot;SameTime Environment is fully responsive.&quot; -ForegroundColor Green 
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

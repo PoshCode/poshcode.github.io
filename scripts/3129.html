@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Bruce Shreffler">
+    <title>VMware guest information - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>VMware guest information</h1>
+<h3><a href="//scripts/3129.ps1">download</a></h3>
+<p>I needed to write a script to generate a VMware guest inventory so I needed to know what was available within the PowerCLI interface and where to find it. So I wrote this script to dump everything it could find about a single VMware guest. It has proved very useful to me. I hope others will also find it useful.</p>
+<pre><code class="language-posh"># vminfo.ps1
+#
+# Give this a VMware guest and it will attempt to dump all the information available.
+#
+# Example: .\vminfo.ps1  &quot;guestname&quot;
+#
+# This scripts assumes that you have already connected to a VirtualCenter server.
+#
+# This was developed and tested using VMware vSphere PowerCLI version 4.1.1.2816
+# on an ESXi 4.1 build 381591 cluster
+
+Param($guest)
+
+####################################################################
+# ProcessObject - This recursive function does the bulk of the work. 
+#
+#Input Parameters
+#
+# $xobj - Object to dump info on
+# $pref - Prefix to use on print lines
+# 
+# When an object is encountered then we recursively call ourselves  to
+# process that object after first updating the prefix.
+#
+# Snapshot objects can point to both a parent and a child. Dumping both
+# Parent and Child objects results in an endless loop. Therefore dump only
+# Child objects.
+
+function ProcessObject ($xobj, $pref){
+    $plen = $pref.length
+	$pad = $width - $plen
+	If ($pad -lt 0){$pad = 0}
+	# Get information on all of the members of this object because what is done with a member is
+	# dependent on whether the member is an object or is a data item and if it is a data item
+	# what kind of data item is it
+	$xom = $xobj | get-member -membertype property
+    foreach ($ent in $xom){
+		$xnam = $ent.name
+		#write-host &quot;&gt;&gt;&gt;&gt;&gt;&gt;&gt;Processing entry&quot; $ent.name
+        $xnlen = $xnam.length
+        $strs = $ent.Definition.split(&quot; &quot;)
+		
+		# process 1st level simple things like strings and numbers including simple arrays
+		
+		# There are some fields in a VMware guest &quot;Get-View&quot; description we will ignore
+		# because they are obsolete and have either had their descriptive names changed
+		# or a new cmdlet is now available and it is the preferred method for finding
+		# out about the object.
+		# 
+		# The following &quot;objects&quot; may be encountered but will be ignored. These are legacy objects 
+		# from ESX 3.5 but were promoted to having their own cmdlets in ESX 4. Therefore we will
+		# ignore them when found as members of some other object prefering to examine them using the
+		# new cmdlets.
+		#
+		# legacy guest objects
+		#
+		# CDDrives == Get-CDDrives
+		# FloppyDrives == Get-FloppyDrive
+		# HardDisk == Get-HardDisk
+		# NetworkAdapters == Get-NetworkAdapter
+		# UsbDevices == Get-UsbDevice
+		#
+		# legacy host objects
+		#
+		# ConsoleNic == Get-VMHostNetworkAdapter
+		# PhysicalNic == Get-VMHostNetworkAdapter
+		# VirtualNic == Get-VMHostNetworkAdapter
+		# VirtualSwitch == Get-VirtualSwitch
+		# ScsiLun == Get-ScsiLun
+		#
+		#
+		
+        if ($xnam -match &quot;^(CDDrives|FloppyDrives|HardDisks|NetworkAdapters|UsbDevices)$&quot; ){
+			&quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}{4,-30}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;:&quot;, &quot;== skipping legacy device object ==&quot; #| Out-File -FilePath $reportfile -Append
+		}
+		elseif ($xnam -match &quot;^(ConsoleNic|PhysicalNic|ScsiLun|VirtualNic|VirtualSwitch)$&quot; ){
+			#Write-Host &quot;****** skipping legacy Network Adapter object- $xnam&quot;
+			&quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}{4,-30}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;:&quot;, &quot;== skipping legacy Network Adapter object ==&quot; #| Out-File -FilePath $reportfile -Append
+		}
+		# The following are obsolete identifiers in ESX 3.5 that have new names as of ESX version 4.x
+		# We will ignore all old identifiers and only display the new identifiers.
+		#
+		# Description - replaced by Notes
+		# Host is replaced by VMHost
+		# HostId is replaced by VMHostId
+		# State == ConnectionState
+		# VirtualMachineId == VMId
+		elseif ($xnam -match &quot;^(Description|Host|HostId|State|VirtualMachineId)$&quot; ){
+			&quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}{4,-30}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;:&quot;, &quot;== skipping obsolete identifier ==&quot; #| Out-File -FilePath $reportfile -Append
+		}
+		# Examining the following will result in recursive loops threrfore we will skip them.
+		#
+		# Parent
+		# VM
+		# VMHost
+		elseif ($xnam -match &quot;^(VMHost)$&quot; ){
+			&quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}{4,-30}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;:&quot;, &quot;== skipping object to avoid infinite loop ==&quot; #| Out-File -FilePath $reportfile -Append
+		}
+		elseif ($strs[0] -match &quot;^System.String\[\]&quot; ){
+			if (!$xobj.$xnam.count) {
+				$res = $xobj.$xnam
+				#Write-Host &quot;===  single entry array name =&quot;  $xnam &quot;result&quot; $res
+				&quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}{4,-30}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;:&quot;, $xobj.$xnam #| Out-File -FilePath $reportfile -Append
+			}
+			else {
+				$count = $xobj.$xnam.count
+				for ($i=0; $i -lt $count; $i++){
+					$namlen = $xnam.length
+					$ipad = $pad - 2 - $namlen
+					If ($i -gt 9){$ipad--}
+					If ($ipad -lt 1){$ipad = 1}
+					&quot;{0,-$plen}{1,-1}{2,-$namlen}{3,1}{4,1}{5,-$ipad}{6,-2}{7,-30}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;[&quot;, $i, &quot;]&quot;, &quot;:&quot;, $xobj.$xnam[$i] #| Out-File -FilePath $reportfile -Append
+				}
+			}
+		}
+		elseif ($strs[0] -match &quot;^System.(String|Int|Nullable|Boolean|DateTime|Double)&quot; ){
+			# If this is a &quot;value__&quot; then show the number and the symbolic name
+			if ($xnam -eq &quot;value__&quot;){
+				$vpad = $pad + 3
+				&quot;{0,-$plen}{1,$vpad}{2,-2}{3,-2}{4,-30}&quot; -f $pref, &quot;: &quot;, $xobj.$xnam, &quot;-&quot;, $xobj #| Out-File -FilePath $reportfile -Append
+			}
+			else {
+				&quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}{4,-30}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;:&quot;, $xobj.$xnam #| Out-File -FilePath $reportfile -Append		
+			}
+		}
+        elseif ($strs[0] -match &quot;^VMware.Vim(.|Automation.Types|Automation.ViCore)&quot;){
+			# Hack to avoid closed loop when crawling snapshot structures
+			# Each child points back to its parent and each parent points to its children
+			# hence and endless loop. Therefore do not process parents
+			if ($xnam -match &quot;^(Parent|ParentSnapshot|VM)$&quot;){
+				$pad = $width-$plen
+				If ($pad -lt 0){$pad = 0}
+				&quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;: == skipping $xnam to avoid infinite loop ==&quot; #| Out-File -FilePath $reportfile -Append
+			}
+			else {
+	            $pad = $width-$plen
+				If ($pad -lt 0){$pad = 0}
+	            $yobj = $xobj.$xnam
+				$newp = $pref + &quot;.&quot; + $xnam
+				if (!$yobj){
+					&quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;: =undefined=&quot; #| Out-File -FilePath $reportfile -Append
+				}
+				else{
+					if (!$yobj.count){
+						ProcessObject $yobj $newp
+					}
+					else {
+						$lc = $yobj.count
+						for ($z = 0; $z -lt $lc; $z++){
+							$zobj = $yobj[$z]
+							$zperf = $newp + &quot;[&quot; + $z + &quot;]&quot;
+							ProcessObject $zobj $zperf
+						}
+					}
+				}
+			}
+		}
+		elseif ($strs[0] -match &quot;^System.(Collections)&quot; ){
+			Foreach ($entry in $xobj.$xnam){
+				$newpref = $pref + &quot;.&quot; + $xnam
+				$cpad = $pad - $xnam.length - 1
+				If ($cpad -lt 0){$cpad = 0}
+				&quot;{0,-$plen}{1,-1}{2,-$Cpad}{3,-2}{4,-30}&quot; -f $newpref, &quot;.&quot;, $entry.Key, &quot;:&quot;, $entry.value #$strs[0] #| Out-File -FilePath $reportfile -Append
+			}
+		}
+		else {
+            &quot;{0,-$plen}{1,-1}{2,-$pad}{3,-2}{4,-30}&quot; -f $pref, &quot;.&quot;, $xnam, &quot;:&quot;, $ent.Definition #$strs[0] #| Out-File -FilePath $reportfile -Append
+		}
+	}	
+}
+
+function POLauncher ($xobj, $pref){
+	if (!$xobj.count){
+		ProcessObject $xobj $pref
+	}
+	else {
+		$lc = $xobj.count
+		for ($z = 0; $z -lt $lc; $z++){
+			$zobj = $xobj[$z]
+			$zperf = $pref + &quot;[&quot; + $z + &quot;]&quot;
+			ProcessObject $zobj $zperf
+		}
+	}
+}
+
+# end function ProcessObject
+
+
+$reportfile = &quot;vminfo-rpt.txt&quot;
+$first = 20
+$width = 70
+
+$xvm = get-vm -name $guest
+$prefix = $xvm.name + &quot; Get-VM&quot;
+POLauncher $xvm $prefix
+
+
+# Display information about virtual devices attached to the guest
+# Process devices CDDrives|Harddisk|FloppyDrives|NetworkAdapters|UsbDevices
+
+$dvm = get-HardDisk -vm $xvm
+$prefix = $xvm.name + &quot; Get-HardDisk&quot;
+POLauncher $dvm $prefix
+
+$cdvm = get-CDDrive -vm $xvm
+$prefix = $xvm.name + &quot; Get-CDDrive&quot;
+POLauncher $cdvm $prefix
+
+$flpvm = get-FloppyDrive -vm $xvm
+$prefix = $xvm.name + &quot; Get-FloppyDrive&quot;
+POLauncher $flpvm $prefix
+
+$netvm = get-NetworkAdapter -vm $xvm
+$prefix = $xvm.name + &quot; Get-NetworkAdapter&quot;
+POLauncher $netvm $prefix
+
+$usbvm = get-UsbDevice -vm $xvm
+$prefix = $xvm.name + &quot; Get-UsbDevice&quot;
+POLauncher usbvm $prefix
+
+#Get-View return more information than Get-Vm
+$xview = $xvm | get-view
+$prefix = $xvm.name + &quot; Get-View&quot;
+POLauncher $xview $prefix
+
+# Return information about any snapshots.
+$snap = get-snapshot $xvm
+if ($snap){
+	$prefix = $xvm.name + &quot; Get-Snapshot&quot;
+	POLauncher $snap $prefix
+}
+
+#Tell ua about the host we are running on
+$vmhost = $xvm.VMHost
+$prefix = $vmhost.name + &quot; Get-VMHost&quot;
+POLauncher $vmhost $prefix
+
+# probably don't want to do this one unless you want to be buried in data
+#$vmhostv = Get-View $vmhost
+#$prefix = $vmhostv.name + &quot; Get-View&quot;
+#POLauncher $vmhostv $prefix
+
+#Dump information about the Host's devices 
+
+$nics = Get-VMHostNetworkAdapter $vmhost
+foreach ($nic in $nics){
+	$prefix = $vmhost.name + &quot; &quot; + $nic.Name
+	POLauncher $nic $prefix
+}
+
+
+
+$vmguest = get-vmguest $xvm
+$prefix = $xvm.name + &quot; Get-VMGuest&quot;
+#POLauncher $vmguest $prefix
+
+
+$vmdatastore = get-datastore -vm $xvm
+$prefix = $xvm.name + &quot; Get-Datastore&quot;
+POLauncher $vmdatastore $prefix
+
+$dc = Get-Datacenter -vm $xvm
+$prefix = $xvm.name + &quot; Get-Datacenter&quot;
+#POLauncher $dc $prefix
+
+    
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

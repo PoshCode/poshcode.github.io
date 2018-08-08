@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Lee Holmes">
+    <title>Get-ScriptPerformancePro - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-ScriptPerformancePro</h1>
+<h3><a href="//scripts/2165.ps1">download</a></h3>
+<p>From Windows PowerShell Cookbook (O'Reilly) by Lee Holmes</p>
+<pre><code class="language-posh">#############################################################################
+##
+## Get-ScriptPerformanceProfile
+##
+## From Windows PowerShell Cookbook (O'Reilly)
+## by Lee Holmes (http://www.leeholmes.com/guide)
+##
+##############################################################################
+
+&lt;#
+
+.SYNOPSIS
+
+Computes the performance characteristics of a script, based on the transcript
+of it running at trace level 1.
+
+.DESCRIPTION
+
+To profile a script:
+
+   1) Turn on script tracing in the window that will run the script:
+      Set-PsDebug -trace 1
+   2) Turn on the transcript for the window that will run the script:
+      Start-Transcript
+      (Note the filename that PowerShell provides as the logging destination.)
+   3) Type in the script name, but don't actually start it.
+   4) Open another PowerShell window, and navigate to the directory holding
+      this script.  Type in '.\Get-ScriptPerformanceProfile &lt;transcript&gt;',
+      replacing &lt;transcript&gt; with the path given in step 2.  Don't
+      press &lt;Enter&gt; yet.
+   5) Switch to the profiled script window, and start the script.
+      Switch to the window containing this script, and press &lt;Enter&gt;
+   6) Wait until your profiled script exits, or has run long enough to be
+      representative of its work.  To be statistically accurate, your script
+      should run for at least ten seconds.
+   7) Switch to the window running this script, and press a key.
+   8) Switch to the window holding your profiled script, and type:
+      Stop-Transcript
+   9) Delete the transcript.
+
+.NOTES
+
+You can profile regions of code (ie: functions) rather than just lines
+by placing the following call at the start of the region:
+      Write-Debug &quot;ENTER &lt;region_name&gt;&quot;
+and the following call and the end of the region:
+      Write-Debug &quot;EXIT&quot;
+This is implemented to account exclusively for the time spent in that
+region, and does not include time spent in regions contained within the
+region.  For example, if FunctionA calls FunctionB, and you've surrounded
+each by region markers, the statistics for FunctionA will not include the
+statistics for FunctionB.
+
+#&gt;
+
+param(
+    ## The path of the transcript log file
+    [Parameter(Mandatory = $true)]
+    $Path
+)
+
+Set-StrictMode -Version Latest
+
+function Main
+{
+    ## Run the actual profiling of the script.  $uniqueLines gets
+    ## the mapping of line number to actual script content.
+    ## $samples gets a hashtable mapping line number to the number of times
+    ## we observed the script running that line.
+    $uniqueLines = @{}
+    $samples = GetSamples $uniqueLines
+
+    &quot;Breakdown by line:&quot;
+    &quot;----------------------------&quot;
+
+    ## Create a new hash table that flips the $samples hashtable --
+    ## one that maps the number of times sampled to the line sampled.
+    ## Also, figure out how many samples we got altogether.
+    $counts = @{}
+    $totalSamples = 0;
+    foreach($item in $samples.Keys)
+    {
+        $counts[$samples[$item]] = $item
+        $totalSamples += $samples[$item]
+    }
+
+    ## Go through the flipped hashtable, in descending order of number of
+    ## samples.  As we do so, output the number of samples as a percentage of
+    ## the total samples.  This gives us the percentage of the time our
+    ## script spent executing that line.
+    foreach($count in ($counts.Keys | Sort-Object -Descending))
+    {
+        $line = $counts[$count]
+        $percentage = &quot;{0:#0}&quot; -f ($count * 100 / $totalSamples)
+        &quot;{0,3}%: Line {1,4} -{2}&quot; -f $percentage,$line,
+            $uniqueLines[$line]
+    }
+
+    ## Go through the transcript log to figure out which lines are part of
+    ## any marked regions.  This returns a hashtable that maps region names
+    ## to the lines they contain.
+    &quot;&quot;
+    &quot;Breakdown by marked regions:&quot;
+    &quot;----------------------------&quot;
+    $functionMembers = GenerateFunctionMembers
+
+    ## For each region name, cycle through the lines in the region.  As we
+    ## cycle through the lines, sum up the time spent on those lines and
+    ## output the total.
+    foreach($key in $functionMembers.Keys)
+    {
+        $totalTime = 0
+        foreach($line in $functionMembers[$key])
+        {
+            $totalTime += ($samples[$line] * 100 / $totalSamples)
+        }
+
+        $percentage = &quot;{0:#0}&quot; -f $totalTime
+        &quot;{0,3}%: {1}&quot; -f $percentage,$key
+    }
+}
+
+## Run the actual profiling of the script.  $uniqueLines gets
+## the mapping of line number to actual script content.
+## Return a hashtable mapping line number to the number of times
+## we observed the script running that line.
+function GetSamples($uniqueLines)
+{
+    ## Open the log file.  We use the .Net file I/O, so that we keep
+    ## monitoring just the end of the file.  Otherwise, we would make our
+    ## timing inaccurate as we scan the entire length of the file every time.
+    $logStream = [System.IO.File]::Open($Path, &quot;Open&quot;, &quot;Read&quot;, &quot;ReadWrite&quot;)
+    $logReader = New-Object System.IO.StreamReader $logStream
+
+    $random = New-Object Random
+    $samples = @{}
+
+    $lastCounted = $null
+
+    ## Gather statistics until the user presses a key.
+    while(-not $host.UI.RawUI.KeyAvailable)
+    {
+        ## We sleep a slightly random amount of time.  If we sleep a constant
+        ## amount of time, we run the very real risk of improperly sampling
+        ## scripts that exhibit periodic behaviour.
+        $sleepTime = [int] ($random.NextDouble() * 100.0)
+        Start-Sleep -Milliseconds $sleepTime
+
+        ## Get any content produced by the transcript since our last poll.
+        ## From that poll, extract the last DEBUG statement (which is the last
+        ## line executed.)
+        $rest = $logReader.ReadToEnd()
+        $lastEntryIndex = $rest.LastIndexOf(&quot;DEBUG: &quot;)
+
+        ## If we didn't get a new line, then the script is still working on
+        ## the last line that we captured.
+        if($lastEntryIndex -lt 0)
+        {
+            if($lastCounted) { $samples[$lastCounted] ++ }
+            continue;
+        }
+
+        ## Extract the debug line.
+        $lastEntryFinish = $rest.IndexOf(&quot;\n&quot;, $lastEntryIndex)
+        if($lastEntryFinish -eq -1) { $lastEntryFinish = $rest.length }
+
+        $scriptLine = $rest.Substring(
+            $lastEntryIndex, ($lastEntryFinish - $lastEntryIndex)).Trim()
+        if($scriptLine -match 'DEBUG:[ \t]*([0-9]*)\+(.*)')
+        {
+            ## Pull out the line number from the line
+            $last = $matches[1]
+
+            $lastCounted = $last
+            $samples[$last] ++
+
+            ## Pull out the actual script line that matches the line number
+            $uniqueLines[$last] = $matches[2]
+        }
+
+        ## Discard anything that's buffered during this poll, and start
+        ## waiting again
+        $logReader.DiscardBufferedData()
+    }
+
+    ## Clean up
+    $logStream.Close()
+    $logReader.Close()
+
+    $samples
+}
+
+## Go through the transcript log to figure out which lines are part of any
+## marked regions.  This returns a hashtable that maps region names to
+## the lines they contain.
+function GenerateFunctionMembers
+{
+    ## Create a stack that represents the callstack.  That way, if a marked
+    ## region contains another marked region, we attribute the statistics
+    ## appropriately.
+    $callstack = New-Object System.Collections.Stack
+    $currentFunction = &quot;Unmarked&quot;
+    $callstack.Push($currentFunction)
+
+    $functionMembers = @{}
+
+    ## Go through each line in the transcript file, from the beginning
+    foreach($line in (Get-Content $Path))
+    {
+        ## Check if we're entering a monitor block
+        ## If so, store that we're in that function, and push it onto
+        ## the callstack.
+        if($line -match 'write-debug &quot;ENTER (.*)&quot;')
+        {
+            $currentFunction = $matches[1]
+            $callstack.Push($currentFunction)
+        }
+        ## Check if we're exiting a monitor block
+        ## If so, clear the &quot;current function&quot; from the callstack,
+        ## and store the new &quot;current function&quot; onto the callstack.
+        elseif($line -match 'write-debug &quot;EXIT&quot;')
+        {
+            [void] $callstack.Pop()
+            $currentFunction = $callstack.Peek()
+        }
+        ## Otherwise, this is just a line with some code.
+        ## Add the line number as a member of the &quot;current function&quot;
+        else
+        {
+            if($line -match 'DEBUG:[ \t]*([0-9]*)\+')
+            {
+                ## Create the arraylist if it's not initialized
+                if(-not $functionMembers[$currentFunction])
+                {
+                    $functionMembers[$currentFunction] =
+                        New-Object System.Collections.ArrayList
+                }
+
+                ## Add the current line to the ArrayList
+                $hitLines = $functionMembers[$currentFunction]
+                if(-not $hitLines.Contains($matches[1]))
+                {
+                    [void] $hitLines.Add($matches[1])
+                }
+            }
+        }
+    }
+
+    $functionMembers
+}
+
+. Main
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

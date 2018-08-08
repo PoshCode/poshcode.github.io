@@ -1,0 +1,1462 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BattleChicken">
+    <title>EFT Powershell module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>EFT Powershell module</h1>
+<h3><a href="//scripts/6087.ps1">download</a></h3>
+<p>Globalscape EFT Powershell module
+This module is not particularly well polished but it does most of the user-management tasks acceptably well.</p>
+<pre><code class="language-posh">&lt;# Globalscape EFT module
+ Written by Daniel V. Davidson; davidsondaniel81@gmail.com
+ The purpose of this module is to simplify creating and maintaining users in Globalscape EFT
+ There are several limitations to keep in mind:
+ 1)  This will only work in 32 bit Powershell.  the DLL will not load in 32 bit sessions
+ 2)  Certain functions only appear to work in Powershell 2.0 mode. most likely .net framework changes
+ #&gt;
+
+
+
+if ([System.IntPtr]::Size -ne 4){
+    Throw &quot;The EFT DLL objects require a x86 (32 bit) Powershell.exe instance - it will not work in a 64 bit session&quot;
+}
+
+if (-not ($PSVersionTable.PSVersion.major -lt 3)){
+    Write-Warning &quot;The Get-EFTUserAccessSummary (and possibly other) functions in this module require Powershell version 2. There are bugs in the EFT DLL for certain functions using PS3 (like GetEnableAccount() in the - probably due to .net framework differences.  You can force version 2 by running powershell.exe -version 2&quot;
+}
+
+
+
+
+
+
+$global:EFTBaseObjTypeName = &quot;&quot;
+$global:EFTSiteObjTypeName = &quot;&quot;
+$global:EFTUserSettingsObjTypeName = &quot;&quot;
+$global:EFTFolderPermObjTypeName = &quot;&quot;
+
+# This represents the set of settings configured in Function Set-EFTPermissions.  It's used
+# In many other functions to set the access for a given directory.  If any get added to Set-EFTPermissions
+# they need to get added here too.
+Add-Type -TypeDefinition @'
+using System;
+
+public enum AccessRights{
+	AllButDelete,
+	AllButDownload,
+	AllButUpload,
+	AllButFolderCreateDelete,
+	DownloadOnly,
+	DownloadDeleteFiles,
+	FullAccess,
+	ListOnly,
+	None,
+	UploadAppendRenameCreate,
+	UploadDownloadOnly,
+	UploadOnly
+}
+'@
+
+#Function to generate a random password, upper, lower, numbers of a specified length.
+Function New-RandomPassword {
+  Param(
+    [parameter()]
+    [ValidateRange(8,100)]
+    [int]$Length=12,
+
+    [parameter()]
+    [switch]$SpecialChars
+
+  )
+    $aUpper      = [char[]]'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    $aLower      = [char[]]'abcdefghijklmnopqrstuvwxyz'
+    $aNumber     = [char[]]'1234567890'
+    $aSCharacter = [char[]]'!@#$%^&amp;*()_+|~-=\{}[]:;&lt;&gt;,./' # Depending on usage, you may want to strip out some of the special characters if they are not supported
+
+    $aClasses    = [char[]]'ULN' #represents the different classes of characters
+    $thePass     = &quot;&quot;
+    if ($SpecialChars){
+        $aClasses += 'S'
+    }
+    $notOneOfEach = $true
+    while ($notOneOfEach){
+        $pPattern = ''
+        for ($i=0; $i-lt $Length; $i++){
+            $pPattern += get-random -InputObject $aClasses
+        }
+        if (($pPattern -match 'U' -and $pPattern -match 'L' -and $pPattern -match 'N' -and (-not $specialChars)) -or ($pPattern -match 'U' -and $pPattern -match 'L' -and $pPattern -match 'N' -and $pPattern -match 'S')){
+            $notOneOfEach = $false
+        }
+    }
+    foreach ($chr in [char[]]$pPattern){
+        switch ($chr){
+            U {$thePass += get-random -InputObject $aUpper; break}
+            L {$thePass += get-random -InputObject $aLower; break}
+            N {$thePass += get-random -InputObject $aNumber; break}
+            S {$thePass += get-random -InputObject $aSCharacter; break}
+        }
+    }
+    $thePass
+}
+
+function New-EFTComObject{
+[CmdletBinding()]
+param ()
+	try{
+		$objFTP = new-object -comObject &quot;SFTPCOMInterface.CIServer&quot;
+		if ($?){write-verbose &quot;A blank EFT COM Object has been created.  It is not connected to a server.&quot;}
+		$global:EFTBaseObjTypeName = $objFTP.psobject.typenames[0]
+	}
+	catch{
+		throw &quot;Unable to create the EFT com object&quot;
+	}
+	$objFTP
+}
+
+function Connect-EFTServer {
+[CmdletBinding()]
+	param (
+		[parameter(ValueFromPipeLine=$true)]
+		[object]$objFTP=$null,
+
+		[parameter()]
+		[string]$Server=&quot;$env:computername&quot;,
+		
+		[parameter()]
+		[ValidateRange(0,65535)]
+		[int]$Port=&quot;4242&quot;, #EFT Software default is 1100
+
+		[parameter()]
+		[ValidateNotNullOrEmpty()]
+		[string]$AdminAccount,
+
+		[parameter()]
+		[ValidateNotNullOrEmpty()]
+		[string]$Password,
+		
+		[parameter(Mandatory=$true)]
+		[ValidateSet(&quot;EFT&quot;,&quot;Windows&quot;)]
+		[string]$LogonType
+	)
+	if ($objFTP -eq $null){$objFTP = New-EFTComObject}
+	try{
+		if ($objFTP.psobject.typenames[0] -eq $global:EFTBaseObjTypeName){
+			switch ($LogonType.tolower()){
+				eft {
+					#Connect to server using an EFT-level account
+					$objFTP.connect($server,$Port,$AdminAccount,$Password)
+					if ($?){write-verbose &quot;Connected to $server as $AdminAccount&quot;}
+					break
+				}
+				windows {
+					#Connect to server using current user credential - windows login
+					$objFTP.ConnectEX($Server,$port,1,&quot;&quot;,&quot;&quot;)
+					if ($?){write-verbose &quot;Connected to $server with Windows credentials&quot;}
+					break
+				}
+			}
+			$objFTP
+		}
+		else {
+			throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTBaseObjTypeName' required&quot;
+		}
+		
+	}
+	catch [exception] {
+		write-error $_.exception.Message
+	}
+}
+
+function Get-EFTSites {
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objFTP,
+		
+		[parameter()]
+		[string[]]$SiteNames=$null
+	)
+		
+	try{
+		if ($objFTP.psobject.typenames[0] -eq $global:EFTBaseObjTypeName){
+			$objSites = $objFTP.sites() #COM object method to retun the FTP site parent object; lets you create, etc..
+			$global:EFTSiteObjTypeName = ($objSites.item(0)).psobject.typenames[0]
+			if ($?){write-verbose &quot;$($objSites.count()) total sites found&quot;}
+			$objArr = for ($i=0; $i -lt $objSites.count(); $i++){
+				$objSites.item($i)
+			}
+			if ($SiteNames -eq $null -and $objArr){
+				write-verbose &quot;Found sites`: $($objArr | foreach {$_.name})&quot;
+				$objArr 
+			}
+			elseif ($objArr -and $SiteNames -ne $null){
+				$hits = $false
+				$foundArr = foreach ($site in $objArr){
+					if ($SiteNames -contains ($site.name)){
+						$hits = $true
+						$site
+					}
+				}
+				write-verbose &quot;Matching sites`: $($foundArr | foreach {$_.name})&quot;
+				$foundArr
+				if ($hits -eq $false){
+					throw &quot;No FTP sites matched the provided name(s)`: $Names&quot;
+				}
+			}
+			else {throw &quot;No FTP Sites Found&quot;}
+		}
+		else {
+			throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTBaseObjTypeName' required&quot;
+		}
+	}
+	catch [exception] {
+		write-error $_.exception.Message
+	}
+}
+
+# Updated function to throw an error if any usernames don't match - might want to consider adding a switch to specify &quot;get all that match, don't error&quot; 
+#  or &quot;error on mismatch&quot;
+function Get-EFTSiteUsers {
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+		
+		[parameter()]
+		[string[]]$UserNames=$null
+	)
+	try{
+		# Get all the user accounts
+		if ($objSite.psobject.typenames[0] -eq $global:EFTSiteObjTypeName){
+			$arrEFTUsers = $null
+			$arrEFTUsers = $objSite.getusers()
+		}
+		else {
+			throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+		}
+		
+		
+		#Pare the list down if names were provided.
+		$arrMatchingUsers = @()
+		if ($UserNames -ne $null -and $arrEFTUsers -ne $null){
+			foreach ($name in $UserNames){
+				if ($arrEFTUsers -contains $name){
+					$arrMatchingUsers += $arrEFTUsers -like $name
+				}
+				else{
+					throw &quot;$name does not exist in $($objSite.name)&quot;
+				}
+			}
+			#make sure that there were some matching users
+			if ($arrMatchingUsers -ne $null){
+				write-verbose &quot;$($arrMatchingUsers.count) provided UserName(s) found&quot;
+				$arrMatchingUsers
+			}
+			else {
+				throw &quot;No user accounts found that match the provided UserName(s)&quot;
+			}
+		}
+		elseif ($UserNames -eq $null -and $arrEFTUsers -ne $null){
+			write-verbose &quot;$($arrEFTUsers.count) found&quot;
+			$arrEFTUsers
+		}
+		else {
+			throw &quot;No EFT user accounts found for $($objSite.name)&quot;
+		}
+	}
+	catch [exception] {
+		write-error $_.exception.Message
+	}
+}
+
+function Get-EFTUserSettings {
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$UserName
+	)
+	try{
+		if ($objSite.psobject.typenames[0] -eq $global:EFTSiteObjTypeName){
+			$userSettings = $null
+			try {
+				$userSettings = $objSite.GetUserSettings($UserName)
+				$global:EFTUserSettingsObjTypeName = $userSettings.psobject.typenames[0]
+			}
+			catch [exception] {
+				throw &quot;There was an error getting the user object. No user named '$UserName' in $($objSite.name).&quot;
+			}
+			if ($?){write-verbose &quot;Found user settings for $UserName, $($userSettings.fullname)&quot;}
+			if ($userSettings -eq $null){
+				throw &quot;There was an error getting the user object most likely connecting to the EFT server.  Try Reconnecting to EFT using Connect-EFTServer and try again&quot;
+			}
+			$userSettings
+		}
+		else {
+			throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+		}
+	}
+	catch [exception] {
+		write-error $_.exception.Message
+	}
+}
+
+
+function Set-EFTUserSettingsTemplate{
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$UserName,
+
+		[parameter(Mandatory=$true)]
+		[string]$UserSettingsTemplateName
+	)
+
+	if ($objSite.psobject.typenames[0] -ne $global:EFTSiteObjTypeName){
+		write-verbose &quot;Invalid object passed&quot;
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	
+	$site | Get-EFTSiteUsers -UserNames $Username | out-null # confirm that the account exists - it will throw if it doesn't.
+	try{
+		$objSite.moveusertosettingslevel($UserName, $UserSettingsTemplateName)
+		if ($?){Write-Verbose &quot;User Settings Template set to `&quot;$UserSettingsTemplateName`&quot; for $UserName&quot;}
+	}
+	catch{
+		throw &quot;Specified user settings template `&quot;$UserSettingsTemplateName`&quot; does not exist.&quot;
+	}
+}
+
+function Get-EFTUserSettingsTemplate{
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$UserName
+	)
+	
+	if ($objSite.psobject.typenames[0] -ne $global:EFTSiteObjTypeName){
+		write-verbose &quot;Invalid object passed&quot;
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	
+		
+	$objSite | Get-EFTSiteUsers -UserNames $Username | out-null # confirm that the account exists - it will throw if it doesn't.
+	try{
+		$objSite.GetUserSettingsLevel($UserName)
+	}
+	catch{
+		throw &quot;Error getting user settings level for $UserName&quot;
+	}
+}
+
+Function Get-EFTUserAccessSummary{
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objFTP,
+		
+		[parameter(Mandatory=$true)]
+		[string]$SiteName=$null,
+		
+		[parameter()]
+		[string[]]$UserNames=$null,
+
+		[parameter()]
+		[string]$CSVExportPath=&quot;&quot;
+	)
+	$arrAllData = @()
+		
+	if ($objFTP.psobject.typenames[0] -ne $global:EFTBaseObjTypeName){
+		write-verbose &quot;Invalid object passed&quot;
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTBaseObjTypeName' required&quot;
+	}
+
+	if ($SiteName -eq $null){
+		$objSites = $objFtp | Get-EFTSites
+	}
+	else{
+		$objSites = $objFtp | Get-EFTSites -SiteNames $SiteName
+	}
+	foreach ($objSite in $objSites){
+        # Collecting all of the configured folders in EFT.
+        $allConfiguredFolders = @()
+        $allConfiguredFolders += $objSite.GetPermPathsList(&quot;/&quot;) -split '\r\n' # this returns all folders that EFT thinks exists. even ones that don't
+        $allConfiguredFolders += $objSite.GetVirtualFolderList(&quot;/&quot;) -split '\r\n'
+
+		if ($UserNames -eq $null){
+			write-verbose &quot;Getting all users for $($site.name)&quot;
+			$UserList = $objSite | Get-EFTSiteUsers | sort
+		}
+		else {
+			write-verbose &quot;Checking for $UserNames in $($objSite.name)&quot;
+			$UserList = $objSite | Get-EFTSiteUsers -UserNames $UserNames
+		}
+		foreach ($EFTuser in $UserList){
+				
+			#keep alive attempt - for long queries the object times out
+			$null = $objFTP.GetLocalTime()
+			$arrUserFolders = @()
+			$objUserAccess = $objSite | Get-EFTUserSettings -UserName $EFTUser
+			write-verbose &quot;Getting all of $($EFTUser)'s EFT Access...&quot;
+			$homeDir = $objUserAccess.GetHomeDirString()
+				
+			if (test-path (join-path ($objSite.GetRootFolder()) $homedir)){
+                $arrUserFolders += $allConfiguredFolders | where {$_ -match $homeDir}
+			}
+			else{
+				write-warning &quot;**** $EFTUser has a home dir set to to $homeDir but it does not exists&quot; 
+				$arrUserFolders = $null
+			}
+
+			$accessPSObjects = foreach ($dir in $arrUserFolders | foreach {$_.tolower()} | select -Unique | sort){
+                # Lousy workaround to determine if the folder exists... the function I should be able to use no longer works, bug in the API.
+                # unfortunately in PS 2 mode i can't redirect the error output 
+                $null = $objSite.IsFolderVirtual($dir) 2&gt; $null
+                if ($?){
+				    $folderAccessObj = $objSite.GetFolderPermissions($dir) | where {$_.client -eq $EFTUser}
+					if ($folderAccessObj){
+						if ($folderAccessObj.InheritedFrom.length -ge $folderAccessObj.Folder.length){
+							$accessString = &quot;_&quot;
+							#Create a string that represents the acces assigned to the folder that mimics the in-client display
+							if ($folderAccessObj.FileUpload)	 {$accessString += 'U'}	else {$accessString += 'x'}
+							if ($folderAccessObj.FileDownload)	 {$accessString += 'D'}	else {$accessString += 'x'}
+							if ($folderAccessObj.FileAppend)	 {$accessString += 'A'}	else {$accessString += 'x'}
+							if ($folderAccessObj.FileDelete)	 {$accessString += 'D'}	else {$accessString += 'x'}
+							if ($folderAccessObj.FileRename)	 {$accessString += 'R'}	else {$accessString += 'x'}
+							if ($folderAccessObj.DirShowInList)	 {$accessString += 'S'}	else {$accessString += 'x'}
+							if ($folderAccessObj.DirCreate)		 {$accessString += 'C'}	else {$accessString += 'x'}
+							if ($folderAccessObj.DirDelete)		 {$accessString += 'D'}	else {$accessString += 'x'}
+							if ($folderAccessObj.DirList)		 {$accessString += 'L'}	else {$accessString += 'x'}
+							if ($folderAccessObj.DirShowHidden)	 {$accessString += 'H'}	else {$accessString += 'x'}	
+							if ($folderAccessObj.DirShowReadOnly){$accessString += '0'}	else {$accessString += 'x'}	
+							
+							New-Object psobject -Property @{
+								'Site Name'				= $objSite.name
+								'User Enabled'			= $objUserAccess.GetEnableAccount() # This method does not work in PS3.
+								'Is Virtual Folder' 	= $objSite.IsFolderVirtual($dir)
+								'Physical Path'			= $objSite.GetPhysicalPath($dir)
+								'User Home Dir'			= $homeDir
+								Access					= $accessString
+								Notes					= &quot;&quot;
+								InheritedFrom	 		= $folderAccessObj.InheritedFrom
+								Folder					= $folderAccessObj.Folder
+								User					= $folderAccessObj.Client
+								'Full Name'				= $objUserAccess.fullname
+								IsGroup					= $folderAccessObj.IsGroup
+								IsInherited				= $folderAccessObj.IsInherited
+								AccountCreationTime		= $objUserAccess.AccountCreationTime
+								LastConnectionTime		= $objUserAccess.LastConnectionTime
+								LastModifiedBy			= $objUserAccess.LastModifiedBy
+								# Adding the boolean values for each of the exact fields required to rebuild an access object.
+								FileUpload              = $folderAccessObj.FileUpload
+								FileDownload            = $folderAccessObj.FileDownload
+								FileAppend              = $folderAccessObj.FileAppend
+								FileDelete              = $folderAccessObj.FileDelete
+								FileRename              = $folderAccessObj.FileRename
+								DirShowInList           = $folderAccessObj.DirShowInList
+								DirCreate               = $folderAccessObj.DirCreate
+								DirDelete               = $folderAccessObj.DirDelete
+								DirList                 = $folderAccessObj.DirList
+								DirShowHidden           = $folderAccessObj.DirShowHidden
+								DirShowReadOnly         = $folderAccessObj.DirShowReadOnly
+							}
+						}
+					}
+				}
+			}
+			$arrAllData += $accessPSObjects
+            # Can't do it this way since there's a bug in one of the DLL methods for the access objects.. the  .GetEnableAccount() method fails in Powershell 3, probably due to .net framework differences.
+            #$accessPSObjects | select User,'Full Name','Site Name','User Enabled',LastConnectionTime,'User Home Dir',Folder,Access,'Is Virtual Folder','Physical Path',InheritedFrom,IsInherited,AccountCreationTime,LastModifiedBy,IsGroup,Notes,FileUpload,FileDownload,FileAppend,FileDelete,FileRename,DirShowInList,DirCreate,DirDelete,DirList,DirShowHidden,DirShowReadOnly| export-csv $CSVExportPath -notypeinformation -encoding ascii -Append
+		}
+	}
+	if ($CSVExportPath -eq &quot;&quot;){
+		$arrAllData
+	}
+	else {
+		#$allData
+		$arrAllData | select User,'Full Name','Site Name','User Enabled',LastConnectionTime,'User Home Dir',Folder,Access,'Is Virtual Folder','Physical Path',InheritedFrom,IsInherited,AccountCreationTime,LastModifiedBy,IsGroup,Notes,FileUpload,FileDownload,FileAppend,FileDelete,FileRename,DirShowInList,DirCreate,DirDelete,DirList,DirShowHidden,DirShowReadOnly| export-csv $CSVExportPath -notypeinformation -encoding ascii
+	}
+}
+&lt;# 5/19/2015:  I don't need this right now since I'm about to retire my only NTFS instance.  I'm also reworking the other script, so commenting this out for now until i can retrofit both
+# 5/8/2014: At some point I will merge Get-EFTUserAccessSummary and Get-EFTUserAccessSummaryNTFS. not today, though.
+# it will involve adding a site-level detection of some kind, haven't explored for that method/property yet.
+Function Get-EFTUserAccessSummaryNTFS{
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objFTP,
+		
+		[parameter(Mandatory=$true)]
+		[string]$SiteName=$null,
+		
+		[parameter()]
+		[string[]]$UserNames=$null,
+
+		[parameter()]
+		[string]$CSVExportPath=$null
+		&lt;#
+		[parameter()]
+		[validateset(&quot;Fast&quot;,&quot;Complete&quot;)]
+		[string]$ScanType=&quot;Complete&quot;
+		
+	)
+	try{
+		$arrAllData = @()
+		switch ($scanType){
+			Complete {
+				write-verbose &quot;Scan Type set to 'Complete'.  Scan may be slow due to full directory recursion but will return ALL data&quot;
+				break
+			}
+			Fast{
+				write-verbose &quot;Scan Type set to 'Fast'.  Scan will be faster but will only recurse down 3 folder levels.&quot;
+				break
+			}
+		}
+		
+		if ($objFTP.psobject.typenames[0] -ne $global:EFTBaseObjTypeName){
+			write-verbose &quot;Invalid object passed&quot;
+			throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTBaseObjTypeName' required&quot;
+		}
+		#leaving this chunk in for now because I want to change it to gracefully exit when it cannot find a site or users later, but
+		# leaving this until i can rethink the logic later on.
+		if ($SiteName -eq $null){
+			$objSites = $objFtp | Get-EFTSites
+		}
+		else{
+			$objSites = $objFtp | Get-EFTSites -SiteNames $SiteName
+		}
+		foreach ($objSite in $objSites){
+			if ($UserNames -eq $null){
+				write-verbose &quot;Getting all users for $($site.name)&quot;
+				$UserList = $objSite | Get-EFTSiteUsers
+			}
+			else {
+				write-verbose &quot;Checking for $UserNames in $($objSite.name)&quot;
+				$UserList = $objSite | Get-EFTSiteUsers -UserNames $UserNames
+			}
+			foreach ($EFTuser in $UserList){
+				
+				#keep alive attempt - for long queries the damn thing times out.
+				$null = $objFTP.GetLocalTime()
+
+				$objUserAccess = $objSite | Get-EFTUserSettings -UserName $EFTUser
+				write-verbose &quot;Getting all of $($EFTUser)'s EFT Access...&quot;
+				$homeDir = $objUserAccess.GetHomeDirString()
+				if ($homedir.endswith(&quot;/&quot;)){}
+				else {$homedir += &quot;/&quot;}
+				
+				$arrUserFolders = @()
+				
+				$homedirExists = test-path (join-path ($objSite.GetRootFolder()) $homedir)
+				if ($homeDirExists){
+					$arrUserFolders += get-item (join-path ($objSite.GetRootFolder()) $homedir)
+					$arrUserFolders += get-childitem $arrUserFolders[0].fullname | where {$_.psiscontainer}
+				}
+				else{
+					write-warning &quot;**** $EFTUser has a home dir set to to $homeDir but it does not exists&quot;
+				}
+				
+				# Just letting people know that it's going to be slow.
+				if ($arrUserFolders.count -gt 1000){
+					write-verbose &quot;$($arrUserFolders.count) folders found, this may take a while&quot;
+				}
+				
+				$accessPSObjects = foreach ($dir in $arrUserFolders | sort fullname){
+					$ACEs = (get-acl $dir.fullname).access | where {$_.identityreference -eq $EFTUser}
+					if ($ACEs){
+						foreach ($ACE in $ACEs){
+							new-object psobject -property @{
+								'Site Name'				= $objSite.name
+								'User Enabled'			= $objUserAccess.GetEnableAccount()
+								'User Home Dir'			= $homeDir
+								FileSystemRights		= $ACE.FileSystemRights
+								AccessControlType		= $ACE.AccessControlType
+								IdentityReference		= $ACE.IdentityReference
+								IsInherited				= $ACE.IsInherited
+								InheritanceFlags		= $ACE.InheritanceFlags
+								PropagationFlags		= $ACE.PropagationFlags
+								Folder					= $dir.fullname
+								User					= $EFTUser
+								'Full Name'				= $objUserAccess.fullname
+								AccountCreationTime		= $objUserAccess.AccountCreationTime
+								LastConnectionTime		= $objUserAccess.LastConnectionTime
+								LastModifiedBy			= $objUserAccess.LastModifiedBy
+							}	
+						}
+					}
+					else {
+						write-warning &quot;No access for $EFTUser for $($dir.fullname)&quot;
+					}
+				}
+				$arrAllData += $accessPSObjects
+				$accessPSObjects
+			}
+		}
+		if ($CSVExportPath -eq $null){
+			$arrAllData
+		}
+		else {
+			#$allData
+			$arrAllData | export-csv $CSVExportPath -notypeinformation -encoding ascii
+		}
+	}
+	catch [exception] {
+		Write-Error $_.exception.Message
+	}
+}
+#&gt;
+Function Get-EFTFolderPermissionObject{
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+
+		[parameter()]
+		[string[]]$UserNames=$null,
+
+		[parameter()]
+		[string]$Folder
+	)
+	
+	if ($objSite.psobject.typenames[0] -eq $global:EFTSiteObjTypeName){}
+	else {
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	try{
+		$objPerms = @($objSite.GetFolderPermissions($folder))
+	}
+	catch [exception]{
+		throw &quot;Unable to get permission objects for $Folder&quot;
+	}
+	$someMatches = $false
+	foreach ($objPerm in $objPerms){
+		foreach ($User in $UserNames){
+			if ($objPerm.client -eq $User){
+				$objPerm
+			}
+		}
+	}
+}
+
+Function Copy-EFTFolderPermissionsToNewUser {
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+
+		[parameter(Mandatory=$true)]
+		[object]$AccessObjectToCopy,
+		
+		[parameter()]
+		[string]$UserName,
+		
+		[parameter()]
+		[string]$FolderOverride=$null
+	)
+	
+	if ($objSite.psobject.typenames[0] -eq $global:EFTSiteObjTypeName){}
+	else {
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	# Use the folder specified in the passed object or override the folder with identical access.
+	if (-not $FolderOverride){
+		$newAccessObj = $objSite | New-EFTPermissionOject -UserNames $UserName -Folder $AccessObjectToCopy.folder
+	}
+	else{
+		$newAccessObj = $objSite | New-EFTPermissionOject -UserNames $UserName -Folder $FolderOverride
+	}
+	
+	if ($AccessObjectToCopy.psobject.typenames[0] -eq $global:EFTFolderPermObjTypeName){}
+	else {
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTFolderPermObjTypeName' required&quot;
+	}
+	$newAccessObj.FileUpload 		= $AccessObjectToCopy.FileUpload
+	$newAccessObj.FileDelete 		= $AccessObjectToCopy.FileDelete
+	$newAccessObj.FileRename 		= $AccessObjectToCopy.FileRename
+	$newAccessObj.FileAppend 		= $AccessObjectToCopy.FileAppend
+	$newAccessObj.FileDownload		= $AccessObjectToCopy.FileDownload
+	$newAccessObj.DirCreate 		= $AccessObjectToCopy.DirCreate
+	$newAccessObj.DirDelete 		= $AccessObjectToCopy.DirDelete
+	$newAccessObj.DirList 			= $AccessObjectToCopy.DirList
+	$newAccessObj.DirShowHidden 	= $AccessObjectToCopy.DirShowHidden
+	$newAccessObj.DirShowReadOnly 	= $AccessObjectToCopy.DirShowReadOnly
+	$newAccessObj.DirShowInList 	= $AccessObjectToCopy.DirShowInList
+	
+	$newAccessObj
+	
+}
+
+Function New-EFTPermissionOject{
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+
+		[parameter()]
+		[string[]]$UserNames=$null,
+
+		[parameter()]
+		[string]$Folder
+	)
+	
+	if ($objSite.psobject.typenames[0] -eq $global:EFTSiteObjTypeName){}
+	else {
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	try{
+		# confirm the specified path exists in EFT. will error if it isn't.
+		$objSite.GetPhysicalPath($Folder) | out-null
+	}
+	catch [exception]{
+		throw &quot;Error finding a physical path for $Folder - it does not exist&quot;
+	}
+	# Check that at at least one user is valid. by validating that the user exists - cmdlet will error otherwise.
+	$objSite | Get-EFTSiteUsers -UserNames $UserNames | Out-Null
+
+	# return a blank permission object for reach user.. may rework this to just take one at a time.
+	$bFirst = $true
+	$tempObj = $null
+	foreach ($UserName in $UserNames){
+		if ($bFirst){
+			$tempObj = $objSite.GetBlankPermission($Folder, $UserName)
+			$global:EFTFolderPermObjTypeName = $tempObj.psobject.typenames[0]
+			$bFirst = $false
+			$tempObj
+		}
+		else{
+			$objSite.GetBlankPermission($Folder, $UserName)
+		}
+	}
+}
+
+#I don't care about hidden files - everything that can see stuff gets show hidden and list for now
+Function Set-EFTPermissions{
+[CmdletBinding()]
+	param (
+		[parameter(ValueFromPipeLine=$true, Mandatory=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true, ParameterSetName = &quot;InputObject&quot;)]
+		[object]$EFTPermissionObject,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;NoObject&quot;)]
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[string]$UserName,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;NoObject&quot;)]
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[string]$Folder,
+	
+		[parameter(ParameterSetName = &quot;NoObject&quot;, Mandatory=$true)]
+		[parameter(ParameterSetName = &quot;InputObject&quot;)]
+		[AccessRights]$AccessRights, #if you pass an object (with existing permissions) and don't specify $accessrights, it will use the existing obj settings
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileUpload,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileDownload,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileAppend,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileDelete,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileRename,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowInList,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirCreate,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirDelete,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirList,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowHidden,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowReadOnly
+	)
+
+
+
+	# How this thing deals with slashes at the end of home dirs and folders is kind of spotty, so a user accidentally 
+	#  having $homefolder//target happens a lot - adding this to make that be less of an issue for the users.
+	$Folder = $Folder -replace &quot;//&quot;,&quot;/&quot;
+	if ($objSite.psobject.typenames[0] -eq $global:EFTSiteObjTypeName){}
+	else {
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	if ($EFTPermissionObject -ne $null){
+		if ($EFTPermissionObject.psobject.typenames[0] -eq $global:EFTFolderPermObjTypeName){}
+		else {
+			throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTFolderPermObjTypeName' required&quot;
+		}
+	}
+	else{
+		$EFTPermissionObject = $objSite | New-EFTPermissionOject -UserNames $UserName -Folder $Folder
+	}
+	
+    if ($AccessRights){
+	    switch ($AccessRights){
+		    'FullAccess' {
+			    $EFTPermissionObject.FileUpload      = $true
+			    $EFTPermissionObject.FileDelete      = $true
+			    $EFTPermissionObject.FileRename      = $true
+			    $EFTPermissionObject.FileAppend      = $true
+			    $EFTPermissionObject.FileDownload    = $true
+			    $EFTPermissionObject.DirCreate       = $true
+			    $EFTPermissionObject.DirDelete       = $true
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'ListOnly' {
+			    $EFTPermissionObject.FileUpload      = $false
+			    $EFTPermissionObject.FileDelete      = $false
+			    $EFTPermissionObject.FileRename      = $false
+			    $EFTPermissionObject.FileAppend      = $false
+			    $EFTPermissionObject.FileDownload    = $false
+			    $EFTPermissionObject.DirCreate       = $false
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'None' {
+			    $EFTPermissionObject.FileUpload      = $false
+			    $EFTPermissionObject.FileDelete      = $false
+			    $EFTPermissionObject.FileRename      = $false
+			    $EFTPermissionObject.FileAppend      = $false
+			    $EFTPermissionObject.FileDownload    = $false
+			    $EFTPermissionObject.DirCreate       = $false
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $false
+			    $EFTPermissionObject.DirShowHidden   = $false
+			    $EFTPermissionObject.DirShowReadOnly = $false
+			    $EFTPermissionObject.DirShowInList   = $false
+			    break
+		    }
+		    'DownloadOnly' {
+			    $EFTPermissionObject.FileUpload      = $false
+			    $EFTPermissionObject.FileDelete      = $false
+			    $EFTPermissionObject.FileRename      = $false
+			    $EFTPermissionObject.FileAppend      = $false
+			    $EFTPermissionObject.FileDownload    = $true
+			    $EFTPermissionObject.DirCreate       = $false
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'DownloadDeleteFiles' {
+			    $EFTPermissionObject.FileUpload      = $false
+			    $EFTPermissionObject.FileDelete      = $true
+			    $EFTPermissionObject.FileRename      = $false
+			    $EFTPermissionObject.FileAppend      = $false
+			    $EFTPermissionObject.FileDownload    = $true
+			    $EFTPermissionObject.DirCreate       = $false
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'AllButUpload' {
+			    $EFTPermissionObject.FileUpload      = $false
+			    $EFTPermissionObject.FileDelete      = $true
+			    $EFTPermissionObject.FileRename      = $true
+			    $EFTPermissionObject.FileAppend      = $true
+			    $EFTPermissionObject.FileDownload    = $true
+			    $EFTPermissionObject.DirCreate       = $true
+			    $EFTPermissionObject.DirDelete       = $true
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'AllButDelete' {
+			    $EFTPermissionObject.FileUpload      = $true
+			    $EFTPermissionObject.FileDelete      = $false
+			    $EFTPermissionObject.FileRename      = $true
+			    $EFTPermissionObject.FileAppend      = $true
+			    $EFTPermissionObject.FileDownload    = $true
+			    $EFTPermissionObject.DirCreate       = $true
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'UploadDownloadOnly' {
+			    $EFTPermissionObject.FileUpload      = $true
+			    $EFTPermissionObject.FileDelete      = $false
+			    $EFTPermissionObject.FileRename      = $false
+			    $EFTPermissionObject.FileAppend      = $false
+			    $EFTPermissionObject.FileDownload    = $true
+			    $EFTPermissionObject.DirCreate       = $false
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'UploadOnly' {
+			    $EFTPermissionObject.FileUpload      = $true
+			    $EFTPermissionObject.FileDelete      = $false
+			    $EFTPermissionObject.FileRename      = $false
+			    $EFTPermissionObject.FileAppend      = $false
+			    $EFTPermissionObject.FileDownload    = $false
+			    $EFTPermissionObject.DirCreate       = $false
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'AllButDownload' {
+			    $EFTPermissionObject.FileUpload      = $true
+			    $EFTPermissionObject.FileDelete      = $true
+			    $EFTPermissionObject.FileRename      = $true
+			    $EFTPermissionObject.FileAppend      = $true
+			    $EFTPermissionObject.FileDownload    = $false
+			    $EFTPermissionObject.DirCreate       = $true
+			    $EFTPermissionObject.DirDelete       = $true
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'UploadAppendRenameCreate' {
+			    $EFTPermissionObject.FileUpload      = $true
+			    $EFTPermissionObject.FileDelete      = $false
+			    $EFTPermissionObject.FileRename      = $true
+			    $EFTPermissionObject.FileAppend      = $true
+			    $EFTPermissionObject.FileDownload    = $false
+			    $EFTPermissionObject.DirCreate       = $true
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+		    'AllButFolderCreateDelete' {
+			    $EFTPermissionObject.FileUpload      = $true
+			    $EFTPermissionObject.FileDelete      = $true
+			    $EFTPermissionObject.FileRename      = $true
+			    $EFTPermissionObject.FileAppend      = $true
+			    $EFTPermissionObject.FileDownload    = $true
+			    $EFTPermissionObject.DirCreate       = $false
+			    $EFTPermissionObject.DirDelete       = $false
+			    $EFTPermissionObject.DirList         = $true
+			    $EFTPermissionObject.DirShowHidden   = $true
+			    $EFTPermissionObject.DirShowReadOnly = $true
+			    $EFTPermissionObject.DirShowInList   = $true
+			    break
+		    }
+	    }
+    }
+    if ($PSBoundParameters.ContainsKey(&quot;FileUpload&quot;)){
+        $EFTPermissionObject.FileUpload      = $FileUpload
+		$EFTPermissionObject.FileDelete      = $FileDelete
+		$EFTPermissionObject.FileRename      = $FileRename
+		$EFTPermissionObject.FileAppend      = $FileAppend
+		$EFTPermissionObject.FileDownload    = $FileDownload
+		$EFTPermissionObject.DirCreate       = $DirCreate
+		$EFTPermissionObject.DirDelete       = $DirDelete
+		$EFTPermissionObject.DirList         = $DirList
+		$EFTPermissionObject.DirShowHidden   = $DirShowHidden
+		$EFTPermissionObject.DirShowReadOnly = $DirShowReadOnly
+		$EFTPermissionObject.DirShowInList   = $DirShowInList
+    }
+
+
+	$objSite.SetPermission($EFTPermissionObject)
+	if ($?){write-verbose &quot;Granted $Username $AccessRights access to $Folder&quot;}
+}
+
+Function New-EFTVirtualLink{
+[CmdletBinding()]
+	param (
+		[parameter(ValueFromPipeLine=$true,Mandatory=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$VirtualLinkName,
+
+		[parameter(Mandatory=$true)]
+		[string]$VirtualLinkDirectory,
+
+		[parameter(Mandatory=$true, ParameterSetName=&quot;NameAndAccess&quot;)]
+        [parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[string]$UserName,
+
+		[parameter(Mandatory=$true, ParameterSetName=&quot;NameAndAccess&quot;)]		
+		[AccessRights]$AccessRights,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileUpload,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileDownload,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileAppend,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileDelete,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileRename,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowInList,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirCreate,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirDelete,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirList,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowHidden,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowReadOnly
+
+	)
+	
+	if ($objSite.psobject.typenames[0] -eq $global:EFTSiteObjTypeName){}
+	else {
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	if ((test-path $VirtualLinkDirectory) -eq $false){
+		throw &quot;$VirtulLinkDirectory does not exist&quot;
+	}
+	$VirtualLinkName = $VirtualLinkName -replace &quot;//&quot;,&quot;/&quot;
+	# I want it to fail here - it means there is no path already that has the name.
+	try{
+		$tempPath = $site.GetPhysicalPath($VirtualLinkName)
+	}
+	catch{
+		write-verbose &quot;$virtualLinkName does not exist - creating&quot;
+	}
+	
+	try{
+		$objSite.CreateVirtualFolder($VirtualLinkName, $VirtualLinkDirectory)
+	}
+	catch{
+		throw &quot;Invalid virtual directory name $VirtualLinkName or it already exists&quot;
+	}
+	if ($AccessRights){
+		$objSite | Set-EFTPermissions -UserName $UserName -Folder $VirtualLinkName -AccessRights $AccessRights
+        if ($?){write-verbose &quot;$AccessRights granted to $Username to $VirtualLinkName&quot;}
+	}
+
+    if ($PSBoundParameters.ContainsKey(&quot;FileUpload&quot;)){
+        $objSite | Set-EFTPermissions -UserName $UserName -Folder $VirtualLinkName -FileUpload $FileUpload -FileDownload $FileDownload -FileAppend $FileAppend -FileDelete $FileDelete -FileRename $FileRename -DirShowInList $DirShowInList -DirCreate $DirCreate -DirDelete $DirDelete -DirList $DirList -DirShowHidden $DirShowHidden -DirShowReadOnly $DirShowReadOnly
+        if ($?){write-verbose &quot;Specified access granted to $Username to $VirtualLinkName&quot;}
+    }
+
+}
+
+Function Remove-EFTUserFolderAccessRights {
+[CmdletBinding()]
+	param (
+		[parameter(
+			ValueFromPipeLine=$true,
+			Mandatory=$true
+		)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$UserName,
+
+		[parameter(Mandatory=$true)]
+		[string]$Folder
+	)
+	$objSite.RemovePermission($folder, $UserName)
+	if ($?){write-verbose &quot;$Username's access to $folder has been removed&quot;}
+}
+
+function Get-EFTUserHomeDirectory {
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$UserName
+	)
+	if ($objSite.psobject.typenames[0] -ne $global:EFTSiteObjTypeName){
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	
+	$objUser = $objSite | Get-EFTUserSettings -Username $UserName
+	$objUser.GetHomeDirString()
+	
+}
+
+function Set-EFTUserHomeDirectory {
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$UserName,
+
+		[parameter(Mandatory=$true)]
+		[string]$HomeDirectory,
+		
+		[parameter(Mandatory=$true, ParameterSetName = &quot;AccessRights&quot;)]
+		[AccessRights]$AccessRights,
+
+		[parameter()]
+		[switch]$RemoveOldHomeDirAccess,
+		
+		[parameter()]
+		[switch]$ReturnObject,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileUpload,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileDownload,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileAppend,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileDelete,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileRename,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowInList,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirCreate,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirDelete,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirList,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowHidden,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowReadOnly
+
+	)
+	
+	if ($objSite.psobject.typenames[0] -ne $global:EFTSiteObjTypeName){
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	try {
+		$objUser = $objSite | Get-EFTUserSettings -UserName $UserName
+		if ($RemoveOldHomeDirAccess){
+			$objSite | Remove-EFTUserFolderAccessRights -UserName $UserName -Folder ($objUser.GetHomeDirString())
+		}
+		$objUser.SetHomeDirIsRoot(1)
+		$objUser.SetHomeDir(1)
+		$objUser.SetHomeDirString($HomeDirectory)
+		if ($?){write-verbose &quot;$UserName's Home directory has been set to $HomeDirectory&quot;}
+	}
+	catch [exception]{
+		throw &quot;Unable to set $UserName's home directory to $HomeDirectory - it may not exist&quot;
+	}
+	if ($AccessRights){
+		$objSite | Set-EFTPermissions -UserName $UserName -Folder $HomeDirectory -AccessRights $AccessRights
+		#if ($?){write-verbose &quot;$AccessRights Access granted for $Username to $HomeDirectory&quot;}
+	}
+
+    if ($PSBoundParameters.ContainsKey(&quot;FileUpload&quot;)){
+        $objSite | Set-EFTPermissions -UserName $UserName -Folder $HomeDirectory -FileUpload $FileUpload -FileDownload $FileDownload -FileAppend $FileAppend -FileDelete $FileDelete -FileRename $FileRename -DirShowInList $DirShowInList -DirCreate $DirCreate -DirDelete $DirDelete -DirList $DirList -DirShowHidden $DirShowHidden -DirShowReadOnly $DirShowReadOnly
+        if ($?){write-verbose &quot;Specified access granted to $Username to $HomeDirectory&quot;}
+    }
+
+	
+	if ($ReturnObject){
+		$objUser
+	}
+}
+
+
+Function New-EFTUser{
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$UserName,
+
+		[parameter(Mandatory=$true)]
+		[string]$FullName,	
+		
+		[parameter(Mandatory=$true)]
+		[string]$Password,
+
+		[parameter(Mandatory=$true)]
+		[string]$Email,
+		
+		[parameter(Mandatory=$true)]
+		[string]$HomeDirectory,
+		
+		[parameter(ParameterSetName = &quot;AccessRights&quot;)]
+		[AccessRights]$AccessRights, #for the home directory.
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileUpload,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileDownload,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileAppend,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileDelete,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$FileRename,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowInList,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirCreate,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirDelete,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirList,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowHidden,
+
+		[parameter(Mandatory=$true, ParameterSetName = &quot;ManualAccess&quot;)]
+		[bool]$DirShowReadOnly,
+
+		[parameter()]
+		[string]$UserSettingsTemplateName=&quot;&quot;, # set user settings template for the user
+		
+		[parameter()]
+		[string]$Description=&quot;&quot;,
+
+		[parameter()]
+		[string]$Comment=&quot;&quot;,
+
+		[parameter()]
+		[string]$Fax=&quot;&quot;,
+
+		[parameter()]
+		[string]$Phone=&quot;&quot;,
+
+		[parameter()]
+		[string]$Pager=&quot;&quot;,
+		
+		[parameter()]
+		[string]$Custom1=&quot;&quot;,
+
+		[parameter()]
+		[string]$Custom2=&quot;&quot;,
+
+		[parameter()]
+		[string]$Custom3=&quot;&quot;
+
+
+
+
+
+	)
+	
+	if ($objSite.psobject.typenames[0] -ne $global:EFTSiteObjTypeName){
+		write-verbose &quot;Invalid object passed&quot;
+		throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+	}
+	try {
+		if (test-path (join-path ($objSite.GetRootFolder()) $HomeDirectory)){
+			write-verbose &quot;Specified Home folder $HomeDirectory exists&quot;
+		}
+		else {
+			$objSite.CreatePhysicalFolder($HomeDirectory)
+			if ($?){write-verbose &quot;Specified Home folder $HomeDirectory has been created&quot;}
+		}
+	}
+	catch {
+		throw &quot;Error creating home directory $HomeDirectory&quot;
+	}
+	
+	try{
+		$objSite.CreateUserEx($Username, $Password, 0, $Description, $FullName, 0, $false)
+	}
+	catch {
+		throw &quot;Error creating $UserName&quot;
+	}
+	
+	$objUser = $objSite | Set-EFTUserHomeDirectory -Username $Username -HomeDirectory $HomeDirectory -ReturnObject
+	
+	$objUser.email = $email
+	if ($Comment -ne &quot;&quot;){$objUser.Comment = $Comment}
+	if ($Fax -ne &quot;&quot;)	{$objUser.Fax = $Fax}
+	if ($Phone -ne &quot;&quot;)	{$objUser.Phone = $Phone}
+	if ($Pager -ne &quot;&quot;)	{$objUser.Pager = $pager}
+	if ($Custom1 -ne &quot;&quot;){$objUser.Custom1 = $Custom1}
+	if ($Custom2 -ne &quot;&quot;){$objUser.Custom2 = $Custom2}
+	if ($Custom3 -ne &quot;&quot;){$objUser.Custom3 = $Custom3}
+
+	if ($AccessRights){
+		$objSite | Set-EFTPermissions -UserName $Username -Folder $HomeDirectory -AccessRights $AccessRights
+		if ($?){write-verbose &quot;$AccessRights Access granted for $Username to $HomeDirectory&quot;}
+	}
+
+    if ($PSBoundParameters.ContainsKey(&quot;FileUpload&quot;)){
+        $objSite | Set-EFTPermissions -UserName $UserName -Folder $HomeDirectory -FileUpload $FileUpload -FileDownload $FileDownload -FileAppend $FileAppend -FileDelete $FileDelete -FileRename $FileRename -DirShowInList $DirShowInList -DirCreate $DirCreate -DirDelete $DirDelete -DirList $DirList -DirShowHidden $DirShowHidden -DirShowReadOnly $DirShowReadOnly
+        if ($?){write-verbose &quot;Specified access granted to $Username to $HomeDirectory&quot;}
+    }
+	if ($UserSettingsTemplateName -ne &quot;&quot;){
+		try {
+			$objSite | Set-EFTUserSettingsTemplate -UserName $UserName -UserSettingsTemplateName $UserSettingsTemplateName
+		}
+		catch{
+			write-warning &quot;Unable to add user to User Settings Template `&quot;UserSettingsTemplateName`&quot; - user is still in the site's default settings template&quot;
+		}
+	}
+}
+
+Function New-EFTFolder{
+[CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true,ValueFromPipeLine=$true)]
+		[object]$objSite,
+		
+		[parameter(Mandatory=$true)]
+		[string]$Folder
+	)
+		if ($objSite.psobject.typenames[0] -ne $global:EFTSiteObjTypeName){
+			write-verbose &quot;Invalid object passed&quot;
+			throw &quot;Unexpected Object Passed to cmdlet.  Object of Typename '$global:EFTSiteObjTypeName' required&quot;
+		}
+		try {
+			if (test-path (join-path ($objSite.GetRootFolder()) $Folder)){
+				write-verbose &quot;Specified folder $Folder exists&quot;
+			}
+			else {
+				$objSite.CreatePhysicalFolder($Folder)
+				if ($?){write-verbose &quot;Specified folder $Folder has been created&quot;}
+			}
+		}
+		catch {
+			throw &quot;Error creating home directory $Folder&quot;
+		}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

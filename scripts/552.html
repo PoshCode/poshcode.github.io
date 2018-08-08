@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Steven Saehrig">
+    <title>ServicePWChgReset - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ServicePWChgReset</h1>
+<h3><a href="//scripts/552.ps1">download</a> - <a href="//scripts/550.md">parent</a></h3>
+<p>Requires - Quest ActiveRoles Snapin
+Please read comments on each section!
+1st - Search Domain computers for matching name and import into array.
+2nd - Export matching hosts from array to text file. (comment out after text file created)
+3rd - Create CSV file of all Matching Critera with full service detail. ( so you have record of modified services)
+4th - Create text file of all matching services with limited info
+5th - Change password on matching services
+6th - Restart services if running if not running skip restart. (with console feedback)</p>
+<pre><code class="language-posh"># ==============================================================================================
+#  
+# NAME: ServicePWChgReset.ps1
+# 
+# AUTHOR: Saehrig, Steven
+# DATE  : 8/26/2008
+@@# Requires - Quest ActiveRoles Snapin
+@@# COMMENT: Please read comments on each section! 
+# 1st - Search Domain computers for matching name and import into array. 
+# 2nd - Export matching hosts from array to text file. (comment out after text file created)
+# 3rd - Create CSV file of all Matching Critera with full service detail. ( so you have record of modified 
+# services)
+# 4th - Create text file of all matching services with limited info
+# 5th - Change password on matching services
+# 6th - Restart services if running if not running skip restart. (with console feedback)
+#
+# I would like to Thank Halr9000 and glnsize from powershellcomunity.org for there guidance during this
+# script creation. I would not have been able to complete this without them and i would have been spending
+# alot of time manually updating every service. Granted if they actually wrote this it would be much nicer :).
+# But hey everyone has to start somewhere.
+# ==============================================================================================
+
+#discover Servers for Host.txt file
+function func_Forest()
+{
+[System.DirectoryServices.ActiveDirectory.Forest]::GetCurrentForest().Domains | ForEach-Object {
+	Get-QADComputer -Service $_.Name -SizeLimit 0 -ErrorAction SilentlyContinue `
+		| Add-Member -Name 'DomainName' -MemberType NoteProperty -Value $_.Name -PassThru
+}
+}
+
+#initialize Array for Output
+$Array = @()
+#This should be run once to fill the host file then commented out.
+#Fill Array
+func_forest | where { $_.Name  -like  'jxr*' } | Sort-Object -property &quot;Name&quot; |? { $array += $_.name}
+$file = $array | Out-File -FilePath c:\txt\host.txt -Append
+
+
+#Variables
+$StartName = &quot;username&quot;
+$csvlocation = &quot;c:\txt\service.csv&quot;
+$txtlocation = &quot;c:\txt\service.txt&quot;
+$computer = gc c:\txt\host.txt
+$password = &quot;password&quot;
+$service = gwmi -Class Win32_Service -namespace root\CIMV2 -ComputerName $computer | Where-Object {$_.StartName -match $startname}                   
+
+#exports discovered services for documentation of modified services
+$service | Export-Csv $csvlocation
+
+#Function Declarations
+function exporttxt { #This function exports the services to a text file in limited data fields.
+	foreach ($i in $service) {
+			($i | FT systemname, Displayname, State, Startname, Status | Out-File -Append -FilePath $txtlocation )
+	}
+}
+
+function changepw { #This function will change the password to the variable assigned above.
+	foreach ($i in $service) {
+            (Write-Host -ForegroundColor &quot;Yellow&quot; &quot;Changing password on&quot; $i.SystemName &quot;Service Name&quot;$i.Name) 
+			($i.Change($Null,$Null,$Null,$Null,$Null,$Null,$Null,$password))
+			(Write-Host -ForegroundColor &quot;green&quot; &quot;Password Successfully Changed on&quot; $i.SystemName &quot;Service Name&quot;$i.Name) 
+	}
+}		
+
+function restartsvc { #This function will restart the service for the new password to take effect.
+$s = gwmi -Class Win32_Service -namespace root\CIMV2 -ComputerName $computer | Where-Object {$_.StartName -match $startname}
+ 	foreach ($i in $s) {
+			if ($i.State -eq &quot;running&quot;) {
+				Write-Host -ForegroundColor &quot;Yellow&quot; &quot;Service name&quot; $i.SystemName &quot;Service name&quot;$i.Name &quot;is&quot; $i.state 
+					$i.StopService()
+					Sleep -Seconds 20 #allow time for service to stop.
+					$b = gwmi -Class Win32_Service -namespace root\CIMV2 -ComputerName $computer | Where-Object {$_.StartName -match $startname}
+						Write-Host -ForegroundColor &quot;RED&quot; &quot;Service name&quot; $b.SystemName &quot;Service name&quot; $b.Name &quot;is&quot; $b.state 
+					$i.StartService()
+				    $c = gwmi -Class Win32_Service -namespace root\CIMV2 -ComputerName $computer | Where-Object {$_.StartName -match $startname}
+					Write-Host -ForegroundColor &quot;Green&quot; &quot;Server name&quot; $c.SystemName  &quot;Service name&quot; $c.Name &quot;is&quot; $c.state }
+				
+			elseif ($i.State -eq &quot;Stopped&quot;) {
+				Write-Host -ForegroundColor &quot;RED&quot; &quot;Service name&quot; $i.SystemName &quot;Service name&quot; $i.Name $i.state &quot;Service will not be Started&quot;  }
+	}
+}
+
+
+#Execute
+exporttxt
+changepw | out-null
+restartsvc | out-null
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

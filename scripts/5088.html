@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>GUI GAC View - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>GUI GAC View</h1>
+<h3><a href="//scripts/5088.ps1">download</a> - <a href="//scripts/5012.md">parent</a></h3>
+<p>Fixed</p>
+<pre><code class="language-posh">#requires -version 2.0
+function Get-ItemsList {
+  $lvItems.Items.Clear()
+  [IO.Directory]::GetFiles(([Regex]&quot;(?&lt;=file:///)(.*)(?=GAC)&quot;).Match(
+    ([AppDomain]::CurrentDomain.GetAssemblies()[0].Evidence | ? {
+      $_.Value -ne $null
+  }).Value), '*.dll', [IO.SearchOption]::AllDirectories) | % {$tbl = @{}}{
+    try {
+      $ra = [Reflection.AssemblyName]::GetAssemblyName($_)
+      $tbl[$ra.FullName] = $ra
+    }
+    catch {}
+  }{
+    $tbl.GetEnumerator() | % {
+      $asm = $_.Name.Split(',')
+      $itm = $lvItems.Items.Add($asm[0], 0)
+      $itm.SubItems.Add($asm[1].Split('=')[1])
+      $itm.SubItems.Add($asm[2].Split('=')[1])
+      $itm.SubItems.Add($asm[3].Split('=')[1])
+      $itm.SubItems.Add($_.Value.ProcessorArchitecture.ToString())
+      $itm.SubItems.Add($_.Value.CodeBase)
+    }
+  }
+  $lvItems.AutoResizeColumns([Windows.Forms.ColumnHeaderAutoResizeStyle]::ColumnContent)
+  Get-ItemsNumber
+}
+
+function Get-ItemsNumber {
+  $sbLabel.Text = $lvItems.Items.Count.ToString() + ' item(s)'
+}
+
+function frmMain_Show {
+  Add-Type -AssemblyName System.Windows.Forms
+  [Windows.Forms.Application]::EnableVisualStyles()
+  
+  $ico = [Drawing.Icon]::ExtractAssociatedIcon(($PSHome + '\powershell.exe'))
+  
+  $frmMain = New-Object Windows.Forms.Form
+  $mnuMain = New-Object Windows.Forms.MenuStrip
+  $mnuFile = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuScan = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuExit = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuView = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuHelp = New-Object Windows.Forms.ToolStripMenuItem
+  $mnuInfo = New-Object Windows.Forms.ToolStripMenuItem
+  $lvItems = New-Object Windows.Forms.ListView
+  $chCol_1 = New-Object Windows.Forms.ColumnHeader
+  $chCol_2 = New-Object Windows.Forms.ColumnHeader
+  $chCol_3 = New-Object Windows.Forms.ColumnHeader
+  $chCol_4 = New-Object Windows.Forms.ColumnHeader
+  $chCol_5 = New-Object Windows.Forms.ColumnHeader
+  $chCol_6 = New-Object Windows.Forms.ColumnHeader
+  $imgList = New-Object Windows.Forms.ImageList
+  $sbStrip = New-Object Windows.Forms.StatusStrip
+  $sbLabel = New-Object Windows.Forms.ToolStripStatusLabel
+  #
+  #common
+  #
+  $mnuMain.Items.AddRange(@($mnuFile, $mnuHelp))
+  $chCol_1.Text = &quot;Assembly Name&quot;
+  $chCol_2.Text = &quot;Version&quot;
+  $chCol_3.Text = &quot;Culture&quot;
+  $chCol_4.Text = &quot;Public Key Token&quot;
+  $chCol_5.Text = &quot;Kind&quot;
+  $chCol_6.Text = &quot;Full Path&quot;
+  $sbStrip.Items.AddRange(@($sbLabel))
+  $sbLabel.AutoSize = $true
+  $imgList.Images.Add($ico.ToBitmap())
+  #
+  #mnuFile
+  #
+  $mnuFile.DropDownItems.AddRange(@($mnuScan, $mnuExit))
+  $mnuFile.Text = &quot;&amp;File&quot;
+  #
+  #mnuScan
+  #
+  $mnuScan.ShortcutKeys = [Windows.Forms.Keys]::F5
+  $mnuScan.Text = &quot;&amp;Scan&quot;
+  $mnuScan.Add_Click({Get-ItemsList})
+  #
+  #mnuExit
+  #
+  $mnuExit.ShortcutKeys = [Windows.Forms.Keys]::Control, [Windows.Forms.Keys]::X
+  $mnuExit.Text = &quot;E&amp;xit&quot;
+  $mnuExit.Add_Click({$frmMain.Close()})
+  #
+  #mnuHelp
+  #
+  $mnuHelp.DropDownItems.AddRange(@($mnuInfo))
+  $mnuHelp.Text = &quot;&amp;Help&quot;
+  #
+  #mnuInfo
+  #
+  $mnuInfo.Text = &quot;About...&quot;
+  $mnuInfo.Add_Click({frmInfo_Show})
+  #
+  #lvItems
+  #
+  $lvItems.AllowColumnReorder = $true
+  $lvItems.Columns.AddRange(@($chCol_1, $chCol_2, $chCol_3, $chCol_4, $chCol_5, $chCol_6))
+  $lvItems.Dock = [Windows.Forms.DockStyle]::Fill
+  $lvItems.SmallImageList = $imgList
+  $lvItems.Sorting = [Windows.Forms.SortOrder]::Ascending
+  $lvItems.View = [Windows.Forms.View]::Details
+  #
+  #frmMain
+  #
+  $frmMain.ClientSize = New-Object Drawing.Size(570, 320)
+  $frmMain.Controls.AddRange(@($lvItems, $sbStrip, $mnuMain))
+  $frmMain.Icon = $ico
+  $frmMain.MainMenuStrip = $mnuMain
+  $frmMain.StartPosition = [Windows.Forms.FormStartPosition]::CenterScreen
+  $frmMain.Text = &quot;GACView&quot;
+  $frmMain.Add_Load({Get-ItemsNumber})
+  
+  [void]$frmMain.ShowDialog()
+}
+
+function frmInfo_Show {
+  $frmInfo = New-Object Windows.Forms.Form
+  $pbImage = New-Object Windows.Forms.PictureBox
+  $lblName = New-Object Windows.Forms.Label
+  $lblCopy = New-Object Windows.Forms.Label
+  $btnExit = New-Object Windows.Forms.Button
+  #
+  #pbImage
+  #
+  $pbImage.Image = $ico.ToBitmap()
+  $pbImage.Location = New-Object Drawing.Point(16, 16)
+  $pbImage.Size = New-Object Drawing.Size(32, 32)
+  $pbImage.SizeMode = [Windows.Forms.PictureBoxSizeMode]::StretchImage
+  #
+  #lblName
+  #
+  $lblName.Font = New-Object Drawing.Font(&quot;Microsoft Sans Serif&quot;, 8.5, [Drawing.FontStyle]::Bold)
+  $lblName.Location = New-Object Drawing.Point(53, 19)
+  $lblName.Size = New-Object Drawing.Size(360, 18)
+  $lblName.Text = &quot;GACView v1.01&quot;
+  #
+  #lblCopy
+  #
+  $lblCopy.Location = New-Object Drawing.Point(67, 37)
+  $lblCopy.Size = New-Object Drawing.Size(360, 23)
+  $lblCopy.Text = &quot;Copyright (C) 2014 greg zakharov&quot;
+  #
+  #btnExit
+  #
+  $btnExit.Location = New-Object Drawing.Point(135, 67)
+  $btnExit.Text = &quot;OK&quot;
+  #
+  #frmInfo
+  #
+  $frmInfo.AcceptButton = $btnExit
+  $frmInfo.CancelButton = $btnExit
+  $frmInfo.ClientSize = New-Object Drawing.Size(350, 110)
+  $frmInfo.ControlBox = $false
+  $frmInfo.Controls.AddRange(@($pbImage, $lblName, $lblCopy, $btnExit))
+  $frmInfo.FormBorderStyle = [Windows.Forms.FormBorderStyle]::FixedSingle
+  $frmInfo.ShowInTaskBar = $false
+  $frmInfo.StartPosition = [Windows.Forms.FormStartPosition]::CenterParent
+  $frmInfo.Text = &quot;About...&quot;
+  $frmInfo.Add_Load($frmInfo_Load)
+
+  [void]$frmInfo.ShowDialog()
+}
+
+frmMain_Show
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

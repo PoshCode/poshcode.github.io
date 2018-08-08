@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Export-CustomProperty - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Export-CustomProperty</h1>
+<h3><a href="//scripts/2269.ps1">download</a></h3>
+<p>An example of making &quot;custom objects&quot; with strongly-typed properties, custom enumeration/validation and error messages.</p>
+<pre><code class="language-posh">## An example of how to make a custom object with strongly-typed properties, custom enumeration values, and custom validators, etc.
+
+function Export-CustomProperty {
+param(
+   [Parameter(ValueFromPipeline=$true)]
+   [PSCustomObject]$Object
+)
+process {
+   foreach($property in Get-Member Get_*,Set_* -Input $Object -Type Methods | Group-Object { $_.Name.Split(&quot;_&quot;,2)[1] }) {
+      $GetAccessor = $SetAccessor = {}
+      foreach($accessor in $property.Group) {
+         switch($accessor.Name.Split(&quot;_&quot;)[0]) {
+            &quot;Get&quot; {
+               $GetAccessor = [ScriptBlock]::Create('$this.' + $accessor.Name + '()')
+            }
+            &quot;Set&quot; {
+               $SetAccessor = [ScriptBlock]::Create('try { $this.' + $accessor.Name + '( $args ) } catch { throw $_.Exception.Message.Split(&quot;:&quot;,2)[1].trim('' &quot;'') }')
+            }
+         }
+      }
+         
+      Add-Member -Input $Object -Type ScriptProperty -Name $Property.Name -Value $GetAccessor $SetAccessor
+   }
+   Write-Output $Object
+}
+}
+
+
+## USAGE:
+
+$customThing = New-Module -AsCustomObject {
+
+   ## The FooBar property: a variable, two accessor methods and later, a ScriptProperty.
+   [string]$FooBar = 'foo'
+   [string[]]$FooBarValues = 'foo','bar'
+   
+   function Get_FooBar { $FooBar }
+   
+   function Set_FooBar { 
+      param([string]$value)
+      if($FooBarValues -notcontains $Value) {
+         throw &quot;You can't set FooBar to '$value', valid values are $($FooBarValues -join ', ').&quot;;
+      }
+      $script:FooBar = $value
+   }
+   
+   ## The Enabled property: just a strongly-typed variable
+   [bool]$Enabled = $False
+   
+  
+   ## The UserName property: a variable, two accessor methods (and a validation method) and later, a ScriptProperty.
+   [String]$UserName = $Env:UserName
+
+   function Test-ADUser {
+      [CmdletBinding()]
+      param([string]$UserName)
+      $ads = New-Object System.DirectoryServices.DirectorySearcher([ADSI]'')
+      $ads.filter = &quot;(&amp;(objectClass=Person)(samAccountName=$UserName))&quot;
+      return [bool]$ads.FindOne()
+   }
+
+   function Get_UserName { $UserName }
+
+   function Set_UserName { 
+      param([string]$value)
+      if(!(Test-ADUser $Value)) {
+         throw &quot;You can't set UserName to '$value', that user doesn't exist.&quot;;
+      }
+      $script:UserName = $value
+   }
+
+   Export-ModuleMember -Function Get_*,Set_* -Variable Enabled
+
+} | Export-CustomProperty
+
+
+#### Sample Validation Output:
+##############################################################################
+#  C:\PS&gt; $customThing.UserName = 'Nobody'
+#  
+#  Exception setting &quot;UserName&quot;: &quot;You can't set UserName to 'Nobody', that user doesn't exist.&quot;
+#  At line:1 char:6
+#  + $customThing. &lt;&lt;&lt;&lt; UserName = 'Nobody'
+#      + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+#      + FullyQualifiedErrorId : PropertyAssignmentException
+#   
+#  
+#  C:\PS&gt; $customThing.FooBar = 'foobar'
+#  
+#  Exception setting &quot;FooBar&quot;: &quot;You can't set FooBar to 'foobar', valid values are foo, bar.&quot;
+#  At line:1 char:6
+#  + $customThing. &lt;&lt;&lt;&lt; FooBar = 'foobar'
+#      + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+#      + FullyQualifiedErrorId : PropertyAssignmentException
+#  
+#  
+#  C:\PS&gt; $customThing.Enabled = &quot;what&quot;
+#  
+#  Cannot convert value &quot;System.String&quot; to type &quot;System.Boolean&quot;, parameters of this type only accept booleans or numbers, use $true, $false, 1 or 0 instead.
+#  At line:1 char:6
+#  + $customThing. &lt;&lt;&lt;&lt; Enabled = &quot;what&quot;
+#      + CategoryInfo          : InvalidOperation: (:) [], RuntimeException
+#   + FullyQualifiedErrorId : PropertyAssignmentException
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

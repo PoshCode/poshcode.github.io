@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Stephen Wheet">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/2080.ps1">download</a></h3>
+<p>COMMENT:
+This script was created to find unknown SIDs or old domain permissions
+on folders.  It ignores folders where inheirtance
+is turned on.</p>
+<p>Version 2: completely changed the query method and ACL removal
+Version 3: Added ability to query AD for servers, and handles getting
+getting shares automatically from Netapp and Windows servers
+Version 4: Cleaned up folder checking and added checking for local
+account checking so we could ignore.</p>
+<pre><code class="language-posh">#==========================================================================
+# NAME: getunknownsids.ps1
+#
+# AUTHOR: Stephen Wheet
+# Version: 4.0
+# Date: 6/11/10
+#
+# COMMENT: 
+#	This script was created to find unknown SIDs or old domain permissions
+#   on folders.  It ignores folders where inheirtance is turned on.
+#
+#	This works on NETAPPS and WINDOWS servers.  You will need the DLL's
+#
+#   Version 2: completely changed the query method and ACL removal
+#   Version 3: Added ability to query AD for servers, and handles getting
+#              getting shares automatically from:
+#	      NETAPP FILERS
+#	      Windows servers
+#   Version 4: Cleaned up folder checking and added checking for local
+#              account checking so we could ignore.
+#
+#==========================================================================
+
+Function checkshare {
+   Param($PassedShareName)
+   Process 
+   {
+            
+            $path = &quot;\\$serverFQDN\$PassedShareName&quot;
+            $filename = $path.Replace(&quot;\&quot;,&quot;-&quot;) + &quot;.csv&quot;
+
+
+            #Place Headers on out-put file
+            $list = &quot;Task,Path,Access Entity,&quot;
+            $list | format-table | Out-File &quot;c:\reports\unknownsids\$filename&quot;
+
+            #Populate Folders Array 
+            Write-Host &quot;Writing results to : $filename&quot;
+            $date = Get-Date
+            Write-Host $date
+            Write-Host &quot;Getting Folders in:  $Path&quot;
+			#PSIscontainer means folders only
+            [Array] $folders = Get-ChildItem -path $path -recurse | ? {$_.PSIsContainer} 
+
+
+            #Process data in array
+            ForEach ($folder in [Array] $folders)
+            {
+                #Check to see if there are any folders
+				If ($folder.pspath){
+					#Convert Powershell Provider Folder Path to standard folder path
+					$PSPath = (Convert-Path $folder.pspath)
+                	Write-Host &quot;Checking Dir:  $PSPath&quot;
+    			
+					#Check to make sure valid
+					If ($PSPath){
+						#Get the ACL's from each folder
+						$error.clear()
+                		$acl = Get-Acl -Path $PSPath
+                		#Write log if no access
+						if (!$?) {
+                	    	$errmsg = &quot;Error,$PSPath,ACCESS DENIED&quot;
+                	    	$errmsg | format-table | Out-File -append &quot;$filename&quot;
+						} #end IF
+    						
+                		$ACL.Access |
+						?{!$_.IsInherited} |
+						?{ $_.IdentityReference -like $unknownsid -or $_.IdentityReference -like $olddomain } |
+						% {$value = $_.IdentityReference.Value
+                	
+                	    	#Check for Local account
+							$localsid = 0
+							If ($value -like $unknownsid){
+                        		$checkforlocal = $value.split(&quot;-&quot;)
+                       	 		$total =$checkforlocal.count -1
+                        		if ($checkforlocal[$total] -match &quot;100?&quot; -or $checkforlocal[$total] -match &quot;500&quot;){
+                         		   	$localsid = 1
+									# You can uncomment the below if you want to report on local accounts.
+								   	#$list = (&quot;Local,$PSPath,$value&quot;)
+									#$list | format-table | Out-File -append &quot;$filename&quot;
+								}  #end IF
+                    		}  #end IF
+							
+                    		If (!$localsid){
+                                    Write-host &quot;Found - $PSPath - $value&quot;
+									$list = (&quot;Found,$PSPath,$value&quot;)
+                          			$list | format-table | Out-File -append &quot;$filename&quot;
+                            		
+									#Remove Bad SID
+                            		if ($removeacl) { $ACL.RemoveAccessRuleSpecific($_)
+                                        Write-host &quot;Deleting - $PSPath - $value&quot;
+                            	    	$list = (&quot;Deleting,$PSPath,$value&quot;)
+                            	    	$list | format-table | Out-File -append &quot;$filename&quot;
+									}#end IF
+                        
+                            		if ($removeacl -and $value) {
+                                        $date = Get-Date
+                                        Write-Host $date
+                                        Write-host &quot;Setting - $PSPath&quot;
+                            	    	$list = (&quot;Setting,$PSPath&quot;)
+                             		   	$list | format-table | Out-File -append &quot;$filename&quot;
+                                		Set-ACL $PSpath $ACL
+                                		$value = &quot;&quot;
+									} #end IF
+                    		} #end if
+                		} #end foreachobj
+					} #end if
+				} #end if	
+            } #end ForEach 
+	}#end Process
+} #end function
+
+get-pssnapin -registered | add-pssnapin -passthru
+[void][Reflection.Assembly]::LoadFile('C:\reports\ManageOntap.dll') #Need this DLL from netapp 3.5SDK 
+$ReqVersion = [version]&quot;1.2.2.1254&quot; 
+$QadVersion = (Get-PSSnapin Quest.ActiveRoles.ADManagement).Version  #Need Quest plugins installed
+
+if($QadVersion -lt $ReqVersion) { 
+    throw &quot;Quest AD cmdlets version '$ReqVersion' is required. Please download the latest version&quot; 
+} #end If
+
+#Set variables
+$value = &quot;&quot;
+$unknownsid = &quot;*S-1-5-21-*&quot; #Broken SID Verify the Broken SID number on your system and replace
+$olddomain = &quot;Domain.local*&quot; #Old w2k/nt4 domain
+$ErrorActionPreference = &quot;SilentlyContinue&quot;
+$removeacl = 0 #change to 1 if you want to remove the SID, 0 for only logging
+$localsid = 0
+
+
+
+#Get all the servers from the specified OU
+$Servers = get-QADComputer -SearchRoot 'domain.local/ou/Server' # change the container.
+
+Foreach ($server in $Servers ) {
+	$serverFQDN = $server.dnsname
+	write-host  $serverFQDN
+
+	#Test ping server to make sure it's up before querying it
+	$ping = new-object System.Net.NetworkInformation.Ping
+	$Reply = $ping.Send($serverFQDN)
+    if ($Reply.status -eq &quot;Success&quot;){
+        Write-Host &quot;Online&quot;
+
+		#Check for Netapp .. if found get the shares differently	   
+        If ($serverFQDN -like &quot;*netapp*&quot;){
+            $server = new-object netapp.manage.naserver($serverFQDN,1,0)
+			
+			#pass authentication
+            $server.Style = &quot;RPC&quot;
+			
+			# Issue command to get the shares
+            $NaElement = New-Object NetApp.Manage.NaElement(&quot;system-cli&quot;)
+            $arg = New-Object NetApp.Manage.NaElement(&quot;args&quot;)
+            $arg.AddNewChild('arg','cifs')
+            $arg.AddNewChild('arg','shares')
+            $NaElement.AddChildElement($arg)
+            $CifsString = $server.InvokeElem($NaElement).GetChildContent(&quot;cli-output&quot;)
+			
+			# Split the returned txt up .. the $null makes it skip a line
+            $null,$null,$Lines = $CifsString.Split(&quot;`n&quot;)
+
+            Foreach ($line in $Lines ) {
+                                
+                # Had to trick it so skip the line with permissions, then exclude ETC$ adn c$
+				if (!$line.startswith(&quot;			&quot;) -and $line -notlike &quot;*Etc$*&quot; -and $line -notlike &quot;*C$*&quot;){
+                    $l= $line.Split(&quot; &quot;)
+                    checkshare -PassedShareName $l[0] #Pass share to function
+                } #end if
+            } #end foreach
+        } #end if
+		
+        Else{ #Else if a Windows server query via WMI
+               
+            Get-WMIObject Win32_Share -Computer $serverFQDN | 
+            	where {$_.Name -like &quot;*$*&quot; -and $_.Name -notlike &quot;*ADMIN*&quot; -and $_.Name -notlike &quot;*IPC*&quot; -and $_.Name -notlike &quot;*lib*&quot;} |
+				%{
+              		#Set path 
+            		$sharename = $_.name
+            		checkshare -PassedShareName $sharename  #Pass share to function         
+            	} #end ForEachObj
+        } #End Else
+    } #End If
+} #end ForEach
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

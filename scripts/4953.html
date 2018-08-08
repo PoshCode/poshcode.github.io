@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Victor Vogelpoel">
+    <title>Get-WSManCredSSPConfigur - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-WSManCredSSPConfigur</h1>
+<h3><a href="//scripts/4953.ps1">download</a></h3>
+<p>CredSSP is a security provider to help delegate credentials from a client computer to a target computer. In PowerShell, we can use CredSSP to overcome the double-hop authentication problem. Getting the current CredSSP configuration settings for client and target computer is a bit of a pain, though. My function Get-WSManCredSSPConfiguration helps with gathering the current CredSSP configuration on both local and target computers.
+See blogpost at http://blog.victorvogelpoel.nl/2014/03/03/powershell-get-wsmancredsspconfiguration-getting-credssp-configuration-for-local-or-remote-computers/</p>
+<pre><code class="language-posh"># Get-WSManCredSSPConfiguration.ps1
+# Compile a WSManCredSSP configuration object for the local or remote computer
+# Inspired by http://www.ravichaganti.com/blog/?p=1902
+# http://blog.victorvogelpoel.nl/2014/03/03/powershell-get-wsmancredsspconfiguration-getting-credssp-configuration-for-local-or-remote-computers/
+#
+# Disclaimer
+# This script is provided AS IS without warranty of any kind. I disclaim all implied
+# warranties including, without limitation, any implied warranties of merchantability
+# or of fitness for a particular purpose. The entire risk arising out of the use or 
+# performance of the sample scripts and documentation remains with you. In no event 
+# shall I be liable for any damages whatsoever (including, without limitation, damages 
+# for loss of business profits, business interruption, loss of business information, 
+# or other pecuniary loss) arising out of the use of or inability to use the script or 
+# documentation.
+#
+# Oct 2013
+# If this works, Ravikanth Chaganti and Victor Vogelpoel &lt;victor.vogelpoel@macaw.nl&gt; wrote this.
+# If it doesn't, I don't know who wrote this.
+
+#requires -version 3
+Set-PSDebug -Strict
+Set-StrictMode -Version Latest
+
+
+# NOTE: if using credentials, make sure to use DOMAIN\ACCOUNT format for username!
+function Get-WSManCredSSPConfiguration
+{
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory=$false, position=0, ValueFromPipeLine=$true, ValueFromPipeLineByPropertyName=$true, HelpMessage=&quot;Computers to get the CredSSP configuration for&quot;)]
+		[String[]]$computerName = &quot;localhost&quot;,
+
+		[Parameter(Mandatory=$false, Position=1, ValueFromPipelineByPropertyName=$true, HelpMessage=&quot;Credential to connect to the computers with&quot;)]
+		[Management.Automation.PSCredential]$Credential
+	)
+	
+	begin
+	{
+		function Test-ElevatedProcess
+		{
+			return (New-Object Security.Principal.WindowsPrincipal -ArgumentList ([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole( [Security.Principal.WindowsBuiltInRole]::Administrator )
+		}
+		
+		function Resolve-FQDNHostName
+		{
+			[CmdletBinding()]
+			param
+			(
+				[Parameter(Mandatory=$false, position=0, ValueFromPipeLine=$true, ValueFromPipeLineByPropertyName=$true, HelpMessage=&quot;TODO&quot;)]
+				[Alias('CN','__SERVER', 'Server', 'Hostname')]
+				[String[]]$ComputerName = &quot;localhost&quot;
+			)
+			
+			process
+			{
+				foreach ($comp in $ComputerName)
+				{
+					try
+					{
+						if ($comp -eq &quot;.&quot;) { $comp = &quot;localhost&quot; }
+				
+						Write-Output ([System.Net.Dns]::GetHostByName($comp).HostName)
+					}
+					catch
+					{
+						throw &quot;ERROR while resolving server `&quot;$comp`&quot;: $($_.Exception.Message)&quot;
+					}
+				}
+			}
+		}
+	
+		if (!(Test-ElevatedProcess))
+		{
+			throw &quot;ERROR: WSManCredSSPConfiguration can only be used in an elevated PowerShell session.&quot;
+		}
+		
+		$localComputer 		= Resolve-FQDNHostName
+	}
+
+	process
+	{
+		foreach ($computer in $computerName)
+		{
+			$computer 		= Resolve-FQDNHostName -ComputerName $computer
+			$credsspConfig 	= $null
+			
+			if ($computer -eq $localComputer)
+			{
+				$credsspConfig = New-Object -TypeName PSObject
+				$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;computerName&quot;			-Value $computer
+				$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;IsServer&quot; 				-Value $false
+				$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;IsClient&quot; 				-Value $false
+				$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;AllowFreshCredentials&quot;	-Value &quot;NA&quot;
+				$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;ClientDelegateComputer&quot;	-Value &quot;&quot;
+				
+				if ($Credential)
+				{
+					$wsmanTest = Test-WSMan -Credential $Credential -ErrorAction SilentlyContinue
+				}
+				else
+				{
+					$wsmanTest = Test-WSMan -ErrorAction SilentlyContinue
+				}
+						
+				if ($wsmanTest)
+				{
+					$isServer = ((Get-Item WSMan:\LocalHost\Service\Auth\CredSSP).Value -eq &quot;true&quot;)
+					$isClient = ((Get-Item WSMan:\LocalHost\Client\Auth\CredSSP).Value -eq &quot;true&quot;)
+				
+					$credsspConfig.IsServer = $isServer
+					$credsspConfig.IsClient = $isClient
+					
+					if ($isClient -and (Test-Path HKLM:\software\policies\microsoft\windows\CredentialsDelegation\AllowFreshCredentials))
+					{
+						$credsspConfig.AllowFreshCredentials = (Get-ItemProperty HKLM:\software\policies\microsoft\windows\CredentialsDelegation).AllowFreshCredentials
+						
+						# Extract registry values for 1,2,3,... from HKLM:\software\policies\microsoft\windows\CredentialsDelegation\AllowFreshCredentials, which are the delegate computers from &quot;Enable-WSMANCredSSP -role client -delegatecomputer&quot;
+						$delegateComputers = @((Get-ItemProperty HKLM:\software\policies\microsoft\windows\CredentialsDelegation\AllowFreshCredentials).psobject.Properties | where { $_.Name -match &quot;\d+&quot;  } | select -expand value | foreach { if ($_ -like &quot;wsman/*&quot;) { $_.substring(6) } else { $_ } })
+						
+						# Store delegatecomputers in the custom object 						
+						$credsspConfig.ClientDelegateComputer = $delegateComputers
+					}
+				}
+				else
+				{
+					throw &quot;Could not connect to WSMAN; is the WinRM service running on `&quot;$computer`&quot;? Run `&quot;WinRM quickconfig -force`&quot;!&quot;
+				}
+			}
+			else
+			{
+				if (Test-WSMan -ComputerName $computer -ErrorAction SilentlyContinue)   # Note: does NOT take -Credential, otherwise error &quot;flagged with no authentication&quot;
+				{
+					$credsspConfig = New-Object -TypeName PSObject
+					$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;computerName&quot; 			-Value $computer
+					$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;IsServer&quot; 				-Value $false
+					$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;IsClient&quot; 				-Value $false
+					$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;AllowFreshCredentials&quot; 	-Value &quot;NA&quot;
+					$credsspConfig | Add-Member -MemberType NoteProperty -Name &quot;ClientDelegateComputer&quot;	-Value &quot;&quot;
+					
+					try
+					{
+						$WSManConnected = $false
+					
+						if ($Credential)
+						{
+							Connect-WSMan -ComputerName $computer -Credential $Credential -ErrorAction SilentlyContinue
+						}
+						else
+						{
+							Connect-WSMan -ComputerName $computer -ErrorAction SilentlyContinue
+						}
+					
+						$WSManConnected = $true
+						$isServer 		= ((Get-Item &quot;WSMan:\$($computer)\Service\Auth\CredSSP&quot;).Value -eq &quot;true&quot;)
+						$isClient		= ((Get-Item &quot;WSMan:\$($computer)\Client\Auth\CredSSP&quot;).Value -eq &quot;true&quot;)
+
+						$credsspConfig.IsServer = $isServer
+						$credsspConfig.IsClient = $isClient
+												
+						#Write-Verbose &quot;WSMan:\$($computer)\Client\Auth\CredSSP&quot;
+						if ($isClient)
+						{
+							# Start collecting the CredSSP client role configuration on the remote computer by querying the registry remotely (using WMI)
+							
+							$reg = $null
+							
+							try
+							{
+								if ($Credential)
+								{
+									# Get the WMI registry provider using credentials
+									$reg = Get-WmiObject -List -Namespace root\default -ComputerName $computer -Credential $Credential | Where-Object {$_.Name -eq &quot;StdRegProv&quot;}
+								}
+								else
+								{
+									# Get the WMI registry provider using current credentials
+									$reg = Get-WmiObject -List -Namespace root\default -ComputerName $computer | Where-Object {$_.Name -eq &quot;StdRegProv&quot;}
+								}
+								
+								$HKLM					= 2147483650
+								$allowFreshCredentials 	= $reg.GetDWORDValue($HKLM, &quot;SOFTWARE\Policies\Microsoft\Windows\CredentialsDelegation&quot;, &quot;AllowFreshCredentials&quot;).uValue
+								if ($allowFreshCredentials -ne $null)
+								{
+									$credsspConfig.AllowFreshCredentials = $allowFreshCredentials
+								
+									# Query the delegate computers from the registry
+									$delegateComputers = $reg.EnumValues($HKLM, &quot;SOFTWARE\Policies\Microsoft\Windows\CredentialsDelegation\AllowFreshCredentials&quot;).sNames | foreach {
+															$delegateComputer = $reg.GetStringValue($HKLM, &quot;SOFTWARE\Policies\Microsoft\Windows\CredentialsDelegation\AllowFreshCredentials&quot;, $_).sValue
+															if ($delegateComputer -like &quot;wsman/*&quot;) { $delegateComputer.substring(6) } else { $delegateComputer } 
+														}
+														
+									# Add the found delegate computers to the configuration object!
+									$credsspConfig.ClientDelegateComputer = $delegateComputers
+														
+								}
+							}
+							catch
+							{
+								throw &quot;ERROR while reading remote registry on computer `&quot;$computer`&quot;: $($_.Exception.Message)&quot;
+
+								$credsspConfig.AllowFreshCredentials = &quot;ERROR&quot;
+							}
+						}
+					}
+					catch 
+					{
+						$exMessage  = $_.Exception.Message
+						$advise 	= &quot;&quot;
+
+						if ($exMessage -like &quot;Access is denied.*&quot; -or $exMessage -like &quot;The user name or password is incorrect*&quot;)
+						{
+							$advise = &quot;Please supply proper credentials.&quot;
+						}
+
+						throw &quot;ERROR while connecting to WSMAN on $computer or gathering CredSSP information: `&quot;$exMessage`&quot;. $advise&quot;
+					}
+					finally
+					{
+						if ($WSManConnected)
+						{
+							Disconnect-WSMan -ComputerName $computer
+						}
+					}
+				}
+				else
+				{
+					throw &quot;ERROR: could not connect to WSMAN on `&quot;$computer`&quot;? Is WinRM service running? Run `&quot;WinRM quickconfig -force`&quot; on this computer!&quot;
+				}
+			}
+			
+			Write-Output $credsspConfig
+		}
+	}
+	
+&lt;#
+.SYNOPSIS
+Retrieves the CredSSP configuration for the local or remote computers. 
+   
+.DESCRIPTION
+Get-WSManCredSSPConfiguration retrieves CredSSP configuration for one
+or more computers and returns the configuration as a custom PS object:
+
+  computerName              computer for this configuration
+  IsServer                  Has the computer the CredSSP server role?
+  IsClient                  Has the computer the CredSSP client role?
+  AllowFreshCredentials     Value of the Allow Fresh Credentials
+  ClientDelegateComputer    If client role enabled, this holds the array 
+                            of computers where the computer can delegate
+							credentials to.
+
+Get-WSManCredSSPConfiguration connects to other computers with either 
+current credentials or the specified credentials. These credentials must 
+have administrative privileges. WSMan must have been enabled on the
+computers in order to connect.
+   
+.PARAMETER ComputerName
+When specified, one or more computers to get the CredSSP configuration for.
+(Get-WSManCredSSPConfiguration connects to other computers with either 
+current credentials or the specified credentials.)
+Wen not specified, the CredSSP configuration for the current computer
+is returned.
+
+.PARAMETER Credential
+When specified, this is the credential that is used to connect to other computers.
+
+.EXAMPLE
+PS&gt; Get-WSManCredSSPConfiguration
+
+Gets the CredSSP configuration for the local computer, for example:
+
+computerName           : laptop01.domain.com
+IsServer               : False
+IsClient               : True
+AllowFreshCredentials  : 1
+ClientDelegateComputer : {server01.domain.com, server02.domain.com}
+
+.EXAMPLE
+PS&gt; Get-WSManCredSSPConfiguration -computername server01.domain.com 
+
+Connects to server01.domain.com with current credentials and gets the
+CredSSP configuration:
+
+computerName           : server01.domain.com
+IsServer               : True
+IsClient               : false
+AllowFreshCredentials  : NA
+ClientDelegateComputer : 
+
+.EXAMPLE
+PS&gt; Get-WSManCredSSPConfiguration -computername server01.domain.com -credential $admincred
+
+Connects to server01.domain.com with the credentials $admincred and gets the
+CredSSP configuration:
+
+computerName           : server01.domain.com
+IsServer               : True
+IsClient               : false
+AllowFreshCredentials  : NA
+ClientDelegateComputer : 
+
+.EXAMPLE
+PS&gt; Get-WSManCredSSPConfiguration | select -expand ClientDelegateComputer
+
+Gets the CredSSP configuration for the local computer and returns the
+array of computers for which the local computer may delegate credentials:
+
+server01.domain.com
+server02.domain.com
+
+
+.NOTES
+Author:      Victor Vogelpoel
+Date:        Oct 2013
+Inspired by: http://www.ravichaganti.com/blog/?p=1902
+
+IMPORTANT: Get-WSManCredSSPConfiguration must be invoked in an elevated
+PowerShell session. Start PowerShell session with &quot;Run-as administrator&quot;
+
+.LINK
+Get-WSManCredSSP
+
+See Victor's blogpost about Get-WSManCredSSPConfiguration:
+http://blog.victorvogelpoel.nl/2014/03/03/powershell-get-wsmancredsspconfiguration-getting-credssp-configuration-for-local-or-remote-computers/
+
+Scripting guys about CredSSP:
+http://blogs.technet.com/b/heyscriptingguy/archive/2012/11/14/enable-powershell-quot-second-hop-quot-functionality-with-credssp.aspx
+
+#&gt;
+}
+
+
+# Get-WSManCredSSPConfiguration -computerName server01.domain.com -Credential (Get-Credential) -Verbose
+# Get-WSManCredSSPConfiguration $env:COMPUTERNAME
+# Get-WSManCredSSPConfiguration -Verbose
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="akaNeo">
+    <title>Get-DiskTemperature - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-DiskTemperature</h1>
+<h3><a href="//scripts/4364.ps1">download</a></h3>
+<p>Uses Get-StorageReliabilityCounter method to obtain information about the temperature of the physical disks</p>
+<pre><code class="language-posh">## Version 1.00
+Function Get-DiskTemperature {
+&lt;#
+.Synopsis
+Shows current temperature of hard drives
+.Description
+Uses Get-StorageReliabilityCounter method to obtain information about the temperature of the physical disks
+.Example
+PS C:\&gt; Get-DiskTemperature -DiskNumbers 0,1 -TechInfo | Format-Table -AutoSize
+Caption                Number DriveLetters Temperature ConvenientSize BusType FirmwareVersion PowerOnHours
+-------                ------ ------------ ----------- -------------- ------- --------------- ------------
+OCZ-VERTEX4                 0 {R, C}                   238.5 GiB      SATA    1.5                     6175
+ST1000LM024 HN-M101MBB      1 {L}          38          931.5 GiB      USB     2AR1                    1144
+.Link
+Get-Disk
+Get-Partition
+Get-StorageReliabilityCounter
+#&gt;
+[CmdletBinding()]
+Param(
+[Parameter(Mandatory=$false,Position=1)]
+[System.Array]$DiskNumbers,
+[switch]$TechInfo
+)
+New-Variable -Name space -Value ([System.Char]32) -Option Const
+New-Variable -Name csz_MeasureLabel -Value @('Bytes', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB') -Option Const
+filter Remove-ExtraSpaces {
+$rex_OutStr = [System.String]::Empty
+$rex_NoMoreSpaces = $true
+$rex_IsReadyForNextSpace = $false
+$_.GetEnumerator() | ForEach-Object -Process {
+if ($_ -ne $space)
+{
+if ($rex_IsReadyForNextSpace)
+{
+$rex_OutStr += $space
+$rex_IsReadyForNextSpace = $false
+}
+$rex_OutStr += $_
+$rex_NoMoreSpaces = $false
+}
+else
+{
+if (-not $rex_NoMoreSpaces)
+{
+$rex_IsReadyForNextSpace = $true
+$rex_NoMoreSpaces = $true
+}
+}
+}
+Return $rex_OutStr
+}
+filter Get-ConvenientSize {
+if (![bool]$_ -or $_ -lt 1 -or $_ -gt ([System.Int64]::MaxValue -shr 3))
+{
+return $null
+}
+else
+{
+$csz_MeasureValue = [System.Int64]1
+for ($k = 0; $k -le $csz_MeasureLabel.Count - 1; ++$k)
+{
+$csz_MeasureValue = [System.Int64]$csz_MeasureValue -shl 10
+if ($_ -lt $csz_MeasureValue)
+{
+$csz_Measure = $k
+$csz_MeasureValue = [System.Int64]$csz_MeasureValue -shr 10
+break
+}
+}
+$csz_MeasureRound = $csz_Measure - 2
+if ($csz_MeasureRound -lt 0) {$csz_MeasureRound = 0}
+$csz_ConvenientSize = [System.Math]::Round($_ / $csz_MeasureValue, $csz_MeasureRound)
+return [System.String]$csz_ConvenientSize + $space + $csz_MeasureLabel[$csz_Measure]
+}
+}
+## Main
+switch ($DiskNumbers)
+{
+$null {$gdt_Drives = Get-Disk | Sort-Object -Property 'Number'}
+default {$gdt_Drives = Get-Disk -Number $DiskNumbers | Sort-Object -Property 'Number'}
+}
+$gdt_PartitionsInfo = Get-Partition | Select-Object -Property 'DriveLetter','DiskNumber'
+$gdt_Drives | ForEach-Object -Process {
+$fe_Letters = @()
+$fe_Number = $_.Number
+$gdt_PartitionsInfo | ForEach-Object -Process {
+if ($_.DiskNumber -eq $fe_Number -and $_.DriveLetter -ne [System.Char]0)
+{
+$fe_Letters += $_.DriveLetter
+}
+}
+if (![bool]$fe_Letters.Count)
+{
+$fe_Letters = $null
+}
+$fe_SRC = $_ | Get-StorageReliabilityCounter | Select-Object -Property 'Temperature','PowerOnHours'
+$fe_Caption = $_.Manufacturer + $_.Model | Remove-ExtraSpaces
+$_ | Add-Member -MemberType 'NoteProperty' -Name 'Caption' -Value $fe_Caption
+$_ | Add-Member -MemberType 'NoteProperty' -Name 'DriveLetters' -Value $fe_Letters
+$_ | Add-Member -MemberType 'NoteProperty' -Name 'Temperature' -Value $fe_SRC.Temperature
+if ($TechInfo)
+{
+$fe_ConvenientSize = $_.Size | Get-ConvenientSize
+$_ | Add-Member -MemberType 'NoteProperty' -Name 'ConvenientSize' -Value $fe_ConvenientSize
+$_ | Add-Member -MemberType 'NoteProperty' -Name 'PowerOnHours' -Value $fe_SRC.PowerOnHours
+}
+}
+switch ($TechInfo)
+{
+$false {
+Write-Output $gdt_Drives | Select-Object -Property 'Caption','Number','DriveLetters','Temperature'
+}
+$true {
+Write-Output $gdt_Drives | Select-Object -Property 'Caption','Number','DriveLetters','Temperature','ConvenientSize','BusType','FirmwareVersion','PowerOnHours'
+}
+}
+} ## End Get-DiskTemperature
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

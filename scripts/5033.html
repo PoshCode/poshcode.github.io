@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="SQLDBAWithABeard">
+    <title>SQL Agent Jobs to Excel - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SQL Agent Jobs to Excel</h1>
+<h3><a href="//scripts/5033.ps1">download</a></h3>
+<h1>NAME: Agent Job Status to Excel.ps1</h1>
+<h1>AUTHOR: Rob Sewell http://newsqldbawiththebeard.wordpress.com</h1>
+<h1>DATE:22/07/2013</h1>
+<h1></h1>
+<h1>COMMENTS: Iterates through the sqlservers.txt file to populate</h1>
+<h1>Excel File with colour coded status</h1>
+<h1></h1>
+<h1>WARNING - This will stop ALL Excel Processes. Read the Blog Post for more info</h1>
+<pre><code class="language-posh"> #############################################################################################
+#
+# NAME: Agent Job Status to Excel.ps1
+# AUTHOR: Rob Sewell http://newsqldbawiththebeard.wordpress.com
+# DATE:22/07/2013
+#
+# COMMENTS: Iterates through the sqlservers.txt file to populate
+# Excel File with colour coded status
+#
+# WARNING - This will stop ALL Excel Processes. Read the Blog Post for more info
+#
+# ————————————————————————
+
+# Create a .com object for Excel
+$xl = new-object -comobject excel.application
+$xl.Visible = $true # Set this to False when you run in production
+
+$wb = $xl.Workbooks.Add()
+$ws = $wb.Worksheets.Item(1)
+
+$date = Get-Date -format f
+$Filename = ( get-date ).ToString('ddMMMyyyHHmm')
+
+$cells=$ws.Cells
+
+# Create a description
+
+$cells.item(1,3).font.bold=$True
+$cells.item(1,3).font.size=18
+$cells.item(1,3)=&quot;Back Up Report $date&quot;
+$cells.item(5,9)=&quot;Last Job Run Older than 1 Day&quot;
+$cells.item(5,8).Interior.ColorIndex = 43
+$cells.item(4,9)=&quot;Last Job Run Older than 7 Days&quot;
+$cells.item(4,8).Interior.ColorIndex = 53
+$cells.item(7,9)=&quot;Successful Job&quot;
+$cells.item(7,8).Interior.ColorIndex = 4
+$cells.item(8,9)=&quot;Failed Job&quot;
+$cells.item(8,8).Interior.ColorIndex = 3
+$cells.item(9,9)=&quot;Job Status Unknown&quot;
+$cells.item(9,8).Interior.ColorIndex = 15
+
+
+#define some variables to control navigation
+$row=3
+$col=2
+
+#insert column headings
+
+    $cells.item($row,$col)=&quot;Server&quot;
+    $cells.item($row,$col).font.size=16
+    $Cells.item($row,$col).Columnwidth = 10
+    $col++
+    $cells.item($row,$col)=&quot;Job Name&quot;
+    $cells.item($row,$col).font.size=16
+    $Cells.item($row,$col).Columnwidth = 40
+    $col++
+    $cells.item($row,$col)=&quot;Enabled?&quot;
+    $cells.item($row,$col).font.size=16    
+    $Cells.item($row,$col).Columnwidth = 15
+    $col++    
+    $cells.item($row,$col)=&quot;Outcome&quot;
+    $cells.item($row,$col).font.size=16
+    $Cells.item($row,$col).Columnwidth = 12
+    $col++
+    $cells.item($row,$col)=&quot;Last Run Time&quot;
+    $cells.item($row,$col).font.size=16    
+    $Cells.item($row,$col).Columnwidth = 15
+    $col++
+
+   
+    # Load SMO extension
+[System.Reflection.Assembly]::LoadWithPartialName(&quot;Microsoft.SqlServer.Smo&quot;) | Out-Null;
+
+# Get List of sql servers to check
+$sqlservers = Get-Content 'D:\SkyDrive\Documents\Scripts\Powershell Scripts\sqlservers.txt';
+
+# Loop through each sql server from sqlservers.txt
+foreach($sqlserver in $sqlservers)
+{
+      # Create an SMO Server object
+      $srv = New-Object &quot;Microsoft.SqlServer.Management.Smo.Server&quot; $sqlserver;
+ 
+      # For each jobs on the server
+      foreach($job in $srv.JobServer.Jobs)
+      {
+
+            $jobName = $job.Name;
+            $jobEnabled = $job.IsEnabled;
+            $jobLastRunOutcome = $job.LastRunOutcome;
+            $Time = $job.LastRunDate ;
+
+            # Set Fill Colour for Job Enabled
+            if($jobEnabled -eq &quot;FALSE&quot;)
+            { $colourenabled = &quot;2&quot;}
+            else {$colourenabled = &quot;48&quot; }         
+
+            # Set  Fill Colour for Failed jobs
+            if($jobLastRunOutcome -eq &quot;Failed&quot;)
+            { $colour = &quot;3&quot; # RED
+            }
+            
+            # Set Fill Colour for Uknown jobs
+            Elseif($jobLastRunOutcome -eq &quot;Unknown&quot;)
+            { $colour = &quot;15&quot;}       #GREY        
+
+                  else {$Colour =&quot;4&quot;}   # Success is Green    
+    $row++
+    $col=2
+    $cells.item($Row,$col)=$sqlserver
+    $col++
+    $cells.item($Row,$col)=$jobName
+    $col++
+    $cells.item($Row,$col)=$jobEnabled    
+    #Set colour of cells for Disabled Jobs to Grey
+    
+    $cells.item($Row,$col).Interior.ColorIndex = $colourEnabled
+        if ($colourenabled -eq &quot;48&quot;)        
+    { 
+        $cells.item($Row ,1 ).Interior.ColorIndex = 48
+        $cells.item($Row ,2 ).Interior.ColorIndex = 48
+        $cells.item($Row ,3 ).Interior.ColorIndex = 48
+        $cells.item($Row ,4 ).Interior.ColorIndex = 48
+        $cells.item($Row ,5 ).Interior.ColorIndex = 48
+        $cells.item($Row ,6 ).Interior.ColorIndex = 48
+        $cells.item($Row ,7 ).Interior.ColorIndex = 48
+        } 
+    $col++
+
+    $cells.item($Row,$col)=&quot;$jobLastRunOutcome&quot;
+    $cells.item($Row,$col).Interior.ColorIndex = $colour
+
+    #Reset Disabled Jobs Fill Colour
+    if ($colourenabled -eq &quot;48&quot;) 
+    {$cells.item($Row,$col).Interior.ColorIndex = 48}
+
+    $col++
+
+    $cells.item($Row,$col)=$Time 
+    
+    #Set teh Fill Colour for Time Cells
+
+    If($Time -lt ($(Get-Date).AddDays(-1)))
+    { $cells.item($Row,$col).Interior.ColorIndex = 43}
+        If($Time -lt ($(Get-Date).AddDays(-7)))
+            { $cells.item($Row,$col).Interior.ColorIndex = 53} 
+              
+    }
+    $row++
+    $row++
+
+    # Add two Yellow Rows
+    $ws.rows.item($Row).Interior.ColorIndex = 6
+    $row++
+    $ws.rows.item($Row).Interior.ColorIndex = 6
+    $row++
+    }
+
+
+$wb.Saveas(&quot;C:\temp\Test$filename.xlsx&quot;)
+$xl.quit()
+Stop-Process -Name EXCEL
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

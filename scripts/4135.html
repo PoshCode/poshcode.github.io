@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joe Bruns">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/4135.ps1">download</a></h3>
+<p>How-To Extract MS Cluster Resources and Create Powershell Commands out of them.</p>
+<pre><code class="language-posh">#######################################################################################################
+# NAME:    BuildPowershellClusterCommands.ps1
+#
+# COMMENT: This script runs a series of 'get' cmdlet's to inventory a MS cluster and turns around
+#          and attempts to create the Powershell commands necessary to create or re-create the resource.
+#
+# DEPENDENCY REQUIREMENTS:
+#       Internal:   Failover Cluster feature activated.
+#       External: 
+#
+# OUTPUT:
+#       C:\&lt;CHANGEME!&gt;\logs\cluster\&lt;cluster-name&gt;-powershell-resource-cmds.txt
+#
+# INCOMPATIBILITY ISSUES:
+#       Will not work on 2003 or RTM 2008 servers.  Only 2008 R2 and up machines.
+#
+#######################################################################################################
+Clear-Host
+[BOOL]  $RightNode = $false
+$date4file = Get-Date -uformat &quot;%Y-%m-%d-%H-%M-%S&quot;
+$now = Get-Date
+$cmdfilepath = 'c:\&lt;CHANGEME!&gt;\logs\cluster\'
+$synopsis = @&quot;
+
+The purpose of this file is to provide you a way to create cluster resources that existed in the cluster
+named in the front of this file name.
+
+Commands below need to be run inside Powershell console or as a group inside a PS1 file.
+Start Powershell by navigating to [Start &gt; All Programs &gt; Accessories &gt; Windows Powershell], right click
+on Powershell and select [Run as Administrator].
+
+Set execution policy by running following command, [set-executionpolicy unrestricted]. &lt; no brackets
+Import cluster support by running [import-module failoverclusters]. &lt; no brackets
+
+All resources will be in an offline state when they are done being created.  You will need to open the Failover Clustering
+GUI and bring them online.
+
+Windows 2008 R2 is the minumum OS required to run the cluster Powershell CMDLETs.
+Microsoft recommends creating disk resources using the failover cluster management GUI.
+
+Make sure to create any resources that other resources are dependent on first.
+This script does NOT ensure that the order of Powershell command executions is in order of their respective dependency chains.
+
+Notes:
+
+Some resource parameters cannot be set but this script does not filter those.  You may see errors when you try to set a parameter
+that is read-only or the cast is not valid.  Some errors you may see are:
+
+Specified cast is not valid.
+The value of read-only property '&lt;property name&gt;' cannot be changed.
+
+These errors are for the most part expected but all should be investigated.
+#################################################################################################################################
+&quot;@
+
+# Import the cmdlets
+Import-Module FailOverClusters
+
+$ClusterGroups = Get-ClusterGroup
+ForEach ($ClusterGroup in $ClusterGroups) {
+    If (($env:COMPUTERNAME -eq $ClusterGroup.OwnerNode) -and ($ClusterGroup.Name -eq 'Cluster Group')){
+        $RightNode = $true
+    }
+}
+If ($RightNode){
+    # Get the cluster vip and set to variable
+    $clustervip = (Get-Cluster).name
+    $cmdfile = &quot;$clustervip-powershell-resource-cmds.txt&quot;
+
+    # delete previous days check
+    del $cmdfilepath\$cmdfile -ErrorAction SilentlyContinue
+
+    Out-File &quot;$cmdfilepath\$cmdfile&quot; -Encoding ASCII
+    Add-Content $cmdfilepath\$cmdfile &quot;This file was created/updated on $now&quot; -Encoding ASCII
+    #Add-Content $cmdfilepath\$cmdfile &quot;`r&quot; -Encoding ASCII
+    Add-Content $cmdfilepath\$cmdfile $synopsis -Encoding ASCII
+
+    ForEach ($ClusterGroup in $ClusterGroups) {
+        $String = 'Add-ClusterGroup -Name ' + [char]34 + $ClusterGroup.name + [char]34
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+    }
+    Add-Content $cmdfilepath\$cmdfile &quot;#&quot; -Encoding ASCII
+    $ResourceTypes = Get-ClusterResourceType
+    ForEach ($ResourceType in $ResourceTypes) {
+        $String = 'Add-ClusterResourceType -Name ' + [char]34 + $ResourceType.name + [char]34 + ' -Dll ' + $ResourceType.DllName
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+    }
+    Add-Content $cmdfilepath\$cmdfile &quot;#&quot; -Encoding ASCII
+    $ClusterResources = Get-ClusterResource
+    ForEach ($ClusterResource in $ClusterResources) {
+        #Create initial add cluster resource command
+        $String = 'Add-ClusterResource -Name ' + [char]34 + $ClusterResource.name + [char]34 + ' -Group ' + [char]34 + $ClusterResource.ownergroup + [char]34 + ' -ResourceType ' + [char]34 + $ClusterResource.resourcetype + [char]34
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        #Retrieve common properties and create commands for each
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.DeadlockTimeout=' + $ClusterResource.DeadlockTimeout + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.IsAlivePollInterval=' + $ClusterResource.IsAlivePollInterval + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.LooksAlivePollInterval=' + $ClusterResource.LooksAlivePollInterval + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.PendingTimeout=' + $ClusterResource.PendingTimeout + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.PersistentState=' + $ClusterResource.PersistentState + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.RestartAction=' + $ClusterResource.RestartAction + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.RestartDelay=' + $ClusterResource.RestartDelay + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.RestartPeriod=' + $ClusterResource.RestartPeriod + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.RestartThreshold=' + $ClusterResource.RestartThreshold + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.RetryPeriodOnFailure=' + $ClusterResource.RetryPeriodOnFailure + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $String = 'Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34 + ' | % {$_.SeparateMonitor=$' + $ClusterResource.SeparateMonitor + '}'
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        Add-Content $cmdfilepath\$cmdfile &quot;#&quot; -Encoding ASCII
+        $String = '$ResourceParameters = Get-ClusterResource ' + [char]34 + $ClusterResource.Name + [char]34
+        Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        $parmcounter = 1
+        $ResourceParameters = Get-ClusterResource $ClusterResource.Name | Get-ClusterParameter
+        ForEach ($ResourceParameter in $ResourceParameters) {
+            If (($ClusterResource.ResourceType -like 'IP Address') -and (($ResourceParameter.Name -like 'Address') -or ($ResourceParameter.Name -like 'SubnetMask') -or ($ResourceParameter.Name -like 'Network'))){
+                $String = '$parm' + $parmcounter + ' = New-Object Microsoft.FailoverClusters.PowerShell.ClusterParameter -ArgumentList $ResourceParameters,' + [char]34 + $ResourceParameter.Name + [char]34 + ',' + [char]34 + $ResourceParameter.value + [char]34
+                Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+                $parmcounter ++
+                If ($parmcounter -gt 3){
+                    $String = '$parms = $parm1,$parm2,$parm3'
+                    Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+                    $String = '$parms | Set-ClusterParameter'
+                    Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+                    Add-Content $cmdfilepath\$cmdfile &quot;#&quot; -Encoding ASCII
+                }
+            }
+            Else{
+                $String = 'Set-ClusterParameter -InputObject $ResourceParameters' + ' -Name ' + [char]34 + $ResourceParameter.name + [char]34 + ' -Value ' + [char]34 + $ResourceParameter.value + [char]34
+                Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+            }
+        }
+        Add-Content $cmdfilepath\$cmdfile &quot;#&quot; -Encoding ASCII
+    }
+    $ClusterResourceDependencies = Get-ClusterResource | Get-ClusterResourceDependency
+    ForEach ($ClusterResourceDependency in $ClusterResourceDependencies) {
+        If ($ClusterResourceDependency.DependencyExpression -ne ''){
+            $String = 'Add-ClusterResourceDependency -Resource ' + [char]34 + $ClusterResourceDependency.resource + [char]34 + `
+                ' -Provider ' + [char]34 + $ClusterResourceDependency.DependencyExpression + [char]34
+            Add-Content $cmdfilepath\$cmdfile $String -Encoding ASCII
+        }
+        }
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

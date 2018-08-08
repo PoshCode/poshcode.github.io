@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Boe Prox">
+    <title>Rollback Policy Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Rollback Policy Module</h1>
+<h3><a href="//scripts/2751.ps1">download</a></h3>
+<p>This module allows you to Get, Enable and Disable the software rollback settings on your computer or computers. This is useful when working with certain patches and software installations that require the software rollback to be enabled.</p>
+<p>The link below details a common instance where this needs to be done when installing a .NET patch.</p>
+<p>http://support.microsoft.com/kb/312499</p>
+<pre><code class="language-posh">Function Get-RollbackPolicy { 
+&lt;#   
+.SYNOPSIS   
+     Retieves the current rollback policy on a local or remote computer 
+          
+.DESCRIPTION   
+    Retieves the current rollback policy on a local or remote computer 
+     
+.PARAMETER Computername 
+    The name of the computer or computers to perform the query against 
+                
+.NOTES   
+    Name: Get-RollbackPolicy 
+    Author: Boe Prox 
+    DateCreated: 06/24/2011 
+    Links:  
+ 
+.EXAMPLE 
+Get-RollbackPolicy -Computername DC1 
+ 
+Rollback                                Computer                                
+--------                                --------                                
+Enabled                                 dc1      
+ 
+Description 
+----------- 
+Performs a query against the server, DC1 and returns whether the rollback setting has been enabled  
+or disabled. 
+ 
+.EXAMPLE 
+Get-RollbackPolicy -Computername DC1,server1,server2 
+ 
+Rollback                                Computer                                
+--------                                --------                                
+Enabled                                 dc1      
+Disabled                                server1    
+Enabled                                 server2    
+ 
+Description 
+----------- 
+Performs a query against the server, DC1 and returns whether the rollback setting has been enabled  
+or disabled. 
+#&gt; 
+[cmdletbinding()] 
+Param ( 
+    [parameter()] 
+    [string[]]$Computername 
+    ) 
+Process { 
+    ForEach ($computer in $computername) { 
+        Try { 
+            #Make initial registry connection    
+            Write-Verbose &quot;Making registry connection to remote computer&quot;      
+            $registry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey(&quot;LocalMachine&quot;,$computer) 
+            #Connect to the subkey where the rollback is located 
+            Write-Verbose &quot;Making registry connection to 'Software' key&quot;  
+            If ($registry.GetSubkeyNames() -contains &quot;Software&quot;) { 
+                $subkey = $registry.OpenSubKey(&quot;Software&quot;,$True) 
+                Write-Verbose &quot;Making registry connection to 'Policies' key&quot; 
+                If ($subkey.GetSubKeyNames() -contains &quot;Policies&quot;) { 
+                    $subkey = $subkey.OpenSubKey(&quot;Policies&quot;,$True) 
+                    Write-Verbose &quot;Making registry connection to 'Microsoft' key&quot; 
+                    If ($subkey.GetSubKeyNames() -contains &quot;Microsoft&quot;) { 
+                        $subkey = $subkey.OpenSubKey(&quot;Microsoft&quot;,$True) 
+                        Write-Verbose &quot;Making registry connection to 'Windows' key&quot; 
+                        If ($subkey.GetSubKeyNames() -contains &quot;Windows&quot;) { 
+                            $subkey = $subkey.OpenSubKey(&quot;Windows&quot;,$True) 
+                            Write-Verbose &quot;Making registry connection to 'Installer' key&quot; 
+                            If ($subkey.GetSubKeyNames() -contains &quot;Installer&quot;) { 
+                                $subkey = $subkey.OpenSubKey(&quot;Installer&quot;,$True) 
+                                Write-Verbose &quot;Checking to see if 'DisableRollback' value name exists&quot; 
+                                If ($subkey.GetValueNames() -contains &quot;DisableRollback&quot;) { 
+                                    #Get the value of DisableRollback 
+                                    Write-Verbose &quot;Retrieving value of 'DisableRollback'&quot; 
+                                    $value = $subkey.GetValue('DisableRollback') 
+                                    Switch ($value) { 
+                                        0 {$hash = @{Computer = $computer;Rollback = &quot;Enabled&quot;}} 
+                                        1 {$hash = @{Computer = $computer;Rollback = &quot;Disabled&quot;}} 
+                                        Default {$hash = @{Computer = $computer;Rollback = &quot;Unknown&quot;}} 
+                                        }                                     
+                                    } 
+                                Else { 
+                                    Write-Warning &quot;$($computer): Missing 'DisableRollback' value name in registy!&quot; 
+                                    $hash = @{Computer = $computer;Rollback = &quot;Missing DisableRollback value name&quot;} 
+                                    } 
+                                } 
+                            Else { 
+                                Write-Warning &quot;$($computer): Missing 'Installer' key in registy!&quot; 
+                                $hash = @{Computer = $computer;Rollback = &quot;Missing Installer key&quot;} 
+                                } 
+                            } 
+                        Else { 
+                            Write-Warning &quot;$($computer): Missing 'Windows' key in registy!&quot; 
+                            $hash = @{Computer = $computer;Rollback = &quot;Missing Windows key&quot;} 
+                            } 
+                        } 
+                    Else { 
+                        Write-Warning &quot;$($computer): Missing 'Microsoft' key in registy!&quot; 
+                        $hash = @{Computer = $computer;Rollback = &quot;Missing Microsoft key&quot;} 
+                        } 
+                    } 
+                Else { 
+                    Write-Warning &quot;$($computer): Missing 'Policies' key in registy!&quot; 
+                    $hash = @{Computer = $computer;Rollback = &quot;Missing Policies key&quot;} 
+                    } 
+                } 
+            Else { 
+                Write-Warning &quot;$($computer): Missing 'Software' key in registy!&quot; 
+                $hash = @{Computer = $computer;Rollback = &quot;Missing Software key&quot;} 
+                } 
+            } 
+        Catch { 
+            Write-Warning &quot;$($computer): $($Error[0])&quot; 
+            $hash = @{Computer = $computer;Rollback = ($error[0].exception.innerexception.message -split &quot;`n&quot;)[0]} 
+            } 
+        Finally { 
+            $object = New-Object PSObject -Property $hash 
+            $object.PSTypeNames.Insert(0,'RollbackStatus') 
+            Write-Output $object         
+            } 
+        } 
+    } 
+} 
+ 
+Function Disable-RollbackPolicy { 
+&lt;#   
+.SYNOPSIS   
+     Disables the rollback policy on a local or remote computer 
+     
+.DESCRIPTION   
+    Disables the rollback policy on a local or remote computer 
+     
+.PARAMETER Computername 
+    The name of the computer or computers to disable the rollback policy on 
+ 
+.PARAMETER Passthru 
+    Displays the returned object after disabling the policy. 
+     
+.NOTES   
+    Name: Disable-RollbackPolicy 
+    Author: Boe Prox 
+    DateCreated: 06/24/2011 
+    Links:  
+ 
+.EXAMPLE 
+Disable-RollbackPolicy -Computername DC1 -Passthru 
+ 
+Rollback                                Computer                                
+--------                                --------                                
+Disabled                                DC1     
+ 
+Description 
+----------- 
+This disables the rollback policy on DC1 and returns the object showing that the policy has  
+been disabled. 
+ 
+.EXAMPLE 
+Disable-RollbackPolicy -Computername DC1,server1,server2 -Passthru 
+ 
+Rollback                                Computer                                
+--------                                --------                                
+Disabled                                DC1     
+Disabled                                server1   
+Disabled                                server2   
+ 
+Description 
+----------- 
+This disables the rollback policy on DC1,server1 and server2 and returns the object showing that the policy has  
+been disabled. 
+#&gt; 
+[cmdletbinding( 
+    SupportsShouldProcess = 'True' 
+    )] 
+Param ( 
+    [parameter()] 
+    [string[]]$Computername, 
+    [parameter()] 
+    [Switch]$Passthru 
+    ) 
+Process { 
+    ForEach ($computer in $computername) { 
+        Try { 
+            #Make initial registry connection    
+            Write-Verbose &quot;Making registry connection to remote computer&quot;      
+            $registry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey(&quot;LocalMachine&quot;,$computer) 
+            If ($PScmdlet.ShouldProcess(&quot;$computer&quot;,&quot;Disable Rollback&quot;)) { 
+                #Connect to the subkey where the rollback is located 
+                Write-Verbose &quot;Making registry connection to 'Software' key&quot;  
+                If ($registry.GetSubkeyNames() -notcontains &quot;Software&quot;) { 
+                    $registry.CreateSubKey(&quot;Software&quot;) 
+                    $subkey = $registry.OpenSubKey(&quot;Software&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $registry.OpenSubKey(&quot;Software&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Making registry connection to 'Policies' key&quot; 
+                If ($subkey.GetSubKeyNames() -notcontains &quot;Policies&quot;) { 
+                    $subkey.CreateSubKey(&quot;Policies&quot;) 
+                    $subkey = $subkey.OpenSubKey(&quot;Policies&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $subkey.OpenSubKey(&quot;Policies&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Making registry connection to 'Microsoft' key&quot; 
+                If ($subkey.GetSubKeyNames() -notcontains &quot;Microsoft&quot;) { 
+                    $subkey.CreateSubKey(&quot;Microsoft&quot;) 
+                    $subkey = $subkey.OpenSubKey(&quot;Microsoft&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $subkey.OpenSubKey(&quot;Microsoft&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Making registry connection to 'Windows' key&quot; 
+                If ($subkey.GetSubKeyNames() -notcontains &quot;Windows&quot;) { 
+                    $subkey.CreateSubKey(&quot;Windows&quot;) 
+                    $subkey = $subkey.OpenSubKey(&quot;Windows&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $subkey.OpenSubKey(&quot;Windows&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Making registry connection to 'Installer' key&quot; 
+                If ($subkey.GetSubKeyNames() -notcontains &quot;Installer&quot;) { 
+                    $subkey.CreateSubKey(&quot;Installer&quot;) 
+                    $subkey = $subkey.OpenSubKey(&quot;Installer&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $subkey.OpenSubKey(&quot;Installer&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Checking to see if 'DisableRollback' value name exists&quot; 
+                If ($subkey.GetValueNames() -notcontains &quot;DisableRollback&quot;) { 
+                    Write-Verbose &quot;Creating DisableRollback value name and setting to 1 (Disable)&quot; 
+                    $subkey.SetValue(&quot;DisableRollback&quot;,&quot;1&quot;,&quot;DWord&quot;)  
+                    }                                  
+                Else { 
+                    Write-Verbose &quot;Disabling Rollback&quot; 
+                    $subkey.SetValue(&quot;DisableRollback&quot;,&quot;1&quot;,&quot;DWord&quot;)  
+                    } 
+                If ($PSBoundParameters['Passthru']) { 
+                    Write-Verbose &quot;Retrieving value of 'DisableRollback'&quot; 
+                    $value = $subkey.GetValue('DisableRollback') 
+                    Switch ($value) { 
+                        0 {$hash = @{Computer = $computer;Rollback = &quot;Enabled&quot;}} 
+                        1 {$hash = @{Computer = $computer;Rollback = &quot;Disabled&quot;}} 
+                        Default {$hash = @{Computer = $computer;Rollback = &quot;Unknown&quot;}} 
+                        }                      
+                    }                     
+                } 
+            } 
+        Catch { 
+            Write-Warning &quot;$($computer): $($Error[0])&quot; 
+            } 
+        Finally { 
+            If ($PSBoundParameters['Passthru']) {         
+                $object = New-Object PSObject -Property $hash 
+                $object.PSTypeNames.Insert(0,'RollbackStatus') 
+                Write-Output $object    
+                } 
+            }             
+        } 
+    } 
+} 
+ 
+Function Enable-RollbackPolicy { 
+&lt;#   
+.SYNOPSIS   
+     Enables the rollback policy on a local or remote computer 
+     
+.DESCRIPTION   
+    Enables the rollback policy on a local or remote computer 
+     
+.PARAMETER Computername 
+    Name of computer or computers to enable the rollback policy 
+     
+.PARAMETER Passthru 
+    Displays the object after enabling the rollback policy on a computer 
+            
+.NOTES   
+    Name: Enable-RollbackPolicy 
+    Author: Boe Prox 
+    DateCreated: 06/24/2011 
+    Links:  
+ 
+.EXAMPLE 
+Enable-RollbackPolicy -Computername DC1 -Passthru 
+ 
+Rollback                                Computer                                
+--------                                --------                                
+Enable                                DC1     
+ 
+Description 
+----------- 
+This enables the rollback policy on DC1 and returns the object showing that the policy has  
+been enabled. 
+ 
+.EXAMPLE 
+Enable-RollbackPolicy -Computername DC1,server1,server2 -Passthru 
+ 
+Rollback                                Computer                                
+--------                                --------                                
+Enable                                DC1     
+Enable                                server1     
+Enable                                server2     
+ 
+Description 
+----------- 
+This enables the rollback policy on DC1,server1 and server2 and returns the object showing that the policy has  
+been enabled. 
+#&gt; 
+[cmdletbinding( 
+    SupportsShouldProcess = 'True' 
+    )] 
+Param ( 
+    [parameter()] 
+    [string[]]$Computername, 
+    [parameter()] 
+    [Switch]$Passthru 
+    ) 
+Process { 
+    ForEach ($computer in $computername) { 
+        Try { 
+            #Make initial registry connection    
+            Write-Verbose &quot;Making registry connection to remote computer&quot;      
+            $registry = [Microsoft.Win32.RegistryKey]::OpenRemoteBaseKey(&quot;LocalMachine&quot;,$computer) 
+            If ($PScmdlet.ShouldProcess(&quot;$computer&quot;,&quot;Enable Rollback&quot;)) { 
+                #Connect to the subkey where the rollback is located 
+                Write-Verbose &quot;Making registry connection to 'Software' key&quot;  
+                If ($registry.GetSubkeyNames() -notcontains &quot;Software&quot;) { 
+                    $registry.CreateSubKey(&quot;Software&quot;) 
+                    $subkey = $registry.OpenSubKey(&quot;Software&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $registry.OpenSubKey(&quot;Software&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Making registry connection to 'Policies' key&quot; 
+                If ($subkey.GetSubKeyNames() -notcontains &quot;Policies&quot;) { 
+                    $subkey.CreateSubKey(&quot;Policies&quot;) 
+                    $subkey = $subkey.OpenSubKey(&quot;Policies&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $subkey.OpenSubKey(&quot;Policies&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Making registry connection to 'Microsoft' key&quot; 
+                If ($subkey.GetSubKeyNames() -notcontains &quot;Microsoft&quot;) { 
+                    $subkey.CreateSubKey(&quot;Microsoft&quot;) 
+                    $subkey = $subkey.OpenSubKey(&quot;Microsoft&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $subkey.OpenSubKey(&quot;Microsoft&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Making registry connection to 'Windows' key&quot; 
+                If ($subkey.GetSubKeyNames() -notcontains &quot;Windows&quot;) { 
+                    $subkey.CreateSubKey(&quot;Windows&quot;) 
+                    $subkey = $subkey.OpenSubKey(&quot;Windows&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $subkey.OpenSubKey(&quot;Windows&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Making registry connection to 'Installer' key&quot; 
+                If ($subkey.GetSubKeyNames() -notcontains &quot;Installer&quot;) { 
+                    $subkey.CreateSubKey(&quot;Installer&quot;) 
+                    $subkey = $subkey.OpenSubKey(&quot;Installer&quot;,$True) 
+                    } 
+                Else { 
+                    $subkey = $subkey.OpenSubKey(&quot;Installer&quot;,$True) 
+                    } 
+                Write-Verbose &quot;Checking to see if 'DisableRollback' value name exists&quot; 
+                If ($subkey.GetValueNames() -notcontains &quot;DisableRollback&quot;) { 
+                    Write-Verbose &quot;Creating DisableRollback value name and setting to 0 (Enable)&quot; 
+                    $subkey.SetValue(&quot;DisableRollback&quot;,&quot;0&quot;,&quot;DWord&quot;)  
+                    }                                  
+                Else { 
+                    Write-Verbose &quot;Enabling Rollback&quot; 
+                    $subkey.SetValue(&quot;DisableRollback&quot;,&quot;0&quot;,&quot;DWord&quot;)  
+                    } 
+                If ($PSBoundParameters['Passthru']) { 
+                    Write-Verbose &quot;Retrieving value of 'DisableRollback'&quot; 
+                    $value = $subkey.GetValue('DisableRollback') 
+                    Switch ($value) { 
+                        0 {$hash = @{Computer = $computer;Rollback = &quot;Enabled&quot;}} 
+                        1 {$hash = @{Computer = $computer;Rollback = &quot;Disabled&quot;}} 
+                        Default {$hash = @{Computer = $computer;Rollback = &quot;Unknown&quot;}} 
+                        }                      
+                    } 
+                } 
+            } 
+        Catch { 
+            Write-Warning &quot;$($computer): $($Error[0])&quot; 
+            } 
+        Finally { 
+            If ($PSBoundParameters['Passthru']) { 
+                $object = New-Object PSObject -Property $hash 
+                $object.PSTypeNames.Insert(0,'RollbackStatus') 
+                Write-Output $object    
+                } 
+            } 
+        } 
+    } 
+} 
+ 
+Export-ModuleMember -Function Get-RollbackPolicy,Enable-RollbackPolicy,Disable-RollbackPolicy
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

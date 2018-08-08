@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Boe Prox">
+    <title>Install-Patches - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Install-Patches</h1>
+<h3><a href="//scripts/2689.ps1">download</a></h3>
+<p>This module uses PSexec,vbscript and PowerShell to install patches on local or remote systems. This does require PSexec to be in the same directory as where you are running the function within this module. Save as a .psm1 file.</p>
+<pre><code class="language-posh">&lt;#
+Save this with a .PSM1 extension and use Import-Module to properly load the functions.
+ie: Install-Patches.psm1
+Import-Module Install-Patches.psm1
+#&gt;
+#Validate user is an Administrator
+Write-Verbose &quot;Checking Administrator credentials&quot;
+If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(`
+    [Security.Principal.WindowsBuiltInRole] &quot;Administrator&quot;))
+{
+    Write-Warning &quot;You are not running this as an Administrator!`nPlease re-run this with an Administrator account.&quot;
+    Break
+}
+
+Function Create-UpdateVBS {
+Param ($computername)
+#Create Here-String of vbscode to create file on remote system
+$vbsstring = @&quot;
+ON ERROR RESUME NEXT
+CONST ForAppending = 8
+CONST ForWriting = 2
+CONST ForReading = 1
+strlocalhost = &quot;.&quot;
+Set oShell = CreateObject(&quot;WScript.Shell&quot;) 
+set ofso = createobject(&quot;scripting.filesystemobject&quot;)
+Set updateSession = CreateObject(&quot;Microsoft.Update.Session&quot;)
+Set updateSearcher = updateSession.CreateupdateSearcher()
+Set updatesToInstall = CreateObject(&quot;Microsoft.Update.UpdateColl&quot;)
+Set searchResult = updateSearcher.Search(&quot;IsInstalled=0 and Type='Software'&quot;)
+Set objWMI = GetObject(&quot;winmgmts:\\&quot; &amp; strlocalhost &amp; &quot;\root\CIMV2&quot;)
+set colitems = objWMI.ExecQuery(&quot;SELECT Name FROM Win32_ComputerSystem&quot;)
+	For Each objcol in colitems
+		strcomputer = objcol.Name
+	Next
+set objtextfile = ofso.createtextfile(&quot;C:\&quot; &amp; strcomputer &amp; &quot;_patchlog.csv&quot;, True)
+objtextfile.writeline &quot;Computer,Title,KB,InstallResultCode&quot;
+If searchresult.updates.count = 0 Then
+	Wscript.echo &quot;No updates to install.&quot;
+	objtextfile.writeline strcomputer &amp; &quot;,NA,NA,NA&quot;
+	Wscript.Quit
+Else
+For I = 0 To searchResult.Updates.Count-1
+    set update = searchResult.Updates.Item(I)
+	    If update.IsDownloaded = true Then
+	       updatesToInstall.Add(update)	
+	End If
+Next
+End If
+err.clear
+Wscript.Echo &quot;Installing Updates&quot;
+Set installer = updateSession.CreateUpdateInstaller()
+installer.Updates = updatesToInstall
+Set installationResult = installer.Install()
+	If err.number &lt;&gt; 0 Then
+		objtextfile.writeline strcomputer &amp; &quot;,&quot; &amp; update.Title &amp; &quot;,NA,&quot; &amp; err.number
+	Else		
+		For I = 0 to updatesToInstall.Count - 1
+		objtextfile.writeline strcomputer &amp; &quot;,&quot; &amp; updatesToInstall.Item(i).Title &amp; &quot;,NA,&quot; &amp; installationResult.GetUpdateResult(i).ResultCode 
+		Next
+	End If
+Wscript.Quit
+&quot;@
+
+Write-Verbose &quot;Creating vbscript file on $computer&quot;
+Try {
+    $vbsstring | Out-File &quot;\\$computername\c$\update.vbs&quot; -Force
+    Return $True
+    }
+Catch {
+    Write-Warning &quot;Unable to create update.vbs!&quot;
+    Return $False
+    }
+}
+
+
+Function Format-InstallPatchLog {
+    [cmdletbinding()]
+    param ($computername)
+    
+    #Create empty collection
+    $installreport = @()
+    #Check for logfile
+    If (Test-Path &quot;\\$computername\c$\$($computername)_patchlog.csv&quot;) {
+        #Retrieve the logfile from remote server
+        [array]$CSVreport = Import-Csv &quot;\\$computername\c$\$($computername)_patchlog.csv&quot;
+        If ($csvreport[0].title -ne &quot;NA&quot;) {
+            #Iterate through all items in patchlog
+            ForEach ($log in $CSVreport) {
+                $temp = &quot;&quot; | Select Computer,Title,KB,InstallResultCode
+                $temp.Computer = $log.Computer
+                $temp.Title = $log.title.split('\(')[0]
+                $temp.KB = ($log.title.split('\(')[1]).split('\)')[0]
+                Switch ($log.InstallResultCode) {
+                    1 {$temp.InstallResultCode = &quot;No Reboot required&quot;}
+                    2 {$temp.InstallResultCode = &quot;Reboot Required&quot;}
+                    4 {$temp.InstallResultCode = &quot;Failed to Install Patch&quot;}
+                    &quot;-2145124316&quot; {$temp.InstallResultCode = &quot;Update is not available to install&quot;}
+                    Default {$temp.InstallResultCode = &quot;Unable to determine Result Code&quot;}            
+                    }
+                $installreport += $temp
+                }
+            }
+        Else {
+            $temp = &quot;&quot; | Select Computer, Title, KB,InstallResultCode
+            $temp.Computer = $computername
+            $temp.Title = &quot;NA&quot;
+            $temp.KB = &quot;NA&quot;
+            $temp.InstallResultCode = &quot;NA&quot;  
+            $installreport += $temp            
+            }
+        }
+    Else {
+        $temp = &quot;&quot; | Select Computer, Title, KB,InstallResultCode
+        $temp.Computer = $computername
+        $temp.Title = &quot;NA&quot;
+        $temp.KB = &quot;NA&quot;
+        $temp.InstallResultCode = &quot;NA&quot;  
+        $installreport += $temp      
+        }
+    Write-Output $installreport
+}
+
+Function Install-Patches {
+&lt;#    
+.SYNOPSIS    
+    Install patches on a local or remote computer and generates a report.
+.DESCRIPTION  
+    Install patches on a local or remote computer and generates a report with status of installation.
+.PARAMETER Computername  
+    Name of the computer to install patches on.           
+.NOTES    
+    Name: Install-Patches 
+    Author: Boe Prox  
+    DateCreated: 19May2011   
+        
+.LINK    
+    https://boeprox.wordpress.com  
+.EXAMPLE    
+    Install-Patches -Computername Server1
+    
+    Description
+    -----------
+    Installs patches on Server1 and displays report with installation status.
+
+.EXAMPLE    
+    Install-Patches -Computername Server1,Server2,Server3
+    
+    Description
+    -----------
+    Installs patches on Server1,Server2 and Server3 and displays report with installation status.    
+#&gt;
+[cmdletbinding()]
+Param(
+    [Parameter(Mandatory = $True,Position = 0,ValueFromPipeline = $True)]  
+    [string[]]$Computername
+    )
+Begin {
+    If (-Not (Test-Path psexec.exe)) {
+        Write-Warning &quot;PSExec not in same directory as script!&quot;  
+        Break
+        }
+    }
+Process {
+    ForEach ($computer in $computername) {
+        If ((Test-Connection -ComputerName $computer -Count 1 -Quiet)) {
+            Write-Verbose &quot;Creating update.vbs file on remote server.&quot;
+            If (Create-UpdateVBS -computer $computer) {
+                Write-Verbose &quot;Patching computer: $($computer)&quot;
+                .\psexec.exe -accepteula -s -i \\$computer cscript.exe C:\update.vbs
+                If ($LASTEXITCODE -eq 0) {
+                    Write-Verbose &quot;Successful run of install script!&quot;
+                    Write-Verbose &quot;Formatting log file and adding to report&quot;
+                    Format-InstallPatchLog -computer $computer
+                    }            
+                Else {
+                    Write-Warning &quot;Unsuccessful run of install script!&quot;
+                    $report = &quot;&quot; | Select Computer,Title,KB,IsDownloaded,InstallResultCode
+                    $report.Computer = $computer
+                    $report.Title = &quot;ERROR&quot;
+                    $report.KB = &quot;ERROR&quot;
+                    $report.IsDownloaded = &quot;ERROR&quot;
+                    $report.InstallResultCode = &quot;ERROR&quot; 
+                    Write-Output $report
+                    }
+                }
+            Else {
+                Write-Warning &quot;Unable to install patches on $computer&quot;
+                $report = &quot;&quot; | Select Computer,Title,KB,IsDownloaded,InstallResultCode
+                $report.Computer = $computer
+                $report.Title = &quot;ERROR&quot;
+                $report.KB = &quot;ERROR&quot;
+                $report.IsDownloaded = &quot;ERROR&quot;
+                $report.InstallResultCode = &quot;ERROR&quot; 
+                Write-Output $report              
+                }
+            }
+        Else {
+            Write-Warning &quot;$($Computer): Unable to connect!&quot;
+            } 
+        } 
+    }   
+}
+Export-ModuleMember Install-Patches
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

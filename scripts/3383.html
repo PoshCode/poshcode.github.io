@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Paul McDonnell">
+    <title>AD attributes - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>AD attributes</h1>
+<h3><a href="//scripts/3383.asp">download</a></h3>
+<p>This ASP page takes an input from a form from a html page. The input is the displayname (or part of a displayname) of an account in Active Directory. It returns a number of fields, but the one I was mainly interested in was the msds-Principalname, which is only available in AD 2008. As we're not 100% AD 2008, I hard-coded this page to hit a Windows 2008 Domain Controller. I also needed the msds-Principalname field with &quot;winnt://&quot; in front of it, which is why the output loop looks a bit strange.</p>
+<pre><code class="language-asp">&lt;%@ Language=VBScript %&gt;
+&lt;% StartTime = Timer %&gt;
+&lt;!--#include file = &quot;global.inc&quot;--&gt;
+&lt;html&gt;
+&lt;head&gt;&lt;title&gt;&lt;%=strCompany%&gt; - Search List&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;!--#include file=&quot;default.htm&quot;--&gt;
+&lt;link rel=&quot;stylesheet&quot; href=&quot;/server/default.css&quot; TYPE=&quot;text/css&quot; media=&quot;screen&quot;&gt;
+&lt;%
+Dim MyVariable
+MyVariable=Request.Form(&quot;name&quot;)
+MyVariable =Replace(MyVariable,&quot;'&quot;,&quot;''&quot;)  
+    'the request.form gets the info within the boxes of the form actioned
+    'from the previous HTML/ASP
+    gotname = Request.form(&quot;name&quot;)
+    %&gt; 
+
+
+&lt;%
+Dim objRootDSE, objConnection, objRecordSet, objCommand
+Dim strDomainLDAP, intPage, i, j, strTRbgColor, strTemp
+Const ADS_SCOPE_SUBTREE = 2
+
+Set objRootDSE = GetObject(&quot;GC://RootDSE&quot;)
+strDomainLDAP = objRootDSE.Get(&quot;DefaultNamingContext&quot;)
+Set objRootDSE = Nothing
+
+response.write(&quot;Display Name that was searched for: &lt;h3&gt;&quot; &amp; gotname)
+
+
+Set objConnection = CreateObject(&quot;ADODB.Connection&quot;)
+Set objRecordSet = Server.CreateObject(&quot;ADODB.Recordset&quot;)
+Set objCommand = Server.CreateObject(&quot;ADODB.Command&quot;)
+
+objConnection.Provider = &quot;ADsDSOObject&quot;
+objConnection.Open &quot;Active Directory Provider&quot;
+
+Set objCommand.ActiveConnection = objConnection
+objCommand.Properties(&quot;Page Size&quot;) = 10000
+objCommand.Properties(&quot;Searchscope&quot;) = ADS_SCOPE_SUBTREE
+objCommand.Properties(&quot;Size Limit&quot;) = 10000
+
+objCommand.CommandText = &quot;SELECT mail, l, title, Displayname, msds-PrincipalName&quot; &amp; _
+			&quot; FROM 'GC://windows2008DC' WHERE objectCategory='user' AND homemdb='*' AND UserAccountControl='512' AND objectclass='User' AND displayname= '*&quot; &amp; myvariable &amp; &quot;*' ORDER BY Name&quot;
+
+objRecordSet.Open objCommand.CommandText, objConnection,1,1
+objRecordSet.PageSize = Cint(RowsPerPage)
+
+If Request.QueryString(&quot;page&quot;) = &quot;&quot; Then
+	intPage = 1
+Else
+	intPage = Request.QueryString(&quot;page&quot;)
+End If
+
+If objRecordSet.EOF Then 
+	Response.Write &quot;&lt;h3&gt;No search term entered or search term not found&lt;/h3&gt;&quot; &amp; vbCrLf
+	Response.End 
+Else
+	Response.Write &quot;&lt;center&gt;&lt;h3&gt;&quot; &amp; strCompany &amp; &quot; - Searchlist &lt;/h3&gt;&quot; &amp; vbCrLf
+	
+	objRecordSet.AbsolutePage = intPage
+
+	Response.Write &quot;&lt;table align=center border=1&gt;&quot; &amp; vbNewLine
+	Response.Write &quot;	&lt;tr align=center&gt;&quot; &amp; vbNewLine
+	For i = 0 To objRecordSet.Fields.Count - 1
+		Response.Write &quot;		&lt;th&gt;&quot; &amp; objRecordSet.Fields(i).Name &amp; &quot;&lt;/th&gt;&quot; &amp; vbNewLine
+	Next
+	Response.Write &quot;	&lt;/tr&gt;&quot; &amp; vbNewLine
+rem Response.Write objRecordSet.RecordCount
+	For j = 1 To objRecordSet.RecordCount
+rem objRecordSet.PageSize
+		Response.Write &quot;	&lt;tr bgColor='&quot;
+		strTRbgColor = RowOddColor
+		If j Mod 2 = 0 Then strTRbgColor = RowEvenColor
+		Response.Write strTRbgColor 
+    	If RowMoveColor &lt;&gt; &quot;&quot; Then
+    		Response.Write &quot;' onmouseover=this.bgColor='&quot; &amp; RowMoveColor &amp; &quot;' onmouseout=this.bgColor='&quot; &amp; strTRbgColor
+    	End If
+    	Response.Write &quot;'&gt;&quot; &amp; vbCrLf		
+			If objRecordSet.Fields(0).Value &lt;&gt; &quot;&quot; Then strTemp = objRecordSet.Fields(0).Value
+			Response.Write &quot;		&lt;td&gt;winnt://&quot; &amp; strTemp &amp; &quot;&lt;/td&gt;&quot; &amp; vbNewLine
+			For i = 1 To objRecordSet.Fields.Count - 1
+			strTemp = &quot;&lt;font color=&quot; &amp; strTRbgColor &amp; &quot;&gt;-&lt;/font&gt;&quot;
+			If objRecordSet.Fields(i).Value &lt;&gt; &quot;&quot; Then strTemp = objRecordSet.Fields(i).Value
+			Response.Write &quot;		&lt;td&gt;&quot; &amp; strTemp &amp; &quot;&lt;/td&gt;&quot; &amp; vbNewLine
+
+		Next						
+
+		Response.Write &quot;	&lt;/tr&gt;&quot; &amp; vbNewLine
+	    objRecordSet.MoveNext
+	Next
+
+	Response.Write &quot;&lt;/table&gt;&quot; &amp; vbNewLine
+
+	Response.Write &quot;&lt;br&gt;&lt;br&gt;&quot; &amp; vbNewLine	
+
+
+objRecordSet.Close
+Set objRecordSet = Nothing
+Set objConnection = Nothing
+End If
+%&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+
+&lt;%
+Private Function TrimServerVariable(strString)
+Dim temp 'As String
+If inStr(strString,&quot;&amp;&quot;) &lt;&gt; 0 Then
+	arr = Split(strString, &quot;&amp;&quot;)
+	strString = &quot;&quot;
+	For i = 0 To UBound(arr) - 1
+        temp = Left(arr(i), InStr(arr(i), &quot;=&quot;))
+		If InStr(strString, temp) = 0 Then
+		strString = strString &amp; arr(i) &amp; &quot;&amp;&quot;
+		End If
+	Next
+	strString = Left(strString, Len(strString) - 1)
+End If
+TrimServerVariable = strString
+End Function
+%&gt;
+&lt;%
+EndTime = Timer
+Response.Write &quot;&lt;!-- Page rendered in &quot; &amp; (EndTime-StartTime) &amp; &quot; --&gt;&quot; &amp; vbNewLine
+%&gt;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

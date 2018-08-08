@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="General_Dark">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/515.ps1">download</a></h3>
+<p>A script to determine if what printerques that are active</p>
+<pre><code class="language-posh">#PrinterChecking Script By Henrik Pedersen Åmark and Daniel Lundgren
+
+#This script is designed to check what printers that is still in use.
+#It's assumed the printer is classed as inactive if it hasnt been used in X months
+#The script is reading the Systemlog on a printserver of your choice, the one you type in the hostname for,
+#sorting the log on eventID 10 (successful print) and searching for entries the latest 6 months.
+#When its done it gets printer ports and ques from the same server and then compare them to the messageline from the eventlog.
+#And then checking if the mportname of is in the message.
+#If it is, it will write the name to a file and if not it will write the name to another file.
+
+#You will need admin rights to use the script.
+
+$date = Get-Date -UFormat %Y%m%d
+#Finding out what host to check logs from
+Write-Host &quot;What server do you want to get the eventlog from?&quot;
+$hostname = Read-Host
+
+Write-Host &quot;Getting eventlog from remote server &quot;$hostname&quot;. Please wait...&quot;
+Write-Host &quot;Please wait... (this might take a few minutes)&quot;
+
+#Get Eventlog from a remote host
+$events = gwmi -ComputerName $hostname -query &quot;select * from win32_ntlogevent where logfile='system' and eventcode='10' and sourcename='print'&quot; | Select-Object EventCode, Timegenerated, Message | sort Timegenerated
+
+#Making a variable for the printerports
+$printerports = Get-WmiObject -computername $hostname Win32_Printer | Select-Object Portname, DeviceID, __server, name
+
+#Converting newest logtimes to DateTime
+$newest = [System.Management.ManagementDateTimeConverter]::ToDateTime($events[0].TimeGenerated)
+Write-Host &quot;Oldest logentry is from:&quot; $newest
+
+Write-Host &quot;How many months back do you want to check?&quot;
+$months = Read-Host
+
+#Checks is the path where the files gonna be added exists, it it dont, it creates it
+if ((Test-Path -path $hostname) -ne $True)
+{
+	New-Item -type directory -path $hostname
+}
+
+$counter = 0
+
+while ($counter -ne ($printerports.count-1))
+{
+	$foundprinted = 0
+
+	#Looping through each line and checking for how old the events are and if they match the current printerquename
+	foreach ($line in $events)
+	{
+		#Converting Timegenerated to DateTime
+		$current = ([System.Management.ManagementDateTimeConverter]::ToDateTime($line.TimeGenerated)) 
+		
+		#Checking each line for beeing less then X months and has quename in the message
+		if ($current -gt $(Get-Date).AddMonths(-$months) -and ($line.message -match $printerports[$counter].name ))
+		{
+			$foundprinted = 1
+		}
+	}
+	
+	if ($foundprinted) 
+	{
+		write-host -ForegroundColor Green $printerports[$counter].name&quot;is in use!&quot; 
+		
+		#Writing to a file
+		add-content -path $hostname\Validprinters_$date.txt -Value $printerports[$counter].name
+	}
+	else 
+	{
+		#Writing to another file
+		write-host -ForegroundColor red $printerports[$counter].name &quot;is not in use!&quot;
+		add-content -path $hostname\Invalidprinters_$date.txt -Value $printerports[$counter].name
+	}
+	
+	#Adds 1 to the counter so the loop ends after all quenames are checked
+	$counter=$counter+1
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

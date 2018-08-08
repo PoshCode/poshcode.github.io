@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>WPF PingMonitor for 2.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>WPF PingMonitor for 2.0</h1>
+<h3><a href="//scripts/981.ps1">download</a> - <a href="//scripts/980.md">parent</a></h3>
+<p>This script ONLY works in PowerShell 2.0, but it doesn't require -STA (single threaded apartment) mode.
+A PowerBoots script to demonstrate the power of PoshWpf: Create a New-PingMonitor window which uses Visifire charts to display the recent ping history of multiple servers simultaneously, and interact with it while it's running, adding hosts at will. There are only two callable functions here:</p>
+<ul>
+<li>New-PingMonitor creates the window and starts pinging hosts</li>
+<li>Add-PingHost adds hosts to the window. There should be a matching Remove-PingHost, but I just haven't written it.</li>
+</ul>
+<pre><code class="language-posh">if(!(Get-Command New-BootsWindow -EA SilentlyContinue)) {
+   # Add-PsSnapin PoshWpf
+   Import-Module PowerBoots
+   Add-BootsContentProperty 'DataPoints', 'Series'
+   #[Void][Reflection.Assembly]::LoadFrom( (Convert-Path (Resolve-Path &quot;~\Documents\WindowsPowershell\Libraries\WPFVisifire.Charts.dll&quot;)) )
+   Add-BootsFunction -Assembly &quot;~\Documents\WindowsPowershell\Libraries\WPFVisifire.Charts.dll&quot;
+   Add-BootsFunction ([System.Windows.Threading.DispatcherTimer])
+}
+
+if(Get-Command Ping-Host -EA SilentlyContinue) {
+   $pingcmd = { (Ping-Host $args[0] -count 1 -Quiet).AverageTime }
+} else {
+   $pingcmd = { [int]([regex]&quot;time=(\d+)ms&quot;).Match( (ping $args[0] -n 1) ).Groups[1].Value }
+}
+
+$global:onTick = {
+$window = $this.Tag
+   #  Invoke-BootsWindow $window {
+      try {
+         foreach($s in $window.Content.Series.GetEnumerator()) {
+            $ping = &amp;$pingcmd $s.LegendText
+            $points = $s.DataPoints
+            foreach($dp in 0..$($points.Count - 1)) 
+            {
+               if(($dp+1) -eq $points.Count) {
+                  $points[$dp].YValue = $ping
+               } else {
+                  $points[$dp].YValue = $points[$dp+1].YValue
+               }
+            }
+         }
+      } catch { 
+         Write-Output $_
+      }
+   #  }
+}
+
+function Add-PingHost {
+[CmdletBinding()]
+Param(
+   [Parameter(Position=0,ValueFromPipeline=$true)]
+   [string[]]$target
+,
+   [Parameter(Position=1)]
+   [Visifire.Charts.RenderAs]$renderAs=&quot;Line&quot;
+,  
+   [Parameter(Position=2)]
+   [System.Windows.Window]$window = $global:pingWindow
+,
+   [Parameter()]
+   [Switch]$Passthru
+)
+PROCESS {
+   if($Window) {
+      Invoke-BootsWindow $Window { 
+         $target | Add-PingHostInternal -render $renderAs -window $window
+      }
+      return $Window
+   } else {
+      return New-PingMonitor -Hosts $target -RenderAs $renderAs
+   }
+}
+}
+
+function Add-PingHostInternal {  
+[CmdletBinding()]
+Param(
+   [Parameter(Position=0,ValueFromPipeline=$true)]
+   [string]$target
+,
+   [Parameter(Position=1)]
+   [Visifire.Charts.RenderAs]$renderAs=&quot;Line&quot;
+,  
+   [Parameter(Position=2)]
+   [System.Windows.Window]$window = $global:pingWindow
+)
+Process {
+   $start = $(get-random -min 10 -max 20)
+   $window.Content.Series.Add( $(
+      DataSeries { 1..25 | %{DataPoint -YValue $start} } -LegendText $target -RenderAs $renderAs
+   ) )
+}
+}
+
+function New-PingMonitor {
+[CmdletBinding()]
+Param(
+   [Parameter(Position=0,ValueFromPipeline=$true)]
+   [string[]]$hosts = $(Read-Host &quot;Please enter the name of a computer to ping&quot;)
+,
+   [Parameter(Position=1)]
+   [Visifire.Charts.RenderAs]$renderAs=&quot;Line&quot;
+,
+   [Parameter()]
+   [Switch]$Passthru
+)
+Process { 
+   $script:renderAs = $renderAs
+   $script:Hosts = $Hosts
+      
+   $global:pingWindow = New-BootsWindow -Async {
+      Param($window) # New-Boots passes the window to us ...
+      # Make a new scriptblock of the OnTick handle, passing it ourselves
+      # Make a timer, and stick it in the window....
+      $window.Tag = @((DispatcherTimer -Interval &quot;00:00:01.0&quot; -On_Tick $global:onTick -Tag $window), $global:onTick)
+      
+      Chart {
+         foreach($h in $hosts) {
+            $script:start = get-random -min 10 -max 20
+            DataSeries {
+               foreach($i in 1..25) {
+                  DataPoint -YValue $script:start
+               }
+            } -LegendText $h -RenderAs $renderAs
+         }
+      } -watermark $false
+   } -On_ContentRendered {
+      $this.tag[0].Start()
+   } -On_Closing { 
+      $this.tag[0].Remove_Tick($this.tag[1])
+      $this.tag[0].Stop()
+      $global:pingWindow = $null 
+      Remove-BootsWindow $this
+   } -Title &quot;Ping Monitor&quot; -Passthru -height 300 -width 800 
+
+   if($Passthru) {
+      return $global:pingWindow
+   }
+}
+}
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

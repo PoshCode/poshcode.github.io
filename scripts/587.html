@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Vegard Hamar">
+    <title>Out-Html - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Out-Html</h1>
+<h3><a href="//scripts/587.ps1">download</a></h3>
+<p>Out-HTML - converts cmdlets help to HTML format
+Based on Out-wiki by Dimitry Sotnikov (http://dmitrysotnikov.wordpress.com/2008/08/18/out-wiki-convert-powershell-help-to-wiki-format/)</p>
+<p>Modify the invocation line at the bottom of the script if you want to document fewer command, subsets or snapins
+Open default.htm to view in frameset or index.htm for index page with links.</p>
+<pre><code class="language-posh">################################################################################
+# Out-HTML - converts cmdlets help to HTML format
+# Based on Out-wiki by Dimitry Sotnikov (http://dmitrysotnikov.wordpress.com/2008/08/18/out-wiki-convert-powershell-help-to-wiki-format/)
+#
+# Modify the invocation line at the bottom of the script if you want to document 
+# fewer command, subsets or snapins
+# Open default.htm to view in frameset or index.htm for index page with links.
+################################################################################
+# Created By: Vegard Hamar
+################################################################################
+
+param($outputDir = &quot;./help&quot;)
+
+function FixString {
+	param($in = &quot;&quot;)
+	if ($in -eq $null) {
+		$in = &quot;&quot;
+	}
+	return $in.Replace(&quot;&amp;&quot;, &quot;&amp;amp;&quot;).Replace(&quot;&lt;&quot;, &quot;&amp;lt;&quot;).Replace(&quot;&gt;&quot;, &quot;&amp;gt;&quot;)
+}
+
+function Out-HTML {
+	param($commands = $null, $outputDir = &quot;./help&quot;)
+
+	$commandsHelp = $commands | sort-object PSSnapIn, noun | get-help -full
+
+	#create an output directory
+	if ( -not (Test-Path $outputDir)) {
+		md $outputDir | Out-Null
+	}
+
+	#Generate frame page
+	$indexFileName = $outputDir + &quot;/index.htm&quot;
+	
+	#Generate frameset
+@'
+&lt;html&gt;
+	&lt;head&gt;
+		&lt;title&gt;PowerShell Help&lt;/title&gt;
+	&lt;/head&gt;
+	&lt;frameset cols=&quot;250,*&quot;&gt;
+		&lt;frame src=&quot;./index.htm&quot; /&gt;
+		&lt;frame src=&quot;&quot; name=&quot;display&quot;/&gt;
+	&lt;/frameset&gt;
+&lt;/html&gt;
+'@ | Out-File &quot;$outputDir/default.htm&quot;
+
+	#Generate index
+@'
+&lt;html&gt;
+	&lt;head&gt;
+		&lt;title&gt;PowerShell Help&lt;/title&gt;
+	&lt;/head&gt;
+	&lt;body&gt;
+'@  | out-file $indexFileName
+
+	$SnapIn = &quot;&quot;
+	foreach ($c in $commandsHelp) {
+		if ($SnapIn -ne $c.PSSnapIn.Name) {
+			&quot;&lt;a href='#&quot; + $c.PSSnapIn.name + &quot;'&gt;* &quot; + $c.PSSnapIn.Name.Replace(&quot;.&quot;, &quot; &quot;) + &quot;&lt;/a&gt;&lt;/br&gt;&quot;   | out-file $indexFileName -Append
+			$SnapIn = $c.PSSnapIn.Name
+		}
+	}
+
+	$SnapIn = &quot;&quot;
+	foreach ($c in $commandsHelp) {
+		if ($SnapIn -ne $c.PSSnapIn.Name) {
+			&quot;&lt;h3&gt;&lt;a name='$($c.PSSnapIn.Name)'&gt;&quot; +$c.PSSnapIn.Name.Replace(&quot;.&quot;, &quot; &quot;) + &quot;&lt;/a&gt;&lt;/h3&gt;&quot; | Out-File $indexFileName -Append
+			$SnapIn = $c.PSSnapIn.Name
+		}
+		&quot;&lt;a href='&quot; + $c.name + &quot;.htm' target='display'&gt;* $($c.Name)&lt;/a&gt;&lt;/br&gt;&quot;   | out-file $indexFileName -Append
+	}
+
+	#Generate all single help files
+	$outputText = $null
+	foreach ($c in $commandsHelp) {
+		$fileName = ( $outputDir + &quot;/&quot; + $c.Name + &quot;.htm&quot; )
+
+@&quot;
+&lt;html&gt;
+	&lt;head&gt;
+		&lt;title&gt;$($c.Name)&lt;/title&gt;
+	&lt;/head&gt;
+	&lt;body&gt;
+		&lt;h1&gt;$($c.Name)&lt;/h1&gt;
+		&lt;div&gt;$($c.synopsis)&lt;/div&gt;
+
+		&lt;h2&gt; Syntax &lt;/h2&gt;
+		&lt;code&gt;$(FixString($c.syntax | out-string  -width 2000).Trim())&lt;/code&gt;  
+
+		&lt;h2&gt; Detailed Description &lt;/h2&gt;
+		&lt;div&gt;$(FixString($c.Description  | out-string  -width 2000))&lt;/div&gt;
+
+		&lt;h2&gt; Related Commands &lt;/h2&gt;
+		&lt;div&gt;
+&quot;@ | out-file $fileName 
+		foreach ($relatedLink in $c.relatedLinks.navigationLink) {
+			if($relatedLink.linkText -ne $null -and $relatedLink.linkText.StartsWith(&quot;about&quot;) -eq $false){
+				&quot;			* &lt;a href='$($relatedLink.linkText).htm'&gt;$($relatedLink.linkText)&lt;/a&gt;&lt;br/&gt;&quot; | out-file $fileName -Append         
+			}
+		}
+	  
+@&quot;
+		&lt;/div&gt;
+		&lt;h2&gt; Parameters &lt;/h2&gt;
+		&lt;table border='1'&gt;
+			&lt;tr&gt;
+				&lt;th&gt;Name&lt;/th&gt;
+				&lt;th&gt;Description&lt;/th&gt;
+				&lt;th&gt;Required?&lt;/th&gt;
+				&lt;th&gt;Pipeline Input&lt;/th&gt;
+				&lt;th&gt;Default Value&lt;/th&gt;
+			&lt;/tr&gt;
+&quot;@   | out-file $fileName -Append
+
+		$paramNum = 0
+		foreach ($param in $c.parameters.parameter ) {
+@&quot;
+			&lt;tr valign='top'&gt;
+				&lt;td&gt;$($param.Name)&amp;nbsp;&lt;/td&gt;
+				&lt;td&gt;$(FixString(($param.Description  | out-string  -width 2000).Trim()))&amp;nbsp;&lt;/td&gt;
+				&lt;td&gt;$(FixString($param.Required))&amp;nbsp;&lt;/td&gt;
+				&lt;td&gt;$(FixString($param.PipelineInput))&amp;nbsp;&lt;/td&gt;
+				&lt;td&gt;$(FixString($param.DefaultValue))&amp;nbsp;&lt;/td&gt;
+			&lt;/tr&gt;
+&quot;@  | out-file $fileName -Append
+		}
+		&quot;		&lt;/table&gt;}&quot;  | out-file $fileName -Append
+   
+		# Input Type
+		if (($c.inputTypes | Out-String ).Trim().Length -gt 0) {
+@&quot;
+		&lt;h2&gt; Input Type &lt;/h2&gt;
+		&lt;div&gt;$(FixString($c.inputTypes  | out-string  -width 2000).Trim())&lt;/div&gt;
+&quot;@  | out-file $fileName -Append
+		}
+   
+		# Return Type
+		if (($c.returnValues | Out-String ).Trim().Length -gt 0) {
+@&quot;
+		&lt;h2&gt; Return Values &lt;/h2&gt;
+		&lt;div&gt;$(FixString($c.returnValues  | out-string  -width 2000).Trim())&lt;/div&gt;
+&quot;@  | out-file $fileName -Append
+		}
+          
+		# Notes
+		if (($c.alertSet | Out-String).Trim().Length -gt 0) {
+@&quot;
+		&lt;h2&gt; Notes &lt;/h2&gt;
+			&quot;&lt;div&gt;$(FixString($c.alertSet  | out-string -Width 2000).Trim())&lt;/div&gt;
+&quot;@  | out-file $fileName -Append
+		}
+   
+		# Examples
+		if (($c.examples | Out-String).Trim().Length -gt 0) {
+			&quot;		&lt;h2&gt; Examples &lt;/h2&gt;&quot;  | out-file $fileName -Append      
+			foreach ($example in $c.examples.example) {
+@&quot;
+		&lt;h3&gt; $(FixString($example.title.Trim(('-',' '))))&lt;/h3&gt;
+				&lt;pre&gt;$(FixString($example.code | out-string ).Trim())&lt;/pre&gt;
+				&lt;div&gt;$(FixString($example.remarks | out-string -Width 2000).Trim())&lt;/div&gt;
+&quot;@  | out-file $fileName -Append
+			}
+		}
+@&quot;
+	&lt;/body&gt;
+&lt;/html&gt;
+&quot;@ | out-file $fileName -Append
+	}
+@&quot;
+	&lt;/body&gt;
+&lt;/html&gt;
+&quot;@ | out-file $indexFileName -Append
+}
+
+Out-HTML (Get-Command ) $outputDir 
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Justin Dearing">
+    <title>Create-Mdb.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Create-Mdb.ps1</h1>
+<h3><a href="//scripts/2928.ps1">download</a></h3>
+<p>A Script that demonstrates how to create a Microsoft Access database in powershell without Microsoft Access installed. It works in 32 and 64 bit instances of powershell.</p>
+<pre><code class="language-posh"># Copyright (c) 2011 Justin Dearing &lt;zippy1981@gmail.com&gt;
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the &quot;Software&quot;), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+
+# The authoritative version of this script lives at: https://gist.github.com/1166670
+
+
+#TODO: Get The PInvoke calls to actually use these ENUMS.
+Add-Type -TypeDefinition @&quot;
+namespace PInvoke {
+	public enum ODBC_Constants {
+		ODBC_ADD_DSN = 1,
+		ODBC_CONFIG_DSN,
+		ODBC_REMOVE_DSN,
+		ODBC_ADD_SYS_DSN,
+		ODBC_CONFIG_SYS_DSN,
+		ODBC_REMOVE_SYS_DSN,
+		ODBC_REMOVE_DEFAULT_DSN,
+	};
+
+	public enum SQL_RETURN_CODE {
+		SQL_ERROR = -1,
+		SQL_INVALID_HANDLE = -2,
+		SQL_SUCCESS = 0,
+		SQL_SUCCESS_WITH_INFO = 1,
+		SQL_STILL_EXECUTING = 2,
+		SQL_NEED_DATA = 99,
+		SQL_NO_DATA = 100
+	}
+}
+&quot;@;
+
+$signature = @'
+[DllImport(&quot;ODBCCP32.DLL&quot;,CharSet=CharSet.Unicode, SetLastError=true)]
+public static extern int SQLConfigDataSource 
+	(int hwndParent, int fRequest, string lpszDriver, string lpszAttributes);
+
+[DllImport(&quot;odbccp32&quot;, CharSet=CharSet.Auto)]
+public static extern int SQLInstallerError(int iError, ref int pfErrorCode, StringBuilder lpszErrorMsg, int cbErrorMsgMax, ref int pcbErrorMsg);
+'@;
+
+Add-Type -MemberDefinition $signature -Name Win32Utils -Namespace PInvoke -Using PInvoke,System.Text;
+
+Function Create-MDB ([string] $fileName, [switch] $DeleteIfExists = $false) {
+	# We need to pass the full path of the file to SQLConfigDataSource(). Relative paths will fail.
+	$fileName = [System.IO.Path]::GetFullPath($fileName);
+	if ($DeleteIfExists -and (Test-Path $fileName)) {
+		Remove-Item $fileName;
+	}
+	[string] $attrs = [string]::Format(&quot;CREATE_DB=`&quot;{0}`&quot; General`0&quot;, $fileName);
+	# For 32 bit processes we use the older ODBCJT32.dll driver
+	[string] $driver = 'Microsoft Access Driver (*.mdb)';
+	# There is no 64 bit version of this driver so we use ACEODBC.dll
+	# This requires the Microsoft Access Database Engine 2010 Redistributable
+	# http://www.microsoft.com/download/en/details.aspx?id=13255
+	if ([IntPtr]::Size -eq 8) { 
+		$driver = 'Microsoft Access Driver (*.mdb, *.accdb)';
+	}
+	# TODO: Interogate the registry (HKEY_LOCAL_MACHINE\SOFTWARE\ODBC\ODBCINST.INI) to search for which driver to use.
+	# TODO: If no driver found use the 64 bit ones
+	[int] $retCode = [PInvoke.Win32Utils]::SQLConfigDataSource(
+		0, [PInvoke.ODBC_Constants]::ODBC_ADD_DSN, 
+		$driver, $attrs);
+	if ($retCode -eq 0) {
+		[int] $errorCode = 0 ;
+		[int]  $resizeErrorMesg = 0 ;
+		$sbError = New-Object System.Text.StringBuilder(512);
+	[PInvoke.Win32Utils]::SQLInstallerError(1, [ref] $errorCode, $sbError, $sbError.MaxCapacity, [ref] $resizeErrorMesg);
+	if ($sbError.ToString() -eq 'Component not found in the registry') {
+		$sbError = New-Object System.Text.StringBuilder(512);
+		if ([intptr]::Size -eq 8) { $sbError.Append(&quot;Their appears to be no 64 bit MS Access Driver installed. Please install a 64 bit access driver or run this script from a 32 bit powershell instance&quot;); }
+		if ([intptr]::Size -eq 4) { $sbError.Append(&quot;Their appears to be no 32 bit MS Access Driver installed. Please install a 32 bit access driver or run this script from a 64 bit powershell instance&quot;); }
+		}
+		throw New-Object ApplicationException([string]::Format(&quot;Cannot create file: {0}. Error: {1}&quot;, $fileName, $sbError));
+	}
+}
+
+
+Create-Mdb &quot;.\foo.mdb&quot; -DeleteIfExists
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

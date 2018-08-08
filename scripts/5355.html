@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Daniel Cheng">
+    <title>Stop-ServiceandProcess - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Stop-ServiceandProcess</h1>
+<h3><a href="//scripts/5355.ps1">download</a> - <a href="//scripts/5354.md">parent</a></h3>
+<p>Stop service and associated Pid. Sometimes homegrown win32 services has its Pid still terminating gracefully in the background for quite a while. This function allows to wait indefinitely, or after some time, kill the associated Pid.</p>
+<pre><code class="language-posh">Function Stop-ServiceandProcess
+# daniel.cheng@thomsonreuters.com
+# Function: Stop service and associated Pid. Sometimes homegrown services has its Pid still terminating gracefully in the background.
+{
+    param (
+        [string[]]$servers = 'localhost',
+        [parameter(Mandatory)][string[]]$services,
+        [int]$InterrogateServiceDelay = 1, # seconds
+        [int]$killDelay = $null
+    )
+
+    $serviceState = @{
+        00 = 'The request was accepted.';
+        01 = 'The request is not supported.';
+        02 = 'The user did not have the necessary access.';
+        03 = 'The service cannot be stopped because other services that are running are dependent on it.';
+        04 = 'The requested control code is not valid, or it is unacceptable to the service.';
+        05 = 'The requested control code cannot be sent to the service because the state of the service (Win32_BaseService State property) is equal to 0, 1, or 2.';
+        06 = 'The service has not been started.';
+        07 = 'The service did not respond to the start request in a timely fashion.';
+        08 = 'Unknown failure when starting the service.';
+        09 = 'The directory path to the service executable file was not found.';
+        10 = 'The service is already running.';
+        11 = 'The database to add a new service is locked.';
+        12 = 'A dependency this service relies on has been removed from the system.';
+        13 = 'The service failed to find the service needed from a dependent service.';
+        14 = 'The service has been disabled from the system.';
+        15 = 'The service does not have the correct authentication to run on the system.';
+        16 = 'This service is being removed from the system.';
+        17 = 'The service has no execution thread.';
+        18 = 'The service has circular dependencies when it starts.';
+        19 = 'A service is running under the same name.';
+        20 = 'The service name has invalid characters.';
+        21 = 'Invalid parameters have been passed to the service.';
+        22 = 'The account under which this service runs is either invalid or lacks the permissions to run the service.';
+        23 = 'The service exists in the database of services available from the system.';
+        24 = 'The service is currently paused in the system.'
+    }
+
+    foreach ($server in $servers) {foreach ($service in $services) {
+        $currentService = gwmi -ComputerName $server -Class win32_service -Filter &quot;name='$($service)'&quot; -ea SilentlyContinue
+        if ($currentService -isnot [object]) {
+            throw &quot;Error with creating object for $($server):$('$service')!&quot;
+        } else {
+            switch ($currentService) {
+                {
+                    $_.StartMode -ne 'Disabled' -and `
+                    $_.State -ne 'Stopped' -and `
+                    $_.ProcessId -ne 0
+                } {
+                    Write-Output &quot;$(Get-Date -Format s): $($env:computername): Service ('$($service)', Pid=$($currentService.ProcessId)) stop command sent to $($server).&quot;
+                    Write-Output &quot;$(Get-Date -Format s): $($server): StopService('$($service)', Pid=$($currentService.ProcessId)): $($serviceState.$([int]$currentService.StopService().ReturnValue))&quot;
+                    $timeElapsed = [System.Diagnostics.Stopwatch]::StartNew()
+                    do
+                    {
+                        switch ($exitCode = $([int]$currentService.InterrogateService().ReturnValue)){
+                            4 {Write-Host -NoNewline '.'}
+                            default {Write-Output &quot;$(Get-Date -Format s): $($server): InterrogateService('$($service)', Pid=$($currentService.ProcessId)): (exit code=$($exitCode)) $($serviceState.$exitCode)&quot;}
+                        }
+
+                        if ($killDelay -ne 0 -and $timeElapsed.Elapsed.Seconds -ge $killDelay) {
+                            Write-Output &quot;$(Get-Date -Format s): $($env:computername): Process ('$($service)', Pid=$($currentService.ProcessId)) kill command sent to $($server).&quot;
+                            Stop-Process -Id $currentService.ProcessId -Force
+                        }
+                        Start-Sleep -Seconds $InterrogateServiceDelay
+                    } until (
+                        [bool]!(Get-Process -ComputerName $server -Id $currentService.ProcessId -ea SilentlyContinue).Id
+                    )
+                    Write-Output &quot;Operation took $($timeElapsed.Elapsed.Seconds) seconds.&quot;
+                    $timeElapsed.Stop()
+                }
+                default {Write-Output &quot;No stop operation necessary (stopped already) or possible (disabled).&quot;}
+            }
+            gwmi -ComputerName $server -Class win32_service -Filter &quot;name='$($service)'&quot; | select PSComputerName, Name, ServiceType, StartMode, State, ProcessId, PathName | ft -AutoSize
+        }
+    }}
+}
+
+Stop-ServiceandProcess -servers dc -services 'custom service 1', 'custom service 2' -killDelay 30
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

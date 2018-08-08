@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="BattleChicken">
+    <title>FAQ - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>FAQ</h1>
+<h3><a href="//scripts/5324.ps1">download</a> - <a href="//scripts/4816.md">parent</a></h3>
+<p>A simple datastorage module for the &quot;#PowerShell IRC bot&quot;:irc://chat.freenode.net/PowerShell which serves as a simple example of how to use &quot;Beefarino's SQLite Provider&quot;:https://psqlite.codeplex.com/</p>
+<p>This release: Updated because Set-FAQ wasn't working right.</p>
+<pre><code class="language-posh">#requires -Module SQLite
+
+if(!(Test-Path data:)) {
+   Mount-SQLite -name data -dataSource data.sqlite
+}
+if(!(Test-Path data:\FAQ)) {
+   new-item data:\FAQ -Value @{ Question=&quot;TEXT UNIQUE NOT NULL&quot;; Answer=&quot;TEXT NOT NULL&quot; }
+   New-FAQ &quot;best powershell books&quot; @&quot;
+For beginners: http://powershell.com/cs/blogs/ebook/ (Free) or Don's Month of Lunches book http://j.mp/1kEBG3z
+For intermediate: PowerShell Toolmaking http://j.mp/1i29RAh More Free eBooks http://j.mp/1m9deTr
+For experts: PowerShell In Action http://www.manning.com/payette2/
+For developers: Doug's PowerShell for Developers http://j.mp/1dhUwXO, best powershell books
+&quot;@   
+}
+
+
+function New-FAQ { 
+   #.Synopsis
+   #  Adds a question and answer to the FAQ list
+   param(
+      # A short question
+      [Parameter(Mandatory,Position=0)]
+      [String]$Question,
+
+      # Less than five lines of answer
+      [Parameter(Mandatory,Position=1,ValueFromPipeline)]
+      [String[]]$Answer
+   )
+   begin { 
+      $Question = $Question.ToLowerInvariant() -replace &quot;[^\p{L} ]&quot;
+      $FullAnswer = &quot;&quot; 
+   }
+   process { $FullAnswer = @(@($FullAnswer) + $Answer) -Join &quot;`n&quot; }
+   end {
+      $Result = New-Item data:\FAQ -Question $Question -Answer $FullAnswer -ErrorAction SilentlyContinue -ErrorVariable Failed
+      if($Failed) {
+         Write-Warning $($Failed.Exception.Message -split &quot;[\r\n]+&quot; -join &quot;: &quot;)
+      } else {
+         &quot;Added: {0}&quot; -f $Result.Question
+      }
+   }
+}
+
+function Set-FAQ { 
+   #.Synopsis
+   #  Changes the answer to a question on the FAQ list
+   param(
+      # A short question
+      [Parameter(Mandatory,Position=0)]
+      [String]$Question,
+
+      # Less than five lines of answer
+      [Parameter(Mandatory,Position=1,ValueFromPipeline)]
+      [String]$Answer
+   )
+   begin { 
+      $Question = $Question.ToLowerInvariant() -replace &quot;[^\p{L} ]&quot;
+      $FullAnswer = @()
+   }
+   process { $FullAnswer = @(@($FullAnswer) + $Answer) -Join &quot;`n&quot; }
+   end {
+      $Result = Set-Item data:\FAQ -Filter &quot;Question='$Question'&quot; -Value @{Answer=$FullAnswer} -ErrorAction SilentlyContinue -ErrorVariable Failed -Passthru
+
+      if($Failed) {
+         Write-Warning $($Failed.Exception.Message -split &quot;[\r\n]+&quot; -join &quot;: &quot;)
+      } else {
+         &quot;Set: {0}&quot; -f $Result.Question
+      }
+   }
+}
+
+function Get-FAQ {
+   #.Synopsis
+   #  Returns a specific FAQ (the first one that matches)
+   param(
+      # A short question
+      [Parameter(Position=0,ValueFromRemainingArguments,ValueFromPipeline)]
+      [String]$Question
+   )
+   if($Question -as [int]) {
+      Get-Item data:\FAQ\$Question | % Answer
+   } elseif($Question) {
+      $Question = $Question.ToLowerInvariant() -replace &quot;[^\p{L} ]&quot;
+      Get-Item -Path data:\FAQ -filter &quot;Question = '${Question}'&quot; | % Answer
+   } else {
+      &quot;Available FAQs: {0}&quot; -f ((Get-ChildItem -Path data:\FAQ | % Question) -join &quot;, &quot;)
+   }
+}
+
+Set-Alias FAQ Search-FAQ
+function Search-FAQ {
+   #.Synopsis
+   #  Returns a specific FAQ (the first one that matches)
+   param(
+      # A short question
+      [Parameter(Position=0,ValueFromRemainingArguments,ValueFromPipeline)]
+      [String[]]$Question
+   )
+   if($Question) {
+      [String]$Question = ($Question | % ToLowerInvariant) -join &quot;%&quot; -replace '\*','%' -replace &quot;[^\p{L} %]&quot;
+      $FAQs = Get-Item -Path data:\FAQ -filter &quot;Question like '%${Question}%'&quot;
+   } else {
+      &quot;Available FAQs: {0}&quot; -f ((Get-ChildItem -Path data:\FAQ | % Question) -join &quot;, &quot;)
+   }
+
+   switch (@($FAQs).Count) {
+      1 { $FAQs.Answer }
+      0 { &quot;Couldn't find any FAQ matching ${Question}&quot;}
+      default { &quot;I found more than one matching question: {0}&quot; -f $(($FAQs | % Question) -join &quot;, &quot;) }
+   }   
+}
+
+Export-ModuleMember -Function * -Alias *
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

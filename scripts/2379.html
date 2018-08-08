@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Jan Egil Ring">
+    <title>Set-OutlookSignature - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Set-OutlookSignature</h1>
+<h3><a href="//scripts/2379.ps1">download</a></h3>
+<p>Script to create an Outlook signature based on user information from Active Directory.</p>
+<pre><code class="language-posh">###########################################################################¡±
+#
+# NAME: Set-OutlookSignature.ps1
+#
+# AUTHOR: Jan Egil Ring
+# Modifications by Darren Kattan
+#
+# COMMENT: Script to create an Outlook signature based on user information from Active Directory.
+# Adjust the variables in the ¡°Custom variables¡±-section
+# Create an Outlook-signature from Microsoft Word (logo, fonts etc) and copy this signature to \\domain\NETLOGON\sig_files\$CompanyName\$CompanyName.docx
+#	 This script supports the following keywords:
+#	 DisplayName
+#	 Title
+#	 Email
+#
+#    See the following blog-posts for more information: 
+#    http://blog.powershell.no/2010/01/09/outlook-signature-based-on-user-information-from-active-directory
+#    http://www.immense.net/deploying-unified-email-signature-template-outlook
+#
+# Tested on Office 2003, 2007 and 2010
+#
+# You have a royalty-free right to use, modify, reproduce, and
+# distribute this script file in any way you find useful, provided that
+# you agree that the creator, owner above has no warranty, obligations,
+# or liability for such use.
+#
+# VERSION HISTORY:
+# 1.0 09.01.2010 ¨C Initial release
+# 1.1 11.09.2010 ¨C Modified by Darren Kattan
+#	- Removed bookmarks. Now uses simple find and replace for DisplayName, Title, and Email.
+#	- Email address is generated as a link
+#	- Signature is generated from a single .docx file
+#	- Removed version numbers for script to run. Script runs at boot up when it sees a change in the ¡°Date Modified¡± property of your signature template.
+#
+#
+###########################################################################¡±
+
+#Custom variables
+$CompanyName = ¡®Contoso¡¯
+$DomainName = ¡®contoso.local¡¯
+
+$SigSource = ¡°\\$DomainName\netlogon\sig_files\$CompanyName¡±
+$ForceSignatureNew = ¡¯1¡ä #When the signature are forced the signature are enforced as default signature for new messages the next time the script runs. 0 = no force, 1 = force
+$ForceSignatureReplyForward = ¡¯1¡ä #When the signature are forced the signature are enforced as default signature for reply/forward messages the next time the script runs. 0 = no force, 1 = force
+
+#Environment variables
+$AppData=(Get-Item env:appdata).value
+$SigPath = ¡®\Microsoft\Signatures¡¯
+$LocalSignaturePath = $AppData+$SigPath
+$RemoteSignaturePathFull = $SigSource+¡¯\'+$CompanyName+¡¯.docx¡¯
+
+#Get Active Directory information for current user
+$UserName = $env:username
+$Filter = ¡°(&amp;(objectCategory=User)(samAccountName=$UserName))¡±
+$Searcher = New-Object System.DirectoryServices.DirectorySearcher
+$Searcher.Filter = $Filter
+$ADUserPath = $Searcher.FindOne()
+$ADUser = $ADUserPath.GetDirectoryEntry()
+$ADDisplayName = $ADUser.DisplayName
+$ADEmailAddress = $ADUser.mail
+$ADTitle = $ADUser.title
+$ADTelePhoneNumber = $ADUser.TelephoneNumber
+
+#Setting registry information for the current user
+$CompanyRegPath = ¡°HKCU:\Software\¡±+$CompanyName
+
+if (Test-Path $CompanyRegPath)
+{}
+else
+{New-Item -path ¡°HKCU:\Software¡± -name $CompanyName}
+
+if (Test-Path $CompanyRegPath¡¯\Outlook Signature Settings¡¯)
+{}
+else
+{New-Item -path $CompanyRegPath -name ¡°Outlook Signature Settings¡±}
+
+$SigVersion = (gci $RemoteSignaturePathFull).LastWriteTime #When was the last time the signature was written
+$ForcedSignatureNew = (Get-ItemProperty $CompanyRegPath¡¯\Outlook Signature Settings¡¯).ForcedSignatureNew
+$ForcedSignatureReplyForward = (Get-ItemProperty $CompanyRegPath¡¯\Outlook Signature Settings¡¯).ForcedSignatureReplyForward
+$SignatureVersion = (Get-ItemProperty $CompanyRegPath¡¯\Outlook Signature Settings¡¯).SignatureVersion
+Set-ItemProperty $CompanyRegPath¡¯\Outlook Signature Settings¡¯ -name SignatureSourceFiles -Value $SigSource
+$SignatureSourceFiles = (Get-ItemProperty $CompanyRegPath¡¯\Outlook Signature Settings¡¯).SignatureSourceFiles
+
+#Forcing signature for new messages if enabled
+if ($ForcedSignatureNew -eq ¡¯1¡ä)
+{
+#Set company signature as default for New messages
+$MSWord = New-Object -com word.application
+$EmailOptions = $MSWord.EmailOptions
+$EmailSignature = $EmailOptions.EmailSignature
+$EmailSignatureEntries = $EmailSignature.EmailSignatureEntries
+$EmailSignature.NewMessageSignature=$CompanyName
+$MSWord.Quit()
+}
+
+#Forcing signature for reply/forward messages if enabled
+if ($ForcedSignatureReplyForward -eq ¡¯1¡ä)
+{
+#Set company signature as default for Reply/Forward messages
+$MSWord = New-Object -com word.application
+$EmailOptions = $MSWord.EmailOptions
+$EmailSignature = $EmailOptions.EmailSignature
+$EmailSignatureEntries = $EmailSignature.EmailSignatureEntries
+$EmailSignature.ReplyMessageSignature=$CompanyName
+$MSWord.Quit()
+}
+
+#Copying signature sourcefiles and creating signature if signature-version are different from local version
+if ($SignatureVersion -eq $SigVersion){}
+else
+{
+#Copy signature templates from domain to local Signature-folder
+Copy-Item ¡°$SignatureSourceFiles\*¡± $LocalSignaturePath -Recurse -Force
+
+$ReplaceAll = 2
+$FindContinue = 1
+$MatchCase = $False
+$MatchWholeWord = $True
+$MatchWildcards = $False
+$MatchSoundsLike = $False
+$MatchAllWordForms = $False
+$Forward = $True
+$Wrap = $FindContinue
+$Format = $False
+
+#Insert variables from Active Directory to rtf signature-file
+$MSWord = New-Object -com word.application
+$fullPath = $LocalSignaturePath+¡¯\'+$CompanyName+¡¯.docx¡¯
+$MSWord.Documents.Open($fullPath)
+
+$FindText = ¡°DisplayName¡±
+$ReplaceText = $ADDisplayName.ToString()
+$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+
+$FindText = ¡°Title¡±
+$ReplaceText = $ADTitle.ToString()
+$MSWord.Selection.Find.Execute($FindText, $MatchCase, $MatchWholeWord,	$MatchWildcards, $MatchSoundsLike, $MatchAllWordForms, $Forward, $Wrap,	$Format, $ReplaceText, $ReplaceAll	)
+
+$MSWord.Selection.Find.Execute(¡°Email¡±)
+
+$MSWord.ActiveDocument.Hyperlinks.Add($MSWord.Selection.Range, ¡°mailto:¡±+$ADEmailAddress.ToString(), $missing, $missing, $ADEmailAddress.ToString())
+
+$MSWord.ActiveDocument.Save()
+$saveFormat = [Enum]::Parse([Microsoft.Office.Interop.Word.WdSaveFormat], ¡°wdFormatHTML¡±);
+[ref]$BrowserLevel = ¡°microsoft.office.interop.word.WdBrowserLevel¡± -as [type]
+
+$MSWord.ActiveDocument.WebOptions.OrganizeInFolder = $true
+$MSWord.ActiveDocument.WebOptions.UseLongFileNames = $true
+$MSWord.ActiveDocument.WebOptions.BrowserLevel = $BrowserLevel::wdBrowserLevelMicrosoftInternetExplorer6
+$path = $LocalSignaturePath+¡¯\'+$CompanyName+¡±.htm¡±
+$MSWord.ActiveDocument.saveas([ref]$path, [ref]$saveFormat)
+
+$saveFormat = [Enum]::Parse([Microsoft.Office.Interop.Word.WdSaveFormat], ¡°wdFormatRTF¡±);
+$path = $LocalSignaturePath+¡¯\'+$CompanyName+¡±.rtf¡±
+$MSWord.ActiveDocument.SaveAs([ref] $path, [ref]$saveFormat)
+
+$saveFormat = [Enum]::Parse([Microsoft.Office.Interop.Word.WdSaveFormat], ¡°wdFormatText¡±);
+$path = $LocalSignaturePath+¡¯\'+$CompanyName+¡±.rtf¡±
+$MSWord.ActiveDocument.SaveAs([ref] $path, [ref]$saveFormat)
+
+$path = $LocalSignaturePath+¡¯\'+$CompanyName+¡±.txt¡±
+$MSWord.ActiveDocument.SaveAs([ref] $path, [ref]$SaveFormat::wdFormatText)
+$MSWord.ActiveDocument.Close()
+
+$MSWord.Quit()
+
+}
+
+#Stamp registry-values for Outlook Signature Settings if they doesn`t match the initial script variables. Note that these will apply after the second script run when changes are made in the ¡°Custom variables¡±-section.
+if ($ForcedSignatureNew -eq $ForceSignatureNew){}
+else
+{Set-ItemProperty $CompanyRegPath¡¯\Outlook Signature Settings¡¯ -name ForcedSignatureNew -Value $ForceSignatureNew}
+
+if ($ForcedSignatureReplyForward -eq $ForceSignatureReplyForward){}
+else
+{Set-ItemProperty $CompanyRegPath¡¯\Outlook Signature Settings¡¯ -name ForcedSignatureReplyForward -Value $ForceSignatureReplyForward}
+
+if ($SignatureVersion -eq $SigVersion){}
+else
+{Set-ItemProperty $CompanyRegPath¡¯\Outlook Signature Settings¡¯ -name SignatureVersion -Value $SigVersion}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

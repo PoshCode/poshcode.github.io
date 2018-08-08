@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="David McDonough">
+    <title>Get-LogonEvents - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-LogonEvents</h1>
+<h3><a href="//scripts/6701.ps1">download</a></h3>
+<p>Retrieve user logon events (relatively) quickly. This will output results to the console as they are retrieved</p>
+<pre><code class="language-posh">function Get-LogonEvents{
+
+[CmdletBinding()]
+
+    param (
+
+        [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+        [Alias('ServerName','Server','Name')]
+        [string[]]$ComputerName,
+
+        [Parameter(ValueFromPipelineByPropertyName=$true,Mandatory=$true)]
+        [PSCredential]$Credential,
+
+        [Parameter()]
+        [ValidateSet(&quot;Service&quot;,&quot;Interactive&quot;,&quot;RemoteInteractive&quot;,&quot;NetworkCleartext&quot;,&quot;CachedInteractive&quot;,&quot;Unlock&quot;,&quot;NewCredentials&quot;,&quot;Network&quot;,&quot;*&quot;)] 
+        [string[]]$LogonType = @(&quot;Interactive&quot;,&quot;RemoteInteractive&quot;,&quot;CachedInteractive&quot;),
+
+        [string]$UserName,
+
+        [Parameter()]
+        [switch]$Oldest,
+        
+        [Parameter()]
+        [int64]$MaxEvents,
+
+        [Parameter()]
+        [datetime]$StartTime=(Get-Date 1/1/1900),
+
+        [Parameter()]
+        [datetime]$StopTime=(Get-Date 1/1/2100)   
+        
+    )
+
+    Begin{
+
+
+        Function ParseEventMessage
+        {
+            [CmdletBinding()]
+            
+            param( 
+                [Parameter(ValueFromPipeline=$true)]
+                $obj
+            )
+
+            Begin{
+                $defaultDisplaySet = 'MachineName','Result','TimeCreated','TargetUserName'
+                $defaultDisplayPropertySet = New-Object System.Management.Automation.PSPropertySet(‘DefaultDisplayPropertySet’,[string[]]$defaultDisplaySet)
+                $PSStandardMembers = [System.Management.Automation.PSMemberInfo[]]@($defaultDisplayPropertySet)
+                $myHash = @{}
+            }
+            Process{
+                
+                $myHash['Result'] = switch ($obj.id)
+                {
+                    4625 { &quot;Failure&quot; }
+                    4624 { &quot;Success&quot; }
+                }
+                $myHash['ID'] = $obj.ID
+                $myHash['TimeCreated'] = $obj.TimeCreated
+                $myHash['MachineName'] = $obj.MachineName
+
+                ([xml]($obj.ToXml())).event.eventdata.data | ForEach-Object { $myHash[$PSItem.name] = $PSItem.'#text' }
+
+                New-Object -TypeName PSObject -Property $myHash | ForEach-Object { 
+                    
+                    $PSItem.PSObject.TypeNames.Insert(0,&quot;EventLogRecord.XMLParse&quot;)
+
+                    $PSItem | Add-Member MemberSet PSStandardMembers $PSStandardMembers -PassThru 
+                }
+
+            }
+        }
+
+        $hashLogonType = @{
+
+            Interactive = 2
+            Network = 3
+            Service = 5
+            Unlock = 7
+            NetworkCleartext = 8
+            NewCredentials = 9
+            RemoteInteractive = 10
+            CachedInteractive = 11
+
+        }
+
+    $filter = @&quot;
+&lt;QueryList&gt;
+    &lt;Query Id=&quot;0&quot; Path=&quot;Security&quot;&gt;
+    &lt;Select Path=&quot;Security&quot;&gt;
+        *[System[
+            (EventID=4624 or EventID=4625)            
+            and TimeCreated[@SystemTime&amp;gt;='{0}' and @SystemTime&amp;lt;='{1}']
+        ] 
+            and EventData[
+                Data[@Name='LogonType'] and ({2})
+                {3}
+            ]
+        ]
+    &lt;/Select&gt;
+    &lt;/Query&gt;
+&lt;/QueryList&gt;
+&quot;@
+
+    }
+  
+    Process{
+        
+        foreach ($obj in $ComputerName)
+        {            
+            
+            if ($UserName)
+            {
+                $joinUserName = &quot;and Data[@Name='TargetuserName'] and (Data='{0}')&quot; -f $UserName
+            }
+
+            $joinLogonType = if ($LogonType -eq '*')
+            {
+            
+                $hashLogonType.Values -replace '^',&quot;Data='&quot; -replace '$',&quot;'&quot; -join &quot; or &quot;
+            
+            }
+            Else
+            {
+                $($LogonType | ForEach-Object { $hashLogonType[$PSItem] }) -replace '^',&quot;Data='&quot; -replace '$',&quot;'&quot; -join &quot; or &quot;
+            }
+
+            $objFilter = $filter -f (Get-Date $StartTime -Format s),(Get-Date $StopTime -Format s),$joinLogonType,$joinUserName
+           
+            $hashEventParm = @{ 
+                ComputerName = $obj
+                FilterXml = $objFilter
+            }
+
+            if ($Credential) { $hashEventParm['Credential'] = $Credential }
+            if ($MaxEvents) { $hashEventParm['MaxEvents'] = $MaxEvents }
+
+            $objFilter | Write-Verbose
+
+            Get-WinEvent @hashEventParm | ParseEventMessage
+
+        }
+
+    }
+
+
+    End{}
+
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Santi Fernandez">
+    <title>NTFS ACLs Folder Tree - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>NTFS ACLs Folder Tree</h1>
+<h3><a href="//scripts/1273.ps1">download</a> - <a href="//scripts/1272.md">parent</a></h3>
+<p>This script generate a HTML report show all ACLs asociated with a Folder tree structure starting in root specified by the user</p>
+<pre><code class="language-posh">#######################################
+# TITLE: listACL.ps1                  #
+# AUTHOR: Santiago Fernandez Muñoz    #
+#                                     #
+# DESC: This script generate a HTML   #
+# report show all ACLs asociated with #
+# a Folder tree structure starting in #
+# root specified by the user          #
+#######################################
+	
+param ([string] $computer = 'localhost',
+		[string] $path = $(if ($help -eq $false) {Throw &quot;A path is needed.&quot;}),
+		[int] $level = 0,
+		[string] $scope = 'administrator', 
+		[switch] $help = $false,
+		[switch] $debug = $false
+	)
+	
+#region Initializations and previous checkings
+#region Initialization
+$allowedLevels = 10
+$Stamp = get-date -uformat &quot;%Y%m%d&quot;
+$report = &quot;$PWD\$computer.html&quot;
+$comparison = &quot;&quot;
+$UNCPath = &quot;\\&quot; + $computer + &quot;\&quot; + $path + &quot;\&quot;
+#endregion
+
+#region Previous chekings
+#require -version 2.0
+if ($level -gt $allowedLevels -or $level -lt 0) {Throw &quot;Level out of range.&quot;}
+if ($computer -eq 'localhost' -or $computer -ieq $env:COMPUTERNAME) { $UNCPath = $path }
+switch ($scope) {
+	micro {
+		$comparison = '($acl -notlike &quot;*administrator*&quot; -and $acl -notlike &quot;*BUILTIN*&quot; -and $acl -notlike &quot;*NT AUTHORITY*&quot;)'
+	}
+	user {
+		$comparison = '($acl -notlike &quot;*administrator*&quot; -and $acl -notlike &quot;*BUILTIN*&quot; -and $acl -notlike &quot;*IT*&quot; -and $acl -notlike &quot;*NT AUTHORITY*&quot; -and $acl -notlike &quot;*All*&quot;)'
+	}
+}
+#endregion
+#endregion
+
+#region Function definitions
+function drawDirectory([ref] $directory) {
+	$dirHTML = '
+	&lt;div class=&quot;'
+		if ($directory.value.level -eq 0) { $dirHTML += 'he0_expanded' } else { $dirHTML += 'he' + $directory.value.level } 
+		$dirHTML += '&quot;&gt;&lt;span class=&quot;sectionTitle&quot; tabindex=&quot;0&quot;&gt;Folder ' + $directory.value.Folder.FullName + '&lt;/span&gt;&lt;/div&gt;
+		&lt;div class=&quot;container&quot;&gt;&lt;div class=&quot;he' + ($directory.value.level + 1) + '&quot;&gt;&lt;span class=&quot;sectionTitle&quot; tabindex=&quot;0&quot;&gt;Access Control List&lt;/span&gt;&lt;/div&gt;
+			&lt;div class=&quot;container&quot;&gt;
+				&lt;div class=&quot;heACL&quot;&gt;
+					&lt;table class=&quot;info3&quot; cellpadding=&quot;0&quot; cellspacing=&quot;0&quot;&gt;
+						&lt;thead&gt;
+							&lt;th scope=&quot;col&quot;&gt;&lt;b&gt;Owner&lt;/b&gt;&lt;/th&gt;
+							&lt;th scope=&quot;col&quot;&gt;&lt;b&gt;Privileges&lt;/b&gt;&lt;/th&gt;
+						&lt;/thead&gt;
+						&lt;tbody&gt;'
+		foreach ($itemACL in $directory.value.ACL) {
+			$acls = $null
+			if ($itemACL.AccessToString -ne $null) {
+				$acls = $itemACL.AccessToString.split(&quot;`n&quot;)
+			}
+			$dirHTML += '&lt;tr&gt;&lt;td&gt;' + $itemACL.Owner + '&lt;/td&gt;
+			&lt;td&gt;
+			&lt;table&gt;
+				&lt;thead&gt;
+					&lt;th&gt;User&lt;/th&gt;
+					&lt;th&gt;Control&lt;/th&gt;
+					&lt;th&gt;Privilege&lt;/th&gt;
+				&lt;/thead&gt;
+				&lt;tbody&gt;'
+			foreach ($acl in $acls) {
+				$temp = [regex]::split($acl, &quot;(?&lt;!(,|NT))\s{1,}&quot;)
+				if ($debug) {
+					write-host &quot;ACL(&quot; $temp.gettype().name &quot;)[&quot; $temp.length &quot;]: &quot; $temp
+				}
+				if ($temp.count -eq 1) {
+					continue
+				}
+				if ($scope -ne 'administrator') {
+					if ( Invoke-Expression $comparison ) {
+						$dirHTML += &quot;&lt;tr&gt;&lt;td&gt;&quot; + $temp[0] + &quot;&lt;/td&gt;&lt;td&gt;&quot; + $temp[1] + &quot;&lt;/td&gt;&lt;td&gt;&quot; + $temp[2] + &quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+					}
+				} else {
+					$dirHTML += &quot;&lt;tr&gt;&lt;td&gt;&quot; + $temp[0] + &quot;&lt;/td&gt;&lt;td&gt;&quot; + $temp[1] + &quot;&lt;/td&gt;&lt;td&gt;&quot; + $temp[2] + &quot;&lt;/td&gt;&lt;/tr&gt;&quot;
+				}
+			}
+			$dirHTML += '&lt;/tbody&gt;
+						&lt;/table&gt;
+						&lt;/td&gt;
+						&lt;/tr&gt;'
+		}
+$dirHTML += '
+						&lt;/tbody&gt;
+					&lt;/table&gt;
+				&lt;/div&gt;
+			&lt;/div&gt;
+		&lt;/div&gt;'
+	return $dirHTML
+}
+
+#endregion
+
+#region Printing help message
+if ($help) {
+	Write-Host @&quot;
+/··················································\
+· Script gather access control lists per directory ·
+\··················································/
+
+USAGE: ./listACL -computer &lt;machine or IP&gt; 
+                 -path &lt;path&gt;
+                 -level &lt;0-10&gt;
+                 -help:[$false]
+	
+PARAMETERS:
+	computer [OPTIONAL]     - Computer name or IP addres where folder is hosted (Default: localhost)
+	path [REQUIRED]         - Folder's path to query.
+	level [OPTIONAL]        - Level of folders to go down in the query. Allowd values are between 0 and $allowedLevels.
+	                          0 show that there's no limit in the going down (Default: 0)
+	scope [OPTIONAL]        - Sets the amount of information showd in the report. Allowd values are: 
+                                  · user, show important information to the user.
+                                  · micro, show user scope information plus important information for the IT Department.
+                                  · administrator, show all information.
+	help [OPTIONAL]         - This help.
+&quot;@
+	exit 0
+	
+}
+#endregion
+
+if (Test-Path $report)
+ {
+  Remove-item $report
+ }
+
+#To normalize I check if last character in the path is the folder separator character
+if ($path.Substring($path.Length - 1,1) -eq &quot;\&quot;) { $path = $path.Substring(0,$path.Length - 1) }
+
+#region Header, style and javascript functions needed by the html report
+@&quot;
+&lt;html dir=&quot;ltr&quot; xmlns:v=&quot;urn:schemas-microsoft-com:vml&quot; gpmc_reportInitialized=&quot;false&quot;&gt;
+&lt;head&gt;
+&lt;meta http-equiv=&quot;Content-Type&quot; content=&quot;text/html; charset=UTF-16&quot; /&gt;
+&lt;title&gt;Access Control List for $path in $computer&lt;/title&gt;
+&lt;!-- Styles --&gt;
+&lt;style type=&quot;text/css&quot;&gt;
+                body{ background-color:#FFFFFF; border:1px solid #666666; color:#000000; font-size:68%;	font-family:MS Shell Dlg; margin:0px 0px 10px 0px; }
+
+                table{ font-size:100%; table-layout:fixed; width:100%; }
+
+                td,th{ overflow:visible; text-align:left; vertical-align:top; white-space:normal; }
+
+                .title{ background:#FFFFFF; border:none; color:#333333; display:block; height:24px; margin:0px 0px -1px 0px; padding-top:4px; position:relative; table-layout:fixed; width:100%; z-index:5; }
+
+                .he0_expanded{ background-color:#FEF7D6; border:1px solid #BBBBBB; color:#3333CC; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:0px; margin-right:0px; padding-left:8px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+                .he1_expanded{ background-color:#A0BACB; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:10px; margin-right:0px; padding-left:8px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+                .he1{ background-color:#A0BACB; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:10px; margin-right:0px; padding-left:8px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+                .he2{ background-color:#C0D2DE; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:20px; margin-right:0px; padding-left:8px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+                .he3{ background-color:#D9E3EA; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:30px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+                .he4{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:40px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+                .he4h{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:45px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+                .he4i{ background-color:#F9F9F9; border:1px solid #BBBBBB; color:#000000; display:block; font-family:MS Shell Dlg; font-size:100%; margin-bottom:-1px; margin-left:45px; margin-right:0px; padding-bottom:5px; padding-left:21px; padding-top:4px; position:relative; width:100%; }
+
+                .he5{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:50px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+                .he5h{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; padding-left:11px; padding-right:5em; padding-top:4px; margin-bottom:-1px; margin-left:55px; margin-right:0px; position:relative; width:100%; }
+
+                .he5i{ background-color:#F9F9F9; border:1px solid #BBBBBB; color:#000000; display:block; font-family:MS Shell Dlg; font-size:100%; margin-bottom:-1px; margin-left:55px; margin-right:0px; padding-left:21px; padding-bottom:5px; padding-top: 4px; position:relative; width:100%; }
+
+                .he6{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:55px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+
+				.he7{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:60px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+				
+				.he8{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:65px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+				
+				.he9{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:70px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+				
+				.he10{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:75px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+				
+				.he11{ background-color:#E8E8E8; border:1px solid #BBBBBB; color:#000000; cursor:pointer; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:80px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+				
+				.heACL { background-color:#ECFFD7; border:1px solid #BBBBBB; color:#000000; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; height:2.25em; margin-bottom:-1px; margin-left:90px; margin-right:0px; padding-left:11px; padding-right:5em; padding-top:4px; position:relative; width:100%; }
+				
+				DIV .expando{ color:#000000; text-decoration:none; display:block; font-family:MS Shell Dlg; font-size:100%; font-weight:normal; position:absolute; right:10px; text-decoration:underline; z-index: 0; }
+
+                .he0 .expando{ font-size:100%; }
+
+                .info, .info3, .info4, .disalign{ line-height:1.6em; padding:0px 0px 0px 0px; margin:0px 0px 0px 0px; }
+
+                .disalign TD{ padding-bottom:5px; padding-right:10px; }
+
+                .info TD{ padding-right:10px; width:50%; }
+
+                .info3 TD{ padding-right:10px; width:33%; }
+
+                .info4 TD, .info4 TH{ padding-right:10px; width:25%; }
+				
+				.info5 TD, .info5 TH{ padding-right:0px; width:20%; }
+
+                .info TH, .info3 TH, .info4 TH, .disalign TH{ border-bottom:1px solid #CCCCCC; padding-right:10px; }
+
+                .subtable, .subtable3{ border:1px solid #CCCCCC; margin-left:0px; background:#FFFFFF; margin-bottom:10px; }
+
+                .subtable TD, .subtable3 TD{ padding-left:10px; padding-right:5px; padding-top:3px; padding-bottom:3px; line-height:1.1em; width:10%; }
+
+                .subtable TH, .subtable3 TH{ border-bottom:1px solid #CCCCCC; font-weight:normal; padding-left:10px; line-height:1.6em;  }
+
+                .subtable .footnote{ border-top:1px solid #CCCCCC; }
+
+                .subtable3 .footnote, .subtable .footnote{ border-top:1px solid #CCCCCC; }
+
+                .subtable_frame{ background:#D9E3EA; border:1px solid #CCCCCC; margin-bottom:10px; margin-left:15px; }
+
+                .subtable_frame TD{ line-height:1.1em; padding-bottom:3px; padding-left:10px; padding-right:15px; padding-top:3px; }
+
+                .subtable_frame TH{ border-bottom:1px solid #CCCCCC; font-weight:normal; padding-left:10px; line-height:1.6em; }
+
+                .subtableInnerHead{ border-bottom:1px solid #CCCCCC; border-top:1px solid #CCCCCC; }
+
+                .explainlink{ color:#000000; text-decoration:none; cursor:pointer; }
+
+                .explainlink:hover{ color:#0000FF; text-decoration:underline; }
+
+                .spacer{ background:transparent; border:1px solid #BBBBBB; color:#FFFFFF; display:block; font-family:MS Shell Dlg; font-size:100%; height:10px; margin-bottom:-1px; margin-left:43px; margin-right:0px; padding-top: 4px; position:relative; }
+
+                .filler{ background:transparent; border:none; color:#FFFFFF; display:block; font:100% MS Shell Dlg; line-height:8px; margin-bottom:-1px; margin-left:43px; margin-right:0px; padding-top:4px; position:relative; }
+
+                .container{ display:block; position:relative; }
+
+                .rsopheader{ background-color:#A0BACB; border-bottom:1px solid black; color:#333333; font-family:MS Shell Dlg; font-size:130%; font-weight:bold; padding-bottom:5px; text-align:center; }
+
+                .rsopname{ color:#333333; font-family:MS Shell Dlg; font-size:130%; font-weight:bold; padding-left:11px; }
+
+                .gponame{ color:#333333; font-family:MS Shell Dlg; font-size:130%; font-weight:bold; padding-left:11px; }
+
+                .gpotype{ color:#333333; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; padding-left:11px; }
+
+                #uri    { color:#333333; font-family:MS Shell Dlg; font-size:100%; padding-left:11px; }
+
+                #dtstamp{ color:#333333; font-family:MS Shell Dlg; font-size:100%; padding-left:11px; text-align:left; width:30%; }
+
+                #objshowhide { color:#000000; cursor:pointer; font-family:MS Shell Dlg; font-size:100%; font-weight:bold; margin-right:0px; padding-right:10px; text-align:right; text-decoration:underline; z-index:2; }
+
+                #gposummary { display:block; }
+
+                #gpoinformation { display:block; }
+
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;table class=&quot;title&quot; cellpadding=&quot;0&quot; cellspacing=&quot;0&quot;&gt;
+&lt;tr&gt;&lt;td colspan=&quot;2&quot; class=&quot;gponame&quot;&gt;Access Control List for $path on machine $computer&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;
+    &lt;td id=&quot;dtstamp&quot;&gt;Data obtained on: $(Get-Date)&lt;/td&gt;
+    &lt;td&gt;&lt;div id=&quot;objshowhide&quot; tabindex=&quot;0&quot;&gt;&lt;/div&gt;&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/table&gt;
+&lt;div class=&quot;filler&quot;&gt;&lt;/div&gt;
+&quot;@ | Set-Content $report
+#endregion
+
+#region Information gathering
+$colFiles = Get-ChildItem -path $UNCPath -Filter *. -Recurse -force -Verbose | Sort-Object FullName
+$colACLs = @()
+#We start going through the path pointed out by the user
+foreach($file in $colFiles)
+{
+#To control the current level in the tree we are in it's needed to count the number of separator characters
+#contained in the path. However in order to make the count correctly it's needed to delete the path 
+#provided by the user (the parent). Once the parent has been deleted, the rest of the full name will be 
+#string used to do the level count.
+#It's needed to use a REGEX object to get ALL separator character matches.
+$matches = (([regex]&quot;\\&quot;).matches($file.FullName.substring($path.length, $file.FullName.length - $path.length))).count
+if ($level -ne 0 -and ($matches - 1) -gt $level) {
+	continue
+}
+if ($debug) {
+	Write-Host $file.FullName &quot;-&gt;&quot; $file.Mode 
+}
+if ($file.Mode -notlike &quot;d*&quot;) {
+	continue
+}
+$myobj = &quot;&quot; | Select-Object Folder,ACL,level
+$myobj.Folder = $file
+$myobj.ACL = Get-Acl $file.FullName
+$myobj.level = $matches - 1
+$colACLs += $myobj
+}
+#endregion
+
+#region Setting up the report
+	'&lt;div class=&quot;gposummary&quot;&gt;' | Add-Content $report
+	
+	for ($i = 0; $i -lt $colACLs.count; $i++) {
+		drawDirectory ([ref] $colACLs[$i]) | Add-Content $report
+	}
+	'&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;' | Add-Content $report
+	
+#endregion
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

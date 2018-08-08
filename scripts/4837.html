@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="greg zakharov">
+    <title>copypaste(possible ways) - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>copypaste(possible ways)</h1>
+<h3><a href="//scripts/4837.ps1">download</a></h3>
+<pre><code class="language-posh">#There are a lot of ways to copy\paste text from the clipboard. For example, you can use context menu of host which
+#is called with Alt+Space combination or use standard clip utility or third party modules and extensions. But all
+#this is not a way a true Jedi ;) At firstly you can use Clipboard class which defined into System.Windows.Forms
+#namespace but note that it requires STA mode.
+if ($host.Runspace.ApartmentState -ne 'STA') {
+  powershell /noprofile /sta $MyInvocation.MyCommand.Path
+  return
+}
+
+function Invoke-Clipboard([String]$Text, [Switch]$Paste) {
+  begin {
+    $asm = 'System.Windows.Forms'
+    if (!([AppDomain]::CurrentDomain.GetAssemblies() | ? {
+      $_.FullName.Split(',')[0] -eq $asm
+    })) {[void][Reflection.Assembly]::LoadWithPartialName($asm)}
+  }
+  process {
+    switch($Paste) {
+      $true {[Windows.Forms.Clipboard]::GetText()}
+      default {[Windows.Forms.Clipboard]::SetText($Text)}
+    }
+  }
+  end {}
+}
+#Copy text
+#PS C:\&gt;Invoke-Clipboard 'This is a test string'
+#Paste
+#PS C:\&gt;Invoke-Clipboard -p
+#That's good but there is alternative way without STA. Next function is completely analogous to the previous except
+#that it does not require STA mode verification.
+function Invoke-Clipboard([String]$Text, [Switch]$Paste) {
+  begin {
+    $asm = 'System.Windows.Forms'
+    if (!([AppDomain]::CurrentDomain.GetAssemblies() | ? {
+      $_.FullName.Split(',')[0] -eq $asm
+    })) {[void][Reflection.Assembly]::LoadWithPartialName($asm)}
+    
+    $txtClip = New-Object Windows.Forms.TextBox
+    $txtClip.Multiline = $true
+  }
+  process {
+    switch($Paste) {
+      $true {
+        $txtClip.Paste()
+        $txtClip.Text
+      }
+      default {
+        $txtClip.Text = $Text
+        $txtClip.SelectAll()
+        $txtClip.Copy()
+      }
+    }
+  }
+  end {}
+}
+#OK, how about PInvoke? In principle, you can use PInvoke methods that has been encapsulated in the .NET platform
+#assemblies. For example (http://poshcode.org/4750):
+function Get-HostPaste {
+  begin {
+    if (@(ps powershell).Count -gt 1) {
+      throw &quot;More than one host running.&quot;
+    }
+    
+    function get([String]$Assembly, [String]$Class, [String]$Method, [Switch]$Flags) {
+      $type = ([AppDomain]::CurrentDomain.GetAssemblies() | ? {
+        $_.Location.Split('\')[-1].Equals($Assembly)
+      }).GetType($Class)
+      
+      switch ($Flags) {
+        $true {$res = $type.GetMethod($Method, [Reflection.BindingFlags]'NonPublic, Static')}
+        default {$res = $type.GetMethod($Method)}
+      }
+      
+      return $res
+    }
+  }
+  process {
+    $GetConsoleWindow = get `
+      Microsoft.PowerShell.ConsoleHost.dll Microsoft.PowerShell.ConsoleControl GetConsoleWindow -f
+    $SendMessage = get System.dll Microsoft.Win32.UnsafeNativeMethods SendMessage
+    
+    [Runtime.InteropServices.HandleRef]$href = New-Object Runtime.InteropServices.HandleRef(
+      (New-Object IntPtr), $GetConsoleWindow.Invoke($null, @())
+    )
+  }
+  end {
+    [void]$SendMessage.Invoke($null, @($href, 0x0111, [IntPtr]0xfff1, [IntPtr]::Zero))
+  }
+}
+#Another possible way:
+Add-Type @'
+using System;
+using System.Reflection;
+using System.Runtime.InteropServices;
+
+[assembly: AssemblyVersion(&quot;2.0.0.0&quot;)]
+[assembly: CLSCompliant(true)]
+[assembly: ComVisible(false)]
+
+namespace Clip {
+  internal static class NativeMethods {
+    [DllImport(&quot;kernel32.dll&quot;)]
+    internal static extern IntPtr GetConsoleWindow();
+    
+    [DllImport(&quot;kernel32.dll&quot;)]
+    internal static extern IntPtr GlobalAlloc(UInt32 uFlags, UIntPtr dwBytes);
+    
+    [DllImport(&quot;kernel32.dll&quot;)]
+    internal static extern IntPtr GlobalLock(IntPtr hMem);
+    
+    [DllImport(&quot;kernel32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean GlobalUnlock(IntPtr hMem);
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean CloseClipboard();
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean EmptyClipboard();
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    internal static extern IntPtr GetOpenClipboardWindow();
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean OpenClipboard(IntPtr hWndNewOwner);
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    internal static extern IntPtr SetClipboardData(UInt32 uFormat, IntPtr hMem);
+  }
+  
+  internal static class UnsafeNativeMethods {
+    [DllImport(&quot;kernel32.dll&quot;, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+    internal static extern IntPtr lstrcpy(IntPtr lpString1, String lpString2);
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    internal static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
+  }
+  
+  public sealed class Utility {
+    private Utility() {}
+    
+    public static void Copy(String text) {
+      IntPtr mem = NativeMethods.GlobalAlloc((UInt32)0x0042, (UIntPtr)(text.Length + 1));
+      IntPtr lck = NativeMethods.GlobalLock(mem);
+      
+      UnsafeNativeMethods.lstrcpy(lck, text);
+      NativeMethods.GlobalUnlock(mem);
+      NativeMethods.OpenClipboard(NativeMethods.GetOpenClipboardWindow());
+      NativeMethods.EmptyClipboard();
+      NativeMethods.SetClipboardData((UInt32)1, mem);
+      NativeMethods.CloseClipboard();
+    }
+    
+    public static void Paste() {
+      IntPtr hndl = NativeMethods.GetConsoleWindow();
+      UnsafeNativeMethods.SendMessage(hndl, 0x0111, (IntPtr)0xfff1, IntPtr.Zero);
+    }
+  }
+}
+'@
+[Clip.Utility]::Copy('This is a test string.')
+sleep(3)
+[Clip.Utility]::Paste()
+#As I've said there a lot of ways of copy\paste, so...
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

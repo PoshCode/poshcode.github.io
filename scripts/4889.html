@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Janny">
+    <title>regjump - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>regjump</h1>
+<h3><a href="//scripts/4889.ps1">download</a></h3>
+<p>From greg’s repository on github.</p>
+<pre><code class="language-posh">#requires -version 2.0
+Set-Alias regjump Get-RegistryPath
+
+$asm = Add-Type -MemberDefinition @'
+    [DllImport(&quot;kernel32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean CloseHandle(IntPtr hObject);
+    
+    [DllImport(&quot;kernel32.dll&quot;)]
+    internal static extern IntPtr OpenProcess(
+        UInt32 dwDesiredAcess,
+        [MarshalAs(UnmanagedType.Bool)]Boolean bInheritHandle,
+        UInt32 dwProcessId
+    );
+    
+    [DllImport(&quot;user32.dll&quot;, CharSet = CharSet.Unicode)]
+    internal static extern IntPtr FindWindow(
+        String lpClassName,
+        String lpWindowName
+    );
+    
+    [DllImport(&quot;user32.dll&quot;, CharSet = CharSet.Unicode)]
+    internal static extern IntPtr FindWindowEx(
+        IntPtr hwndParent,
+        IntPtr hwndChildAfter,
+        String lpszClass,
+        String lpszWindow
+    );
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    internal static extern UInt32 GetWindowThreadProcessId(
+        IntPtr hWnd,
+        out UInt32 lpdwProcessId
+    );
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    internal static extern IntPtr SendMessage(
+        IntPtr hWnd,
+        UInt32 Msg,
+        IntPtr wParam,
+        IntPtr lParam
+    );
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    internal static extern IntPtr SetFocus(IntPtr hWnd);
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean SetForegroundWindow(IntPtr hWnd);
+    
+    [DllImport(&quot;user32.dll&quot;)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern Boolean ShowWindow(
+        IntPtr hWnd,
+        UInt32 nCmdShow
+    );
+    
+    const UInt32 SW_SHOW     = 0x00000005;
+    const UInt32 SYNCHRONIZE = 0x00100000;
+    
+    public static void JumpTo(String path) {
+      IntPtr RegEditMain;
+      IntPtr RegEditHwnd;
+      UInt32 rslt;
+      UInt32 ProcessId = 0;
+      IntPtr hndl;
+      
+      RegEditMain = FindWindow(&quot;RegEdit_RegEdit&quot;, null);
+      if (RegEditMain == IntPtr.Zero) {
+        ProcessStartInfo psi = new ProcessStartInfo(&quot;regedit.exe&quot;);
+        psi.UseShellExecute = false;
+        Process.Start(psi);
+        Thread.Sleep(100); //pause for the correct execution of the next step
+        RegEditMain = FindWindow(&quot;RegEdit_RegEdit&quot;, null);
+      }
+      
+      ShowWindow(RegEditMain, SW_SHOW);
+      RegEditHwnd = FindWindowEx(RegEditMain, IntPtr.Zero, &quot;SysTreeView32&quot;, null);
+      SetFocus(RegEditHwnd);
+
+      rslt = GetWindowThreadProcessId(RegEditHwnd, out ProcessId);
+      if (rslt != 0) {
+        hndl = OpenProcess(SYNCHRONIZE, false, ProcessId);
+        for (Int32 i = 0; i &lt; 30; i++)
+          SendMessage(RegEditHwnd, (UInt32)0x100, (IntPtr)0x25, IntPtr.Zero);
+        
+        //jumping
+        Char[] c = path.ToCharArray();
+        for (Int32 i = 0; i &lt; c.Length; i++) {
+          if (c[i].Equals('\\')) {
+            SendMessage(RegEditHwnd, (UInt32)0x100, (IntPtr)0x27, IntPtr.Zero);
+          }
+          else {
+            SendMessage(RegEditHwnd, (UInt32)0x102, (IntPtr)c[i], IntPtr.Zero);
+          }
+        }
+        SetForegroundWindow(RegEditMain);
+        SetFocus(RegEditMain);
+        CloseHandle(hndl);
+      }
+    }
+'@ -Name NativeUtils -NameSpace RegJump -Using System.Diagnostics, System.Threading -PassThru
+
+function Get-RegistryPath {
+  &lt;#
+    .NOTES
+        Author: greg zakharov
+  #&gt;
+  param(
+    [Parameter(Mandatory=$true)]
+    [String]$RegistryPath
+  )
+  
+  begin {
+    $RegistryPath = $RegistryPath.ToUpper()
+    
+    function get([String]$short, [String]$full) {
+      if (Test-Path ('Registry::' + $RegistryPath)) {
+        $RegistryPath = '\' + $RegistryPath.Replace($short, $full)
+        $asm::JumpTo($RegistryPath)
+      }
+      else {
+        Write-Host Specified registry path does not exist. -fo Yellow
+      }
+    }
+  }
+  process {
+    try {
+      switch ($RegistryPath.Substring(0, 4)) {
+        'HKCR' {get 'HKCR' 'HKEY_CLASSES_ROOT'}
+        'HKCU' {get 'HKCU' 'HKEY_CURRENT_USER'}
+        'HKLM' {get 'HKLM' 'HKEY_LOCAL_MACHINE'}
+        'HKU\' {get 'HKU'  'HKEY_USERS'}
+        'HKCC' {get 'HKCC' 'HKEY_CURRENT_CONFIG'}
+        default {
+          Write-Host Invalid registry path. -fo Red
+        }
+      }
+    }
+    catch [Management.Automation.MethodInvocationException] {
+      Write-Host Invalid registry path. -fo Red
+    }
+  }
+  end {}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

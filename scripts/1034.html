@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="tysonkopczynski">
+    <title>SharpSSH Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>SharpSSH Module</h1>
+<h3><a href="//scripts/1034.ps1">download</a> - <a href="//scripts/979.md">parent</a></h3>
+<p><strong>I fixed some stuff.</strong></p>
+<p>As promised, I started to expand on Joel's functions (http://poshcode.org/877).  A lot of stuff is missing, but... I have big plans for this module and a PKI module I want to write.</p>
+<pre><code class="language-posh">##################################################
+# cmdlets
+##################################################
+#-------------------------------------------------
+# New-SharpSession
+#-------------------------------------------------
+# Usage:		New-SharpSession -?
+#-------------------------------------------------
+function New-SharpSession {
+	&lt;# 
+	.Synopsis
+    	Used to open an SSH or SCP Session to the specified server.
+    .Description
+    	Uses SharpSSH to open an SSH or SCP Session to the specified server.
+	.Parameter Host
+    	The hostname or IP address that you want to connect to.
+	.Parameter UserName
+    	The username string used for the connection.
+    .Parameter Key
+    	The switch that tells function to execute with key parameters.
+    .Parameter KeyFile
+    	The path and file name to the key file used for key based
+    	authentication.
+    .Parameter User
+    	The switch that tells function to execute with user parameters.
+    .Parameter Password
+    	The password string used for the connection.
+	#&gt; 
+    [CmdletBinding(DefaultParameterSetName=&quot;KeySet&quot;)]
+    param(
+		[Parameter(Mandatory=$True)][String]$Host,
+		[Parameter(Mandatory=$True)][String]$UserName,
+		[Parameter(ParameterSetName=&quot;KeySet&quot;)][Switch]$Key,
+        [Parameter(ParameterSetName=&quot;KeySet&quot;, Mandatory=$True)][String]$KeyFile,
+        [Parameter(ParameterSetName=&quot;User&quot;)][Switch]$User,
+        [Parameter(ParameterSetName=&quot;User&quot;, Mandatory=$True)][String]$Password,
+		[Switch]$SCP,
+		[Switch]$PassThru
+        )
+	
+	try {
+		# Default will always be to do SSH...
+		if ($SCP){
+			$ConnectType = &quot;Tamir.SharpSsh.scp&quot;
+			}
+		else{
+			$ConnectType = &quot;Tamir.SharpSsh.SshShell&quot;
+			}
+		
+		if ($Key -and (Test-Path $KeyFile)){
+			$Global:SharpSession = New-Object $ConnectType $Host, $UserName
+			$Global:SharpSession.AddIdentityFile((Resolve-Path $KeyFile))
+			}
+		else{
+			$Global:SharpSession = New-Object $ConnectType $Host, $UserName, $Password
+			}
+			
+		$Global:SharpSession.Connect()
+		
+		if ($ConnectType -eq &quot;Tamir.SharpSsh.SshShell&quot;){
+			$Global:SharpSession.RemoveTerminalEmulationCharacters = $True
+			}
+		
+		if($PassThru){
+			return $Global:SharpSession
+			}
+		}
+	catch {
+		throw $_
+		}
+	}
+
+#-------------------------------------------------
+# Transfer-SharpFile
+#-------------------------------------------------
+# Usage:		Transfer-SharpFile -?
+#-------------------------------------------------
+function Transfer-SharpFile {
+	&lt;# 
+	.Synopsis
+    	Used to tranfser(get or put) a file using a valid SCP SharpSession.
+    .Description
+    	Uses SharpSSH to tranfer (get or put) a file via SCP.
+	.Parameter From
+    	The full path and file name to the file you are transferring.
+	.Parameter To
+    	The full path and file name to where you want to copy the file to.
+	#&gt; 
+    param(
+		[Parameter(Mandatory=$True)][String]$From,
+		[Parameter(Mandatory=$True)][String]$To,
+		[Switch]$Get,
+		[Switch]$Put
+		)
+	
+	try {
+		if (!($Get -or $Put)) {
+			throw Write-Host &quot;Get or Put must be defined!&quot; -ForeGroundColor Red
+			}
+	
+		if ($SharpSession.GetType().Fullname -ne &quot;Tamir.SharpSsh.Scp&quot;){
+			throw Write-Host &quot;Not currently connected using SCP!&quot; -ForeGroundColor Red
+			}
+		else{
+			# The action scriptblock for an EventObject must have
+			# things defined in the Global scope.  Yuck!
+			$Global:SharpSessiontransferDone = $Null
+			$Global:SharpSessiontotalBytes = $Null
+			$Global:SharpSessiontransferredBytes = $Null
+						
+			[void] (Register-ObjectEvent  -InputObject $SharpSession -EventName OnTransferProgress -SourceIdentifier Scp.OnTransferProgress `
+				-Action {$Global:SharpSessiontotalBytes = $args[3]; $Global:SharpSessiontransferredBytes = $args[2]})
+			[void] (Register-ObjectEvent  -InputObject $SharpSession -EventName OnTransferEnd -SourceIdentifier Scp.OnTransferEnd `
+				-Action {$Global:SharpSessiontransferDone = $True})
+	
+			# Default is always to get.
+			if ($Get){
+				$SharpSession.Get($From, $To)
+				
+				try{
+					do {Write-Progress -Activity &quot;Get - $($From)&quot; -Status &quot;Copying&quot; `
+						-PercentComplete (($SharpSessiontransferredBytes/$SharpSessiontotalBytes)*100)} while ($SharpSessiontransferDone -eq $Null)
+					}
+				catch{
+					Write-Warning &quot;File is not there...&quot;
+					}
+				}
+			else{
+				$SharpSession.Put($From, $To)
+				
+				try{
+					do {Write-Progress -Activity &quot;Get - $($From)&quot; -Status &quot;Copying&quot; `
+						-PercentComplete (($SharpSessiontransferredBytes/$SharpSessiontotalBytes)*100)} while ($SharpSessiontransferDone -eq $Null)
+					}
+				catch{
+					Write-Warning &quot;File is not there...&quot;
+					}
+				}
+			}
+		}
+	catch {
+		throw $_
+		}
+	finally {
+		if (Get-EventSubscriber -SourceIdentifier Scp.OnTransferProgress){
+			[void] (Unregister-Event -SourceIdentifier Scp.OnTransferProgress)
+			}
+		if (Get-EventSubscriber -SourceIdentifier Scp.OnTransferEnd){
+			[void] (Unregister-Event -SourceIdentifier Scp.OnTransferEnd)
+			}
+		}
+	}
+	
+#-------------------------------------------------
+# Remove-SharpSession
+#-------------------------------------------------
+# Usage:		Remove-SharpSession -?
+#-------------------------------------------------
+function Remove-SharpSession {
+	&lt;# 
+	.Synopsis
+    	Used to close an active SSH or SCP Session.
+    .Description
+    	Uses SharpSSH to close an active SSH or SCP Session.
+	#&gt; 
+	
+	try {
+		if($SharpSession){
+			if ($SharpSession.GetType().Fullname -eq &quot;Tamir.SharpSsh.SshShell&quot;){
+				$SharpSession.WriteLine(&quot;exit&quot;)
+				sleep -milli 500
+	
+				if($SharpSession.ShellOpened) {
+					Write-Warning &quot;Shell didn't exit cleanly, closing anyway.&quot; 
+					}
+				
+				$SharpSession.Close()
+				}
+			else{
+				$SharpSession.Close()
+				}
+			}
+		else{
+			throw &quot;There is no session to remove!&quot;
+			}
+		}
+	catch {
+		throw $_
+		}
+	finally {
+		$Global:SharpSession = $Null
+		}
+	}	
+	
+##################################################
+# Main
+##################################################
+Export-ModuleMember New-SharpSession
+Export-ModuleMember Transfer-SharpFile
+Export-ModuleMember Remove-SharpSession
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Oisin Grehan">
+    <title>Get-Delegate - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-Delegate</h1>
+<h3><a href="//scripts/3327.ps1">download</a></h3>
+<p>Requires PowerShell 3.0. This is intended as the definitive Get-Delegate function: Create delegates for any methods, static or instance, with any signature, using an intuitive syntax. Create using explicit delegate types, or by specifying a parameter type array to select the correct method overload. Full help with examples inluded: get-help get-delegate -full | more; use -verbose for additional detail of the conversion process. Includes test functions below.</p>
+<pre><code class="language-posh">#requires -version 3
+
+function Get-Delegate {
+&lt;#
+.SYNOPSIS
+Create an action[] or func[] delegate for a psmethod reference.
+.DESCRIPTION
+Create an action[] or func[] delegate for a psmethod reference.
+.PARAMETER Method
+A PSMethod reference to create a delegate for. This parameter accepts pipeline input.
+.PARAMETER ParameterType
+An array of types to use for method overload resolution. If there are no overloaded methods
+then this array will be ignored but a warning will be omitted if the desired parameters were
+not compatible.
+.PARAMETER DelegateType
+The delegate to create for the corresponding method. Example: [string]::format | get-delegate -delegatetype func[int,string]
+.INPUTS System.Management.Automation.PSMethod, System.Type[]
+.EXAMPLE
+$delegate = [string]::format | Get-Delegate string,string
+
+Gets a delegate for a matching overload with string,string parameters.
+It will actually return func&lt;object,string&gt; which is the correct 
+signature for invoking string.format with string,string.
+.EXAMPLE
+$delegate = [console]::beep | Get-Delegate @()
+
+Gets a delegate for a matching overload with no parameters.
+.EXAMPLE
+$delegate = [console]::beep | get-delegate int,int
+
+Gets a delegate for a matching overload with @(int,int) parameters.
+.EXAMPLE
+$delegate = [string]::format | Get-Delegate -Delegate 'func[string,object,string]'
+
+Gets a delegate for an explicit func[].
+.EXAMPLE
+$delegate = [console]::writeline | Get-Delegate -Delegate 'action[int]'
+
+Gets a delegate for an explicit action[].
+.EXAMPLE
+$delegate = [string]::isnullorempty | get-delegate 
+
+For a method with no overloads, we will choose the default method and create a corresponding action/action[] or func[].
+#&gt;
+    [CmdletBinding(DefaultParameterSetName=&quot;FromParameterType&quot;)]
+    [outputtype('System.Action','System.Action[]','System.Func[]')]
+    param(
+        [parameter(mandatory=$true, valuefrompipeline=$true)]
+        [system.management.automation.psmethod]$Method,
+
+        [parameter(position=0, valuefromremainingarguments=$true, parametersetname=&quot;FromParameterType&quot;)]
+        [validatenotnull()]
+        [allowemptycollection()]
+        [Alias(&quot;types&quot;)]
+        [type[]]$ParameterType = @(),
+
+        [parameter(mandatory=$true, parametersetname=&quot;FromDelegate&quot;)]
+        [validatenotnull()]
+        [validatescript({ ([delegate].isassignablefrom($_)) })]
+        [type]$DelegateType
+    )
+
+    $base = $method.GetType().GetField(&quot;baseObject&quot;,&quot;nonpublic,instance&quot;).GetValue($method)    
+    
+    if ($base -is [type]) {
+        [type]$baseType = $base
+        [reflection.bindingflags]$flags = &quot;Public,Static&quot;
+    } else {
+        [type]$baseType = $base.GetType()
+        [reflection.bindingflags]$flags = &quot;Public,Instance&quot;
+    }
+
+    if ($pscmdlet.ParameterSetName -eq &quot;FromDelegate&quot;) {
+        write-verbose &quot;Inferring from delegate.&quot;
+
+        if ($DelegateType -eq [action]) {
+            # void action        
+            $ParameterType = [type[]]@()
+        
+        } elseif ($DelegateType.IsGenericType) {
+            # get type name
+            $name = $DelegateType.Name
+
+            # is it [action[]] ?
+            if ($name.StartsWith(&quot;Action``&quot;)) {
+    
+                $ParameterType = @($DelegateType.GetGenericArguments())    
+            
+            } elseif ($name.StartsWith(&quot;Func``&quot;)) {
+    
+                # it's a [func[]]
+                $ParameterType = @($DelegateType.GetGenericArguments())
+                $ParameterType = $ParameterType[0..$($ParameterType.length - 2)] # trim last element (TReturn)
+            } else {
+                throw &quot;Unsupported delegate type: Use Action&lt;&gt; or Func&lt;&gt;.&quot;
+            }
+        }
+    }
+
+    [reflection.methodinfo]$methodInfo = $null
+
+    if ($Method.OverloadDefinitions.Count -gt 1) {
+        # find best match overload
+        write-verbose &quot;$($method.name) has multiple overloads; finding best match.&quot;
+
+        $finder = [type].getmethod(&quot;GetMethodImpl&quot;, [reflection.bindingflags]&quot;NonPublic,Instance&quot;)
+
+        write-verbose &quot;base is $($base.gettype())&quot;
+
+        $methodInfo = $finder.invoke(
+            $baseType,
+             @(
+                  $method.Name,
+                  $flags,
+                  $null,
+                  $null,
+                  [type[]]$ParameterType,
+                  $null
+             )
+        ) # end invoke
+    } else {
+        # method not overloaded
+        Write-Verbose &quot;$($method.name) is not overloaded.&quot;
+        if ($base -is [type]) {
+            $methodInfo = $base.getmethod($method.name, $flags)
+        } else {
+            $methodInfo = $base.gettype().GetMethod($method.name, $flags)
+        }
+
+        # if parametertype is $null, fill it out; if it's not $null,
+        # override it to correct it if needed, and warn user.
+        if ($pscmdlet.ParameterSetName -eq &quot;FromParameterType&quot;) {           
+            if ($ParameterType -and ((compare-object $parametertype $methodinfo.GetParameters().parametertype))) {
+                write-warning &quot;Method not overloaded: Ignoring provided parameter type(s).&quot;
+            }
+            $ParameterType = $methodInfo.GetParameters().parametertype
+            write-verbose (&quot;Set default parameters to: {0}&quot; -f ($ParameterType -join &quot;,&quot;))
+        }
+    }
+
+    if (-not $methodInfo) {
+        write-warning &quot;Could not find matching signature for $($method.Name) with $($parametertype.count) parameter(s).&quot;
+    } else {
+        
+        write-verbose &quot;MethodInfo: $methodInfo&quot;
+
+        # it's important here to use the actual MethodInfo's parameter types,
+        # not the desired types ($parametertype) because they may not match,
+        # e.g. asked for method(int) but match is method(object).
+
+        if ($pscmdlet.ParameterSetName -eq &quot;FromParameterType&quot;) {            
+            
+            if ($methodInfo.GetParameters().count -gt 0) {
+                $ParameterType = $methodInfo.GetParameters().ParameterType
+            }
+            
+            # need to create corresponding [action[]] or [func[]]
+            if ($methodInfo.ReturnType -eq [void]) {
+                if ($ParameterType.Length -eq 0) {
+                    $DelegateType = [action]
+                } else {
+                    # action&lt;...&gt;
+                    
+                    # replace desired with matching overload parameter types
+                    #$ParameterType = $methodInfo.GetParameters().ParameterType
+                    $DelegateType = (&quot;action[{0}]&quot; -f ($ParameterType -join &quot;,&quot;)) -as [type]
+                }
+            } else {
+                # func&lt;...&gt;
+
+                # replace desired with matching overload parameter types
+                #$ParameterType = $methodInfo.GetParameters().ParameterType
+                $DelegateType = (&quot;func[{0}]&quot; -f (($ParameterType + $methodInfo.ReturnType) -join &quot;,&quot;)) -as [type]
+            }                        
+        }
+        Write-Verbose $DelegateType
+
+        if ($flags -band [reflection.bindingflags]::Instance) {
+            $methodInfo.createdelegate($DelegateType, $base)
+        } else {
+            $methodInfo.createdelegate($DelegateType)
+        }
+    }
+}
+
+#
+# tests
+# 
+
+function Assert-True {
+    param(
+        [parameter(position=0, mandatory=$true)]
+        [validatenotnull()]
+        [scriptblock]$Script,
+
+        [parameter(position=1)]
+        [validatenotnullorempty()]
+        [string]$Name = &quot;Assert-True&quot;
+    )    
+    $eap = $ErrorActionPreference
+    Write-Host -NoNewline &quot;Assert-True [ $Name ] &quot;
+    try {
+        $erroractionpreference = &quot;stop&quot;
+        if ((&amp; $script) -eq $true) {
+            write-host -ForegroundColor Green &quot;[PASS]&quot;
+            return
+        }
+        $reason = &quot;Assert failed.&quot;
+    }
+    catch {
+        $reason = &quot;Error: $_&quot;
+    }
+    finally {
+        $ErrorActionPreference = $eap
+    }
+    write-host -ForegroundColor Red &quot;[FAIL] &quot; -NoNewline
+    write-host &quot;Reason: '$reason'&quot;
+}
+
+#
+# static methods
+#
+
+assert-true {
+    $delegate = [string]::format | Get-Delegate -Delegate 'func[string,object,string]'
+    $delegate.invoke(&quot;hello, {0}&quot;, &quot;world&quot;) -eq &quot;hello, world&quot;
+} -name &quot;[string]::format | get-delegate -delegate 'func[string,object,string]'&quot;
+
+assert-true {
+    $delegate = [console]::writeline | Get-Delegate -Delegate 'action[int]'
+    $delegate -is [action[int]]
+} -name &quot;[console]::writeline | get-delegate -delegate 'action[int]'&quot;
+
+assert-true {
+    $delegate = [string]::format | Get-Delegate string,string
+    $delegate.invoke(&quot;hello, {0}&quot;, &quot;world&quot;) -eq &quot;hello, world&quot;
+} -name &quot;[string]::format | get-delegate string,string&quot;
+
+assert-true {
+    $delegate = [console]::beep | Get-Delegate @()
+    $delegate -is [action]
+} -name &quot;[console]::beep | get-delegate @()&quot;
+
+assert-true {
+    $delegate = [console]::beep | Get-Delegate -DelegateType action
+    $delegate -is [action]
+} -name &quot;[console]::beep | Get-Delegate -DelegateType action&quot;
+
+assert-true {
+    $delegate = [string]::IsNullOrEmpty | get-delegate
+    $delegate -is [func[string,bool]]
+} -name &quot;[string]::IsNullOrEmpty | get-delegate # single overload&quot;
+
+assert-true {
+    $delegate = [string]::IsNullOrEmpty | get-delegate string
+    $delegate -is [func[string,bool]]
+} -name &quot;[string]::IsNullOrEmpty | get-delegate string # single overload&quot;
+
+#
+# instance methods
+#
+
+assert-true {
+    $sb = new-object text.stringbuilder
+    $delegate = $sb.Append | get-delegate string
+    $delegate -is [System.Func[string,System.Text.StringBuilder]]
+} -name &quot;`$sb.Append | get-delegate string&quot;
+
+assert-true {
+    $sb = new-object text.stringbuilder
+    $delegate = $sb.AppendFormat | get-delegate string, int, int
+    $delegate -is [System.Func[string,object,object,System.Text.StringBuilder]]
+} -name &quot;`$sb.AppendFormat | get-delegate string, int, int&quot;
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

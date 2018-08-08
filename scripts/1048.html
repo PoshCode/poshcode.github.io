@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Patrick">
+    <title>vibackup-lx1.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>vibackup-lx1.ps1</h1>
+<h3><a href="//scripts/1048.ps1">download</a> - <a href="//scripts/1047.md">parent</a></h3>
+<p>Generates a Linux VMDK Backup Script 0.7.1</p>
+<pre><code class="language-posh">Param (
+	$viServer,
+	$bakVM,
+	$lxDest
+)
+
+#region check
+if (!$viServer) { $viServer = Read-Host -Prompt &quot;VI Server &quot; }
+if (!$bakVM) { $bakVM = Read-Host -Prompt &quot;VM to Backup &quot; }
+if (!$lxDest) { $lxDest = Read-Host -Prompt &quot;Backup Path (ex. /srv/backup) &quot; }
+#endregion
+
+#region globalvars
+$encoding = &quot;OEM&quot;
+$version = &quot;0.7.1&quot;
+$scriptout = @()
+[regex]$curlpat = &quot;(\s{1})+(.*vmdk$)&quot;
+[regex]$vmxpat = &quot;(\s{1})+(.*vmx$)&quot;
+#endregion
+
+#region stkmvars
+$viUser = &quot;vmware&quot;
+$viPass = &quot;vmware&quot;
+#endregion
+
+Write-Host &quot;viBackup Script Generator - &quot; $version
+Write-Host &quot;--------------------------------------------&quot;
+
+if (($vmCon = Connect-VIServer -Protocol https $viServer) -eq &quot;&quot;) { exit }
+$vm = Get-VM $bakVM -Server $vmCon -ErrorAction SilentlyContinue
+
+if (!$vm) {
+	Write-Host &quot;No VM found.&quot;
+	Write-Host &quot;Enter the Display Name from the VI Center:&quot; -NoNewline
+	$tvm = Read-Host
+	if (!($vm=Get-VM $tvm -ErrorAction SilentlyContinue)) {
+		return $false
+		exit
+	}
+	Write-Host &quot;You have entered 2 different Names. Please check that the VMX and the VM Name are the same!&quot;
+	Write-Host -ForegroundColor yellow &quot;Entered VMX Name: {$bakVM}&quot;
+	Write-Host -ForegroundColor yellow &quot;Entered VM Name: {$tvm}&quot;
+	Write-Host -ForegroundColor yellow &quot;Returned VM Name: {$vm}&quot;
+	Write-Host -ForegroundColor yellow &quot;IS THIS CORRECT (Yes/No)?:&quot; -NoNewline
+	$sure = Read-Host
+	if ($sure -ne &quot;yes&quot;) { exit }
+}
+
+#check Snapshots
+if ((Get-Snapshot -VM $vm -Server $vmCon)) {
+	Write-Host &quot;VM has Snapshots. No Backup possible.&quot;
+	return $false
+	exit
+}
+
+#check HardDisk Mode
+foreach ($hd in $vm.harddisks) {
+	if ($hd.Persistence -ne &quot;Persistent&quot;) {
+		write-host &quot;Hard Disk is not Persistent - no Snapshot allowed.&quot;
+		return $false
+		exit
+	}
+}
+
+#write script
+$scriptname = $vm.name + &quot;.sh&quot;
+$vmname = $vm.name
+$vmhost = $vm.Host
+$vmview= Get-View $vm.id
+$vmvname = $vmview.config.files.vmpathname
+
+#generate Text
+
+$header = &quot;#!/bin/bash&quot;
+$user = &quot;USER=`&quot;${viUser}`&quot;&quot;
+$pass = &quot;PASS=`&quot;${viPass}`&quot;&quot;
+$dest = &quot;DEST=`&quot;${lxDest}`&quot;&quot;
+$lxVM = &quot;VM=`&quot;${vmname}`&quot;&quot;
+$dcPath = $vm | Get-Datacenter
+
+#region writefile
+
+$scriptout += $header 
+$scriptout += $user 
+$scriptout += $pass 
+$scriptout += $dest 
+$scriptout += $lxvm 
+$scriptout += &quot;&quot; 
+$scriptout += &quot;BKUP=`&quot;${vmvname}`&quot;&quot; 
+$scriptout += &quot;SNAPCHECK=``vmware-cmd -H ${viserver} -T ${vmhost} -U `${USER} -P `${PASS} `&quot;`${BKUP}`&quot; hassnapshot`` &quot;
+$scriptout += &quot;if [ `&quot;`$SNAPCHECK`&quot; != `&quot;hassnapshot () =`&quot; ]; then `n echo 'VM has a Snapshot. Aborting...' `n exit `n fi&quot; 
+$scriptout += &quot;vmrun -T esx -h https://${viserver}/sdk -u `${USER} -p `${PASS} snapshot `&quot;`${BKUP}`&quot; vmBackup&quot;
+
+# Hard Disk
+foreach ($hd in $vm.Harddisks) {
+	$hdname = $hd.Filename
+	$patstr = $curlpat.split($hdname)
+	#dirty hack
+	$patstr[0] = $patstr[0].replace(&quot;[&quot;,&quot;&quot;)
+	$patstr[0] = $patstr[0].replace(&quot;]&quot;,&quot;&quot;)	
+	
+	$dsPath = $patstr[0].replace(&quot; &quot;,&quot;%20&quot;)
+	$vmdkpath = $patstr[2].replace(&quot; &quot;,&quot;%20&quot;)
+	$vmdkflatpath = $patstr[2].replace(&quot;.vmdk&quot;,&quot;-flat.vmdk&quot;)
+	
+	#curl options
+	$vmdk = &quot;curl --user `${USER}:`${PASS} -o `${DEST}/${vmdkpath} `&quot;https://${viserver}/folder/${vmdkpath}?dcPath=${dcPath}&amp;dsName=${dsPath}`&quot; --insecure &quot;
+	$vmdkflat = &quot;curl --user `${USER}:`${PASS} -o `${DEST}/${vmdkflatpath} `&quot;https://${viserver}/folder/${vmdkflatpath}?dcPath=${dcPath}&amp;dsName=${dsPath}`&quot; --insecure&quot;
+
+	#$vmdk = &quot;vifs --server ${viserver} --dc 'KM' --username `${USER} --password `${PASS}  --get `&quot;``echo $hdname```&quot; `${DEST}/`${VM}.vmdk &quot;
+	#$vmdkflat = &quot;vifs --server ${viserver} --dc 'KM' --username `${USER} --password `${PASS}  --get `&quot;``echo $hdname | sed 's/.vmdk/-flat.vmdk/g'```&quot; `${DEST}/`${VM}-flat.vmdk &quot;
+
+	$scriptout += $vmdk
+	$scriptout += $vmdkflat
+}
+
+#VMX
+$vmg = get-view $vm.id
+$vmxfile = $vmxpat.split($vmg.config.files.vmpathname)
+$vmxfile = $vmxfile[2]
+
+$scriptout += &quot;curl --user `${USER}:`${PASS} -o `${DEST}/${vmxfile} `&quot;https://${viserver}/folder/${vmxfile}?dcPath=${dcPath}&amp;dsName=${dsPath}`&quot; --insecure &quot;
+
+#Remove Snapshot
+$scriptout += &quot;vmrun -T esx -h https://${viserver}/sdk -u `${USER} -p `${PASS} deleteSnapshot `&quot;`${BKUP}`&quot; vmBackup&quot; 
+
+$scriptout | Out-File $scriptname -Encoding $encoding
+#endregion
+
+Write-Host &quot;Finished&quot;
+Write-Host &quot;Don't forget to convert the script under *nix/Linux with dos2unix!&quot;
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Kyle A Eppler">
+    <title>Invoke-Switch v0.9 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Invoke-Switch v0.9</h1>
+<h3><a href="//scripts/3873.ps1">download</a></h3>
+<p>A function to invoke a @switch@ statement, in order to allow splatting to be used with @switch@</p>
+<p>Dependencies:</p>
+<ul>
+<li>This function, as written in this version, requires the existence of a @repr@ function such as that defined by &quot;http://poshcode.org/3872&quot;:http://poshcode.org/3872 and its successors.</li>
+</ul>
+<p>I plan to post a new version of this function that does not limit the objects that may be used as either values to match against, or values to return, to only those that support round-trip serialization and deserialization to a string and back, using a @repr@ function for the serialization. I'm first posting this version in case some technique used in it would be useful elsewhere.</p>
+<pre><code class="language-posh">New-Variable castDictionaryEntries
+[System.Func[System.Collections.IEnumerable, System.Collections.Generic.IEnumerable[System.Collections.DictionaryEntry]]] `
+    $castDictionaryEntries = [System.Delegate]::CreateDelegate(
+        [System.Func[System.Collections.IEnumerable, System.Collections.Generic.IEnumerable[System.Collections.DictionaryEntry]]],
+        [System.Linq.Enumerable].GetMethod(
+            'Cast', @('Public, Static')).MakeGenericMethod(
+                @([System.Collections.DictionaryEntry])))
+Set-Variable castDictionaryEntries -Option ReadOnly
+
+function Invoke-Switch {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Position=0, Mandatory=$true)]
+        [ValidateNotNullOrEmpty()]
+        [System.Collections.IDictionary] $CaseMap,
+
+        [Parameter(Position=1, Mandatory=$false)]
+        [ValidateSet('Regex', 'Wildcard', 'Exact')]
+        [string] $SwitchMode,
+
+        [Parameter(Position=2, Mandatory=$false)]
+        $DefaultCase,
+
+        [Parameter(Position=3, Mandatory=$true, ValueFromPipeline=$true)]
+        [AllowNull()]
+        $InputObject,
+
+        [Parameter()]
+        [switch] $CaseSensitive)
+
+    begin {
+        New-Variable mode; [string] $mode = $null
+        if($PSBoundParameters.ContainsKey('SwitchMode')) {
+            $mode = &quot; -$SwitchMode&quot;
+        }
+
+        New-Variable caseOption; [string] $caseOption = $null
+        if($CaseSensitive.IsPresent) {
+            $caseOption = ' -CaseSensitive'
+        }
+
+        Set-Variable mode, caseOption -Option ReadOnly
+
+        New-Variable value
+        New-Variable cases; [string] $cases =
+            $castDictionaryEntries.Invoke($CaseMap) `
+                | % { $value = $_.Value; return $_.Key } `
+                | repr `
+                | % { return $_ } `
+                    -End {
+                            if($PSBoundParameters.TryGetValue(
+                                'DefaultCase', [ref] $value))
+                            {
+                                Write-Output default
+                            }
+                        } `
+                | % { return &quot;$_ { Write-Output (,$(repr $value)) }&quot; } `
+                | Join-String -Separator ' '
+        Set-Variable cases -Option ReadOnly
+
+        New-Variable switchScript; [scriptblock] `
+            $switchScript = $PSCmdlet.InvokeCommand.NewScriptBlock(
+                &quot;switch$mode$caseOption (`$InputObject) { $cases }&quot;)
+        Set-Variable switchScript -Option ReadOnly
+
+        $PSCmdlet.WriteDebug($switchScript)
+    }
+
+    process {
+        . $switchScript | % { $PSCmdlet.WriteObject($_) }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

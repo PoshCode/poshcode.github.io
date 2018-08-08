@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Salakar">
+    <title>Lync Bot - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Lync Bot</h1>
+<h3><a href="//scripts/5222.ps1">download</a></h3>
+<p>A simple lync bot in powershell that will respond to set commands etc, was bored today.</p>
+<p>Would love to hear what people do with it :) email is in script header. Thanks!</p>
+<pre><code class="language-posh">&lt;#
+	Powershell Lync Bot
+	This will respond to the commands below in the switch statement.
+
+	Just a simple script to see how it could be done, took a lot of digging
+	as it seems no-one has done this before?
+
+	***Powershell window needs to remain open for events to fire***
+
+	Author: Michael Diarmid
+	Email: michael.diarmid@atos.net
+
+#&gt;
+
+# Clear all previous subscribed events
+Get-EventSubscriber | Unregister-Event
+
+#Import Lync Model
+$ModelPath = &quot;C:\Program Files (x86)\Microsoft Lync\SDK\Assemblies\Desktop\Microsoft.Lync.Model.DLL&quot;
+
+If (Test-Path $ModelPath)
+{
+	Import-Module $ModelPath
+}
+Else
+{
+	Write-Host 'Please Import the &quot;Microsoft.Lync.Model.DLL&quot; Before using Command'
+	break
+}
+
+# lync client
+$client = [Microsoft.Lync.Model.LyncClient]::GetClient()
+
+# Job that is called on new message recieved
+$global:action = {
+	# get the conversation that caused the event
+	$Conversation = $Event.Sender.Conversation
+	
+	# Create a new msg collection for the response
+	$msg = New-Object &quot;System.Collections.Generic.Dictionary[Microsoft.Lync.Model.Conversation.InstantMessageContentType,String]&quot;
+	
+	# Modality Type
+	$Modality = $Conversation.Modalities[1]
+	
+	# The message recieved
+	[string]$msgStr = $Event.SourceArgs.Text
+	$msgStr = $msgStr.ToString().ToLower().Trim()
+	
+	# switch commands / messages - add what you like here
+	switch ($msgStr)
+	{
+		&quot;hey&quot; {
+			$msg.Add(1, '&lt;b&gt;hello&lt;/b&gt;')
+			
+		}
+		&quot;hi&quot; {
+			$msg.Add(1, '&lt;i&gt;Hello&lt;/i&gt;')
+			
+		}
+		&quot;hello&quot; {
+			$msg.Add(1, '&lt;u&gt;hey&lt;/u&gt;')
+			
+		}
+		&quot;moo&quot; {
+			$msg.Add(0, 'Are you a cow?')
+			
+		}
+		&quot;help&quot; {
+			$msg.Add(0, 'Mr bot at your service!')
+			$msg.Add(1, '&lt;b&gt;Available commands:&lt;/b&gt;')
+			$msg.Add(1, 'hi, hey, hello')
+			$msg.Add(1, 'moo')
+			$msg.Add(1, 'time')						
+		}
+		&quot;time&quot; {
+			$now = Get-Date
+			$msg.Add(0, '' + $now)
+		}
+		default
+		{
+				# do nothing 
+				$sendMe = 0
+		}
+	}
+	
+	if ($sendMe -eq 1)
+	{		
+		# Send the message
+		$null = $Modality.BeginSendMessage($msg, $null, $msg)
+	}
+}
+
+# Register events for current open conversation participants
+foreach ($con in $client.ConversationManager.Conversations)
+{
+	# For each participant in the conversation
+	$moo = $con.Participants | Where { !$_.IsSelf }
+
+	foreach ($mo in $moo)
+	{
+		$mo.Contact.uri
+		if (!(Get-EventSubscriber $mo.Contact.uri))
+		{
+			Register-ObjectEvent -InputObject $mo.Modalities[1] -EventName &quot;InstantMessageReceived&quot; -SourceIdentifier $mo.Contact.uri -action $global:action
+		}
+	}
+}
+
+# Add event to pickup new conversations and register events for new participants
+$conversationMgr = $client.ConversationManager
+Register-ObjectEvent -InputObject $conversationMgr `
+					 -EventName &quot;ConversationAdded&quot; `
+					 -SourceIdentifier &quot;NewIncomingConversation&quot; `
+					 -action {
+	$client = [Microsoft.Lync.Model.LyncClient]::GetClient()
+	foreach ($con in $client.ConversationManager.Conversations)
+	{
+		# For each participant in the conversation
+		$moo = $con.Participants | Where { !$_.IsSelf }
+		foreach ($mo in $moo)
+		{
+			#$mo.Contact.uri
+			if (!(Get-EventSubscriber $mo.Contact.uri))
+			{
+				Register-ObjectEvent -InputObject $mo.Modalities[1] -EventName &quot;InstantMessageReceived&quot; -SourceIdentifier $mo.Contact.uri -action $global:action
+			}
+		}
+	}
+	
+}
+
+
+# random junk for testing
+
+#set conversation title
+#$con.BeginSetProperty([Microsoft.Lync.Model.Conversation.ConversationProperty]::Subject, &quot;A title woo&quot;, $null, $null)
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

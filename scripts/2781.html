@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>PowerChart 0.52 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>PowerChart 0.52</h1>
+<h3><a href="//scripts/2781.ps1">download</a> - <a href="//scripts/2780.md">parent</a></h3>
+<p>A first attempt at a generic graphing function using commands from WPFToolkit's DataVisualization dll</p>
+<p><em>First make sure these commands worked:</em></p>
+<p>@Import-Module ShowUI &lt;# Version 1.1 #&gt;;
+Add-UIModule .\WPFToolkit.dll -Name WPFToolkit -AsCmdlet -Import;
+Add-UIModule .\System.Windows.Controls.DataVisualization.Toolkit.dll -Name DataVizualization -AsCmdlet; @</p>
+<pre><code class="language-posh">function New-PowerChart() {
+#.Synopsis
+#   Create a chart using the WPF DataVisualization Toolkit (WPFToolkit)
+#.Example
+#   New-PowerChart Area { ls | ? {!$_.PSIsContainer} } -IndependentValue Name -DependentValue Length -Show
+#.Example
+#   New-PowerChart Pie { ps | sort WS -desc | select -first 10 } Name WS -Show -Interval &quot;0:0:5&quot;
+[CmdletBinding(DefaultParameterSetName='DataTemplate')]
+param(
+    [Parameter(Position=0, Mandatory=$true)]
+    [ValidateSet(&quot;Area&quot;,&quot;Bar&quot;,&quot;Bubble&quot;,&quot;Column&quot;,&quot;Line&quot;,&quot;Pie&quot;,&quot;Scatter&quot;)]
+    [String[]]
+    ${ChartType}
+,
+    [Parameter(Position=1, Mandatory=$true, HelpMessage='The data for the chart ...')]
+    [System.Management.Automation.ScriptBlock[]]
+    ${ItemsSource}
+,
+    [Parameter(Position=2, Mandatory=$true, HelpMessage='The property name for the independent values ...')]
+    [String[]]
+    ${IndependentValuePath}
+,  
+    [Parameter(Position=3, Mandatory=$true, HelpMessage='The property name for the dependent values ...')]
+    [String[]]
+    ${DependentValuePath}
+,
+    [Parameter(Position=4, HelpMessage='The property name for the size values ...')]
+    [String[]]
+    ${SizeValuePath}
+,  
+    [TimeSpan]    
+    ${Interval}
+,
+    [Switch]
+    $Show
+)
+begin
+{
+    Chart -ControlNale PowerChart -Tag @{Interval=$Interval; ItemsSource=$ItemsSource} -On_Loaded {
+        $Interval = $this.Tag.Interval
+        if($Interval) {
+            Register-PowerShellCommand -ScriptBlock {     
+                $i=0
+                $Window.Content.Series | ForEach{ $_.ItemsSource = &amp;$($Window.Content.Tag.ItemsSource[$i++]) }
+            } -in $Interval -run
+        }
+    } -Series {
+      $Series = @()
+      # Write-Host &quot;Three&quot; -Fore Cyan
+      for($c=0; $c -lt $ChartType.length; $c++) {
+         $chartType = $ChartType[$c].ToLower()
+         if($SizeValuePath -and $ChartType[$c] -eq &quot;Bubble&quot;) {
+            $Series += iex &quot;$($chartType)Series -DependentValuePath $($DependentValuePath[$c]) -IndependentValuePath $($IndependentValuePath[$c]) -SizeValuePath $($SizeValuePath[$c]) -ItemsSource `$(&amp;{$($ItemsSource[$c])})&quot; 
+            #$Series[-1].DataPointStyle = $this.FindResource(&quot;$($chartType)DataPointTooltipsFix&quot;)
+         } elseif($ChartType[$c] -eq &quot;Pie&quot;) {
+            $Series += iex &quot;$($chartType)Series -DependentValuePath $($DependentValuePath[$c]) -IndependentValuePath $($IndependentValuePath[$c]) -ItemsSource `$(&amp;{$($ItemsSource[$c])})&quot;
+            #$Series[-1].StylePalette = $this.FindResource(&quot;$($chartType)PaletteTooltipsFix&quot;)
+         } else {
+            Write-Verbose &quot;$($chartType)Series -DependentValuePath $($DependentValuePath[$c]) -IndependentValuePath $($IndependentValuePath[$c]) -ItemsSource `$(&amp;{$($ItemsSource[$c])})&quot; 
+            $Series += iex &quot;$($chartType)Series -DependentValuePath $($DependentValuePath[$c]) -IndependentValuePath $($IndependentValuePath[$c]) -ItemsSource `$(&amp;{$($ItemsSource[$c])})&quot; 
+            #A$Series[-1].DataPointStyle = $this.FindResource(&quot;$($chartType)DataPointTooltipsFix&quot;)
+         }       
+      }
+      Write-Verbose &quot;There are $($Series.Count) Series!&quot;
+      $Series
+   } -Background Transparent -BorderThickness 0 -Show:$Show
+}
+}
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="jgrote">
+    <title>Import-NmapXML - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Import-NmapXML</h1>
+<h3><a href="//scripts/2486.ps1">download</a></h3>
+<p>This is a Powershell v2 module that takes NMAP XML output and formats it into custom powershell objects, allowing you to manipulate NMAP output data in Powershell. It operates similarly to import-csv.</p>
+<p>Based on original script by Jason Fossen: http://blogs.sans.org/windows-security/2009/06/11/powershell-script-to-parse-nmap-xml-output/
+He did all the heavy lifting, I just repackaged it as a module.</p>
+<pre><code class="language-posh">#Requires -Version 2.0
+function Import-NmapXML 
+{
+	####################################################################################
+	#.Synopsis 
+	#    Parse XML output files of the nmap port scanner (www.nmap.org). 
+	#
+	#.Description 
+	#    Parse XML output files of the nmap port scanner (www.nmap.org) and  
+	#    emit custom objects with properties containing the scan data. The 
+	#    script can accept either piped or parameter input.  The script can be
+	#    safely dot-sourced without error as is. 
+	#
+	#.Parameter Path  
+	#    Either 1) a string with or without wildcards to one or more XML output
+	#    files, or 2) one or more FileInfo objects representing XML output files.
+	#
+	#.Parameter OutputDelimiter
+	#    The delimiter for the strings in the OS, Ports and Services properties. 
+	#    Default is a newline.  Change it when you want single-line output. 
+	#
+	#.Parameter RunStatsOnly
+	#    Only displays general scan information from each XML output file, such
+	#    as scan start/stop time, elapsed time, command-line arguments, etc.
+	#
+	#.Parameter ShowProgress
+	#    Prints progress information to StdErr while processing host entries.    
+	#
+	#.Example 
+	#    dir *.xml | Import-NMAPXML
+	#
+	#.Example 
+	#	 Import-NmapXML -path onefile.xml
+	#    Import-NmapXML -path *files.xml 
+	#
+	#.Example 
+	#    $files = dir *some.xml,others*.xml 
+	#    Import-NmapXML -path $files    
+	#
+	#.Example 
+	#    Import-NmapXML -path scanfile.xml -runstatsonly
+	#
+	#.Example 
+	#    Import-NmapXML scanfile.xml -OutputDelimiter &quot; &quot;
+	#
+	#Requires -Version 2.0 
+	#
+	#.Notes 
+	#  Author: Jason Fossen (http://blogs.sans.org/windows-security/)  
+    #  Edited: Justin Grote &lt;justin+powershell NOSPAMAT grote NOSPAMDOT name&gt;
+	# Version: 3.6.1-JWG1
+	# Updated: 02.Feb.2011
+	#   LEGAL: PUBLIC DOMAIN.  SCRIPT PROVIDED &quot;AS IS&quot; WITH NO WARRANTIES OR GUARANTEES OF 
+	#          ANY KIND, INCLUDING BUT NOT LIMITED TO MERCHANTABILITY AND/OR FITNESS FOR
+	#          A PARTICULAR PURPOSE.  ALL RISKS OF DAMAGE REMAINS WITH THE USER, EVEN IF
+	#          THE AUTHOR, SUPPLIER OR DISTRIBUTOR HAS BEEN ADVISED OF THE POSSIBILITY OF
+	#          ANY SUCH DAMAGE.  IF YOUR STATE DOES NOT PERMIT THE COMPLETE LIMITATION OF
+	#          LIABILITY, THEN DELETE THIS FILE SINCE YOU ARE NOW PROHIBITED TO HAVE IT.
+	####################################################################################
+    [CmdletBinding()]
+    
+	param (
+        [Parameter(Mandatory=$true,ValueFromPipeline=$true)]$Path, 
+        [String] $OutputDelimiter = &quot;`n&quot;, 
+        [Switch] $RunStatsOnly,
+        [Switch] $ShowProgress
+    )
+	
+	if ($Path -match &quot;/\?|/help|-h|-help|--h|--help&quot;) 
+	{ 
+		&quot;`nPurpose: Process nmap XML output files (www.nmap.org).`n&quot;
+		&quot;Example: Import-NmapXML scanfile.xml&quot;
+        &quot;Example: Import-NmapXML *.xml -runstatsonly `n&quot;
+		exit 
+	}
+
+	if ($Path -eq $null) {$Path = @(); $input | foreach { $Path += $_ } } 
+	if (($Path -ne $null) -and ($Path.gettype().name -eq &quot;String&quot;)) {$Path = dir $path} #To support wildcards in $path.  
+	$1970 = [DateTime] &quot;01 Jan 1970 01:00:00 GMT&quot;
+
+	if ($RunStatsOnly)
+	{
+		ForEach ($file in $Path) 
+		{
+			$xmldoc = new-object System.XML.XMLdocument
+			$xmldoc.Load($file)
+			$stat = ($stat = &quot; &quot; | select-object FilePath,FileName,Scanner,Profile,ProfileName,Hint,ScanName,Arguments,Options,NmapVersion,XmlOutputVersion,StartTime,FinishedTime,ElapsedSeconds,ScanTypes,TcpPorts,UdpPorts,IpProtocols,SctpPorts,VerboseLevel,DebuggingLevel,HostsUp,HostsDown,HostsTotal)
+			$stat.FilePath = $file.fullname
+			$stat.FileName = $file.name
+			$stat.Scanner = $xmldoc.nmaprun.scanner
+			$stat.Profile = $xmldoc.nmaprun.profile
+			$stat.ProfileName = $xmldoc.nmaprun.profile_name
+			$stat.Hint = $xmldoc.nmaprun.hint
+			$stat.ScanName = $xmldoc.nmaprun.scan_name
+			$stat.Arguments = $xmldoc.nmaprun.args
+			$stat.Options = $xmldoc.nmaprun.options
+			$stat.NmapVersion = $xmldoc.nmaprun.version
+			$stat.XmlOutputVersion = $xmldoc.nmaprun.xmloutputversion
+			$stat.StartTime = $1970.AddSeconds($xmldoc.nmaprun.start) 	
+			$stat.FinishedTime = $1970.AddSeconds($xmldoc.nmaprun.runstats.finished.time)
+			$stat.ElapsedSeconds = $xmldoc.nmaprun.runstats.finished.elapsed
+            
+            $xmldoc.nmaprun.scaninfo | foreach {
+                $stat.ScanTypes += $_.type + &quot; &quot;
+                $services = $_.services  #Seems unnecessary, but solves a problem. 
+
+                if ($services.contains(&quot;-&quot;))
+                {
+                    #In the original XML, ranges of ports are summarized, e.g., &quot;500-522&quot;, 
+                    #but the script will list each port separately for easier searching.
+                    $array = $($services.replace(&quot;-&quot;,&quot;..&quot;)).Split(&quot;,&quot;)
+                    $temp  = @($array | where { $_ -notlike &quot;*..*&quot; })  
+                    $array | where { $_ -like &quot;*..*&quot; } | foreach { invoke-expression &quot;$_&quot; } | foreach { $temp += $_ } 
+                    $temp = [Int32[]] $temp | sort 
+                    $services = [String]::Join(&quot;,&quot;,$temp) 
+                } 
+                    
+                switch ($_.protocol)
+                {
+                    &quot;tcp&quot;  { $stat.TcpPorts  = $services ; break }
+                    &quot;udp&quot;  { $stat.UdpPorts  = $services ; break }
+                    &quot;ip&quot;   { $stat.IpProtocols = $services ; break }
+                    &quot;sctp&quot; { $stat.SctpPorts = $services ; break }
+                }
+            } 
+            
+            $stat.ScanTypes = $($stat.ScanTypes).Trim()
+            
+			$stat.VerboseLevel = $xmldoc.nmaprun.verbose.level
+			$stat.DebuggingLevel = $xmldoc.nmaprun.debugging.level		
+			$stat.HostsUp = $xmldoc.nmaprun.runstats.hosts.up
+			$stat.HostsDown = $xmldoc.nmaprun.runstats.hosts.down		
+			$stat.HostsTotal = $xmldoc.nmaprun.runstats.hosts.total
+			$stat 			
+		}
+		return #Don't process hosts.  
+	}
+	
+	ForEach ($file in $Path) {
+		If ($ShowProgress) { [Console]::Error.WriteLine(&quot;[&quot; + (get-date).ToLongTimeString() + &quot;] Starting $file&quot; ) }
+
+		$xmldoc = new-object System.XML.XMLdocument
+		$xmldoc.Load($file)
+		
+		# Process each of the &lt;host&gt; nodes from the nmap report.
+		$i = 0  #Counter for &lt;host&gt; nodes processed.
+		$xmldoc.nmaprun.host | foreach-object { 
+			$hostnode = $_   # $hostnode is a &lt;host&gt; node in the XML.
+		
+			# Init variables, with $entry being the custom object for each &lt;host&gt;. 
+			$service = &quot; &quot; #service needs to be a single space.
+			$entry = ($entry = &quot; &quot; | select-object FQDN, HostName, Status, IPv4, IPv6, MAC, Ports, Services, OS, Script) 
+
+			# Extract state element of status:
+			$entry.Status = $hostnode.status.state.Trim() 
+			if ($entry.Status.length -lt 2) { $entry.Status = &quot;&lt;no-status&gt;&quot; }
+
+			# Extract fully-qualified domain name(s), removing any duplicates.  
+            $hostnode.hostnames.hostname | foreach-object { $entry.FQDN += $_.name + &quot; &quot; } 
+			$entry.FQDN = [System.String]::Join(&quot; &quot;,@($entry.FQDN.Trim().Split(&quot; &quot;) | sort-object -unique)) #Avoid -Join and -Split for now
+			if ($entry.FQDN.Length -eq 0) { $entry.FQDN = &quot;&lt;no-fullname&gt;&quot; }
+
+			# Note that this code cheats, it only gets the hostname of the first FQDN if there are multiple FQDNs.
+			if ($entry.FQDN.Contains(&quot;.&quot;)) { $entry.HostName = $entry.FQDN.Substring(0,$entry.FQDN.IndexOf(&quot;.&quot;)) }
+			elseif ($entry.FQDN -eq &quot;&lt;no-fullname&gt;&quot;) { $entry.HostName = &quot;&lt;no-hostname&gt;&quot; }
+			else { $entry.HostName = $entry.FQDN }
+
+			# Process each of the &lt;address&gt; nodes, extracting by type.
+			$hostnode.address | foreach-object {
+				if ($_.addrtype -eq &quot;ipv4&quot;) { $entry.IPv4 += $_.addr + &quot; &quot;}
+				if ($_.addrtype -eq &quot;ipv6&quot;) { $entry.IPv6 += $_.addr + &quot; &quot;}
+				if ($_.addrtype -eq &quot;mac&quot;)  { $entry.MAC  += $_.addr + &quot; &quot;}
+			}        
+			if ($entry.IPv4 -eq $null) { $entry.IPv4 = &quot;&lt;no-ipv4&gt;&quot; } else { $entry.IPv4 = $entry.IPv4.Trim()}
+			if ($entry.IPv6 -eq $null) { $entry.IPv6 = &quot;&lt;no-ipv6&gt;&quot; } else { $entry.IPv6 = $entry.IPv6.Trim()}
+			if ($entry.MAC  -eq $null) { $entry.MAC  = &quot;&lt;no-mac&gt;&quot; }  else { $entry.MAC  = $entry.MAC.Trim() }
+
+
+			# Process all ports from &lt;ports&gt;&lt;port&gt;, and note that &lt;port&gt; does not contain an array if it only has one item in it.
+			if ($hostnode.ports.port -eq $null) { $entry.Ports = &quot;&lt;no-ports&gt;&quot; ; $entry.Services = &quot;&lt;no-services&gt;&quot; } 
+			else 
+			{
+				$hostnode.ports.port | foreach-object {
+					if ($_.service.name -eq $null) { $service = &quot;unknown&quot; } else { $service = $_.service.name } 
+					$entry.Ports += $_.state.state + &quot;:&quot; + $_.protocol + &quot;:&quot; + $_.portid + &quot;:&quot; + $service + $OutputDelimiter 
+                    # Build Services property. What a mess...but exclude non-open/non-open|filtered ports and blank service info, and exclude servicefp too for the sake of tidiness.
+                    if ($_.state.state -like &quot;open*&quot; -and ($_.service.tunnel.length -gt 2 -or $_.service.product.length -gt 2 -or $_.service.proto.length -gt 2)) { $entry.Services += $_.protocol + &quot;:&quot; + $_.portid + &quot;:&quot; + $service + &quot;:&quot; + ($_.service.product + &quot; &quot; + $_.service.version + &quot; &quot; + $_.service.tunnel + &quot; &quot; + $_.service.proto + &quot; &quot; + $_.service.rpcnum).Trim() + &quot; &lt;&quot; + ([Int] $_.service.conf * 10) + &quot;%-confidence&gt;$OutputDelimiter&quot; }
+				}
+				$entry.Ports = $entry.Ports.Trim()
+                if ($entry.Services -eq $null) { $entry.Services = &quot;&lt;no-services&gt;&quot; } else { $entry.Services = $entry.Services.Trim() }
+			}
+
+
+			# Extract fingerprinted OS type and percent of accuracy.
+			$hostnode.os.osmatch | foreach-object {$entry.OS += $_.name + &quot; &lt;&quot; + ([String] $_.accuracy) + &quot;%-accuracy&gt;$OutputDelimiter&quot;} 
+            $hostnode.os.osclass | foreach-object {$entry.OS += $_.type + &quot; &quot; + $_.vendor + &quot; &quot; + $_.osfamily + &quot; &quot; + $_.osgen + &quot; &lt;&quot; + ([String] $_.accuracy) + &quot;%-accuracy&gt;$OutputDelimiter&quot;}  
+            $entry.OS = $entry.OS.Replace(&quot;  &quot;,&quot; &quot;)
+            $entry.OS = $entry.OS.Replace(&quot;&lt;%-accuracy&gt;&quot;,&quot;&quot;) #Sometimes no osmatch.
+			$entry.OS = $entry.OS.Trim()
+			if ($entry.OS.length -lt 16) { $entry.OS = &quot;&lt;no-os&gt;&quot; }
+
+            
+            # Extract script output, first for port scripts, then for host scripts.
+            $hostnode.ports.port | foreach-object {
+                if ($_.script -ne $null) { 
+                    $entry.Script += &quot;&lt;PortScript id=&quot;&quot;&quot; + $_.script.id + &quot;&quot;&quot;&gt;$OutputDelimiter&quot; + ($_.script.output -replace &quot;`n&quot;,&quot;$OutputDelimiter&quot;) + &quot;$OutputDelimiter&lt;/PortScript&gt; $OutputDelimiter $OutputDelimiter&quot; 
+                }
+            } 
+            
+            if ($hostnode.hostscript -ne $null) {
+                $hostnode.hostscript.script | foreach-object {
+                    $entry.Script += '&lt;HostScript id=&quot;' + $_.id + '&quot;&gt;' + $OutputDelimiter + ($_.output.replace(&quot;`n&quot;,&quot;$OutputDelimiter&quot;)) + &quot;$OutputDelimiter&lt;/HostScript&gt; $OutputDelimiter $OutputDelimiter&quot; 
+                }
+            }
+            
+            if ($entry.Script -eq $null) { $entry.Script = &quot;&lt;no-script&gt;&quot; } 
+    
+    
+			# Emit custom object from script.
+			$i++  #Progress counter...
+			$entry
+		}
+
+		If ($ShowProgress) { [Console]::Error.WriteLine(&quot;[&quot; + (get-date).ToLongTimeString() + &quot;] Finished $file, processed $i entries.&quot; ) }
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

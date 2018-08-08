@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="foureight84">
+    <title>Boots UI Update Sample - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Boots UI Update Sample</h1>
+<h3><a href="//scripts/2305.ps1">download</a></h3>
+<p>This sample was put together with Jaykul's help and bits and pieces were taken from the Sample.ps1 distributed with PowerBoots</p>
+<p>Shows how you can invoke a long running function from an event handler using background jobs in order to maintain UI responsiveness.</p>
+<p>**** IMPORTANT ****
+Make sure that Powershell is running on .NET 2.0 CLR instead of .NET 4.0. Background jobs and remoting does not function properly under 4.0.</p>
+<pre><code class="language-posh">Import-Module PowerBoots
+
+# This simulates a download function, say Jaykul's Get-Webfile
+# You can output current progress for a large file, or if it's an array of links then out put the current (index/length)%
+# You will need to run the function as a background thread in order for it to not interfere with the UI thread (freezes UI) when called from event handler.
+Function Start-FakeDownload {
+	$global:job = Start-Job {
+		foreach ($i in $(1..50)){
+			sleep 0.7
+			($i/50)*100
+		}
+	}
+}
+
+# GUI using boots. Registers controls as global variables.
+
+$global:Window = Boots -Async -Passthru -Title &quot;Progress Meter&quot; {
+	StackPanel  {
+		ProgressBar -Height 25 -Width 250 -Name &quot;Progress&quot; | tee -var global:progress
+		Button &quot;Download&quot; -Name &quot;Download&quot; | tee -var global:download
+		Textblock | Tee -var global:status
+	}
+}
+
+# Add event handler for the Download button.
+# Runs Background job and updates Ui
+$download.Add_Click({
+	# Prevents download from being pressed while running ... causes overload with $timer.
+	$download.IsEnabled = $false
+	# Get background job out and updates controls with value
+	$updateblock = {
+		# If job is running, or just completed.
+		# Notice the -Keep usage. Job result/output clears everytime you Receive-Job.
+		# -Keep allows us to get the result from the background job multiple times and also serves as a marker to figure out when the job completes
+		if($($job.State -eq &quot;Running&quot;) -or $($($job.State -eq &quot;Completed&quot;) -and $($(Receive-Job $job -Keep)[-1] -eq 100))){
+			Invoke-BootsWindow $Window {
+				$progress.Value = $(Receive-Job $job -Keep)[-1]
+				$status.Text = &quot;$($(Receive-Job $job)[-1])`% done&quot;
+			}
+		}
+		if($($job.State -eq &quot;Completed&quot;) -and $($(Receive-Job $job) -eq $null)){
+			Invoke-BootsWindow $Window {
+				$status.Text = &quot;Download Complete&quot;
+			}
+			$timer.Stop()
+			$download.IsEnabled = $true
+		}
+	}
+	$timer = new-object System.Windows.Threading.DispatcherTimer
+	$timer.Interval = [TimeSpan]&quot;0:0:3&quot;
+	$timer.Add_Tick( $updateBlock )
+	Start-FakeDownload 
+	$timer.start()
+})
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

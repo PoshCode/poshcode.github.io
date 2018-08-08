@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Andy Niel">
+    <title>Remote Support Multitool - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Remote Support Multitool</h1>
+<h3><a href="//scripts/5430.ps1">download</a></h3>
+<p>This is a Powershell GUI that contains several remote support tools. Can also be downloaded here: http://gallery.technet.microsoft.com/scriptcenter/Remote-Support-Multitool-A-ae4d03ac</p>
+<pre><code class="language-posh">################################################################ info
+
+$title = &quot;MultiTool.ps1&quot;
+$desc = &quot;The Remote Support MultiTool!&quot;
+$Rev = &quot;v1.7 8/06/14&quot;
+$By = &quot;Written by Andy Niel&quot;
+$info = &quot;This is a simple utility I created with Powershell that gathers some common support tools together into a single graphical interface.`r`n`r`n***USAGE***`r`n`r`nSearch (by hostname or IP) - In the text box enter the system you wish to manage and click the checkmark or press Enter.`r`n`r`nSearch (by user name) - Click Find and in the search box type the users first or last name. When the search completes double-click the system you wish to manage.`r`n`r`nIf the name cant be resolved you will receive an error, otherwise you will be prompted to select a remote tool from the menu.`r`n`r`nPressing Escape or clicking the X quits the script&quot;
+$tools = &quot;***TOOLS***`r`n`r`nRemote Assistance - Sends a Microsoft Remote Assistance invitation to the target system.`r`n`r`nRemote Desktop - Creates a Remote Desktop connection to the target system without prompting for authentication (you must run the Update Credentials tool first to store your credentials)`r`n`r`nRun PsExec - Accesses CMD console on target system, Note: must have PsTools installed (http://technet.microsoft.com/en-us/sysinternals/bb897553.aspx)`r`n`r`nRegistry - Opens Registry on the target system`r`n`r`nServices - Opens Services on the target system`r`n`r`nComputer Management - Opens Computer Management for the target system`r`n`r`nEvent Viewer - Opens Event Viewer on the target system`r`n`r`nPrint Management - Opens Print Management for the target system`r`n`r`nUpdate Credentials - Creates or updates an encrypted credential file stored at location stored in $credpath variable (default: c:\)`r`n`r`nUNC Path - Opens a UNC path to c:\ on the target system`r`n`r`nAbout Remote Support Multitool... - Opens this help file =)&quot;
+
+################################################################ sets variables
+
+$ErrorActionPreference = &quot;silentlycontinue&quot;
+$script:credpath = &quot;C:\&quot;
+$u = $env:username
+$script:message = &quot;Enter a Hostname or IP Address:&quot;
+$script:message2 = &quot;Enter Name to Search...&quot;
+$script:comp = &quot; &quot;
+$script:output = $null
+$user = $null
+$pc = $null
+
+################################################################ hides console
+
+Add-Type -Name Window -Namespace Console -MemberDefinition '
+[DllImport(&quot;Kernel32.dll&quot;)]
+public static extern IntPtr GetConsoleWindow();
+
+[DllImport(&quot;user32.dll&quot;)]
+public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
+'
+function Hide-Console {
+$consolePtr = [Console.Window]::GetConsoleWindow()
+#0 hide
+[Console.Window]::ShowWindow($consolePtr, 0)
+}
+
+hide-console
+
+################################################################ sets credentials
+
+function setcred {
+$output = &quot;Enter Domain\Username &amp; Pass:&quot;
+$output | out-string
+$outputBox.text=$output
+$credential = Get-Credential $env:userdomain\$env:username
+$credential.Password | ConvertFrom-SecureString | Set-Content $credpath\$u.txt
+$output = &quot;Credential saved to $credpath&quot; | out-string
+$outputBox.text=$output
+start-sleep 4
+$message | out-string
+$outputBox.text=$message
+}
+
+################################################################ gets credentials
+
+function getcred {
+$script:pass = cat $credpath\$u.txt | convertto-securestring
+$script:credential = new-object -typename System.Management.Automation.PSCredential -argumentlist $u, $pass
+$script:p = $credential.GetNetworkCredential().password
+}
+
+################################################################ starts unc path
+
+function uncpath {
+ii \\$comp\c$
+}
+
+################################################################ starts computer management
+
+function compmgmt {
+compmgmt.msc /computer=$comp
+}
+
+################################################################ starts event viewer
+
+function eventvwr {
+eventvwr.msc /computer:\\$comp
+}
+
+################################################################ starts remote assistance
+
+function msra {
+msra.exe /offerra $comp
+}
+
+################################################################ starts psexec
+
+function psexec {
+cmd.exe /c start cmd /k psexec \\$comp cmd
+}
+
+################################################################ starts print management
+
+function prtmgmt {
+add-type -assemblyname microsoft.visualbasic
+add-type -assemblyname system.windows.forms
+start-process printmanagement.msc
+$a = Get-Process | Where-Object {$_.Name -like &quot;printmanagement&quot;}
+[Microsoft.VisualBasic.Interaction]::AppActivate($a)
+start-sleep 2
+[System.Windows.Forms.SendKeys]::SendWait(&quot;{LEFT 10}&quot;)
+start-sleep 1
+[System.Windows.Forms.SendKeys]::SendWait(&quot;%(a)&quot;)
+[System.Windows.Forms.SendKeys]::SendWait(&quot;{ENTER}&quot;)
+[Microsoft.VisualBasic.Interaction]::AppActivate($a)
+start-sleep 1
+[System.Windows.Forms.SendKeys]::SendWait($comp)
+start-sleep .5
+[System.Windows.Forms.SendKeys]::SendWait(&quot;{ENTER}&quot;)
+[Microsoft.VisualBasic.Interaction]::AppActivate($a)
+[System.Windows.Forms.SendKeys]::SendWait(&quot;{TAB 4}&quot;)
+[System.Windows.Forms.SendKeys]::SendWait(&quot;{ENTER}&quot;)
+[System.Windows.Forms.SendKeys]::SendWait(&quot;{DOWN}{DOWN}&quot;)
+}
+
+################################################################ starts remote desktop
+
+function script:rdpc {
+getcred
+cmdkey /generic:TERMSRV/$comp /user:$u /pass:$p
+mstsc /v:$comp
+}
+
+################################################################ tests for credentials
+
+function creds {
+if (test-path $credpath\$u.txt) {
+rdpc
+}
+else {
+setcred
+rdpc
+}
+}
+
+################################################################ starts registry editor
+
+function reged {
+add-type -assemblyname microsoft.visualbasic
+add-type -assemblyname system.windows.forms
+start-process regedit.exe
+$a = Get-Process | Where-Object {$_.Name -like &quot;regedit&quot;}
+[Microsoft.VisualBasic.Interaction]::AppActivate($a)
+start-sleep 1
+[System.Windows.Forms.SendKeys]::SendWait(&quot;%(f)&quot;)
+[System.Windows.Forms.SendKeys]::SendWait(&quot;c&quot;)
+[Microsoft.VisualBasic.Interaction]::AppActivate($a)
+start-sleep 1
+[System.Windows.Forms.SendKeys]::SendWait($comp)
+[System.Windows.Forms.SendKeys]::SendWait(&quot;{ENTER}&quot;)
+}
+
+################################################################ starts services
+
+function servcs {
+services.msc /computer=$comp
+}
+
+################################################################ checks if exists
+
+function script:getcomp {
+$script:comp=$textfield.text
+if (Test-Connection -count 1 -computername $Comp -quiet) {
+$output = &quot;Select a Remote Tool...&quot; | out-string
+$outputBox.text=$output
+}
+else {
+write-host `a
+$output = &quot;Not Found! Verify Hostname/IP&quot; | out-string
+$outputBox.text=$output
+start-sleep 4
+$message | out-string
+$outputBox.text=$message
+}
+}
+
+################################################################ finds user pc
+
+function finduser {
+import-module activedirectory
+$script:user=$textfield2.text
+$user = &quot;*&quot; + $user + &quot;*&quot;
+$var = Get-ADComputer -Filter {Description -Like $user} -property *
+if ($var -eq $null) {
+write-host `a
+$output = &quot;Not Found! Verify Spelling...&quot; | out-string
+$OutputBox2.text=$output
+start-sleep 4
+$message2 | out-string
+$OutputBox2.text=$message2
+}
+else {
+$listview.items.Clear()
+foreach ($pc in $var) {
+$row = New-Object System.Windows.Forms.ListViewItem($pc.name)
+$row.SubItems.Add($pc.description)
+$row.SubItems.Add($pc.ipv4address)
+$Listview.Items.Add($row)
+}
+$output = &quot;Select User PC...&quot; | out-string
+$OutputBox2.text=$output
+}
+}
+
+################################################################ copy selected
+
+function copycomp {
+$comp = $listview.SelectedItems[0].text
+$comp | out-string
+$textfield.text=$comp
+getcomp
+}
+
+################################################################ setup GUI
+
+[void] [reflection.assembly]::LoadWithPartialName( &quot;System.Windows.Forms&quot;)
+
+function about {
+$form2.controls.add($label2)
+$form2.controls.add($label3)
+$form2.controls.add($label4)
+$form2.controls.add($label5)
+$form2.controls.add($label6)
+$form2.controls.add($label7)
+$form2.ShowDialog()
+}
+
+function search {
+$form3.controls.add($textfield2)
+$Form3.Controls.Add($outputBox2) 
+$form3.Controls.Add($GOButton2)
+$Form3.controls.add($listview)
+$form3.ShowDialog()
+}
+
+$form= New-Object Windows.Forms.Form
+$Form.FormBorderStyle=[System.Windows.Forms.FormBorderStyle]::FixedDialog
+$form.Size = New-Object Drawing.Point 344,527
+$form.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,11,[System.Drawing.FontStyle]::regular)
+$Form.ForeColor = &quot;White&quot;
+$form.BackColor = &quot;Black&quot; 
+$Form.MinimizeBox = $False
+$Form.MaximizeBox = $False
+$Form.SizeGripStyle = &quot;Hide&quot;
+$Form.WindowState = &quot;Normal&quot;
+$form.text = &quot;The Remote Support MultiTool!&quot;
+$Form.KeyPreview = $True
+$Form.Add_KeyDown({if ($_.KeyCode -eq &quot;Enter&quot;){getcomp}})
+$Form.Add_KeyDown({if ($_.KeyCode -eq &quot;Escape&quot;){$Form.Close()}})
+
+$form2= New-Object Windows.Forms.Form
+$Form2.AutoSize = $True
+$Form2.AutoSizeMode = &quot;GrowAndShrink&quot;
+$Form2.MinimizeBox = $False
+$Form2.MaximizeBox = $False
+$Form2.SizeGripStyle = &quot;Hide&quot;
+$Form2.StartPosition = &quot;WindowsDefaultLocation&quot;
+$Form2.WindowState = &quot;Normal&quot;
+$Form2.BackColor = &quot;Black&quot;
+$Form2.ForeColor = &quot;Chartreuse&quot;
+$form2.text = &quot;About...&quot;
+$Form2.KeyPreview = $True
+$Form2.Add_KeyDown({if ($_.KeyCode -eq &quot;Escape&quot;){$Form2.Close()}})
+
+$form3= New-Object Windows.Forms.Form
+$Form3.AutoSize = $True
+$Form3.AutoSizeMode = &quot;GrowAndShrink&quot;
+$Form3.MinimizeBox = $False
+$Form3.MaximizeBox = $False
+$Form3.SizeGripStyle = &quot;Hide&quot;
+$Form3.StartPosition = &quot;WindowsDefaultLocation&quot;
+$Form3.WindowState = &quot;Normal&quot;
+$Form3.BackColor = &quot;Black&quot;
+$Form3.ForeColor = &quot;Chartreuse&quot;
+$form3.text = &quot;Search for User PC...&quot;
+$Form3.KeyPreview = $True
+$Form3.Add_KeyDown({if ($_.KeyCode -eq &quot;Enter&quot;){finduser}})
+$Form3.Add_KeyDown({if ($_.KeyCode -eq &quot;Escape&quot;){$Form3.Close()}})
+
+$label = New-Object Windows.Forms.Label
+$label.Location = New-Object Drawing.Point 18,18
+$label.Size = New-Object Drawing.Point 300,24
+$label.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,12,[System.Drawing.FontStyle]::bold)
+$Label.BackColor = &quot;Transparent&quot;
+$label.text = &quot;The Remote Support MultiTool!&quot;
+
+$label2 = New-Object Windows.Forms.Label
+$label2.Location = New-Object Drawing.Point 15,15
+$label2.Size = New-Object Drawing.Point 200,20
+$label2.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,10,[System.Drawing.FontStyle]::bold)
+$label2.ForeColor = &quot;White&quot;
+$label2.text = $title
+
+$label3 = New-Object Windows.Forms.Label
+$label3.Location = New-Object Drawing.Point 15,44
+$label3.Size = New-Object Drawing.Point 220,20
+$label3.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,10,[System.Drawing.FontStyle]::regular)
+$label3.text = $desc
+
+$label4 = New-Object Windows.Forms.Label
+$label4.Location = New-Object Drawing.Point 15,64
+$label4.Size = New-Object Drawing.Point 200,20
+$label4.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,10,[System.Drawing.FontStyle]::regular)
+$label4.text = $rev
+
+$label5 = New-Object Windows.Forms.Label
+$label5.Location = New-Object Drawing.Point 15,84
+$label5.Size = New-Object Drawing.Point 200,20
+$label5.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,10,[System.Drawing.FontStyle]::italic)
+$label5.text = $by
+
+$label6 = New-Object Windows.Forms.Label
+$label6.Location = New-Object Drawing.Point 15,110
+$label6.Size = New-Object Drawing.Point 600,210
+$Label6.MaximumSize = new Size(400,0)
+$label6.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,8,[System.Drawing.FontStyle]::regular)
+$label6.text = $info
+
+$label7 = New-Object Windows.Forms.Label
+$label7.Location = New-Object Drawing.Point 15,330
+$label7.Size = New-Object Drawing.Point 600,380
+$Label7.MaximumSize = new Size(400,0)
+$label7.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,8,[System.Drawing.FontStyle]::regular)
+$label7.text = $tools
+
+$textfield = New-Object Windows.Forms.TextBox
+$textfield.BackColor = &quot;White&quot;
+$textfield.ForeColor = &quot;Black&quot;
+$textfield.Font = New-Object System.Drawing.Font(&quot;Arial&quot;,12,[System.Drawing.FontStyle]::bold)
+$textfield.Location = New-Object Drawing.Point 20,56
+$textfield.Size = New-Object Drawing.Point 202,0
+
+$GOButton = New-Object System.Windows.Forms.Button
+$GOButton.Location = New-Object System.Drawing.Size(223,56)
+$GOButton.Size = New-Object System.Drawing.Size(28,28)
+$GOButton.ForeColor = &quot;Chartreuse&quot;
+$GOButton.BackColor = &quot;DimGray&quot; 
+$GOButton.Font = New-Object System.Drawing.Font(&quot;Webdings&quot;,22,[System.Drawing.FontStyle]::bold)
+$GOButton.Text = &quot;a&quot;
+$GOButton.Add_Click({getcomp})
+
+$FindButton = New-Object System.Windows.Forms.Button
+$FindButton.Location = New-Object System.Drawing.Size(252,56)
+$FindButton.Size = New-Object System.Drawing.Size(59,28)
+$FindButton.ForeColor = &quot;Chartreuse&quot;
+$FindButton.BackColor = &quot;DimGray&quot; 
+$FindButton.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,11,[System.Drawing.FontStyle]::bold)
+$FindButton.Text = &quot;Find&quot;
+$FindButton.Add_Click({search})
+
+$outputBox = New-Object System.Windows.Forms.TextBox 
+$outputBox.Location = New-Object System.Drawing.Size 20,84 
+$outputBox.Size = New-Object System.Drawing.Size 289,20 
+$outputbox.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,13,[System.Drawing.FontStyle]::regular)
+$OutputBox.ReadOnly = &quot;true&quot;
+$OutputBox.BackColor = &quot;Black&quot;
+$OutputBox.ForeColor = &quot;Chartreuse&quot;
+$OutputBox.Text = $script:message
+
+$textfield2 = New-Object Windows.Forms.TextBox
+$textfield2.BackColor = &quot;White&quot;
+$textfield2.ForeColor = &quot;Black&quot;
+$textfield2.Font = New-Object System.Drawing.Font(&quot;Arial&quot;,12,[System.Drawing.FontStyle]::bold)
+$textfield2.Location = New-Object Drawing.Point 3,3
+$textfield2.Size = New-Object Drawing.Point 431,0
+
+$GOButton2 = New-Object System.Windows.Forms.Button
+$GOButton2.Location = New-Object System.Drawing.Size(436,3)
+$GOButton2.Size = New-Object System.Drawing.Size(28,28)
+$GOButton2.ForeColor = &quot;Chartreuse&quot;
+$GOButton2.BackColor = &quot;DimGray&quot; 
+$GOButton2.Font = New-Object System.Drawing.Font(&quot;Webdings&quot;,22,[System.Drawing.FontStyle]::bold)
+$GOButton2.Text = &quot;a&quot;
+$GOButton2.Add_Click({finduser})
+
+$outputBox2 = New-Object System.Windows.Forms.TextBox 
+$outputBox2.Location = New-Object System.Drawing.Size 3,31 
+$outputBox2.Size = New-Object System.Drawing.Size 460,20 
+$outputbox2.Font = New-Object System.Drawing.Font(&quot;Verdana&quot;,13,[System.Drawing.FontStyle]::regular)
+$OutputBox2.ReadOnly = &quot;true&quot;
+$OutputBox2.BackColor = &quot;Black&quot;
+$OutputBox2.ForeColor = &quot;Chartreuse&quot;
+$OutputBox2.Text = $script:message2
+
+$listView = New-Object System.Windows.Forms.ListView
+$listView.View = 'Details'
+$ListView.Location = New-Object System.Drawing.Size(3,62)
+$listview.Font = New-Object System.Drawing.Font(&quot;arial&quot;,11,[System.Drawing.FontStyle]::regular)
+$listview.Add_DoubleClick({$form3.Close();copycomp})
+$listView.Width = 460
+$listView.Height = 120
+
+$colPC = $listView.Columns.Add('Hostname')
+$coluser = $listView.Columns.Add('User')
+$colip = $listView.Columns.Add('IP Address')
+$colpc.width = 160
+$coluser.width = 163
+$colip.width = 133
+
+$button = New-Object Windows.Forms.Button
+$button.Location = New-Object System.Drawing.Size(20,135) 
+$button.Size = New-Object Drawing.Point 140,50
+$Button.ForeColor = &quot;White&quot;
+$Button.BackColor = &quot;Crimson&quot; 
+$button.text = &quot;Remote Assistance&quot;
+$button.add_click({msra})
+
+$button2 = New-Object Windows.Forms.Button
+$Button2.Location = New-Object System.Drawing.Size(20,195)
+$button2.Size = New-Object Drawing.Point 140,50
+$Button2.ForeColor = &quot;White&quot;
+$Button2.BackColor = &quot;DarkCyan&quot; 
+$button2.text = &quot;Run PsExec&quot;
+$button2.add_click({psexec})
+
+$button3 = New-Object Windows.Forms.Button
+$Button3.Location = New-Object System.Drawing.Size(20,255)
+$button3.Size = New-Object Drawing.Point 140,50
+$Button3.ForeColor = &quot;White&quot;
+$Button3.BackColor = &quot;Green&quot; 
+$button3.text = &quot;Services&quot;
+$button3.add_click({servcs})
+
+$button4 = New-Object Windows.Forms.Button
+$Button4.Location = New-Object System.Drawing.Size(20,315)
+$button4.Size = New-Object Drawing.Point 140,50
+$Button4.ForeColor = &quot;White&quot;
+$Button4.BackColor = &quot;DarkOrange&quot; 
+$button4.text = &quot;Event Viewer&quot;
+$button4.add_click({eventvwr})
+
+$button5 = New-Object Windows.Forms.Button
+$button5.Location = New-Object System.Drawing.Size(20,375) 
+$button5.Size = New-Object Drawing.Point 140,50
+$Button5.ForeColor = &quot;White&quot;
+$Button5.BackColor = &quot;Indigo&quot; 
+$button5.text = &quot;Update Credentials&quot;
+$button5.add_click({setcred})
+
+$button6 = New-Object Windows.Forms.Button
+$Button6.Location = New-Object System.Drawing.Size(170,135)
+$button6.Size = New-Object Drawing.Point 140,50
+$Button6.ForeColor = &quot;White&quot;
+$Button6.BackColor = &quot;RoyalBlue&quot;  
+$button6.text = &quot;Remote Desktop&quot;
+$button6.add_click({rdpc})
+
+$button7 = New-Object Windows.Forms.Button
+$Button7.Location = New-Object System.Drawing.Size(170,195)
+$button7.Size = New-Object Drawing.Point 140,50
+$Button7.ForeColor = &quot;White&quot;
+$Button7.BackColor = &quot;OrangeRed&quot; 
+$button7.text = &quot;Registry&quot;
+$button7.add_click({reged})
+
+$button8 = New-Object Windows.Forms.Button
+$Button8.Location = New-Object System.Drawing.Size(170,255)
+$button8.Size = New-Object Drawing.Point 140,50
+$Button8.ForeColor = &quot;White&quot;
+$Button8.BackColor = &quot;DarkSlateBlue&quot; 
+$button8.text = &quot;Computer Management&quot;
+$button8.add_click({compmgmt})
+
+$button9 = New-Object Windows.Forms.Button
+$Button9.Location = New-Object System.Drawing.Size(170,315)
+$button9.Size = New-Object Drawing.Point 140,50
+$Button9.ForeColor = &quot;White&quot;
+$Button9.BackColor = &quot;MediumVioletRed&quot; 
+$button9.text = &quot;Print Management&quot;
+$button9.add_click({prtmgmt})
+
+$button10 = New-Object Windows.Forms.Button
+$button10.Location = New-Object System.Drawing.Size(170,375) 
+$button10.Size = New-Object Drawing.Point 140,50
+$Button10.ForeColor = &quot;White&quot;
+$Button10.BackColor = &quot;OliveDrab&quot; 
+$button10.text = &quot;UNC Path&quot;
+$button10.add_click({uncpath})
+
+$button11 = New-Object Windows.Forms.Button
+$Button11.Location = New-Object System.Drawing.Size(20,445)
+$button11.Size = New-Object Drawing.Point 290,25
+$Button11.ForeColor = &quot;White&quot;
+$Button11.BackColor = &quot;DimGray&quot; 
+$button11.text = &quot;About Remote Support MultiTool...&quot;
+$button11.add_click({about})
+
+$form.controls.add($label)
+$form.controls.add($textfield)
+$Form.Controls.Add($outputBox) 
+$form.Controls.Add($GOButton)
+$form.Controls.Add($findButton)
+$form.controls.add($button)
+$form.controls.add($button2)
+$form.controls.add($button3)
+$form.controls.add($button4)
+$form.controls.add($button5)
+$form.controls.add($button6)
+$form.controls.add($button7)
+$form.controls.add($button8)
+$form.controls.add($button9)
+$form.controls.add($button10)
+$form.controls.add($button11)
+$form.ShowDialog()
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

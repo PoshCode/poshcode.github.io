@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Scripty Harry">
+    <title>Get-FileEncoding.ps1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-FileEncoding.ps1</h1>
+<h3><a href="//scripts/6684.ps1">download</a> - <a href="//scripts/2153.md">parent</a></h3>
+<p>adapted from original by Lee Holmes
+changed statement &quot;$Bytes = (Get-Content -encoding byte -readcount $EncodingLength $path)[0]&quot; to &quot;$Bytes = (Get-Content -encoding byte -readcount $EncodingLength -TotalCount $EncodingLength $path)&quot;
+Encapsulated script into a function
+Added DefaultEncoding parameter</p>
+<pre><code class="language-posh">&lt;#
+.SYNOPSIS
+    Gets the encoding of a file
+ 
+.EXAMPLE
+    Get-FileEncoding.ps1 .\UnicodeScript.ps1
+    
+    BodyName          : unicodeFFFE
+    EncodingName      : Unicode (Big-Endian)
+    HeaderName        : unicodeFFFE
+    WebName           : unicodeFFFE
+    WindowsCodePage   : 1200
+    IsBrowserDisplay  : False
+    IsBrowserSave     : False
+    IsMailNewsDisplay : False
+    IsMailNewsSave    : False
+    IsSingleByte      : False
+    EncoderFallback   : System.Text.EncoderReplacementFallback
+    DecoderFallback   : System.Text.DecoderReplacementFallback
+    IsReadOnly        : True
+    CodePage          : 1201
+
+.PARAMETER Path
+    Mandatory string parameter to specify the path to the file you wish to detect the encoding from
+
+.PARAMETER DefaultEncoding
+    Optional parameter to specify the default encoding, when no encoding can be detected
+    
+.NOTES
+    From Windows PowerShell Cookbook (O'Reilly)
+    by Lee Holmes (http://www.leeholmes.com/guide)
+    Version: 1.3
+    
+    Version History:
+    1.0: - 2011/??/??, Lee Holmes - initial release
+    1.1: - 2017/01/13, Scripty Harry - changed statement &quot;$Bytes = (Get-Content -encoding byte -readcount $EncodingLength $path)[0]&quot;
+                                      to &quot;$Bytes = (Get-Content -encoding byte -readcount $EncodingLength -TotalCount $EncodingLength $path)&quot;
+                                      This prevents outrageous memory usage when reading large(ish) files
+    1.2: - 2017/01/13, Scripty Harry - Encapsulated script into a function
+    1.3: - 2017/01/13, Scripty Harry - Added DefaultEncoding parameter
+#&gt;
+function Get-FileEncoding {
+    param(
+        ## The path of the file to get the encoding of.
+        [Parameter(Mandatory = $True, ValueFromPipelineByPropertyName = $True)]
+        [String]$Path,
+        
+        [Parameter(Mandatory = $False)]
+        [String]$DefaultEncoding = 'ASCII'
+    )
+     
+    Set-StrictMode -Version Latest
+     
+    ## The hashtable used to store our mapping of encoding bytes to their
+    ## name. For example, &quot;255-254 = Unicode&quot;
+    $Encodings = @{}
+     
+    ## Find all of the encodings understood by the .NET Framework. For each,
+    ## determine the bytes at the start of the file (the preamble) that the .NET
+    ## Framework uses to identify that encoding.
+    $EncodingMembers = [System.Text.Encoding] |
+        Get-Member -Static -MemberType Property
+     
+    $EncodingMembers | Foreach-Object {
+        $EncodingBytes = [System.Text.Encoding]::($_.Name).GetPreamble() -join '-'
+        $Encodings[$EncodingBytes] = $_.Name
+    }
+     
+    ## Find out the lengths of all of the preambles.
+    $EncodingLengths = $Encodings.Keys | Where-Object { $_ } |
+        Foreach-Object { ($_ -split &quot;-&quot;).Count }
+     
+    ## Assume the encoding is as specified by the $DefaultEncoding parameter
+    $Result = $DefaultEncoding
+     
+    ## Go through each of the possible preamble lengths, read that many
+    ## bytes from the file, and then see if it matches one of the encodings
+    ## we know about.
+    foreach($EncodingLength in $EncodingLengths | Sort -Descending)
+    {        
+        $Bytes = (Get-Content -encoding byte -readcount $EncodingLength -TotalCount $EncodingLength $path)
+        $Encoding = $Encodings[$Bytes -join '-']
+     
+        ## If we found an encoding that had the same preamble bytes,
+        ## save that output and break.
+        if($Encoding)
+        {
+            $Result = $Encoding
+            break
+        }
+    }
+     
+    ## Finally, output the encoding.
+    [System.Text.Encoding]::$Result
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

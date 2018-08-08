@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DaisukeMutaguchi">
+    <title>Send-Growl 3.0 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Send-Growl 3.0</h1>
+<h3><a href="//scripts/2611.ps1">download</a> - <a href="//scripts/1276.md">parent</a></h3>
+<p>This is the PowerShell 2.0 -only continuation of my Growl module -- redesigned as a proper &quot;module&quot; that can be used by (many) other scripts.</p>
+<p>It includes support for adding new apps, new message types, registering scriptblocks to handle Growl's callbacks, passing URL callbacks, etc.</p>
+<p>Original post &quot;here&quot;:http://HuddledMasses.org/growl-for-windows-from-powershell and future posts &quot;here&quot;:http://HuddledMasses.org/tag/growl will explain more about callbacks and sending notices to remote computers.</p>
+<p>2011/04/13 fix for Growl for Windows v2.0.6</p>
+<pre><code class="language-posh">## This is the first version of a Growl module (just dot-source to use in PowerShell 1.0)
+## v 1.0 supports a very simple notice, and no callbacks
+## v 2.0 supports registering multiple message types
+##       supports callbacks
+## v 2.1 redesigned to be a module used from apps, rather than it's own &quot;PowerGrowler&quot; app
+##
+## TODO:
+## * Test sending notices to other PCs directly
+## 2011/04/13 fix for Growl for Windows v2.0.6
+
+Set-StrictMode -Version 2
+## this is just a default now, you'll have opportunities to override it...
+$script:appName = &quot;PowerGrowler&quot;
+
+[Reflection.Assembly]::LoadFrom(&quot;$(Split-Path (gp HKCU:\Software\Growl).'(default)')\Growl.Connector.dll&quot;) | Out-Null
+if(!(Test-Path Variable:Global:PowerGrowlerNotices)) {
+   $global:PowerGrowlerNotices = @{}
+}
+
+## We can safely recreate this, it doesn't store much
+$script:PowerGrowler = New-Object &quot;Growl.Connector.GrowlConnector&quot;
+
+function Register-GrowlType {
+#.Synopsis
+#  Register a new Type name for growl notices from PowerGrowl
+#.Description
+#  Creates a new type name that can be used for sending growl notices
+#.Parameter AppName
+#  The name of the application you want to register as
+#.Parameter Name
+#  The type name to be used sending growls
+#.Parameter DisplayName
+#  The test to use for display (defaults to use the same value as the type name)
+#.Parameter Icon
+#  Overrides the default icon of the message (accepts .ico, .png, .bmp, .jpg, .gif etc)
+#.Parameter MachineName
+#  The name of a remote machine to register remotely instead of locally.
+#.Parameter Priority
+#  Overrides the default priority of the message (use sparingly)
+#.Example
+#  Register-GrowlType &quot;PoshTwitter&quot; &quot;Command Completed&quot;
+#  
+#  Registers the type &quot;Command Completed,&quot; using the default icon, for sending notifications to the local PC
+#
+PARAM(
+   [Parameter(Mandatory=$true,Position=0)]
+   [String]$AppName
+,
+   [Parameter(Mandatory=$true,Position=1)]
+   [ValidateScript( {!$global:PowerGrowlerNotices.Contains($AppName) -OR !$global:PowerGrowlerNotices.$AppName.Notices.ContainsKey($_)} )]
+   [String]$Name
+,
+   [Parameter(Mandatory=$false,Position=5)]
+   [String]$Icon = &quot;$PSScriptRoot\default.ico&quot;
+,
+   [Parameter(Mandatory=$false,Position=6)]
+   [String]$DisplayName = $Name
+,
+   [Parameter(Mandatory=$false,Position=7)]
+   [String]$MachineName
+,
+   [Parameter(Mandatory=$false)]
+   [String]$AppIcon
+)
+  
+   [Growl.Connector.NotificationType]$Notice = $Name
+   $Notice.DisplayName = $DisplayName
+   $Notice.Icon = Convert-Path (Resolve-Path $Icon)
+
+   if($MachineName) {
+      $Notice.MachineName = $MachineName
+   }
+   if(!$global:PowerGrowlerNotices.Contains($AppName)) {
+      $global:PowerGrowlerNotices.Add( $AppName, ([Growl.Connector.Application]$AppName) )
+
+      $global:PowerGrowlerNotices.$AppName = Add-Member -input $global:PowerGrowlerNotices.$AppName -Name Notices -Type NoteProperty -Value (New-Object hashtable) -Passthru
+      $global:PowerGrowlerNotices.$AppName.Icon = Convert-Path (Resolve-Path $AppIcon)
+   }
+   
+   $global:PowerGrowlerNotices.$AppName.Notices.Add( $Name, $Notice )
+
+   $script:PowerGrowler.Register( $global:PowerGrowlerNotices.$AppName , [Growl.Connector.NotificationType[]]@($global:PowerGrowlerNotices.$AppName.Notices.Values) )
+}
+
+
+function Set-GrowlPassword { 
+#.Synopsis
+#  Set the Growl password
+#.Description
+#  Set the password and optionally, the encryption algorithm, for communicating with Growl
+#.Parameter Password
+#  The password for Growl
+#.Parameter Encryption
+#  The algorithm to be used for encryption (defaults to AES)
+#.Parameter KeyHash
+#  The algorithm to be used for key hashing (defaults to SHA1)
+PARAM( 
+   [Parameter(Mandatory=$true,Position=0)]
+   [String]$Password
+,
+   [Parameter(Mandatory=$false,Position=1)]
+   [ValidateSet( &quot;AES&quot;, &quot;DES&quot;, &quot;RC2&quot;, &quot;TripleDES&quot;, &quot;PlainText&quot; )]
+   [String]$Encryption = &quot;AES&quot;
+,   
+   [Parameter(Mandatory=$false,Position=2)]
+   [ValidateSet( &quot;MD5&quot;, &quot;SHA1&quot;, &quot;SHA256&quot;, &quot;SHA384&quot;, &quot;SHA512&quot; )]
+   [String]$KeyHash = &quot;SHA1&quot;
+)   
+   $script:PowerGrowler.EncryptionAlgorithm = [Growl.Connector.Cryptography+SymmetricAlgorithmType]::&quot;$Encryption&quot;
+   $script:PowerGrowler.KeyHashAlgorithm = [Growl.Connector.Cryptography+SymmetricAlgorithmType]::&quot;$KeyHash&quot;
+   $script:PowerGrowler.Password = $Password
+}
+
+## Register the &quot;PowerGrowler&quot; &quot;Default&quot; notice so everything works out of the box
+Register-GrowlType $script:AppName &quot;Default&quot; -appIcon &quot;$PsScriptRoot\default.ico&quot;
+
+function Register-GrowlCallback {
+#.Synopsis
+#  Register a script to be called when each notice is finished. 
+#.Description
+#  Registers a scriptblock as a handler for the NotificationCallback event. You should accept two parameters, a Growl.Connector.Response and a Growl.Connector.CallbackData object.
+#  
+#  The NotificationCallback only happens when a callback is requested, which in this Growl library only happens if you pass both CallbackData and CallbackType to the Send-Growl function.
+#.Example
+#  Register-GrowlCallback { PARAM( $response, $context )
+#    Write-Host &quot;Response $($response|out-string)&quot; -fore Cyan
+#    Write-Host &quot;Context $($context|fl|out-string)&quot; -fore Green
+#    Write-Host $(&quot;Response Type: {0}`nNotification ID: {1}`nCallback Data: {2}`nCallback Data Type: {3}`n&quot; -f $context.Result, $context.NotificationID, $context.Data, $context.Type) -fore Yellow
+#  }
+#
+#  Registers an informational debugging-style handler. 
+#
+PARAM(
+[Parameter(Mandatory=$true)]
+[Scriptblock]$Handler
+)
+   Register-ObjectEvent $script:PowerGrowler NotificationCallback -Action $Handler
+}
+
+function Send-Growl {
+[CmdletBinding(DefaultParameterSetName=&quot;DataCallback&quot;)]
+#.Synopsis
+#  Send a growl notice
+#.Description
+#  Send a growl notice with the scpecified values
+#.Parameter Caption
+#  The short caption to display
+#.Parameter Message
+#  The message to send (most displays will resize to accomodate)
+#.Parameter NoticeType
+#  The type of notice to send. This MUST be the name of one of the registered types, and senders should bear in mind that each registered type has user-specified settings, so you should not abuse the types, but create your own for messages that will recur.
+#  For example, the user settings allow certain messages to be disabled, set to a different &quot;Display&quot;, or to have their Duration and Stickyness changed, as well as have them be Forwarded to another device, have Sounds play, and set different priorities.
+#.Parameter Icon
+#  Overrides the default icon of the message (accepts .ico, .png, .bmp, .jpg, .gif etc)
+#.Parameter Priority
+#  Overrides the default priority of the message (use sparingly)
+#.Example
+#  Send-Growl &quot;Greetings&quot; &quot;Hello World!&quot;
+#
+#  The Hello World of Growl.
+#.Example
+#  Send-Growl &quot;You've got Mail!&quot; &quot;Message for you sir!&quot; -icon ~\Icons\mail.png
+#
+#  Displays a message with a couple of movie quotes and a mail icon.
+#
+PARAM (
+   [Parameter(Mandatory=$true, Position=0)]
+   [ValidateScript( {$global:PowerGrowlerNotices.Contains($AppName)} )]
+   [string]$AppName
+,
+   [Parameter(Mandatory=$true, Position=1)][Alias(&quot;Type&quot;)]   
+   [ValidateScript( {$global:PowerGrowlerNotices.$AppName.Notices.ContainsKey($_)} )]   
+   [string]$NoticeType
+,
+   [Parameter(Mandatory=$true, Position=2)]
+   [string]$Caption
+,
+   [Parameter(Mandatory=$true, Position=3)]
+   [string]$Message
+,
+   [Parameter(Mandatory=$false, Position=4, ParameterSetName=&quot;UrlCallback&quot;)]
+   [Uri]$Url
+,  
+   [Parameter(Mandatory=$false, Position=4, ParameterSetName=&quot;DataCallback&quot;)]
+   [string]$CallbackData
+,  
+   [Parameter(Mandatory=$false, Position=5, ParameterSetName=&quot;DataCallback&quot;)]
+   [string]$CallbackType
+,
+   [string]$Icon
+,
+   [Growl.Connector.Priority]$Priority = &quot;Normal&quot; 
+)
+
+   $notice = New-Object Growl.Connector.Notification $appName, $NoticeType, (Get-Date).Ticks.ToString(), $caption, $Message
+   
+   if($Icon) { $notice.Icon = Convert-Path (Resolve-Path $Icon) }
+   if($Priority) { $notice.Priority = $Priority }
+   
+   if($DebugPreference -gt &quot;SilentlyContinue&quot;) { Write-Output $notice }
+   if( Test-Path Variable:Local:Url ) {
+      $context = new-object Growl.Connector.CallbackContext $(if(Test-Path Variable:Local:CallbackData){$CallbackData}else{$Url.ToString()})
+      Write-Host $Url -Fore Cyan
+      $script:PowerGrowler.Notify($notice, $context)
+   } elseif( (Test-Path Variable:Local:CallbackData) -and (Test-Path Variable:Local:CallbackType) ) {
+      $context = new-object Growl.Connector.CallbackContext $CallbackData,$CallbackType
+      Write-Host $context.CallbackUrl -Fore Magenta
+      $script:PowerGrowler.Notify($notice, $context)
+   } else {          
+      $script:PowerGrowler.Notify($notice)
+   }
+}
+
+Export-ModuleMember -Function Send-Growl, Set-GrowlPassword, Register-GrowlCallback, Register-GrowlType
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

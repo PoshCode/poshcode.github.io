@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Steven Murawski">
+    <title>Get-ADMapObject - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Get-ADMapObject</h1>
+<h3><a href="//scripts/706.ps1">download</a></h3>
+<p>Map Active Directory objects using the Show-NetMap script from Doug Finke.  Running the script creates three functions Get-ADMapObject (which takes a string or array of strings of the AD object classes), Get-ADObjectClassName (recurses through your Active Directory and returns the names of the object classes), and New-SourceTarget (to get the ADMapObjects into the format that Show-Netmap wants).
+Before the script runs, it will check for the dependencies (Doug's script and the NetMap dll's) and advise you if there are any missing.</p>
+<pre><code class="language-posh"># Author: Steven Murawski http://www.mindofroot.com
+# This script requires the Show-NetMap script from Doug Finke and the NetMap files
+# These can be found at http://dougfinke.com/blog/?p=465
+#
+# Also required are the Quest AD Cmdlets.
+
+#requires -pssnapin Quest.ActiveRoles.ADManagement
+
+
+
+function Write-Help()
+{
+	$ExampleUsage = @'
+To use this script, you will need the Show-Netmap script from Doug Finke,
+along with the NetMap DLLs (included with the Show-NetMap script on Doug's blog).
+Downloadable from http://dougfinke.com/blog/?p=465
+
+Usage:
+. .\Get-ADMapObject.ps1
+Get-ADMapObject ([Object Class Name] | [Array of Object Class Names]) | % { New-SourceTarget $_.Name $_.Parent } | Show-NetMap
+
+
+Example:
+. .\Get-ADMapObject.ps1
+Get-ADMapObject group | % { New-SourceTarget $_.Name $_.Parent } | Show-NetMap -layoutType G
+Get-ADMapObject ou, group, user | % { New-SourceTarget $_.Name $_.Parent } | Show-NetMap -layoutType S
+
+If you would like to get a listing (or array) of the Object Class Names, use the Get-ADObjectClassName function
+
+$classes = Get-ADObjectClassName
+
+'@
+	Write-Host $ExampleUsage
+}
+
+#Check to see if the required files are present to run the script.
+function Test-Prerequisites()
+{
+	$required = @{ShowNetMap = 'Show-Netmap.ps1';
+		NetMapApp = 'Microsoft.NetMap.ApplicationUtil.dll';
+		NetMapControl = 'Microsoft.NetMap.Control.dll';
+		NetMapCore =  'Microsoft.NetMap.Core.dll';
+		NetMapUtil =  'Microsoft.NetMap.Util.dll';
+		NetMapVisual =  'Microsoft.NetMap.Visualization.dll'
+		}
+		
+	$report = @()
+	
+	foreach ($key in $required.Keys)
+	{
+		$file = $required[$($key)]
+		if (Test-Path $file )
+		{
+			Write-Debug &quot;Found $file&quot;
+		}
+		else
+		{
+			$report +=  &quot;Missing $file&quot;
+		}
+		
+	}
+	
+	if ($report.count -eq 0)
+	{
+		Write-Debug &quot;All prerequisites were found.&quot;
+		return $true
+	}
+	else
+	{
+		Write-Help
+		Write-Host &quot;Missing files: &quot;
+		$report | ForEach-Object { Write-Host &quot;`tMissing $_&quot; }
+		throw &quot;Please move the needed files into the current directory!&quot;
+	}
+
+
+}
+
+#If all the prereq's are in the local directory and the script was not run
+#with the -help switch, load everything up!
+if (Test-Prerequisites)
+{
+	#Add the Show-Netmap functions from Doug Finke
+	. .\Show-NetMap.ps1
+	
+	#This is just a helper function to find the parent of an object based on the parent's distinguished name
+	function Get-ParentFromDN()
+	{
+		PROCESS
+		{
+			$root = '^DC=(\w+),DC=(\w+)$'
+			$pattern = '^(OU|CN)=(\w+?),.*?DC=\w+?,DC=\w+?$'
+			$dn = $_
+			
+			
+			if ($dn -notmatch $root)
+			{
+				$dn -replace $pattern, '$2'
+			}
+			else
+			{
+				$dn -replace $root, '$1.$2'
+			}
+		}
+	}
+	
+	#This will return an array of all the Object Classes in your Active Directory
+	function Get-ADObjectClassName()
+	{
+		Get-QADObject | Select-Object -property @{name='Name';Expression={$_.type}} -unique | Sort-Object
+	}
+	
+	function Get-ADMapObject()
+	{
+		param($TypesToMap=$(Throw 'One (or more object types as an array) are required to run this function'), 
+		[switch]$help)
+		if ($help)
+		{
+			Write-Help 
+		}
+		
+		if ($TypesToMap -is [string])
+		{
+			Get-QADObject -Type $TypesToMap | select Name, @{name='Parent';Expression={$_.ParentContainerDN | Get-ParentFromDN}}
+		}
+		else
+		{
+			foreach ( $type in $TypesToMap )
+			{
+				Get-QADObject -Type $type | select Name, @{name='Parent';Expression={$_.ParentContainerDN | Get-ParentFromDN}}
+			}
+		}
+	}
+	
+	#Helper function stolen from Doug Finke and used to create the objects to feed to 
+	#Show-Netmap
+	function New-SourceTarget ($s,$t) 
+	{
+		New-Object PSObject |
+			Add-Member -pass noteproperty source $s |
+			Add-Member -pass noteproperty target $t
+	}
+	
+}
+
+Write-Help
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

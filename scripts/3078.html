@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="karl prosser">
+    <title>Pomodoro Module - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Pomodoro Module</h1>
+<h3><a href="//scripts/3078.ps1">download</a></h3>
+<p>a pomodoro module in PowerShell allowing you to run Pomodoros in powershell with sounds being played, and live update in the progress bar</p>
+<pre><code class="language-posh">#PomoDoro Module (make sure its a PS1)
+#12-3-2011 Karl Prosser
+
+#example
+#import-module C:\amodule\Pomodoro.psm1 -force
+#Start-Pomodoro -ShowPercent -Work &quot;coding&quot; -UsePowerShellPrompt
+
+
+#future todos
+# -limit , a number (by default 0 meaning forever) that will only run the pomodoro that many times
+# -Confirm (after one is finished it will ask questions like whether you want to do another and whether you were successful)
+# -StartSound - path to it - with the current ones as default
+# -BreakSound -path to it -with current ones as default
+# possibly some custom sounds and the module gets distributed as a zip.
+# document all the functions fully with standard powershell help techniques.
+
+# -useprompt - create a prompt instead and update that each time instead..
+#   Pomo 4:21&gt;   (means we are in the pomodoro with that many minutes left.. if work is specified like &quot;watchlogs&quot; then it could be
+# watchlogs 4:21&gt;
+# and when its a break then Break 4:21&gt;
+# support reason for stopping
+# when no progress is shown, do a write-host to state changes.
+$script:DefaultLength = 25;
+$script:DefaultBreak = 5;
+$script:timer = $null
+$script:showprogress = $true
+
+function Stop-Pomodoro
+{
+	[CmdletBinding()]
+	param(
+	[parameter()]
+	$reason
+	)
+	Unregister-Event &quot;Pomodoro&quot; -ErrorAction silentlycontinue	
+	$script:timer = $null
+}
+
+function Set-PomodoroPrompt
+{
+ [CmdletBinding()]
+ param ()
+ $script:promptbackup = $function:prompt 
+ $function:prompt = { Get-PomodoroStatus -ForPrompt}  
+}
+
+function Restore-PomodoroPrompt
+{
+[CmdletBinding()]
+ param ()
+ $function:prompt = $script:promptbackup   
+}
+function Show-PomodoroProgress
+{
+ [cmdletbinding()]param()
+ $script:showprogress = $true
+}
+function Hide-PomodoroProgress
+{
+[cmdletbinding()]param()
+$script:showprogress = $false
+}
+
+function Get-PomodoroStatus
+{
+ [CmdletBinding(DefaultParameterSetName=&quot;summary&quot;)] 
+ param(
+  [Parameter(ParameterSetName=&quot;remaining&quot;,Position=0)] 
+  [switch]$remaining
+  ,
+  [Parameter(ParameterSetName=&quot;From&quot;,Position=0)] 
+  [switch]$From
+  ,
+  [Parameter(ParameterSetName=&quot;Until&quot;,Position=0)] 
+  [switch]$Until
+  ,
+  [Parameter(ParameterSetName=&quot;Length&quot;,Position=0)] 
+  [switch]$Length  
+  ,
+  [Parameter(ParameterSetName=&quot;forPrompt&quot;,Position=0)] 
+  [switch]$ForPrompt  
+ )
+   
+	if($script:timer)
+	{
+		if($script:pomoorbreak) 
+		 	{ 
+				$prefix = &quot;Pomodoro - $script:currentwork&quot;			
+				$pomotime = new-object system.TimeSpan 0,0,$script:currentlength,0
+		 	} 
+		else 
+			{ 
+				$prefix = &quot;Having a Break from work - $script:currentwork&quot;
+				$pomotime = new-object system.TimeSpan 0,0,$script:currentbreak,0
+			}
+		 
+		$diff = (get-Date) - $script:starttime	 
+		$timeleft = $pomotime - $diff
+		$endtime = $starttime + $pomotime
+	}
+	
+	switch ($PsCmdlet.ParameterSetName) 
+    { 
+    &quot;summary&quot;  { &quot;{5} for {4} minutes from {0:hh:mm} to {1:hh:mm} - {2}:{3:00} minutes left.&quot; -f $starttime,$endtime ,$timeleft.minutes, $timeleft.seconds	,$pomotime.minutes,$prefix} 
+    &quot;remaining&quot;  { $timeleft} 
+	&quot;From&quot; {$script:starttime}
+	&quot;Until&quot; { $endtime }
+	&quot;Length&quot; {$pomotime}
+	&quot;ForPrompt&quot; {
+				if($script:timer)
+				{
+					if ($script:pomoorbreak)
+						{
+						 if($script:currentwork -and ($script:currentwork.trim() -ne [string]::Empty))
+						  {
+						    &quot;{0} {1}:{2:00}&gt;&quot; -f $(if($script:currentwork.length -gt 8) { $script:currentwork.substring(0,8)} else {$script:currentwork} ),
+									$timeleft.minutes, $timeleft.seconds
+						  }
+						 else
+						  {
+						  &quot;{0} {1}:{2:00}&gt;&quot; -f &quot;Pomo&quot;,$timeleft.minutes, $timeleft.seconds
+						  }
+						}
+					else
+					    {
+						  &quot;{0} {1}:{2:00}&gt;&quot; -f &quot;Break&quot;,$timeleft.minutes, $timeleft.seconds
+						}
+				}
+				else
+				{
+				 &quot;No Pomo&gt;&quot;
+				}
+				
+		} 
+    } 
+	
+	
+
+}
+function Start-Pomodoro
+{
+	[CmdletBinding()]
+	param (
+	  [Parameter()]
+	  [int]$Length = $script:DefaultLength
+	  ,
+	  [Parameter()]
+	  [int]$Break = $script:DefaultBreak
+	  ,
+	  [Parameter()]
+	  [string]$Work
+	  ,
+	  [Parameter()]
+	  [switch]$ShowPercent
+	  ,
+	  [Parameter()]
+	  [switch]$HideProgress
+	  ,
+	  [Parameter()]
+	  [switch]$UsePowerShellPrompt
+	 )
+	$script:currentlength = $length
+	$script:currentbreak = $break;
+	$script:currentshowpercent = [bool]$showpercent;
+	$script:currentwork = $work
+	if($HideProgress) { $script:showprogress = $false } else { $script:showprogress = $true }
+	#if pomoDoro Already running then stop it
+	Unregister-Event &quot;Pomodoro&quot; -ErrorAction silentlycontinue
+	$script:timer = $null
+	
+	$script:pomoorbreak = $true
+	$script:starttime = get-Date
+	
+   $script:timer = New-Object System.Timers.Timer 
+   $script:timer.Interval = 1000 
+   $script:timer.Enabled = $true 
+   
+   $null = Register-ObjectEvent $timer &quot;Elapsed&quot; -SourceIdentifier &quot;Pomodoro&quot;  -Action {    
+	 $breakmode = &amp; (get-Module Pomodoro) { $script:PomoOrBreak }
+	 $starttime = &amp; (get-Module Pomodoro) { $script:starttime }
+	 $break = &amp; (get-Module Pomodoro) {$script:currentbreak}
+	 $length = &amp; (get-Module Pomodoro) { $script:currentlength }	 	 	 
+	 $work= &amp; (get-Module Pomodoro) { $script:currentwork }	 	 	 
+	 if($breakmode) 
+	 	{ 
+			$prefix = &quot;Pomodoro - $work &quot;			
+			$pomotime = new-object system.TimeSpan 0,0,$length,0
+	 	} 
+	else 
+		{ 
+			$prefix = &quot;Having a Break from work - $work&quot;
+			$pomotime = new-object system.TimeSpan 0,0,$break,0
+		}
+	 
+	 $diff = (get-Date) - $starttime
+	 
+	$timeleft = $pomotime - $diff
+	$endtime = $starttime + $pomotime
+	$timeleftdisplay  = &quot;for {4} minutes from {0:hh:mm} to {1:hh:mm} - {2}:{3:00} minutes left.&quot; -f $starttime,$endtime ,$timeleft.minutes, $timeleft.seconds	,$pomotime.minutes
+		if (($pomotime - $diff) -le 0) 
+		  {      
+		     write-Progress -Activity &quot; &quot; -Status &quot;done&quot;; 
+			 $sound = new-Object System.Media.SoundPlayer;
+		 	if ($breakmode) 
+			   {
+			     $sound.SoundLocation=&quot;$env:systemroot\Media\tada.wav&quot;;
+			   }
+			 else
+			   {
+			     $sound.SoundLocation=&quot;$env:systemroot\Media\notify.wav&quot;;
+			   }		
+			 $sound.Play();
+			 sleep 1
+			 $sound.Play();
+			 sleep 1
+			 $sound.Play();
+			 iex &quot;&amp; (get-module pomodoro) {`$script:starttime = get-Date; `$script:pomoorbreak = ! `$$breakmode } &quot;
+
+		  }
+		else 
+		  {	
+		     if ( &amp; (get-Module Pomodoro) { $script:showprogress } )
+				{
+
+					 if (&amp; (get-Module Pomodoro) { $script:currentshowpercent}  ) 
+					  {	 	
+						$perc =100 - ( [int] ([double]$timeleft.totalseconds * 100 / [double]$pomotime.totalseconds))
+						write-Progress -Activity $prefix -Status &quot;$timeleftdisplay&quot; -PercentComplete $perc
+					  }
+					 else
+					  {
+					   write-Progress -Activity $prefix -Status &quot;$timeleftdisplay&quot;
+					  }
+				}	  
+		  }
+
+   }
+   if($UsePowerShellPrompt) { Set-PomodoroPrompt }
+  
+  
+}
+
+export-ModuleMember -Function &quot;*&quot;
+$myInvocation.MyCommand.ScriptBlock.Module.OnRemove = {
+    if ($script:promptbackup) { $function:prompt = $script:promptbackup }	
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

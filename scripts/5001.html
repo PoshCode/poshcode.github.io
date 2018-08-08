@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Pedro Genil">
+    <title>Informacion de usuarios - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Informacion de usuarios</h1>
+<h3><a href="//scripts/5001.ps1">download</a></h3>
+<p>Sacamos información de los usuarios de la infraestructura.
+1.- La guardamos en una variable, y la exportamos a excel
+2.- La volcamos en un IIS y generamos la páginas automáticamente dependiendo de los resultados y las fechas</p>
+<pre><code class="language-posh">#Generamos los usuarios por buzon
+#Autor: Pedro Genil			
+#Fecha: 2014/03/17
+#Version: 1.0
+# Añadimos modulo
+clear-host
+If ((Get-PSSnapin | where {$_.Name -match &quot;Exchange.Management&quot;}) -eq $null)
+{
+	Add-PSSnapin Microsoft.Exchange.Management.PowerShell.Admin
+}
+#Variables
+$fecha = (get-date).toString(&quot;yyyyMMdd&quot;)
+$formatEnumerationLimit = 100
+$datos = @()
+$Reportiis = &quot;\\$maquinaiis\f$\sites\UbicacionUsuarios\&quot;
+#Creamos la pagina de inicio:
+$index = @'
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Historico de Buzones&lt;/title&gt;
+&lt;META HTTP-EQUIV=&quot;Pragma&quot; CONTENT=&quot;no-cache&quot;&gt;
+&lt;META HTTP-EQUIV=&quot;Expires&quot; CONTENT=&quot;-1&quot;&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;p&gt;
+En esta Web encontraras las últimas ubicaciones de los usuarios ordenados por mailboxserver.&lt;br&gt;
+&lt;/p&gt;
+&lt;hr&gt;
+&lt;h3&gt;Mailbox Server:&lt;/h3&gt;
+&lt;table border= 0&gt;
+'@
+foreach ($mailbox in get-mailboxserver |sort name)
+{
+
+$index += &quot;&lt;tr&gt;&lt;td&gt;&lt;A HREF='http://$ipiis/UbicacionUsuarios/$mailbox.html' TARGET='_new'&gt;$mailbox&lt;/A&gt;&lt;/td&gt;&lt;/tr&gt;&quot;
+    #Creamos la tabla 2
+    $tabla002= @'
+&lt;html&gt;&lt;title&gt;Fecha&lt;/title&gt;
+&lt;head&gt;
+&lt;META HTTP-EQUIV=&quot;Pragma&quot; CONTENT=&quot;no-cache&quot;&gt;
+&lt;META HTTP-EQUIV=&quot;Expires&quot; CONTENT=&quot;-1&quot;&gt;
+&lt;/head&gt; 
+&lt;body&gt;
+'@
+    $tabla002 += &quot;&lt;h3&gt;Fecha:&lt;/h3&gt;&quot;
+    $tabla002 += &quot;&lt;table width='50%' border='0'&gt;&quot;
+    #Creamos la tabla
+    $notabla = @'
+&lt;html&gt;&lt;title&gt;Usuarios&lt;/title&gt;
+&lt;head&gt;
+&lt;META HTTP-EQUIV=&quot;Pragma&quot; CONTENT=&quot;no-cache&quot;&gt;
+&lt;META HTTP-EQUIV=&quot;Expires&quot; CONTENT=&quot;-1&quot;&gt;
+&lt;/head&gt; 
+&lt;body&gt;
+'@
+    $notabla += &quot;&lt;table width='100%' border='1'&gt;&quot;
+    $notabla += &quot;&lt;tr&gt;&lt;th&gt;&quot; +  &quot;BBDD&quot; + &quot;&lt;/th&gt;&lt;th&gt;&quot; + &quot;DISPLAY NAME&quot; +&quot;&lt;/th&gt;&lt;th&gt;&quot; + &quot;SAM ACCOUNT NAME&quot; + &quot;&lt;/th&gt;&lt;th&gt;&quot; +  &quot;EMAIL PRIMARIO&quot; + &quot;&lt;/th&gt;&lt;th&gt;&quot;+  &quot;DIRECCIONES&quot; + &quot;&lt;/th&gt;&lt;/tr&gt;&quot;
+    $resultados = Get-Mailbox -resultsize unlimited -server $mailbox.name -ignoredefaultscope | sort name
+    foreach ($resultado in $resultados)
+    {
+        $arr = @()
+        $(get-mailbox $resultado.displayname).emailaddresses |% {$arr += $_.smtpaddress}
+        $notabla += &quot;&lt;tr&gt;&lt;td&gt;&quot; +  $resultado.database.name + &quot;&lt;/td&gt;&lt;td&gt;&quot; + $resultado.displayname +&quot;&lt;/td&gt;&lt;td&gt;&quot; +  $($resultado.SamAccountName) + &quot;&lt;/td&gt;&lt;td&gt;&quot; +  $resultado.primarysmtpaddress + &quot;&lt;/td&gt;&lt;td&gt;&quot;+  $arr + &quot;&lt;/td&gt;&lt;/tr&gt;&quot;      
+        #Guardamos los datos en una variable para luego exportarla a un excel
+        $objeto = New-Object PSObject -Property (@{
+        BBDD = $resultado.database.name
+        DisplayName = $resultado.displayname
+        SamAccount = $resultado.SamAccountName
+        PrimarySmtp = $resultado.primarysmtpaddress
+        Direcciones = ([string]::Join(&quot;,&quot;,($arr)))
+        })
+        $datos += $objeto
+    }
+    $notabla += &quot;&lt;/body&gt;&lt;/table&gt;&lt;/html&gt;&quot;  
+    $notabla &gt; &quot;$Reportiis\$fecha-$mailbox.html&quot;
+    #Copiamos los ficheros al IIS
+    $ficheros = get-childitem $Reportiis -Filter &quot;*-$mailbox*&quot;
+    foreach ($fichero in $ficheros)
+    {
+        $tabla002 +=&quot;&lt;tr&gt;&lt;td&gt;&lt;A HREF='http://$ipiis/UbicacionUsuarios/$fichero' TARGET='_new'&gt;$fichero&lt;/A&gt;&lt;/td&gt;&lt;/tr&gt;&quot;
+    }    
+    $tabla002 += &quot;&lt;/body&gt;&lt;/table&gt;&lt;/html&gt;&quot; 
+    $tabla002 &gt; &quot;$Reportiis\$mailbox.html&quot;
+}
+$index +=&quot;&lt;/body&gt;&lt;/html&gt;&quot;
+$index &gt; &quot;$Reportiis\index.html&quot;
+#Exportamos a csv
+$datos | export-csv F:\Scripts\users_Acount\CSV\$fecha.csv -notype
+
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

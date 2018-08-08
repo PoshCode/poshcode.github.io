@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="AlanO">
+    <title>Reset SharePoint Alerts - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Reset SharePoint Alerts</h1>
+<h3><a href="//scripts/4057.ps1">download</a></h3>
+<p>This powershell script can be used to reset alerts on a SharePoint site.  This may be necessary if scheduled alerts are arriving an hour early or late due to daylight savings time.  This script was inspired by: http://gallery.technet.microsoft.com/scriptcenter/877d2abd-fce9-4545-b223-7637936dd888 which while as a side effect will reset the alerts, however it does a lot more than restarting the alerts.</p>
+<p>The Reset-Alerts function also has additional options to reset just a specific user's alerts.</p>
+<p>This script was tested on SharePoint 2010, however this should still work with SharePoint 2013.</p>
+<p>This script is supplied &quot;As Is&quot; without warranty.</p>
+<pre><code class="language-posh">Function Reset-Alerts
+{ 
+&lt;#  
+.Synopsis  
+    Resets alerts for the specified site.
+.Description  
+    By default this resets scheduled alerts for the specified site.
+	This can also reset all alerts for the site and/or for a specific user.
+	
+	This is inspired by: http://gallery.technet.microsoft.com/scriptcenter/877d2abd-fce9-4545-b223-7637936dd888         
+.Parameter Url  
+    The url of the site to fix.  Required Parameter. 
+.Parameter User 
+    Optional UserName to reset.
+.Parameter All 
+    Reset all alerts.
+.Example 
+    Reset all scheduled alerts for the specific site.  This operation can not be undone! 
+     
+    PS &gt;  Reset-Alerts -url &quot;http://teams/sites/newteam&quot;
+.Example          
+    Reset all scheduled alerts for the specified user for this specific site.  This operation can not be undone! 
+         
+    PS &gt;  Reset-Alerts -url &quot;http://teams/sites/newteam&quot; -user &quot;username&quot;
+.Example 
+    Reset all alerts for the specific site.  This operation can not be undone! 
+     
+    PS &gt;  Reset-Alerts -url &quot;http://teams/sites/newteam&quot; -All
+.Example 
+    Reset all alerts for the specified user for this specific site.  This operation can not be undone! 
+     
+    PS &gt;  Reset-Alerts -url &quot;http://teams/sites/newteam&quot; -user &quot;username&quot; -All
+	
+.Notes  
+        NAME:      Reset-Alerts 
+        AUTHOR:    Alan Oakland 
+        LASTEDIT:  3/29/2013
+#&gt;  
+ 
+[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Medium')] 
+Param( 
+    [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)][ValidateNotNullOrEmpty()][String] $Url, 
+    [Parameter(Mandatory=$false, ValueFromPipeline=$False)][string] $user = $null,
+	[Switch]$All = $false
+    )
+	#Try catch for entire script
+	try
+	{ 
+		$site = Get-SPWeb -Identity $URL
+		#Try Catch for reading alerts
+		try
+		{ 
+			if ($All -eq $true)
+			{
+				$siteAlerts = $site.Alerts
+			}
+			else
+			{
+				$siteAlerts = $site.Alerts | Where-Object {$_.AlertFrequency -ne &quot;Immediate&quot;}
+			}
+			if (($user -ne $null) -and ($user -ne &quot;&quot;))
+			{
+				$siteAlerts = $siteAlerts | Where-Object {$_.User -like &quot;NSIGHT\$($user)&quot;}
+			}
+			Write-Host &quot;There are $($site.Alerts.Count.ToString()) alerts for $($site.Title) Site ($($site.URL))&quot;
+			
+			foreach ($alert in $siteAlerts)
+			{
+				if ($alert.user -ne $null)
+				{
+					Write-Host &quot;Processing user $($alert.user)&quot;;
+					#Try catch for restarting alert
+					try
+					{ 
+						if($pscmdlet.ShouldProcess($_.ID, &quot;restarting alert: $($alert.Title) for $($alert.user.DisplayName) on site {$URL}&quot;))
+						{
+							$alert.Status = [Microsoft.SharePoint.SPAlertStatus]::Off 
+							$alert.Update(); 
+			
+							$alert.Status = [Microsoft.SharePoint.SPAlertStatus]::On
+							$alert.Update();
+							Write-Host &quot;Restarted alert: $($alert.Title) for $($alert.user.DisplayName) on site {$URL}&quot;
+						} 
+					}
+					catch
+					{ 
+						Write-Error &quot;Failure restarting alert: $($alert.Title) for $($alert.user.DisplayName) on site {$URL}&quot; 
+					}
+				}
+			}
+		}
+		catch
+		{ 
+              Write-Error &quot;Failure reading alerts from SPWeb {$_.URL}&quot; 
+              throw 
+        } 
+		$site.Dispose()
+	}
+	catch
+	{ 
+        Write-Error $_        
+        throw 
+    } 
+}
+
+#Only add the snap in if it is not already loaded.
+if(-not (Get-PSSnapin Microsoft.SharePoint.PowerShell -ErrorAction SilentlyContinue))
+{
+   #Add the SharePoint Snap in, but stop script if this fails
+   Add-PSSnapin Microsoft.SharePoint.PowerShell -ErrorAction Stop 
+   Write-Output &quot;Initialized SharePoint Snap In&quot;
+}
+
+# Example to reset all scheduled alerts on a site
+# Reset-Alerts -url &quot;http://sharepoint/sites/myteam&quot;
+
+# Example to reset all scheduled alerts on all sites in a site collection
+# This has not been tested
+&lt;#
+$sites = Get-SPWeb -Site $Url -limit All
+foreach ($site in $sites)
+{
+	Reset-Alerts -url &quot;http://sharepoint&quot;
+}
+#&gt;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

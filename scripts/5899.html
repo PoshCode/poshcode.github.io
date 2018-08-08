@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="hnishi">
+    <title>Export-PSCredential - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Export-PSCredential</h1>
+<h3><a href="//scripts/5899.ps1">download</a> - <a href="//scripts/474.md">parent</a></h3>
+<p>original filename: lib-authentication.ps1</p>
+<p>These functions allow one to easily save network credentials to disk in a relatively secure manner.  The resulting on-disk credential file can only [1] be decrypted by the same user account which performed the encryption.  For more details, see the help files for ConvertFrom-SecureString and ConvertTo-SecureString as well as MSDN pages about Windows Data Protection API.</p>
+<p>[1]: So far as I know today.  Next week I'm sure a script kiddie will break it.</p>
+<p>rev 2: added more comments
+rev 3: removed custom type name due to issues on v1
+rev 4: re-worked erorr checking to allow for username strings like get-credential
+rev 5: fixed something I broke</p>
+<pre><code class="language-posh"># Author: 	Hal Rottenberg &lt;hal@halr9000.com&gt;
+# Url:		http://halr9000.com/article/tag/lib-authentication.ps1
+# Purpose:	These functions allow one to easily save network credentials to disk in a relatively
+#			secure manner.  The resulting on-disk credential file can only [1] be decrypted
+#			by the same user account which performed the encryption.  For more details, see
+#			the help files for ConvertFrom-SecureString and ConvertTo-SecureString as well as
+#			MSDN pages about Windows Data Protection API.
+#			[1]: So far as I know today.  Next week I'm sure a script kiddie will break it.
+#
+# Usage:	Export-PSCredential [-Credential &lt;PSCredential object&gt;] [-Path &lt;file to export&gt;]
+#			Export-PSCredential [-Credential &lt;username&gt;] [-Path &lt;file to export&gt;]
+#			If Credential is not specififed, user is prompted by Get-Credential cmdlet.
+#			If a username is specified, then Get-Credential will prompt for password.
+#			If the Path is not specififed, it will default to &quot;./credentials.enc.xml&quot;.
+#			Output: FileInfo object referring to saved credentials
+#
+#			Import-PSCredential [-Path &lt;file to import&gt;]
+#
+#			If not specififed, Path is &quot;./credentials.enc.xml&quot;.
+#			Output: PSCredential object
+
+function Export-PSCredential {
+	param ( $Credential = (Get-Credential), $Path = &quot;credentials.enc.xml&quot; )
+
+	# Look at the object type of the $Credential parameter to determine how to handle it
+	switch ( $Credential.GetType().Name ) {
+		# It is a credential, so continue
+		PSCredential		{ continue }
+		# It is a string, so use that as the username and prompt for the password
+		String				{ $Credential = Get-Credential -credential $Credential }
+		# In all other caess, throw an error and exit
+		default				{ Throw &quot;You must specify a credential object to export to disk.&quot; }
+	}
+	
+	# Create temporary object to be serialized to disk
+	$export = &quot;&quot; | Select-Object Username, EncryptedPassword
+	
+	# Give object a type name which can be identified later
+	$export.PSObject.TypeNames.Insert(0,’ExportedPSCredential&amp;#65533;)
+	
+	$export.Username = $Credential.Username
+
+	# Encrypt SecureString password using Data Protection API
+	# Only the current user account can decrypt this cipher
+	$export.EncryptedPassword = $Credential.Password | ConvertFrom-SecureString
+
+	# Export using the Export-Clixml cmdlet
+	$export | Export-Clixml $Path
+	Write-Host -foregroundcolor Green &quot;Credentials saved to: &quot; -noNewLine
+
+	# Return FileInfo object referring to saved credentials
+	Get-Item $Path
+}
+
+function Import-PSCredential {
+	param ( $Path = &quot;credentials.enc.xml&quot; )
+
+	# Import credential file
+	$import = Import-Clixml $Path 
+	
+	# Test for valid import
+	if ( !$import.UserName -or !$import.EncryptedPassword ) {
+		Throw &quot;Input is not a valid ExportedPSCredential object, exiting.&quot;
+	}
+	$Username = $import.Username
+	
+	# Decrypt the password and store as a SecureString object for safekeeping
+	$SecurePass = $import.EncryptedPassword | ConvertTo-SecureString
+	
+	# Build the new credential object
+	$Credential = New-Object System.Management.Automation.PSCredential $Username, $SecurePass
+	Write-Output $Credential
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

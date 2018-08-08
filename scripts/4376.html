@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>Send-WakeOnLan - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Send-WakeOnLan</h1>
+<h3><a href="//scripts/4376.ps1">download</a></h3>
+<p>Send a WakeOnLan packet to computers</p>
+<p>This started out as a simpler version of one the many WOL scripts on PoshCode already, but ended up with good error handling and ShouldProcess and support for loading your computers via an external psd1 file... so I'm sharing it.</p>
+<pre><code class="language-posh">$Computers = DATA {
+  ConvertFrom-StringData -stringdata @'
+    Server1 = 0E:A7:DE:AD:BE:EF
+    Server2 = DE:AD:BE:EF:70:E5
+'@
+}
+
+# You should have a .psd1 file matching the name of this script in a folder matching $PSCulture
+# It should consist of a ConvertFrom-StringData statement like the one above
+Import-LocalizedData -BindingVariable Computers -ErrorAction SilentlyContinue -ErrorVariable NotLocalized
+if($NotLocalized) {
+	Write-Warning &quot;No Server list found. Using hard-coded default servers:&quot;
+	Write-Warning $NotLocalized[0]
+}
+
+#wakeonlan $computer
+function Send-WakeOnLan
+{
+	#.Synopsis
+	#   Wake a computer
+	[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact=&quot;High&quot;)]
+	param(
+		[Parameter(Mandatory=$true,ParameterSetName=&quot;MacAddress&quot;,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,ValueFromRemainingArguments=$true)]
+		[string[]]$Computer
+	)
+
+
+	# If the $Computer parameter is a computer name, and the name is in our data
+	# Or is a MacAddress which is in our data
+	# This will match it, and get the full information.
+	# Otherwise, assume it's a MacAddress already
+	$MacAddresses = foreach($c in $Computer) {
+		if($output = foreach($pc in $Computers.GetEnumerator()) {
+			if($pc.Key -like $c -or $pc.Value -eq $c) { 
+				$pc.Value | Add-Member NoteProperty Name $pc.Name -Passthru
+			}
+		}) { $output } else { $c }
+	}
+
+
+	foreach($mac in $MacAddresses) {
+		# Valid MacAddress has 6 pairs of hex characters (maybe separated by another character)
+		$MacAddress = [regex]::Match($mac, '^(?:([0-9A-F]{2}).?){6}$')
+		if(!$MacAddress.Success) {
+			Write-Warning &quot;$($mac.Name) $mac does not have a valid MacAddress. WakeOnLan skipped.&quot;
+			continue
+		}
+
+	   if($PSCmdlet.ShouldProcess( &quot;Waking the computer $mac $($mac.Name)&quot;,
+	                               &quot;Wake the computer $mac $($mac.Name)?&quot;,
+	                               &quot;Waking Computers&quot; )) {
+
+			$MacAddress = $MacAddress.Groups[1].Captures.Value | % { [byte]&quot;0x$_&quot; }
+
+			$UDPclient = new-Object System.Net.Sockets.UdpClient
+			$UDPclient.Connect(([System.Net.IPAddress]::Broadcast),4000)
+			$packet = [byte[]](,0xFF * 102)
+			6..101 |% { $packet[$_] = $mac[($_%6)]}
+			$null = $UDPclient.Send($packet, $packet.Length)
+		}
+	}
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

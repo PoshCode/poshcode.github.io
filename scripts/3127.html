@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="djh53">
+    <title> - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1></h1>
+<h3><a href="//scripts/3127.ps1">download</a></h3>
+<p>The script leverages Powershell's .NET,  COM and ADODB functionality to automate the creation of Excel workbooks pre-populated with data retrieved from a SQL2008R2 database using stored procedures.</p>
+<p>The script is #-heavy, sacrificing brevity for clarity because this is my first effort at a POSH script that goes much beyond the &quot;Hello World&quot; stage.  The script has been tested on Win7 x 64 using SQL2008R2 Express and Excel 2010.</p>
+<p>The stimuli to create the script were my inability to:</p>
+<ol>
+<li><p>Devise a quick way to pump SQL data into Excel worksheets using .NET data objects.</p>
+</li>
+<li><p>Locate a Powershell implementation of Excel's fast CopyToRecordset function.</p>
+</li>
+</ol>
+<pre><code class="language-posh">&lt;#=====================================================
+SYNOPSIS
+Create an Excel workbook for a teacher.
+The workbook contains a worksheet for each class.
+=====================================================#&gt;
+
+&lt;#=====================================================
+RETRIEVE CURRENT USER'S LOGON
+Prefer API to $env:username.
+http://www.leeholmes.com/blog/2009/...lkthrough/
+http://www.pinvoke.net/
+LOCAL:
+    $signature
+    $type
+IN:
+OUT:
+    $logon
+=====================================================#&gt;
+$signature = @' 
+[DllImport(&quot;mpr.dll&quot;, CharSet=CharSet.Auto, SetLastError=true)]
+    public static extern int WNetGetUser(
+            [MarshalAs(UnmanagedType.LPTStr)] string lpName, 
+            [MarshalAs(UnmanagedType.LPTStr)] StringBuilder lpUserName, 
+            ref int lpnLength); 
+'@
+$type = Add-Type -MemberDefinition $signature -Name GetLogonString -Namespace WNetGetUser -Using System.Text -PassThru   
+$logon = New-Object System.Text.StringBuilder 32 # Current user's logon is returned as a null-terminated string in this buffer.
+
+$type::WNetGetUser(&quot;&quot;, $logon, [ref]$logon.Capacity)
+
+&lt;#=====================================================
+RETRIEVE CURRENT USER'S SFKEY
+The SFKey is the database UID - four chars.
+Test current user's logon first.
+If OK, open a .NET connection and get the SFKey that matches the logon.
+Allows identity impersonation.
+LOCAL:
+    $cmdSFKey
+IN:
+    $logon
+OUT:
+    $cnnNET
+    $sfkey 
+=====================================================#&gt;
+Switch($logon.Length) {
+    0 {throw &quot;Error retrieving Windows logon.&quot;}
+    default { 
+        $cnnNET = New-Object System.Data.SqlClient.SqlConnection
+        $cnnNET.ConnectionString = &quot;Server=HOMEPC\SQLEXPRESS;Database=Keeper;Integrated Security=SSPI&quot;
+        $cnnNET.Open()
+
+        $cmdSFKey = New-Object System.Data.SqlClient.SqlCommand
+        $cmdSFKey.Connection = $cnnNET
+        $cmdSFKey.CommandType = [System.Data.CommandType]&quot;StoredProcedure&quot;
+        $cmdSFKey.CommandText = &quot;SELMainSFKey&quot;
+
+        $cmdSFKey.Parameters.Add(&quot;@LogonName&quot;,[System.Data.SqlDbType]&quot;varchar&quot;,30)
+        $cmdSFKey.Parameters[&quot;@LogonName&quot;].Value = $logon.ToString()
+
+        $cmdSFKey.Parameters.Add(&quot;@SFKey&quot;,[System.Data.SqlDbType]&quot;varchar&quot;,4)
+        $cmdSFKey.Parameters[&quot;@SFKey&quot;].Direction = [System.Data.ParameterDirection]&quot;Output&quot; 
+
+        $cmdSFKey.ExecuteNonQuery()
+
+        [string] $sfkey = $cmdSFKey.Parameters[&quot;@SFKey&quot;].Value
+        
+&lt;#=====================================================
+RETRIEVE TIMETABLE PERIOD AND WORKBOOK SAVE LOCATION
+Test current user's SFKey first.
+If OK, retrieve two values from single-row lookup table:
+    1. $ttperiod is reqd to look up teacher's classes.
+    2. $xlpath is required to save the Excel workbook.
+Nested switch statements end in this block.
+LOCAL:
+    $cmdAdmin
+    $adpAdmin
+    $tblAdmin
+    $rowAdmin
+IN:
+    $sfkey
+    $cnnNET
+OUT:
+    $ttperiod
+    $xlpath
+=====================================================#&gt;
+        Switch($sfkey.Length) {
+            0 {throw &quot;Error retrieving teacher key.&quot;}
+            default {
+                $cmdAdmin = New-Object System.Data.SqlClient.SqlCommand
+                $cmdAdmin.Connection = $cnnNET
+                $cmdAdmin.CommandType = [System.Data.CommandType]&quot;StoredProcedure&quot;
+                $cmdAdmin.CommandText = &quot;SELMainAdmin&quot;
+
+                $adpAdmin = New-Object System.Data.SqlClient.SqlDataAdapter
+                $adpAdmin.SelectCommand = $cmdAdmin
+    
+                $tblAdmin = New-Object System.Data.DataTable
+                $adpAdmin.Fill($tblAdmin)
+                $rowAdmin = $tblAdmin.Rows
+
+                foreach ($rowAdmin in $tblAdmin) {
+                    [string] $ttperiod = $rowAdmin.Item(&quot;CurrentTTPeriod&quot;)
+                    [string] $xlpath = $rowAdmin.Item(&quot;KeeperPath&quot;)
+                } # End foreach 
+                                        
+            } # End Switch $sfkey default    
+        } # End Switch $sfkey.length
+    } # End Switch $logon default
+} # End Switch $logon.length
+
+&lt;#=====================================================
+RETRIEVE CURRENT USER'S CLASSES
+Test Admin values first.
+If OK, retrieve teacher's classes into a DataTable.
+A &quot;class&quot; has two pieces:
+    1. subject key (e.g., 08ENG1).
+    2. class number (e.g., 6).
+LOCAL:
+    $test
+    $cmdClasses
+    $adpClasses
+IN:
+    $ttperiod
+    $xlpath    
+    $cnnNET
+    $sfkey
+OUT:
+    $rowClasses
+    $tblClasses
+=====================================================#&gt;
+[int] $test = 0
+$test = $ttperiod.Length
+if ($test = 0) {throw &quot;Error retrieving timetable period.&quot;}
+$test = $xlpath.Length
+if ($test = 0) {throw &quot;Error retrieving XL pathname.&quot;}
+
+$cmdClasses = New-Object System.Data.SqlClient.SqlCommand
+$cmdClasses.Connection = $cnnNET
+$cmdClasses.CommandType = [System.Data.CommandType]&quot;StoredProcedure&quot;
+$cmdClasses.CommandText = &quot;SELKeeperClassesForTeacher&quot;
+
+$cmdClasses.Parameters.Add(&quot;@ttperiod&quot;,[System.Data.SqlDbType]&quot;varchar&quot;,6)
+$cmdClasses.Parameters[&quot;@ttperiod&quot;].Value = $ttperiod
+
+$cmdClasses.Parameters.Add(&quot;@SFKey&quot;,[System.Data.SqlDbType]&quot;varchar&quot;,4)
+$cmdClasses.Parameters[&quot;@SFKey&quot;].Value = $sfkey
+
+$adpClasses = New-Object System.Data.SqlClient.SqlDataAdapter
+$adpClasses.SelectCommand = $cmdClasses
+
+$tblClasses = New-Object System.Data.DataTable
+$adpClasses.Fill($tblClasses)
+$rowClasses = $tblClasses.Rows
+
+&lt;#=====================================================
+CREATE EXCEL OBJECTS
+Application and workbook.
+Create workbook with a worksheet for each class.
+LOCAL:
+    $xl
+IN:
+    $tblClasses
+OUT:
+    $wb
+=====================================================#&gt;
+$xl = New-Object -ComObject Excel.Application
+$xl.SheetsInNewWorkbook = $tblClasses.Rows.Count
+$wb = $xl.Workbooks.Add()
+$xl.Visible = $True
+
+&lt;#=====================================================
+CREATE ADODB OBJECTS
+An ADODB recordset is reqd by Excel's CopyFromRecordset.
+LOCAL:
+    $ad [int] constants
+    $cnnADO
+    $prmTTPeriod
+IN:
+    $ttperiod
+OUT:
+    $prmSUKey
+    $prmClass
+    $cmdStudents
+    $rstStudents
+=====================================================#&gt;
+[int] $adCmdStoredProc = 4
+
+[int] $adVarChar = 200
+[int] $adSmallInt = 2
+[int] $adParamInput = 1
+
+[int] $adOpenForwardOnly = 0 # Default.
+[int] $adOpenStatic = 3
+
+[int] $adLockReadOnly = 1 # Default.
+[int] $adLockOptimistic = 3
+
+[int] $adUseServer = 2 # Default.
+[int] $adUseClient = 3
+
+$cnnADO = New-Object -ComObject ADODB.Connection
+$cnnADO.Open(&quot;Provider=SQLOLEDB; Data Source=HOMEPC\SQLEXPRESS; Initial Catalog=Keeper; Integrated Security=SSPI&quot;)
+
+$cmdStudents = New-Object -ComObject ADODB.Command
+$cmdStudents.ActiveConnection = $cnnADO
+$cmdStudents.CommandType = $adCmdStoredProc
+$cmdStudents.CommandText = &quot;SELKeeperStudentsForClass&quot;
+
+$prmTTPeriod = New-Object -ComObject ADODB.Parameter
+$prmTTPeriod = $cmdStudents.CreateParameter(&quot;@ttperiod&quot;,$adVarChar,$adParamInput,6,$ttperiod) # This parameter doesn't change; assign value here.
+$cmdStudents.Parameters.Append($prmTTPeriod)
+
+$prmSUKey = New-Object -ComObject ADODB.Parameter
+$prmSUKey = $cmdStudents.CreateParameter(&quot;@SUKey&quot;,$adVarChar,$adParamInput,7) # This parameter changes; assign value in ForEach.
+$cmdStudents.Parameters.Append($prmSUKey)
+
+$prmClass = New-Object -ComObject ADODB.Parameter
+$prmClass = $cmdStudents.CreateParameter(&quot;@class&quot;,$adSmallInt,$adParamInput) # This parameter changes; assign value in ForEach.
+$cmdStudents.Parameters.Append($prmClass)
+
+$rstStudents = New-Object -ComObject ADODB.Recordset
+$rstStudents.CursorLocation = $adUseServer
+$rstStudents.CursorType = $adOpenForwardOnly
+$rstStudents.LockType = $adLockReadOnly
+
+&lt;#=====================================================
+RETRIEVE STUDENTS
+Place students in separate worksheets, one for each class, in a fabricated Excel workbook.
+Use an ADODB recordset to take advantage of Excel's speedy CopyFromRecordset function.
+LOCAL:
+    $ix: indexes worksheets.
+    $subj: student's subject code.
+    $class: student's class number.
+    $ws: current worksheet.
+    $subcode: current worksheet's new name (subj + class).
+    $rangeData: Excel range for column sizing.
+IN:
+    $rowClasses, $tblClasses: data source for teacher's classes iterated by foreach loop.
+    $prmSUKey, $prmClass: refreshed with new values during each iteration.
+    $cmdStudents, $rstStudents: retrieve new class during each iteration.   
+    $wb: current workbook, one per teacher.
+OUT:
+=====================================================#&gt;
+# Seed index for worksheets.
+[int] $ix = 1
+
+# Iterate each class.
+foreach ($rowClasses in $tblClasses) {
+
+# Assign subject and class values to typed variables.
+    [string] $subj = $rowClasses.Item(&quot;subj&quot;)
+    [int] $class = $rowClasses.Item(&quot;class&quot;)
+
+# Rename worksheet.
+    [string] $subcode = $subj + $class
+    $ws = $wb.Sheets.item($ix)  
+    $ws.Name = $subcode 
+
+# Assign typed variables to ADODB parameters.
+    $prmSUKey.Value = $subj
+    $prmClass.Value = $class
+
+# Assign result set to ADODB recordset.    
+    $rstStudents = $cmdStudents.Execute()
+
+# Copy result set to current worksheet. Adjust entry cell as reqd.
+    $wb.Sheets.item($subcode).Cells.item(2,1).CopyFromRecordset($rstStudents)
+
+# Size columns.
+    $rangeData = $wb.Sheets.item($subcode).UsedRange
+    [void] $rangeData.EntireColumn.Autofit()
+
+# Increment index for worksheets.             
+    $ix++
+    
+} # End foreach
+
+&lt;#=====================================================
+SAVE WORKBOOK
+LOCAL:
+    $pathname
+IN:
+    $xlpath
+    $sfkey
+    $ttperiod
+    $wb
+OUT:
+===================================================== #&gt;
+[string] $pathname = $xlpath + $sfkey + $ttperiod + &quot;.xlsx&quot;
+$wb.SaveAs($pathname)
+
+&lt;#=====================================================
+CLEANUP
+=====================================================#&gt;                            
+function Release-Ref ($ref) { 
+# ===================================================== 
+# Author: Kent Finkle 
+# http://gallery.technet.microsoft.co...8a41a680a7
+# =====================================================                            
+([System.Runtime.InteropServices.Marshal]::ReleaseComObject( 
+[System.__ComObject]$ref) -gt 0) 
+[System.GC]::Collect() 
+[System.GC]::WaitForPendingFinalizers() 
+}
+
+# Close connections.
+$cnnNET.Close
+$cnnADO.Close
+
+# Get rid of COM objects.
+$k = Release-Ref($ws) 
+$k = Release-Ref($wb) 
+$k = Release-Ref($xl)
+$k = Release-Ref($rstStudents)
+$k = Release-Ref($cmdStudents)
+$k = Release-Ref($prmTTPeriod)
+$k = Release-Ref($prmSUKey)
+$k = Release-Ref($prmClass)
+$k = Release-Ref($cnnADO)
+
+# Get rid of .NET objects.
+$cmdSFKey.Dispose
+Remove-Variable cmdSFKey
+
+$cmdAdmin.Dispose
+Remove-Variable cmdAdmin
+$adpAdmin.Dispose
+Remove-Variable adpAdmin
+$tblAdmin.Dispose
+Remove-Variable tblAdmin
+$rowAdmin.Dispose
+Remove-Variable rowAdmin
+
+$cmdClasses.Dispose
+Remove-Variable cmdClasses
+$adpClasses.Dispose
+Remove-Variable adpClasses
+$tblClasses.Dispose
+Remove-Variable tblClasses
+$rowClasses.Dispose
+Remove-Variable rowClasses
+
+$cnnNET.Dispose
+Remove-Variable cnnNET
+
+# Get rid of Excel process.
+# Idea from blub, http://www.powershellcommunity.org/...fault.aspx
+$ExcelProcess=get-process excel
+$ExcelProcess | foreach {stop-process ($_.id)}
+[System.Runtime.Interopservices.Marshal]::ReleaseComObject($xl) | out-null
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

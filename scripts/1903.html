@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Claus T Nielsen">
+    <title>Out-HTMLTable - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Out-HTMLTable</h1>
+<h3><a href="//scripts/1903.ps1">download</a></h3>
+<p>This will output a sortable HTML table</p>
+<pre><code class="language-posh">&lt;#
+	.SYNOPSIS
+		Takes input objects, and outputs a sortable HTML table
+
+	.DESCRIPTION
+		The function requires at least 2 parameters, an input object and a path where the result is to be output to.
+		The function will output 3 files, a css file that determines the way the result is formatted, a javascript file
+		that handles the sorting, and a HTML file that contains the data.
+		
+
+	.PARAMETER  $InputObject
+		Contains the objects that should go into the table. (required)
+
+	.PARAMETER  $OutputFolder
+		The folder where the resulting files should be put, if the folder does not exist it will be created. (required)
+		
+	.PARAMETER $BrowserTitle 
+        The name that will show up in the browser title line
+    .PARAMETER $ReportTitle
+		The name of the report on the HTML page
+
+	.EXAMPLE
+		PS C:\&gt; Out-HTMLTable -$InputObject (Get-process | select Name,Handles) -$OutputFolder c:\Reports
+
+	.EXAMPLE
+		PS C:\&gt; (Get-process | select Name,Handles) | Out-HTMLTable  -$OutputFolder c:\Reports -$BrowserTitle &quot;Very Important Report&quot;
+
+	.INPUTS
+		Powershell objects
+
+	.OUTPUTS
+		HTMLTable
+
+	.NOTES
+		Additional information about the function go here.
+
+	.LINK
+		about_functions_advanced
+
+	.LINK
+		about_comment_based_help
+
+#&gt;
+
+
+
+
+Function Out-HTMLTable {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true,Position=0,ValueFromPipeline=$true)]
+        $InputObject,
+        [Parameter(Mandatory=$true,Position=1)]
+        $OutPutFolder,
+        [Parameter(Mandatory=$false)]
+        $BrowserTitle = &quot;Table Report&quot;,
+        [Parameter(Mandatory=$false)]
+        $ReportTitle = &quot;Data&quot;
+    )
+
+    begin {
+        [Object[]]$Objects = @()
+		If (!($OutPutFolder.EndsWith(&quot;\&quot;))) {$OutPutFolder = $OutPutFolder +&quot;\&quot;}
+		if (!(Test-Path -path $OutputFolder))
+			{
+			New-Item $OutputFolder -type directory 
+			}
+    }
+
+    process {
+        $Objects += $InputObject
+    }
+
+    end {
+        $Note = &quot;Number of objects: &quot; + [String](($Objects).Count)
+        $Objects | ConvertTo-Html –body &quot;&lt;a name='Data'&gt;&lt;/a&gt;&lt;H4&gt;$Title&lt;/H4&gt;&quot; -Head &quot;&lt;title&gt;$($BrowserTitle)&lt;/title&gt;&lt;link rel='stylesheet' href='style.css'&gt;&lt;script src='sortable.js'&gt;&lt;/script&gt;&quot; |
+            ForEach-Object {$_.replace(&quot;&amp;lt;&quot;,&quot;&lt;&quot;).replace(&quot;&amp;gt;&quot;,&quot;&gt;&quot;).replace(&quot;&lt;/html&gt;&quot;,&quot;&lt;footer&gt;$($Note)&lt;/footer&gt;&lt;/html&gt;&quot;).replace(&quot;&lt;tr&gt;&lt;th&gt;&quot;,&quot;&lt;table class='sortable' id='anyid'&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;&quot;).replace(&quot;&lt;/th&gt;&lt;/tr&gt;&quot;,&quot;&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&quot;).replace(&quot;&lt;/table&gt;&quot;,&quot;&lt;/tbody&gt;&lt;/table&gt;&quot;)} | Out-File -Encoding ASCII -FilePath ($OutPutFolder + &quot;\table.html&quot;) -Force
+
+        #*#############################
+        #* Output Style Sheet to file #
+        #*#############################
+
+        $css = @'
+/* Copyright 2006 Joost de Valk */
+a img {
+	border: 0;
+}
+table.sortable {
+	border-spacing: 0;
+	border: 1px solid #000;
+	border-collapse: collapse;
+}
+table.sortable th, table.sortable td {
+	text-align: left;
+	padding: 2px 4px 2px 4px;
+	width: 125px;
+	border-style: solid;
+	border-color: #444;
+}
+table.sortable th {
+	border-width: 0px 1px 1px 1px;
+	background-color: #ccc;
+}
+table.sortable td {
+	border-width: 0px 1px 0px 1px;
+}
+table.sortable tr.odd td {
+	background-color: #ddd;
+}
+table.sortable tr.even td {
+	background-color: #fff;
+}
+table.sortable tr.sortbottom td {
+	border-top: 1px solid #444;
+	background-color: #ccc;
+	font-weight: bold;
+} 
+'@ 
+
+        $css | Out-File -encoding ASCII -FilePath ($OutPutFolder + &quot;Style.css&quot;) -Force
+		
+
+#*#############################
+#* Output Style Sheet to file #
+#*#############################
+
+
+        $sorttable= @'
+/*
+Table sorting script  by Joost de Valk, check it out at http://www.joostdevalk.nl/code/sortable-table/.
+Based on a script from http://www.kryogenix.org/code/browser/sorttable/.
+Distributed under the MIT license: http://www.kryogenix.org/code/browser/licence.html .
+
+Copyright (c) 1997-2007 Stuart Langridge, Joost de Valk.
+
+Version 1.5.7
+*/
+
+/* You can change these values */
+var image_path = &quot;http://www.joostdevalk.nl/code/sortable-table/&quot;;
+var image_up = &quot;arrowup.gif&quot;;
+var image_down = &quot;arrowdown.gif&quot;;
+var image_none = &quot;arrownone.gif&quot;;
+var europeandate = true;
+var alternate_row_colors = true;
+
+/* Don't change anything below this unless you know what you're doing */
+addEvent(window, &quot;load&quot;, sortables_init);
+
+var SORT_COLUMN_INDEX;
+var thead = false;
+
+function sortables_init() {
+	// Find all tables with class sortable and make them sortable
+	if (!document.getElementsByTagName) return;
+	tbls = document.getElementsByTagName(&quot;table&quot;);
+	for (ti=0;ti&lt;tbls.length;ti++) {
+		thisTbl = tbls[ti];
+		if (((' '+thisTbl.className+' ').indexOf(&quot;sortable&quot;) != -1) &amp;&amp; (thisTbl.id)) {
+			ts_makeSortable(thisTbl);
+		}
+	}
+}
+
+function ts_makeSortable(t) {
+	if (t.rows &amp;&amp; t.rows.length &gt; 0) {
+		if (t.tHead &amp;&amp; t.tHead.rows.length &gt; 0) {
+			var firstRow = t.tHead.rows[t.tHead.rows.length-1];
+			thead = true;
+		} else {
+			var firstRow = t.rows[0];
+		}
+	}
+	if (!firstRow) return;
+	
+	// We have a first row: assume it's the header, and make its contents clickable links
+	for (var i=0;i&lt;firstRow.cells.length;i++) {
+		var cell = firstRow.cells[i];
+		var txt = ts_getInnerText(cell);
+		if (cell.className != &quot;unsortable&quot; &amp;&amp; cell.className.indexOf(&quot;unsortable&quot;) == -1) {
+			cell.innerHTML = '&lt;a href=&quot;#&quot; class=&quot;sortheader&quot; onclick=&quot;ts_resortTable(this, '+i+');return false;&quot;&gt;'+txt+'&lt;span class=&quot;sortarrow&quot;&gt;&amp;nbsp;&amp;nbsp;&lt;img src=&quot;'+ image_path + image_none + '&quot; alt=&quot;&amp;darr;&quot;/&gt;&lt;/span&gt;&lt;/a&gt;';
+		}
+	}
+	if (alternate_row_colors) {
+		alternate(t);
+	}
+}
+
+function ts_getInnerText(el) {
+	if (typeof el == &quot;string&quot;) return el;
+	if (typeof el == &quot;undefined&quot;) { return el };
+	if (el.innerText) return el.innerText;	//Not needed but it is faster
+	var str = &quot;&quot;;
+	
+	var cs = el.childNodes;
+	var l = cs.length;
+	for (var i = 0; i &lt; l; i++) {
+		switch (cs[i].nodeType) {
+			case 1: //ELEMENT_NODE
+				str += ts_getInnerText(cs[i]);
+				break;
+			case 3:	//TEXT_NODE
+				str += cs[i].nodeValue;
+				break;
+		}
+	}
+	return str;
+}
+
+function ts_resortTable(lnk, clid) {
+	var span;
+	for (var ci=0;ci&lt;lnk.childNodes.length;ci++) {
+		if (lnk.childNodes[ci].tagName &amp;&amp; lnk.childNodes[ci].tagName.toLowerCase() == 'span') span = lnk.childNodes[ci];
+	}
+	var spantext = ts_getInnerText(span);
+	var td = lnk.parentNode;
+	var column = clid || td.cellIndex;
+	var t = getParent(td,'TABLE');
+	// Work out a type for the column
+	if (t.rows.length &lt;= 1) return;
+	var itm = &quot;&quot;;
+	var i = 0;
+	while (itm == &quot;&quot; &amp;&amp; i &lt; t.tBodies[0].rows.length) {
+		var itm = ts_getInnerText(t.tBodies[0].rows[i].cells[column]);
+		itm = trim(itm);
+		if (itm.substr(0,4) == &quot;&lt;!--&quot; || itm.length == 0) {
+			itm = &quot;&quot;;
+		}
+		i++;
+	}
+	if (itm == &quot;&quot;) return; 
+	sortfn = ts_sort_caseinsensitive;
+	if (itm.match(/^\d\d[\/\.-][a-zA-z][a-zA-Z][a-zA-Z][\/\.-]\d\d\d\d$/)) sortfn = ts_sort_date;
+	if (itm.match(/^\d\d[\/\.-]\d\d[\/\.-]\d\d\d{2}?$/)) sortfn = ts_sort_date;
+	if (itm.match(/^-?[£$€Û¢´]\d/)) sortfn = ts_sort_numeric;
+	if (itm.match(/^-?(\d+[,\.]?)+(E[-+][\d]+)?%?$/)) sortfn = ts_sort_numeric;
+	SORT_COLUMN_INDEX = column;
+	var firstRow = new Array();
+	var newRows = new Array();
+	for (k=0;k&lt;t.tBodies.length;k++) {
+		for (i=0;i&lt;t.tBodies[k].rows[0].length;i++) { 
+			firstRow[i] = t.tBodies[k].rows[0][i]; 
+		}
+	}
+	for (k=0;k&lt;t.tBodies.length;k++) {
+		if (!thead) {
+			// Skip the first row
+			for (j=1;j&lt;t.tBodies[k].rows.length;j++) { 
+				newRows[j-1] = t.tBodies[k].rows[j];
+			}
+		} else {
+			// Do NOT skip the first row
+			for (j=0;j&lt;t.tBodies[k].rows.length;j++) { 
+				newRows[j] = t.tBodies[k].rows[j];
+			}
+		}
+	}
+	newRows.sort(sortfn);
+	if (span.getAttribute(&quot;sortdir&quot;) == 'down') {
+			ARROW = '&amp;nbsp;&amp;nbsp;&lt;img src=&quot;'+ image_path + image_down + '&quot; alt=&quot;&amp;darr;&quot;/&gt;';
+			newRows.reverse();
+			span.setAttribute('sortdir','up');
+	} else {
+			ARROW = '&amp;nbsp;&amp;nbsp;&lt;img src=&quot;'+ image_path + image_up + '&quot; alt=&quot;&amp;uarr;&quot;/&gt;';
+			span.setAttribute('sortdir','down');
+	} 
+    // We appendChild rows that already exist to the tbody, so it moves them rather than creating new ones
+    // don't do sortbottom rows
+    for (i=0; i&lt;newRows.length; i++) { 
+		if (!newRows[i].className || (newRows[i].className &amp;&amp; (newRows[i].className.indexOf('sortbottom') == -1))) {
+			t.tBodies[0].appendChild(newRows[i]);
+		}
+	}
+    // do sortbottom rows only
+    for (i=0; i&lt;newRows.length; i++) {
+		if (newRows[i].className &amp;&amp; (newRows[i].className.indexOf('sortbottom') != -1)) 
+			t.tBodies[0].appendChild(newRows[i]);
+	}
+	// Delete any other arrows there may be showing
+	var allspans = document.getElementsByTagName(&quot;span&quot;);
+	for (var ci=0;ci&lt;allspans.length;ci++) {
+		if (allspans[ci].className == 'sortarrow') {
+			if (getParent(allspans[ci],&quot;table&quot;) == getParent(lnk,&quot;table&quot;)) { // in the same table as us?
+				allspans[ci].innerHTML = '&amp;nbsp;&amp;nbsp;&lt;img src=&quot;'+ image_path + image_none + '&quot; alt=&quot;&amp;darr;&quot;/&gt;';
+			}
+		}
+	}		
+	span.innerHTML = ARROW;
+	alternate(t);
+}
+
+function getParent(el, pTagName) {
+	if (el == null) {
+		return null;
+	} else if (el.nodeType == 1 &amp;&amp; el.tagName.toLowerCase() == pTagName.toLowerCase()) {
+		return el;
+	} else {
+		return getParent(el.parentNode, pTagName);
+	}
+}
+
+function sort_date(date) {	
+	// y2k notes: two digit years less than 50 are treated as 20XX, greater than 50 are treated as 19XX
+	dt = &quot;00000000&quot;;
+	if (date.length == 11) {
+		mtstr = date.substr(3,3);
+		mtstr = mtstr.toLowerCase();
+		switch(mtstr) {
+			case &quot;jan&quot;: var mt = &quot;01&quot;; break;
+			case &quot;feb&quot;: var mt = &quot;02&quot;; break;
+			case &quot;mar&quot;: var mt = &quot;03&quot;; break;
+			case &quot;apr&quot;: var mt = &quot;04&quot;; break;
+			case &quot;may&quot;: var mt = &quot;05&quot;; break;
+			case &quot;jun&quot;: var mt = &quot;06&quot;; break;
+			case &quot;jul&quot;: var mt = &quot;07&quot;; break;
+			case &quot;aug&quot;: var mt = &quot;08&quot;; break;
+			case &quot;sep&quot;: var mt = &quot;09&quot;; break;
+			case &quot;oct&quot;: var mt = &quot;10&quot;; break;
+			case &quot;nov&quot;: var mt = &quot;11&quot;; break;
+			case &quot;dec&quot;: var mt = &quot;12&quot;; break;
+			// default: var mt = &quot;00&quot;;
+		}
+		dt = date.substr(7,4)+mt+date.substr(0,2);
+		return dt;
+	} else if (date.length == 10) {
+		if (europeandate == false) {
+			dt = date.substr(6,4)+date.substr(0,2)+date.substr(3,2);
+			return dt;
+		} else {
+			dt = date.substr(6,4)+date.substr(3,2)+date.substr(0,2);
+			return dt;
+		}
+	} else if (date.length == 8) {
+		yr = date.substr(6,2);
+		if (parseInt(yr) &lt; 50) { 
+			yr = '20'+yr; 
+		} else { 
+			yr = '19'+yr; 
+		}
+		if (europeandate == true) {
+			dt = yr+date.substr(3,2)+date.substr(0,2);
+			return dt;
+		} else {
+			dt = yr+date.substr(0,2)+date.substr(3,2);
+			return dt;
+		}
+	}
+	return dt;
+}
+
+function ts_sort_date(a,b) {
+	dt1 = sort_date(ts_getInnerText(a.cells[SORT_COLUMN_INDEX]));
+	dt2 = sort_date(ts_getInnerText(b.cells[SORT_COLUMN_INDEX]));
+	
+	if (dt1==dt2) {
+		return 0;
+	}
+	if (dt1&lt;dt2) { 
+		return -1;
+	}
+	return 1;
+}
+function ts_sort_numeric(a,b) {
+	var aa = ts_getInnerText(a.cells[SORT_COLUMN_INDEX]);
+	aa = clean_num(aa);
+	var bb = ts_getInnerText(b.cells[SORT_COLUMN_INDEX]);
+	bb = clean_num(bb);
+	return compare_numeric(aa,bb);
+}
+function compare_numeric(a,b) {
+	var a = parseFloat(a);
+	a = (isNaN(a) ? 0 : a);
+	var b = parseFloat(b);
+	b = (isNaN(b) ? 0 : b);
+	return a - b;
+}
+function ts_sort_caseinsensitive(a,b) {
+	aa = ts_getInnerText(a.cells[SORT_COLUMN_INDEX]).toLowerCase();
+	bb = ts_getInnerText(b.cells[SORT_COLUMN_INDEX]).toLowerCase();
+	if (aa==bb) {
+		return 0;
+	}
+	if (aa&lt;bb) {
+		return -1;
+	}
+	return 1;
+}
+function ts_sort_default(a,b) {
+	aa = ts_getInnerText(a.cells[SORT_COLUMN_INDEX]);
+	bb = ts_getInnerText(b.cells[SORT_COLUMN_INDEX]);
+	if (aa==bb) {
+		return 0;
+	}
+	if (aa&lt;bb) {
+		return -1;
+	}
+	return 1;
+}
+function addEvent(elm, evType, fn, useCapture)
+// addEvent and removeEvent
+// cross-browser event handling for IE5+,	NS6 and Mozilla
+// By Scott Andrew
+{
+	if (elm.addEventListener){
+		elm.addEventListener(evType, fn, useCapture);
+		return true;
+	} else if (elm.attachEvent){
+		var r = elm.attachEvent(&quot;on&quot;+evType, fn);
+		return r;
+	} else {
+		alert(&quot;Handler could not be removed&quot;);
+	}
+}
+function clean_num(str) {
+	str = str.replace(new RegExp(/[^-?0-9.]/g),&quot;&quot;);
+	return str;
+}
+function trim(s) {
+	return s.replace(/^\s+|\s+$/g, &quot;&quot;);
+}
+function alternate(table) {
+	// Take object table and get all it's tbodies.
+	var tableBodies = table.getElementsByTagName(&quot;tbody&quot;);
+	// Loop through these tbodies
+	for (var i = 0; i &lt; tableBodies.length; i++) {
+		// Take the tbody, and get all it's rows
+		var tableRows = tableBodies[i].getElementsByTagName(&quot;tr&quot;);
+		// Loop through these rows
+		// Start at 1 because we want to leave the heading row untouched
+		for (var j = 0; j &lt; tableRows.length; j++) {
+			// Check if j is even, and apply classes for both possible results
+			if ( (j % 2) == 0  ) {
+				if ( !(tableRows[j].className.indexOf('odd') == -1) ) {
+					tableRows[j].className = tableRows[j].className.replace('odd', 'even');
+				} else {
+					if ( tableRows[j].className.indexOf('even') == -1 ) {
+						tableRows[j].className += &quot; even&quot;;
+					}
+				}
+			} else {
+				if ( !(tableRows[j].className.indexOf('even') == -1) ) {
+					tableRows[j].className = tableRows[j].className.replace('even', 'odd');
+				} else {
+					if ( tableRows[j].className.indexOf('odd') == -1 ) {
+						tableRows[j].className += &quot; odd&quot;;
+					}
+				}
+			} 
+		}
+	}
+}
+'@
+        $sorttable | Out-File -Encoding Unicode -FilePath ($OutPutFolder + 'sortable.js') -Force
+    }
+}
+#Examples
+#Out-HTMLTable -InputObj (Get-process | select name,workingset,vm,pm -First 20)   -OutPutFolder &quot;C:\AP VMs\&quot; -BrowserTitle &quot;Hej med dig&quot;
+#(Get-process | select name,workingset,vm,pm -First 25) | Out-HTMLTable  -OutPutFolder &quot;C:\AP VMs\estt&quot; -BrowserTitle &quot;Hej med dig&quot;
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

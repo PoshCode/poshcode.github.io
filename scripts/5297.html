@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Joel Bennett">
+    <title>ConsoleToys,psm1 - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>ConsoleToys,psm1</h1>
+<h3><a href="//scripts/5297.ps1">download</a> - <a href="//scripts/5295.md">parent</a></h3>
+<p>Show-ConsoleMenu shows a vertical &quot;menu&quot; in the console and allows you to pick numeric items from it.
+Update 1: start numbering of items at 1
+Update 2: fix and put back the &quot;buffer box&quot; code so you can get a fancy menu ;-)</p>
+<pre><code class="language-posh">function Show-ConsoleMenu {
+   &lt;#
+      .Synopsis
+        Displays a menu in the console and returns the selection
+      .Description
+        Displays a numbered list in the console, accepts a typed number from the user, and returns it.
+      .Example
+        ls | Show-ConsoleMenu -Title &quot;Please pick a file to delete:&quot; -Passthru | rm -whatif
+      
+        Description
+        -----------
+        Creates a menu showing a line for every file, and outputs the selected file.
+      .Example
+        if(Test-Path $Profile) {
+           switch(Show-ConsoleMenu &quot;Profile exists:&quot; &quot;Delete it!&quot;,&quot;Rename it with 01&quot;,&quot;Abort&quot;) {
+              1 { rm $Profile -whatif }
+              2 { mv $Profile [IO.Path]::ChangeExtension($Profile,&quot;01.ps1&quot;) }
+              3 { return }
+           }
+        }
+      
+        Description
+        -----------
+        Shows how to use the return value without the Passthru switch.
+        This example would check if you have a profile, and if you do, would offer you the choice of removing or renaming it.
+   #&gt;
+   param(
+      # The items to be chosen from
+      [Parameter(ValueFromPipeline=$true,Position=2)]
+      [Alias(&quot;InputObject&quot;)]
+      [PSObject[]]$Choices,
+      # A caption to display before the choices
+      [Parameter(Position=1)]
+      [Alias(&quot;Title&quot;)]
+      [string]$Caption,
+      # A scriptblock expression for formatting the Choices.
+      [Parameter(Position=3)]
+      [ScriptBlock]$Expression=({$_}),
+      # A prompt to display after the choices
+      [Alias(&quot;Footer&quot;)]
+      [string]$Prompt,
+      # How much to indent the &quot;center&quot; of the selection menu (Defaults to 8)
+      [int]$indentLeft=4,
+      # If set, Show-ConsoleMenu returns the selected value from $choices, otherwise it returns the index (which is usually easier to use in a switch statement)
+      [Switch]$Passthru,
+      # If set, this function works with my New-BufferBox script by using Out-Buffer ( http://poshcode.org/2899 )
+      [Switch]$UseBufferBox,
+      # If set, allows multiple selection (Press Enter to stop selecting more)
+      [Switch]$MultiSelect
+   )
+   begin {
+      $allchoices = New-Object System.Collections.Generic.List[PSObject]
+   }
+   process {
+      if($choices) {
+         $allchoices.AddRange($choices)
+      }
+   }
+   end {
+      $Format = &quot;{0:D1}&quot;; 
+      $Digits = ($allchoices.Count + 1).ToString().Length
+      $Format = &quot;{0:D${Digits}}&quot; 
+
+      $numbersWarning = &quot;Numbers Only Please&quot;
+      $rangeWarning   = &quot;Only {0:D${Digits}}..{1:D${Digits}} Please&quot; -f 1, ($allchoices.Count)
+
+      # Make a hashtable with keys
+      for($i=0; $i -lt $allchoices.Count; $i++) {
+         $allchoices[$i] = Add-Member -Input $allchoices[$i] -Type NoteProperty -Name ConsoleMenuKey -Value $($format -f ($i+1)) -Passthru
+      }
+
+      Write-Debug &quot;There are $($allChoices.Count) choices, so we'll use $Digits digits&quot;
+      # output the menu to the screen
+      $width = [Math]::Max(&quot;$Prompt&quot;.Length, &quot;$Caption&quot;.Length)
+      $width = [Math]::Max($width, $numbersWarning.Length)
+
+      $menu = $allchoices | Format-Table -HideTableHeader @{E=&quot;ConsoleMenuKey&quot;;A=&quot;Right&quot;;W=$indentLeft}, @{E=$Expression;A=&quot;Left&quot;} -Force |
+                            Out-String -Stream | ForEach { $line = $_.TrimEnd(); if($width -lt $line.Length) { $width = $line.Length }; $line }
+      $menu = $menu[0..$($menu.Length-2)]
+
+      if($UseBufferBox) {
+         $OriginalCursorPosition = $Host.UI.RawUI.CursorPosition
+         $Width += $(if($indentLeft -ge 4) { $indentLeft } else { $Width += 4 })
+         $menu = $menu | Where { $_.length }
+         $Height = $Menu.Length + $(if($Prompt){5}else{4})
+         Reset-Buffer -Position $OriginalCursorPosition -Title $Caption -Height $Height -Width $Width -ShowInput
+         $menu | Out-Buffer 
+         Set-BufferInputLine
+      } else {
+         Write-Host (&quot;`n&quot; + (&quot; &quot; * ($indentLeft/2)) + $Caption + &quot;`n&quot;)  -ForegroundColor $Host.PrivateData.VerboseForegroundColor  -BackgroundColor $Host.PrivateData.VerboseBackgroundColor
+         Write-Host $menu
+      }
+      
+      do {
+         if($Prompt) {
+            if($UseBufferBox) {
+               Reset-CursorPosition $BufferPromptPosition -LinesOffset 2
+               Out-Buffer $Prompt -ForegroundColor $Host.PrivateData.VerboseForegroundColor  -BackgroundColor $Host.PrivateData.VerboseBackgroundColor -FixInput
+            } else {
+               Write-Host $Prompt -ForegroundColor $Host.PrivateData.VerboseForegroundColor  -BackgroundColor $Host.PrivateData.VerboseBackgroundColor
+            }
+         }      
+         # get a choice from the user
+         [string]$PreviousKeys=&quot;&quot;
+         do { 
+            $Key = $Host.UI.RawUI.ReadKey(&quot;IncludeKeyDown,NoEcho&quot;).Character
+            try { 
+               [int][string]$choice = &quot;${PreviousKeys}${Key}&quot;
+               $index = $choice - 1
+               $PreviousKeys = &quot;${PreviousKeys}${Key}&quot;
+               if($UseBufferBox) {
+                  Set-BufferInputLine $PreviousKeys
+               } else {
+                   Write-Host $Key -NoNewline
+               }
+            } catch { 
+               ## The &quot;?&quot; causes us to re-show the menu. Useful for long multi-selects, which might scroll off.
+               if(63 -eq [int][char]$Key) {
+                  if($UseBufferBox) {
+                     $menu | Out-Buffer 
+                  } else {
+                     Write-Host $menu
+                  }
+               } elseif(13,27,0 -notcontains [int][char]$Key) {
+                  if($UseBufferBox) {
+                     $menu | Out-Buffer 
+                     Out-Buffer $numbersWarning -ForegroundColor $Host.PrivateData.WarningForegroundColor -BackgroundColor $Host.PrivateData.WarningBackgroundColor -FixInput
+                  } else {
+                     Write-Warning $numbersWarning
+                  }
+               }
+               [int][string]$choice = &quot;${PreviousKeys}&quot;
+            }
+            if($choice -gt $allchoices.Count) {
+               $PreviousKeys = &quot;&quot;
+               if($UseBufferBox) {
+                  $menu | Out-Buffer
+                  Out-Buffer $rangeWarning -ForegroundColor $Host.PrivateData.WarningForegroundColor -BackgroundColor $Host.PrivateData.WarningBackgroundColor -FixInput
+               } else {
+                  Write-Warning $rangeWarning
+               }
+            }
+         } while( $PreviousKeys.Length -lt $Digits -and (13,27 -notcontains [int][char]$Key))
+
+         if($index -ge 0 -and $index -lt $allchoices.Count) {
+            if($UseBufferBox) {
+               Reset-CursorPosition $BufferPromptPosition -LinesOffset 2
+            } else {
+               Write-Host
+            }
+            if($Passthru) { 
+               $allchoices[$index] 
+            } else { 
+               $choice
+            }
+         }
+      } while($key -ne [char]13 -and $MultiSelect)
+   }
+}
+
+
+
+####################################################################################################
+## This script is just a demonstration of some of the things you can do with the buffer
+## in the default PowerShell host... it serves as a reminder of how much work remains on
+## PoshConsole, and as an inspiration to anyone who is thinking about trying to create
+## &quot;interactive&quot; PowerShell applications.
+##
+## Try Test-DisplayBox and then Test-BufferBox (note it has tab completion and everything).
+####################################################################################################
+$global:BoxChars = new-object PSObject -Property @{
+   'HorizontalDouble'            = ([char]9552).ToString()
+   'VerticalDouble'              = ([char]9553).ToString()
+   'TopLeftDouble'               = ([char]9556).ToString()
+   'TopRightDouble'              = ([char]9559).ToString()
+   'BottomLeftDouble'            = ([char]9562).ToString()
+   'BottomRightDouble'           = ([char]9565).ToString()
+   'HorizontalDoubleSingleDown'  = ([char]9572).ToString()
+   'HorizontalDoubleSingleUp'    = ([char]9575).ToString()
+   'Horizontal'                  = ([char]9472).ToString()
+   'Vertical'                    = ([char]9474).ToString()
+   'TopLeft'                     = ([char]9484).ToString()
+   'TopRight'                    = ([char]9488).ToString()
+   'BottomLeft'                  = ([char]9492).ToString()
+   'BottomRight'                 = ([char]9496).ToString()
+   'Cross'                       = ([char]9532).ToString()
+   'VerticalDoubleRightSingle'   = ([char]9567).ToString()
+   'VerticalDoubleLeftSingle'    = ([char]9570).ToString()
+}
+$global:RectType = &quot;system.management.automation.host.rectangle&quot;
+
+
+function Reset-Buffer {
+   param(
+      $Position = $Host.UI.RawUI.WindowPosition,
+      [int]$Height = $Host.UI.RawUI.WindowSize.Height,
+      [int]$Width = $Host.UI.RawUI.WindowSize.Width,
+      # Note: all edges are padded by 1 for the box edges, but we also pad each side by this ammount:
+      [int]$Padding = 1,
+      $ForegroundColor = $Host.UI.RawUI.ForegroundColor,
+      $BackgroundColor = $Host.UI.RawUI.BackgroundColor,
+      $BorderColor     = &quot;Yellow&quot;,
+      [switch]$NoBorder,
+      [switch]$ShowInput,
+      [string]$Title = &quot;&quot;
+   )
+
+   $global:BufferHeight          = $Height
+   $global:BufferWidth           = $Width
+   $global:BufferPadding         = $Padding
+   $global:BufferForegroundColor = $ForegroundColor 
+   $global:BufferBackgroundColor = $BackgroundColor 
+   $global:BufferBorderColor     = $BorderColor     
+
+   if($NoBorder) {
+      $global:BufferBoxSides = 0
+   } else {
+      $global:BufferBoxSides = 2
+   }
+   if($ShowInput) {
+      $global:BufferHeight -= 2
+   }
+
+   Write-Debug &quot;RESET: Position: $Position Left: $Left Top: $Top Width: $Width Height: $Height Offset: $Offset&quot;
+
+   $Host.UI.RawUI.SetBufferContents($Position,(New-BufferBox $BufferHeight $BufferWidth -Title:$Title -NoBorder:$NoBorder -ShowInput:$ShowInput -Background $BufferBackgroundColor -Border $BufferBorderColor))
+  
+   
+   $global:BufferPosition = $Position   
+   $global:BufferPosition.X += $global:BufferPadding + ($global:BufferBoxSides/2)
+   # this gets set to the BOTTOM line, because I assume text will flow in from the bottom.
+   $global:BufferPosition.Y += $global:BufferHeight - 2
+   # and this goes below that ...
+   $global:BufferPromptPosition = $BufferPosition
+   $global:BufferPromptPosition.Y += 2
+   $global:BufferPromptPosition.X += 2 - $global:BufferPadding # Prompt = &quot;&gt; &quot;
+}
+
+function New-BufferBox {
+   param(
+      [int]$Height = $global:BufferHeight, 
+      [int]$Width = $global:BufferWidth,
+      $Title = &quot;&quot;,
+      [switch]$NoBorder,
+      [switch]$ShowInput,
+      $BackgroundColor = $global:BufferBackgroundColor,
+      $BorderColor = $global:BufferBorderColor 
+   )
+   $Width = $Width - $global:BufferBoxSides
+   
+   $LineTop =( $global:BoxChars.HorizontalDouble * 2) + $Title `
+            + $($global:BoxChars.HorizontalDouble * ($Width - ($Title.Length+2)))
+   
+   $LineField = ' ' * $Width
+   $LineBottom = $global:BoxChars.HorizontalDouble * $Width
+   $LineSeparator = $global:BoxChars.Horizontal * $Width
+   $LinePrompt = '&gt; ' + ' ' * ($Width-2) # Prompt = &quot;&gt; &quot;
+   
+   if(!$NoBorder) {
+      $LineField = $global:BoxChars.VerticalDouble + $LineField + $global:BoxChars.VerticalDouble
+      $LinePrompt = $global:BoxChars.VerticalDouble + $LinePrompt + $global:BoxChars.VerticalDouble
+      $LineBottom = $global:BoxChars.BottomLeftDouble + $LineBottom + $global:BoxChars.BottomRightDouble
+      $LineTop = $global:BoxChars.TopLeftDouble + $LineTop + $global:BoxChars.TopRightDouble
+      $LineSeparator = $global:BoxChars.VerticalDoubleRightSingle + $LineSeparator + $global:BoxChars.VerticalDoubleLeftSingle
+   }
+
+   if($ShowInput) {
+      $box = &amp;{$LineTop;1..($Height - 2) |% {$LineField};$LineSeparator;$LinePrompt;$LineBottom}
+   } else {
+      $box = &amp;{$LineTop;1..($Height - 2) |% {$LineField};$LineBottom}
+   }
+   $boxBuffer = $Host.UI.RawUI.NewBufferCellArray($box,$BorderColor,$BackgroundColor)
+   return ,$boxBuffer
+}
+
+function Move-Buffer {
+   param(
+      $Position = $global:BufferPosition,
+      [int]$Left = $($global:BufferBoxSides/2),
+      [int]$Top = (2 - $global:BufferHeight),
+      [int]$Width = $global:BufferWidth - $global:BufferBoxSides,
+      [int]$Height = $global:BufferHeight,
+      [int]$Offset = -1
+   )
+   Write-Debug &quot;MOVE: Position: $Position Left: $Left Top: $Top Width: $Width Height: $Height Offset: $Offset&quot;
+
+   $Position.X += $Left
+   $Position.Y += $Top
+   $Rect = New-Object $RectType $Position.X, $Position.Y, ($Position.X + $width), ($Position.Y + $height -1)
+   $Position.Y += $OffSet
+   $Host.UI.RawUI.ScrollBufferContents($Rect, $Position, $Rect, (new-object System.Management.Automation.Host.BufferCell(' ',$global:BufferForegroundColor,$global:BufferBackgroundColor,'complete')))
+}
+
+function Out-Buffer {
+   param(
+      [Parameter(ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,Position=0,Mandatory=$true)]
+      $Message, 
+      [Parameter(ValueFromPipelineByPropertyName=$true)]
+      $ForegroundColor = $global:BufferForegroundColor, 
+      [Parameter(ValueFromPipelineByPropertyName=$true)]
+      $BackgroundColor = $global:BufferBackgroundColor, 
+      
+      [switch]$NoScroll,
+      
+      [Parameter(ValueFromPipelineByPropertyName=$true)]
+      $Position = $global:BufferPosition,
+      [Parameter(ValueFromPipelineByPropertyName=$true)]
+      [int]$Left = 0,
+      [Parameter(ValueFromPipelineByPropertyName=$true)]
+      [int]$Top    = $(3 - $global:BufferHeight),  # Box Edge + New Lines
+      [Parameter(ValueFromPipelineByPropertyName=$true)]
+      [int]$Width  = ($global:BufferWidth - $global:BufferBoxSides), # Box Edge
+      [Parameter(ValueFromPipelineByPropertyName=$true)]
+      [int]$Height = ($global:BufferHeight - $global:BufferBoxSides), # Box Edge
+      [Parameter(ValueFromPipelineByPropertyName=$true)]
+      [int]$Offset = $( 0 - (&quot;$Message&quot;.Split(&quot;`n&quot;).Count)),
+      [Switch]$FixInput
+   )
+   process {
+      $lineCount = $Message.Split(&quot;`n&quot;).Count
+
+      $Width = $Width - ($global:BufferPadding * 2)
+      if(!$NoScroll){ Move-Buffer $Position $Left $Top $Width $Height $Offset }
+      
+      $MessageBuffer = New-Object &quot;System.Management.Automation.Host.BufferCell[,]&quot; $lineCount, $width
+      
+      $index = 0
+      foreach( $line in $Message.Split(&quot;`n&quot;) ) {
+         $Buffer = $Host.UI.RawUI.NewBufferCellArray( @($line.Trim(&quot;`r&quot;).PadRight($Width)), $ForegroundColor, $BackgroundColor )
+         for($i = 0; $i -lt $width; $i++) {
+            $MessageBuffer[$index,$i] = $Buffer[0,$i]
+         }
+         $index++
+      }
+      
+      $Y = $global:BufferPosition.Y
+      $global:BufferPosition.Y -= $lineCount - 1
+      $Host.UI.RawUI.SetBufferContents($global:BufferPosition,$MessageBuffer)
+      $global:BufferPosition.Y = $Y
+
+      if($FixInput) {
+         Set-BufferInputLine
+      }
+   }
+}
+
+function Set-BufferInputLine {
+   param([String]$Line = &quot;&quot;)
+   $PromptText = $line.PadRight(($global:BufferWidth - $global:BufferBoxSides - $line.Length - 3)) # Prompt = &quot;&gt; &quot;
+   
+   $CursorPosition = $BufferPromptPosition
+   $CursorPosition.X += $line.Length
+   
+   $Prompt = $Host.UI.RawUI.NewBufferCellArray( @($PromptText),$global:BufferForegroundColor, $global:BufferBackgroundColor)
+   $Host.UI.RawUI.SetBufferContents( $BufferPromptPosition, $prompt )
+   $Host.UI.RawUI.CursorPosition = $CursorPosition
+}
+
+function Reset-CursorPosition {
+   param(
+      $CursorPosition = $BufferPromptPosition,
+      $LinesOffset = 2
+   )
+   $CursorPosition.Y += $LinesOffset
+   $CursorPosition.X = 0
+   $Host.UI.RawUI.CursorPosition = $CursorPosition
+}
+
+function Test-DisplayBox {
+   $Position = $Host.UI.RawUI.WindowPosition
+   $Position.X += 10
+   $Position.Y += 3
+
+   Reset-Buffer $Position 20 66 3 -ForegroundColor 'Gray' -BackgroundColor 'Black' -BorderColor 'Green'
+   Out-Buffer 'Greetings!' 'Yellow' 'black'
+   sleep -m 600
+   Out-Buffer '' 'Gray' 'black'
+   sleep -m 600
+   Out-Buffer '- - - Thank you for running this simple demo script! - - -' 'Green' 'black'
+   sleep -m 600
+   Out-Buffer '' 'Gray' 'black'
+   sleep -m 600
+   Out-Buffer &quot;We are demonstrating how the scroll buffer works: you can`nadd more than one line at a time, but you don't really`nneed to, since they add almost as fast one at a time.&quot; 'white' 'black'
+   sleep -m 3000
+   Out-Buffer '' 'Gray' 'black'
+   Out-Buffer 'That is, as long as you don''t have any delay, you can just' 'white' 'black'
+   Out-Buffer 'write out as many lines as you like, one-at-a-time, like' 'white' 'black'
+   Out-Buffer 'this, and there is really no downside to doing that.' 'white' 'black'
+   sleep -m 3000
+   Out-Buffer '' 'Gray' 'black'
+   Out-Buffer 'Right? '.PadRight(58,&quot;-&quot;) 'Red' 'black'   
+   Out-Buffer '' 'Gray' 'black'
+   sleep -m 600
+   Out-Buffer 'It''s clearly not as slick to just pop in multiple lines' 'white' 'black'
+   sleep -m 1200
+   Out-Buffer 'with absolutely no scroll delay, and it makes it a little ' 'white' 'black'
+   sleep -m 1200
+   Out-Buffer 'hard to tell what you have read already, but that''s ok.' 'white' 'black'
+   sleep -m 1200
+   Out-Buffer '' 'Gray' 'black'
+   sleep -m 600
+   Out-Buffer 'If you delay between paragraphs.' 'Red' 'black'   
+   sleep -m 600
+   Out-Buffer '' 'Gray' 'black'
+   sleep -m 600
+   Out-Buffer 'But: don''t scroll off-screen faster than I can read!' 'Yellow' 'black'   
+   sleep -m 600
+   Out-Buffer '' 'Gray' 'black'
+}
+
+## Test-BufferBox 3.1 - Now with Tab completion
+####################################################################################################
+## Imagine it's a chat window: you can type, but the whole time, the ongoing conversation in the 
+## chat room you have joined is going on in the background.
+##
+## NOTE: because this is a &quot;chat&quot; demo, we treat your input as text, and to execute script in-line 
+## you have to enclose it inside $() braces.
+####################################################################################################
+function Test-BufferBox {
+   param(
+      $title = &quot;PowerShell Interactive Buffer Demo&quot;
+   )
+
+   Reset-Buffer -ShowInput -Title $Title
+
+   ###################################################################################################
+   ##### We only need this for the purposes of the demo...
+   ##### In a real script you would, presumably, be getting stuff from somewhere else to display
+   $noise = $MyInvocation.MyCommand.Definition -split &quot;`n&quot;
+   $index = 0; 
+   $random = New-Object &quot;Random&quot;
+   [regex]$chunker = @'
+[^ \&quot;']+|([\&quot;'])[^\\1]*?\\1[^ \&quot;']*|([\&quot;'])[^\\1]*$| $
+'@
+   ##### Printing a &quot;How to Exit&quot; message
+   Out-Buffer &quot;  &quot; -Fore DarkGray -Back Cyan
+   Out-Buffer &quot;     This is just a demo. &quot; -Fore Black -Back Cyan
+   Out-Buffer &quot;     We will stream in the source code of this script ... &quot; -Fore Black -Back Cyan
+   Out-Buffer &quot;     And you can type at the bottom while it's running. &quot; -Fore Black -Back Cyan
+   Out-Buffer &quot;     Imagine this as an n-way chat application like IRC, except that &quot; -Fore Black -Back Cyan
+   Out-Buffer &quot;  FOR THIS PERFORMANCE ONLY: &quot; -Fore Black -Back Cyan
+   Out-Buffer &quot;         The part of your chatting friends is played by my source code. &quot; -Fore DarkGray -Back Cyan
+   Out-Buffer &quot;  &quot; -Fore DarkGray -Back Cyan
+   Out-Buffer &quot;     Press ESC to exit, or enter 'exit' and hit Enter&quot; -Fore Black -Back Cyan
+   Out-Buffer &quot;  &quot; -Fore DarkGray -Back Cyan
+   ##### Setting the prompt
+   Set-BufferInputLine
+   ##### And initializing our two variables ...
+   $line=&quot;&quot;
+   $exit = $false
+    
+   switch(Show-ConsoleMenu &quot;What would you like to do now?&quot; &quot;Continue the demo&quot;,&quot;Stop the demo&quot;,&quot;Exit PowerShell&quot; -UseBuffer) {
+   1 { &lt;# do nothing, will continue #&gt; }
+   2 { $exit = $true &lt;#this script exits cleanly below#&gt; }
+   3 { exit &lt;# stop abruptly #&gt; }
+   }
+
+   while(!$exit){
+      while(!$exit -and $Host.UI.RawUI.KeyAvailable) { 
+         $char = $Host.UI.RawUI.ReadKey(&quot;IncludeKeyUp,IncludeKeyDown,NoEcho&quot;); 
+         # we don't want the key up events, but we do want to get rid of them
+         if($char.KeyDown) {
+         switch([int]$char.Character) {
+            13 { # Enter
+                  if($line.Trim() -eq &quot;exit&quot;) { $exit = $true; break; }
+   ###################################################################################################
+   ###################################################################################################
+   ############# WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING WARNING #############
+   ############# This executes the user input!                                           #############
+   ############# Don't use this on, say, content you got from a web page or chat room    #############
+               iex &quot;Out-Buffer `&quot;$line`&quot; -Fore Red&quot;;                                     #############
+   ###################################################################################################
+   ###################################################################################################
+               $line = &quot;&quot;;
+               Set-BufferInputLine
+               break;
+            }
+            27 { # Esc
+               $exit = $true; break;
+            }
+            9 { # Tab
+               if($line.Length -gt 0) {
+                  [Array]$words = $chunker.Matches($line)
+                  if($words.Count -ge 1) {
+                     Out-Buffer ($Words | Out-String) -Fore Black -Back White
+                     $lastWord = $words[$($words.Count-1)].Value
+                     $trim = $lastWord.TrimEnd(&quot;`r&quot;,&quot;`n&quot;)
+                     ## This may return more than one ... in which case subsequent tabs should iterate through them
+                     ## But for demo purposes, this is more than enough work...
+                     $replacement = TabExpansion -Line $line -LastWord ($lastWord.Trim() -replace '&quot;')
+                     Out-Buffer ($replacement | Out-String) -Fore Black -Back White
+                     $line = $line.SubString(0, $line.Length - $lastWord.Length) + @($replacement)[0]
+                     Set-BufferInputLine $line
+                  }
+               }         
+               break;
+            }
+               8 { # Backspace
+               if($line.Length -gt 0) {
+                  $line = $line.SubString(0,$($line.Length-1))
+               }
+               # $pos = $Host.UI.RawUI.CursorPosition
+               Set-BufferInputLine $line
+               break;
+            }         
+            0 { 
+               # Not actually a key
+               # Out-Buffer $($Char | Out-String)
+               break;
+            }
+            default {
+               $line += $char.Character
+               Set-BufferInputLine $line
+            }
+         }
+         }
+      }
+      # Simulate doing useful things 25% of the time
+      if($random.NextDouble() -gt 0.75) {
+         $noise[($index)..($index++)] | Out-Buffer
+         if($index -ge $noise.Length){$index = 0}
+      }
+      sleep -milli 100
+   }
+   Reset-CursorPosition $BufferPromptPosition
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

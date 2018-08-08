@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="DollarUnderscore">
+    <title>Fetch IMDB info - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Fetch IMDB info</h1>
+<h3><a href="//scripts/5640.ps1">download</a></h3>
+<p>Two functions for interacting with IMDB. Use Get-IMDBMatch to search for a movie/tv show based on the title, and pipe that to Get-IMDBItem for more information about it.</p>
+<p>Happy automating anything :-)</p>
+<pre><code class="language-posh">function Get-IMDBMatch
+{
+    &lt;#
+    .Synopsis
+       Retrieves search results from IMDB
+    .DESCRIPTION
+       This cmdlet posts a search to IMDB and returns the results.
+    .EXAMPLE
+       Get-IMDBMatch -Title 'American Dad!'
+    .EXAMPLE
+       Get-IMDBMatch -Title 'American Dad!' | Where-Object { $_.Type -eq 'TV Series' }
+    .PARAMETER Title
+       Specify the name of the tv show/movie you want to search for.
+
+    #&gt;
+
+    [cmdletbinding()]
+    param([Parameter(Mandatory=$True, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+          [string[]] $Title)
+
+    BEGIN { }
+
+    PROCESS {
+        foreach ($MediaTitle in $Title) {
+            $IMDBSearch = Invoke-WebRequest -Uri &quot;http://www.imdb.com/find?q=$($MediaTitle -replace &quot; &quot;,&quot;+&quot;)&amp;s=all&quot; -UseBasicParsing
+
+            $FoundMatches = $IMDBSearch.Content -split &quot;&lt;tr class=`&quot;findresult &quot; | select -Skip 1 | % { (($_ -split &quot;&lt;TD class=`&quot;result_text`&quot;&gt;&quot;)[1] -split &quot;&lt;/TD&gt;&quot;)[0] } | Select-String -Pattern &quot;fn_al_tt_&quot;
+
+            foreach ($Match in $FoundMatches) {
+
+                $ID = (($Match -split &quot;/title/&quot;)[1] -split &quot;/&quot;)[0]
+                $MatchTitle = (($Match -split &quot;&gt;&quot;)[1] -split &quot;&lt;/a&quot;)[0]
+                $Released = (($Match -split &quot;&lt;/a&gt; \(&quot;)[1] -split &quot;\)&quot;)[0]
+                $Type = (($Match -split &quot;\) \(&quot;)[1] -split &quot;\) &quot;)[0]
+
+                if ($Type -eq &quot;&quot;) {
+                    $Type = &quot;Movie&quot;
+                }
+
+                if ($ID -eq &quot;&quot;) {
+                    Continue
+                }
+
+                $returnObject = New-Object System.Object
+                $returnObject | Add-Member -Type NoteProperty -Name ID -Value $ID
+                $returnObject | Add-Member -Type NoteProperty -Name Title -Value $MatchTitle
+                $returnObject | Add-Member -Type NoteProperty -Name Released -Value $Released
+                $returnObject | Add-Member -Type NoteProperty -Name Type -Value $Type
+
+                Write-Output $returnObject
+
+                Remove-Variable ID, MatchTitle, Released, Type
+    
+            }
+
+            Remove-Variable FoundMatches, IMDBSearch
+        }
+    }
+
+    END { }
+}
+
+
+function Get-IMDBItem
+{
+    &lt;#
+    .Synopsis
+       Retrieves information about a movie/tv show etc. from IMDB.
+    .DESCRIPTION
+       This cmdlet fetches information about the movie/tv show matching the specified ID from IMDB.
+       The ID is often seen at the end of the URL at IMDB.
+    .EXAMPLE
+        Get-IMDBItem -ID tt0848228
+    .EXAMPLE
+       Get-IMDBMatch -Title 'American Dad!' | Get-IMDBItem
+
+       This will fetch information about the item(s) piped from the Get-IMDBMatch cmdlet.
+    .PARAMETER ID
+       Specify the ID of the tv show/movie you want get. The ID has the format of tt0123456
+    #&gt;
+
+    [cmdletbinding()]
+    param([Parameter(Mandatory=$True, ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
+          [string[]] $ID)
+
+    BEGIN { }
+
+    PROCESS {
+        foreach ($ImdbID in $ID) {
+
+            $IMDBItem = Invoke-WebRequest -Uri &quot;http://www.imdb.com/title/$ImdbID&quot; -UseBasicParsing
+
+            $ItemInfo = (($IMDBItem.Content -split &quot;&lt;td id=`&quot;overview-top`&quot;&gt;&quot;)[1] -split &quot;&lt;/td&gt;&quot;)[0]
+
+            $ItemTitle = (($ItemInfo -split &quot;&lt;span class=`&quot;itemprop`&quot; itemprop=`&quot;name`&quot;&gt;&quot;)[1] -split &quot;&lt;/span&gt;&quot;)[0]
+            $Type = (((($ItemInfo -split &quot;&lt;div class=`&quot;infobar`&quot;&gt;&quot;)[1] -split &quot;&lt;&quot;)[0]).Trim() -split &quot;`n&quot;)[0]
+            
+            if ($Type -eq 'TV Episode') {
+                $Released = $null
+            }
+            else {
+                $Released = (($ItemInfo -split &quot;&lt;span class=`&quot;nobr`&quot;&gt;&quot;)[1] -split &quot;&lt;/span&gt;&quot;)[0] -replace &quot;^\(&quot; -replace &quot;\)$&quot;
+            }
+
+            $Description = (((($ItemInfo -split &quot;&lt;p itemprop=`&quot;description`&quot;&gt;&quot;)[1] -split &quot;&lt;/p&gt;&quot;)[0] -split &quot;&lt;a href=`&quot;&quot;)[0]).trim()
+            $Rating = ((($ItemInfo -split &quot;&lt;div class=`&quot;titlePageSprite star-box-giga-star`&quot;&gt;&quot;)[1] -split &quot;&lt;/div&gt;&quot;)[0]).trim()
+            try {
+                $RuntimeMinutes = (((($ItemInfo -split &quot;&lt;time itemprop=`&quot;duration`&quot; datetime=&quot;)[1] -split &quot;&gt;&quot;)[1]).trim() -split &quot; &quot;)[0]
+            }
+            catch {
+                $RuntimeMinutes = $null
+            }
+
+            if ($Type -eq &quot;&quot;) {
+                $Type = &quot;Movie&quot;
+            }
+
+            if ($Released -like &quot;&lt;a href=`&quot;*&quot;) {
+                $Released = (($Released -split &quot;/year/&quot;)[1] -split &quot;/&quot;)[0]
+            }
+
+            if ($Description -like '*Add a plot*') {
+                $Description = $null
+            }
+
+            $returnObject = New-Object System.Object
+            $returnObject | Add-Member -Type NoteProperty -Name ID -Value $ImdbID
+            $returnObject | Add-Member -Type NoteProperty -Name Type -Value $Type
+            $returnObject | Add-Member -Type NoteProperty -Name Title -Value $ItemTitle
+            $returnObject | Add-Member -Type NoteProperty -Name Description -Value $Description
+            $returnObject | Add-Member -Type NoteProperty -Name Released -Value $Released
+            $returnObject | Add-Member -Type NoteProperty -Name RuntimeMinutes -Value $RuntimeMinutes
+            $returnObject | Add-Member -Type NoteProperty -Name Rating -Value $Rating
+
+            Write-Output $returnObject
+
+            Remove-Variable IMDBItem, ItemInfo, ItemTitle, Description, Released, Type, Rating, RuntimeMinutes -ErrorAction SilentlyContinue
+        }
+    }
+
+    END { }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

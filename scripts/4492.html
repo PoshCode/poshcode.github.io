@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Axel Limousin">
+    <title>Nested Groups - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Nested Groups</h1>
+<h3><a href="//scripts/4492.ps1">download</a> - <a href="//scripts/4491.md">parent</a></h3>
+<p>Checking Security Group Nesting Strategy (ie: G.U.DL.), searching Circular Nesting or only graphically reporting Nested Security Groups, ADSecurityGroupMembers.ps1 helps on those tasks exploring group member property and generating a Graphviz file.</p>
+<pre><code class="language-posh">&lt;#
+#######
+Syntax
+#######
+
+List-ADSecurityGroupMembers &lt;ObjectDN&gt; [-SC {&lt;Onelevel&gt; | &lt;Subtree&gt;}] [-RL &lt;integer&gt;] | 
+Graph-ADSecurityGroupMembers &gt; &lt;FilePath&gt;
+
+#########
+Examples
+#########
+
+#1 List-ADSecurityGroupMembers &quot;OU=MyOU,DC=MyDom,DC=MyRoot&quot; | 
+Graph-ADSecurityGroupMembers &gt; &quot;$env:USERPROFILE\Desktop\ADSecurityGroupMembers.viz&quot;
+
+ same as
+
+List-ADSecurityGroupMembers &quot;OU=MyOU,DC=MyDom,DC=MyRoot&quot;  -SC Subtree -RL 5 | 
+Graph-ADSecurityGroupMembers &gt; &quot;$env:USERPROFILE\Desktop\ADSecurityGroupMembers.viz&quot;
+
+With default Scope (-SC) &quot;Subtree&quot; and default RecursionLevel (-RL) of 5, it draws Group Nesting for all Security Groups in &quot;MyOU&quot; and children OUs digging through 5 nesting levels.
+
+ #2 List-ADSecurityGroupMembers &quot;CN=MyGroup,OU=MyOU,DC=MyDom,DC=MyRoot&quot; | 
+Graph-ADSecurityGroupMembers &gt; &quot;$env:USERPROFILE\Desktop\ADSecurityGroupMembers.viz&quot;
+
+ It draws Group Nesting for the Security Groups &quot;MyGroup&quot; digging through 5 nesting levels (default RecursionLevel).
+
+######
+Usage
+######
+
+ADSecurityGroupMembers generates ADSecurityGroupMembers.viz file. Install Graphviz (www.graphviz.org) and associate &quot;gvedit.exe&quot; to .viz extension. With Graphiz GUI App, in &quot;Graph&gt;Settings&quot; menu, you have the choice between &quot;dot&quot;, &quot;fdp&quot;, &quot;sfdp&quot;, &quot;circo&quot;, &quot;neato&quot;, &quot;osage&quot; or &quot;twopi&quot; models to gen a .pdf, .svg or .png graphic. You should try &quot;dot&quot; model first (default). Domain Local Group graph cell border is colored in red, Global in green, Universal in cyan.
+
+#################
+Steps suggestion
+#################
+
+- Install Graphviz from www.graphviz.org
+- Add the program path “C:\Program Files (x86)\Graphviz2.30\bin;” to Path environment variable
+- In PowerShell console, verify that dot.exe is available just by executing dot –help
+- In PowerShell console, paste script code and complement with code below:
+
+ $Output = List-ADSecurityGroupMembers $ADObj | Graph-ADSecurityGroupMembers 
+ $Output | Out-File -FilePath &quot;$env:USERPROFILE\Desktop\NestedGroups.viz&quot; -Encoding ASCII
+ dot -Tjpg &quot;$env:USERPROFILE\Desktop\NestedGroups.viz&quot; -o &quot;$env:USERPROFILE\Desktop\NestedGroups.jpg&quot;
+ del &quot;$env:USERPROFILE\Desktop\NestedGroups.viz&quot;
+ Where $ADObj is a distinguishedName of a domain, an ou, a container or a group. The process can be long if you handle hundred of nested groups.
+
+#######
+Script
+#######
+ 
+=====================================================================================================
+PURPOSE:	Graph Nested AD Security Groups by Member Property
+http://gallery.technet.microsoft.com/scriptcenter/Graph-Nested-AD-Security-20aa3fcd
+
+AUTHORS:	Axel Limousin
+VERSION:	1.0 
+DATE:	09/28/2013 
+
+THANKS:	Thomas Corbiere
+=====================================================================================================
+#&gt;
+
+$ErrorActionPreference=&quot;SilentlyContinue&quot;
+
+function Dig-ADSecurityGroupMembers
+{
+	param
+	(  
+		[Parameter(ValueFromPipeline = $true, Mandatory = $true)]
+		[ValidateScript({$_.GroupCategory -eq &quot;Security&quot;})] 
+        [Microsoft.ActiveDirectory.Management.ADGroup] $ADSGroup,
+		
+		[Parameter(ValueFromPipeline = $false, Mandatory = $false)]
+        [Alias(&quot;RL&quot;)]
+		[Byte] $RecursionLevel = 5,
+		
+		[Parameter(ValueFromPipeline = $false, Mandatory = $false)]
+		[Alias(&quot;CL&quot;)]
+        [Byte] $CurrentLevel = 0
+    )
+ 
+    if ($CurrentLevel -ge $RecursionLevel)
+	{  
+		return
+    }
+ 
+	$ADSGroupMbrs = Get-ADGroupMember $ADSGroup.DistinguishedName | 
+	Where-Object -FilterScript { (Get-ADGroup $_).GroupCategory -eq &quot;Security&quot; }
+
+	$ADSGObj = New-Object PSObject -Property @{
+		Name				= $ADSGroup.Name
+		DistinguishedName	= $ADSGroup.DistinguishedName
+    	GroupScope			= $ADSGroup.GroupScope
+    	Members				= $ADSGroupMbrs | Select-Object distinguishedName
+	}
+	
+	$ADSGObj
+	
+    $ADSGroupMbrs | ForEach-Object -Process {
+	
+		Get-ADGroup $_.DistinguishedName | Dig-ADSecurityGroupMembers -RL $RecursionLevel -CL ($CurrentLevel+1)
+	}
+}
+
+function List-ADSecurityGroupMembers
+{  
+	param
+	(
+		[Parameter(ValueFromPipeline = $false, Mandatory = $false)]
+		[String] $ADDN = (Get-ADDomain).DistinguishedName,
+		
+		[Parameter(ValueFromPipeline = $false, Mandatory = $false)]
+        [Alias(&quot;SC&quot;)]
+		[Microsoft.ActiveDirectory.Management.ADSearchScope] $Scope = &quot;Subtree&quot;,
+		
+		[Parameter(ValueFromPipeline = $false, Mandatory = $false)]
+        [Alias(&quot;RL&quot;)]
+		[Byte] $RecursionLevel = 5
+    )
+ 	
+	$ADObject = Get-ADObject $ADDN -Properties groupType
+	
+	if ($ADObject.ObjectClass -eq &quot;domainDNS&quot; -or $ADObject.ObjectClass -eq &quot;organizationalUnit&quot; -or $ADObject.ObjectClass -eq &quot;container&quot;)
+	{ 
+		$ADSGroupList = Get-ADGroup -Filter {GroupCategory -eq &quot;Security&quot;} -SearchBase $ADDN -SearchScope $Scope | 
+		ForEach-Object -Process {
+		
+			$_ | Dig-ADSecurityGroupMembers -RL $RecursionLevel 
+    	} 
+    
+		$ADSGroupList = $ADSGroupList | Sort-Object -Unique -Property DistinguishedName
+    
+		return $ADSGroupList 
+	}
+	
+	elseif ($ADObject.ObjectClass -eq &quot;group&quot; -and $ADObject.groupType -like &quot;-2*&quot;)
+	{
+		$ADSGroup = Get-ADGroup $ADObject.DistinguishedName
+		
+		$ADSGroupList = Dig-ADSecurityGroupMembers $ADSGroup -RL $RecursionLevel
+		
+		$ADSGroupList = $ADSGroupList | Sort-Object -Unique -Property DistinguishedName 
+		
+		return $ADSGroupList
+	}
+	
+	else
+	{
+		Write-Warning -Message &quot;Please select a Domain, an OU, a Container or a Security Group&quot; 
+	}
+}
+
+function Graph-ADSecurityGroupMembers
+{    
+	param
+	(
+		[Parameter(ValueFromPipeline = $true, Mandatory = $true)]
+		[PSObject[]] $ADSGroupList,
+		
+		[Parameter(ValueFromPipeline = $false, Mandatory = $false)]
+		[String] $DomainLocalColor = &quot;Red&quot;,
+		[Parameter(ValueFromPipeline = $false, Mandatory = $false)]
+        [String] $GlobalColor      = &quot;Green&quot;,
+		[Parameter(ValueFromPipeline = $false, Mandatory = $false)]
+        [String] $UniversalColor   = &quot;Cyan&quot;
+    )
+
+    begin
+	{
+        $Groups = @() #ComparisonArray
+
+        $GroupColor = {
+            
+			param
+			(	
+				[Parameter(ValueFromPipeline = $false, Mandatory = $true)]
+				[Microsoft.ActiveDirectory.Management.ADGroupScope] $GroupScope
+			)
+
+            switch ($GroupScope)
+			{
+                &quot;DomainLocal&quot; { return $DomainLocalColor }
+                &quot;Global&quot;      { return $GlobalColor }
+                &quot;Universal&quot;   { return $UniversalColor }
+            }
+        }
+
+        $GraphNode = {
+		
+			param
+			(
+				[Parameter(ValueFromPipeline = $false, Mandatory = $true)]
+				[PSObject] $ADSGroup
+			)
+		
+			$StrMark = $ADSGroup.DistinguishedName.IndexOf(&quot;DC=&quot;)
+			$DomainName = $ADSGroup.DistinguishedName.Substring($StrMark)
+
+            &quot;node_{0} [&quot; -f [Array]::indexOf($Groups,$ADSGroup.DistinguishedName) | Write-Output
+            'label=&quot;{0}|{1}&quot;;' -f $ADSGroup.Name, $DomainName | Write-Output
+            &quot;color={0};&quot; -f (&amp;$GroupColor $ADSGroup.GroupScope) | Write-Output
+            'shape = &quot;record&quot;' | Write-Output
+            &quot;]&quot; | Write-Output
+        }
+
+        &quot;digraph g {&quot; | Write-Output
+        'graph [rankdir = &quot;LR&quot;] ;' | Write-Output
+        &quot;overlap = false ;&quot; | Write-Output
+    }
+
+    process
+	{	
+		foreach ($ADSGroup in $ADSGroupList)
+		{
+        	if ([Array]::indexOf($Groups,$ADSGroup.DistinguishedName) -eq -1)
+			{
+				$Groups += $ADSGroup.DistinguishedName
+            	&amp;$GraphNode $ADSGroup
+        	}
+
+        	$ADSGroup.Members | 
+			ForEach-Object -Process {
+				
+				if ([array]::indexOf($Groups,$_.distinguishedName) -eq -1)
+				{
+					$Groups += $_.distinguishedName
+					$ChildGroup = Get-ADGroup $_.distinguishedName
+            		&amp;$GraphNode $ChildGroup
+       			}
+
+            	'node_{0} -&gt; node_{1} [dir= &quot;back&quot;] ;' -f [Array]::indexOf($Groups,$ADSGroup.DistinguishedName), [Array]::indexOf($Groups,$_.distinguishedName) | 
+				Write-Output
+			}
+		}
+    }
+
+    end
+	{    
+		&quot;}&quot;	| Write-Output
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

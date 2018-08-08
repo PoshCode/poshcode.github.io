@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Boe Prox">
+    <title>Test-Port - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Test-Port</h1>
+<h3><a href="//scripts/2514.ps1">download</a></h3>
+<p>Advanced function used to test UDP or TCP port/s on one or more systems to determine if it is open or not.</p>
+<pre><code class="language-posh">function Test-Port{ 
+&lt;#   
+.SYNOPSIS   
+    Tests port on computer. 
+.DESCRIPTION 
+    Tests port on computer. 
+.PARAMETER computer 
+    Name of server to test the port connection on. 
+.PARAMETER port 
+    Port to test   
+.PARAMETER tcp 
+    Use tcp port  
+.PARAMETER udp 
+    Use udp port  
+.PARAMETER UDPTimeOut
+    Sets a timeout for UDP port query. (In milliseconds, Default is 1000)   
+.PARAMETER TCPTimeOut
+    Sets a timeout for TCP port query. (In milliseconds, Default is 1000)            
+.NOTES   
+    Name: Test-Port.ps1 
+    Author: Boe Prox 
+    DateCreated: 18Aug2010  
+    List of Ports: http://www.iana.org/assignments/port-numbers 
+     
+    To Do: 
+        Add capability to run background jobs for each host to shorten the time to scan.        
+.LINK   
+    https://boeprox.wordpress.org 
+.EXAMPLE   
+    Test-Port -computer 'server' -port 80 
+    Checks port 80 on server 'server' to see if it is listening 
+.EXAMPLE   
+    'server' | Test-Port -port 80 
+    Checks port 80 on server 'server' to see if it is listening  
+.EXAMPLE   
+    Test-Port -computer @(&quot;server1&quot;,&quot;server2&quot;) -port 80 
+    Checks port 80 on server1 and server2 to see if it is listening    
+.EXAMPLE   
+    @(&quot;server1&quot;,&quot;server2&quot;) | Test-Port -port 80 
+    Checks port 80 on server1 and server2 to see if it is listening   
+.EXAMPLE   
+    (Get-Content hosts.txt) | Test-Port -port 80 
+    Checks port 80 on servers in host file to see if it is listening 
+.EXAMPLE   
+    Test-Port -computer (Get-Content hosts.txt) -port 80 
+    Checks port 80 on servers in host file to see if it is listening    
+.EXAMPLE   
+    Test-Port -computer (Get-Content hosts.txt) -port @(1..59) 
+    Checks a range of ports from 1-59 on all servers in the hosts.txt file     
+           
+#&gt;  
+[cmdletbinding( 
+    DefaultParameterSetName = '', 
+    ConfirmImpact = 'low' 
+)] 
+    Param( 
+        [Parameter( 
+            Mandatory = $True, 
+            Position = 0, 
+            ParameterSetName = '', 
+            ValueFromPipeline = $True)] 
+            [array]$computer, 
+        [Parameter( 
+            Position = 1, 
+            Mandatory = $True, 
+            ParameterSetName = '')] 
+            [array]$port, 
+        [Parameter( 
+            Mandatory = $False, 
+            ParameterSetName = '')] 
+            [int]$TCPtimeout=1000, 
+        [Parameter( 
+            Mandatory = $False, 
+            ParameterSetName = '')] 
+            [int]$UDPtimeout=1000,            
+        [Parameter( 
+            Mandatory = $False, 
+            ParameterSetName = '')] 
+            [switch]$TCP, 
+        [Parameter( 
+            Mandatory = $False, 
+            ParameterSetName = '')] 
+            [switch]$UDP             
+                         
+        ) 
+    Begin { 
+        If (!$tcp -AND !$udp) {$tcp = $True} 
+        #Typically you never do this, but in this case I felt it was for the benefit of the function 
+        #as any errors will be noted in the output of the report         
+        $ErrorActionPreference = &quot;SilentlyContinue&quot; 
+        $report = @() 
+        } 
+    Process {    
+        ForEach ($c in $computer) { 
+            ForEach ($p in $port) { 
+                If ($tcp) {   
+                    #Create temporary holder  
+                    $temp = &quot;&quot; | Select Server, Port, TypePort, Open, Notes 
+                    #Create object for connecting to port on computer 
+                    $tcpobject = new-Object system.Net.Sockets.TcpClient 
+                    #Connect to remote machine's port               
+                    $connect = $tcpobject.BeginConnect($c,$p,$null,$null) 
+                    #Configure a timeout before quitting 
+                    $wait = $connect.AsyncWaitHandle.WaitOne($TCPtimeout,$false) 
+                    #If timeout 
+                    If(!$wait) { 
+                        #Close connection 
+                        $tcpobject.Close() 
+                        Write-Verbose &quot;Connection Timeout&quot; 
+                        #Build report 
+                        $temp.Server = $c 
+                        $temp.Port = $p 
+                        $temp.TypePort = &quot;TCP&quot; 
+                        $temp.Open = &quot;False&quot; 
+                        $temp.Notes = &quot;Connection to Port Timed Out&quot; 
+                        } 
+                    Else { 
+                        $error.Clear() 
+                        $tcpobject.EndConnect($connect) | out-Null 
+                        #If error 
+                        If($error[0]){ 
+                            #Begin making error more readable in report 
+                            [string]$string = ($error[0].exception).message 
+                            $message = (($string.split(&quot;:&quot;)[1]).replace('&quot;',&quot;&quot;)).TrimStart() 
+                            $failed = $true 
+                            } 
+                        #Close connection     
+                        $tcpobject.Close() 
+                        #If unable to query port to due failure 
+                        If($failed){ 
+                            #Build report 
+                            $temp.Server = $c 
+                            $temp.Port = $p 
+                            $temp.TypePort = &quot;TCP&quot; 
+                            $temp.Open = &quot;False&quot; 
+                            $temp.Notes = &quot;$message&quot; 
+                            } 
+                        #Successfully queried port     
+                        Else{ 
+                            #Build report 
+                            $temp.Server = $c 
+                            $temp.Port = $p 
+                            $temp.TypePort = &quot;TCP&quot; 
+                            $temp.Open = &quot;True&quot;   
+                            $temp.Notes = &quot;&quot; 
+                            } 
+                        }    
+                    #Reset failed value 
+                    $failed = $Null     
+                    #Merge temp array with report             
+                    $report += $temp 
+                    }     
+                If ($udp) { 
+                    #Create temporary holder  
+                    $temp = &quot;&quot; | Select Server, Port, TypePort, Open, Notes                                    
+                    #Create object for connecting to port on computer 
+                    $udpobject = new-Object system.Net.Sockets.Udpclient($p) 
+                    #Set a timeout on receiving message
+                    $udpobject.client.ReceiveTimeout = $UDPTimeout
+                    #Connect to remote machine's port               
+                    Write-Verbose &quot;Making UDP connection to remote server&quot;
+                    $udpobject.Connect(&quot;$c&quot;,$p)
+                    #Sends a message to the host to which you have connected.
+                    Write-Verbose &quot;Sending message to remote host&quot;
+                    $a = new-object system.text.asciiencoding
+                    $byte = $a.GetBytes(&quot;$(Get-Date)&quot;)
+                    [void]$udpobject.Send($byte,$byte.length)
+                    #IPEndPoint object will allow us to read datagrams sent from any source. 
+                    Write-Verbose &quot;Creating remote endpoint&quot;
+                    $remoteendpoint = New-Object system.net.ipendpoint([system.net.ipaddress]::Any,0)
+                    
+                    Try {
+                        #Blocks until a message returns on this socket from a remote host.
+                        Write-Verbose &quot;Waiting for message return&quot;
+                        $receivebytes = $udpobject.Receive([ref]$remoteendpoint)
+                        [string]$returndata = $a.GetString($receivebytes)
+                        }
+
+                    Catch {
+                        If ($Error[0].ToString() -match &quot;\bRespond after a period of time\b&quot;) {
+                            #Close connection 
+                            $udpobject.Close() 
+                            #Make sure that the host is online and not a false positive that it is open
+                            If (Test-Connection -comp $c -count 1 -quiet) {
+                                Write-Verbose &quot;Connection Open&quot; 
+                                #Build report 
+                                $temp.Server = $c 
+                                $temp.Port = $p 
+                                $temp.TypePort = &quot;UDP&quot; 
+                                $temp.Open = &quot;True&quot; 
+                                $temp.Notes = &quot;&quot;
+                                }
+                            Else {
+                                &lt;#
+                                It is possible that the host is not online or that the host is online, 
+                                but ICMP is blocked by a firewall and this port is actually open.
+                                #&gt;
+                                Write-Verbose &quot;Host maybe unavailable&quot; 
+                                #Build report 
+                                $temp.Server = $c 
+                                $temp.Port = $p 
+                                $temp.TypePort = &quot;UDP&quot; 
+                                $temp.Open = &quot;False&quot; 
+                                $temp.Notes = &quot;Unable to verify if port is open or if host is unavailable.&quot;                                
+                                }                        
+                            }
+                        ElseIf ($Error[0].ToString() -match &quot;forcibly closed by the remote host&quot; ) {
+                            #Close connection 
+                            $udpobject.Close() 
+                            Write-Verbose &quot;Connection Timeout&quot; 
+                            #Build report 
+                            $temp.Server = $c 
+                            $temp.Port = $p 
+                            $temp.TypePort = &quot;UDP&quot; 
+                            $temp.Open = &quot;False&quot; 
+                            $temp.Notes = &quot;Connection to Port Timed Out&quot;                        
+                            }
+                        Else {
+                            $udpobject.close()
+                            }
+                        }    
+                    #Merge temp array with report             
+                    $report += $temp 
+                    }                                 
+                } 
+            }                 
+        } 
+    End { 
+        #Generate Report 
+        $report 
+        }         
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

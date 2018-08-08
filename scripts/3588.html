@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="Greg88">
+    <title>format-iislog - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>format-iislog</h1>
+<h3><a href="//scripts/3588.ps1">download</a></h3>
+<p>This script will homogenize IIS logs in preparation for use with AWStats. It is useful in situations where log formats have changed over the course of a given reporting period. In order to achieve the specified format, null fields will be inserted (as a hyphen) and unwanted fields will be dropped. In this way, logs can be bulk imported into AWStats while avoiding excessive modification of the &quot;Logfile&quot; configuration parameter.</p>
+<p>Usage:</p>
+<p>.\format-iislog.ps1 [old log path] [desired fields] [revised log output file path]</p>
+<p>Single log file
+.\format-iislog.ps1 &quot;C:\Old Logs\u_ex120218.log&quot; &quot;#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs-version cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes time-taken&quot; &quot;C:\Revised Logs\u_ex120218.log&quot;</p>
+<p>Entire log directory
+foreach ($log in (gci &quot;c:\Old Logs&quot;)) {.\format-iislog.ps1 $log.fullname &quot;#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs-version cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes time-taken&quot; &quot;C:\Revised Logs$log&quot;}</p>
+<pre><code class="language-posh">param
+(
+	[Parameter(
+		Mandatory=$true,
+		Position = 0,
+		ValueFromPipeline=$true,
+		HelpMessage=&quot;Specifies the path to the IIS *.log file to import. You can also pipe a path to Import-Iss-Log.&quot;
+	)]
+	[ValidateNotNullOrEmpty()]
+	[string]
+	$Path,
+	
+    [Parameter(
+		Mandatory=$true,
+		Position = 1,
+		ValueFromPipeline=$true,
+		HelpMessage=&quot;Specifies the desired field names. Must be in the following format: #Fields: fname1 fname2&quot;
+	)]
+	[ValidateNotNullOrEmpty()]
+	[string]
+	$NewPath,
+    
+    [Parameter(
+		Mandatory=$true,
+		Position = 2,
+		ValueFromPipeline=$true,
+		HelpMessage=&quot;Specifies the output location for the modified log file.&quot;
+	)]
+	[ValidateNotNullOrEmpty()]
+	[string]
+	$OutPath,
+    
+	[Parameter(
+		Position = 3,
+		HelpMessage=&quot;Specifies the delimiter that separates the property values in the IIS *.log file. The default is a spacebar.&quot;
+	)]
+	[ValidateNotNullOrEmpty()]
+	[string]
+	$Delimiter = &quot; &quot;,
+	
+	[Parameter(HelpMessage=&quot;The character encoding for the IIS *log file. The default is the UTF8.&quot;)]
+	[Microsoft.PowerShell.Commands.FileSystemCmdletProviderEncoding]
+	$Encoding = [Microsoft.PowerShell.Commands.FileSystemCmdletProviderEncoding]::UTF8
+    
+)
+	
+begin
+	{
+		$fieldNames = @()
+		$newfieldnames = @() 
+	}
+
+process
+	{
+
+		#add headers to new output file
+		 (get-content $path)[0..2] | Out-File $outpath -Append -encoding Default
+		 $newpath | Out-File $outpath -Append -encoding Default
+		
+		#populate $newfieldnames from the mandatory parameter $newpath
+		$newfieldNames = @($newpath.Substring(&quot;#Fields: &quot;.Length).Split($Delimiter));
+		
+		  
+	   
+	foreach($line in Get-Content -Path $Path)
+		{
+	  # Indentify / parse the log header to determine field names
+		if($line.StartsWith(&quot;#Fields: &quot;))
+			{
+				$fieldNames = @($line.Substring(&quot;#Fields: &quot;.Length).Split($Delimiter));
+	   
+			}
+			
+		# Identify / parse the &quot;non log header&quot; lines to determine field values
+		elseif(-not $line.StartsWith(&quot;#&quot;))
+			{
+			   $logline = &quot;&quot;
+				
+			   $fieldValues = @($line.Split($Delimiter));
+					
+                #Initialize a hashtable to hold fields and values
+                #Default value is a hyphen
+                #Only fields specified in the $newpath parameter are initialized
+                
+				$output = @{}
+				foreach ($item in $newfieldnames)
+					{
+							switch($item)
+							{
+								&quot;date&quot;{ $output.add(&quot;date&quot;, &quot;-&quot;)}
+								&quot;time&quot;{ $output.add(&quot;time&quot;, &quot;-&quot;)}
+								&quot;s-ip&quot;{ $output.add(&quot;s-ip&quot;, &quot;-&quot;)}
+								&quot;cs-method&quot;{ $output.add(&quot;cs-method&quot;, &quot;-&quot;)}
+								&quot;cs-uri-stem&quot;{ $output.add(&quot;cs-uri-stem&quot;, &quot;-&quot;)}
+								&quot;cs-uri-query&quot;{ $output.add(&quot;cs-uri-query&quot;, &quot;-&quot;)}
+								&quot;s-port&quot;{ $output.add(&quot;s-port&quot;, &quot;-&quot;)}
+								&quot;cs-username&quot;{ $output.add(&quot;cs-username&quot;, &quot;-&quot;)}
+								&quot;c-ip&quot;{ $output.add(&quot;c-ip&quot;, &quot;-&quot;)}
+								&quot;cs-version&quot;{ $output.add(&quot;cs-version&quot;, &quot;-&quot;)}
+								&quot;cs(User-Agent)&quot;{ $output.add(&quot;cs(User-Agent)&quot;, &quot;-&quot;)}
+								&quot;sc-status&quot;{ $output.add(&quot;sc-status&quot;, &quot;-&quot;)}
+								&quot;sc-substatus&quot;{ $output.add(&quot;sc-substatus&quot;, &quot;-&quot;)}
+								&quot;sc-win32-status&quot;{ $output.add(&quot;sc-win32-status&quot;, &quot;-&quot;)}
+								&quot;sc-bytes&quot;{ $output.add(&quot;sc-bytes&quot;, &quot;-&quot;)}
+								&quot;time-taken&quot;{ $output.add(&quot;time-taken&quot;, &quot;-&quot;)}
+								&quot;cs-host&quot;{ $output.add(&quot;cs-host&quot;, &quot;-&quot;)}
+								&quot;cs(Cookie)&quot;{ $output.add(&quot;cs(Cookie)&quot;, &quot;-&quot;)}
+								&quot;cs(Referer)&quot;{ $output.add(&quot;cs(Referer)&quot;, &quot;-&quot;)}
+								&quot;s-sitename&quot;{ $output.add(&quot;s-sitename&quot;, &quot;-&quot;)}
+								&quot;s-computername&quot;{ $output.add(&quot;s-computername&quot;, &quot;-&quot;)}
+								&quot;cs-bytes&quot;{ $output.add(&quot;cs-bytes&quot;, &quot;-&quot;)}
+							}
+					}
+
+				
+                #Add every field from old log file to the $ouptuts hashtable
+                #Portions of the hash table which are not over written at this point retain the default value (hyphen)
+				for($i = 0; $i -lt $fieldnames.Length; $i++)
+					{
+						$name = $fieldNames[$i]
+						$value = $fieldValues[$i]
+								 
+							
+
+								switch($name)
+								{
+							  
+								&quot;date&quot;{ $output['date'] = $value}
+								&quot;time&quot;{ $output['time'] = $value}
+								&quot;s-ip&quot;{ $output['s-ip'] = $value}
+								&quot;cs-method&quot;{ $output['cs-method'] = $value}
+								&quot;cs-uri-stem&quot;{ $output['cs-uri-stem'] = $value}
+								&quot;cs-uri-query&quot;{ $output['cs-uri-query'] = $value}
+								&quot;s-port&quot;{ $output['s-port'] = $value}
+								&quot;cs-username&quot;{ $output['cs-username'] = $value}
+								&quot;c-ip&quot;{ $output['c-ip'] = $value}
+								&quot;cs-version&quot;{ $output['cs-version'] = $value}
+								&quot;cs(User-Agent)&quot;{ $output['cs(User-Agent)'] = $value}
+								&quot;sc-status&quot;{ $output['sc-status'] = $value}
+								&quot;sc-substatus&quot;{ $output['sc-substatus'] = $value}
+								&quot;sc-win32-status&quot;{ $output['sc-win32-status'] = $value}
+								&quot;sc-bytes&quot;{ $output['sc-bytes'] = $value}
+								&quot;time-taken&quot;{ $output['time-taken'] = $value}
+								&quot;cs-host&quot;{ $output['cs-host'] = $value}
+								&quot;cs(Cookie)&quot;{ $output['cs(Cookie)'] = $value}
+								&quot;cs(Referer)&quot;{ $output['cs(Referer)'] = $value}
+								&quot;s-sitename&quot;{ $output['s-sitename'] = $value}
+								&quot;s-computername&quot;{ $output['s-computername'] = $value}
+								&quot;cs-bytes&quot;{ $output['cs-bytes'] = $value}
+								}
+								   
+								
+					}
+							
+				#$output 
+				$linewriter = $null
+                #Write lines to new log file
+                #Only call upon keys (from output hash) which correspond to desired $newfieldnames as specified in $newpath parameter.
+                #Unwanted fields from old log are inherently dropped
+                #Newly included fields not present in old log are inherently replaced by hypens
+				foreach ($item in $newfieldnames) 
+				 
+					{
+						$linewriter += $output[$item]
+						$linewriter += &quot; &quot;
+					} 
+				 
+				$linewriter |%{$_ -replace &quot; $&quot;,&quot;&quot;}| Out-File $outpath -Append -encoding Default 
+							 
+			}
+		}
+	}
+
+# usage example
+#.\import-iislog-final.ps1 &quot;C:\Old Logs\u_ex120218.log&quot; &quot;#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs-version cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes time-taken&quot; &quot;C:\Revised Logs\u_ex120218.log&quot;
+#foreach ($log in (gci &quot;c:\Old Logs&quot;)) {.\import-iislog-final.ps1 $log.fullname &quot;#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs-version cs(User-Agent) cs(Referer) sc-status sc-substatus sc-win32-status sc-bytes time-taken&quot; &quot;C:\Revised Logs\$log&quot;}
+                                                                        
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="James Gentile">
+    <title>Report movie lib. stats - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Report movie lib. stats</h1>
+<h3><a href="//scripts/3171.ps1">download</a></h3>
+<p>This is a script that reports movie library statistics, it's hard coded to work on my two lan computers so you will have to do some hacking if you want to get it to work.</p>
+<pre><code class="language-posh">function getmoviestat ($drives) { 
+
+$drives=$drives | %{if ($_.systemname -eq $env:computername) {add-member -inputobject $_ -name BRs -membertype noteproperty -value ( gci -ea 0 &quot;$($_.name)\media\BR movies\*&quot; -include *.mkv,*.m2ts  ) -passthru } else {add-member -inputobject $_ -name BRs -membertype noteproperty -value ( invoke-command -session $s -scriptblock { param ($name) gci -ea 0 &quot;$name\media\BR movies\*&quot; -include *.mkv,*.m2ts } -argumentlist $_.name ) -passthru}}
+
+$drives=$drives | %{if ($_.systemname -eq $env:computername) { add-member -inputobject $_ -name SDs -membertype noteproperty -value ( gci -ea 0 &quot;$($_.name)\media\SD movies\*&quot; -include *.mkv,*.avi  ) -passthru } else {add-member -inputobject $_ -name SDs -membertype noteproperty -value ( invoke-command -session $s -scriptblock { param ($name) gci -ea 0 &quot;$name\media\SD movies\*&quot; -include *.mkv,*.avi } -argumentlist $_.name) -passthru}}
+
+$drives=$drives | %{ add-member -inputobject $_ -name MVs -membertype scriptproperty -value { $this.SDs + $this.BRs }  -passthru }
+
+$drives=$drives | %{ add-member -inputobject $_ -name BRsize -membertype scriptproperty -value { $n=0;foreach($mv in $this.BRs){ $n+=$mv.length }; [math]::round($n/1gb,0)}  -passthru }
+
+$drives=$drives | %{ add-member -inputobject $_ -name SDsize -membertype scriptproperty -value { $n=0;foreach($mv in $this.SDs){ $n+=$mv.length }; [math]::round($n/1gb,0)}  -passthru }
+
+$drives=$drives | %{ add-member -inputobject $_ -name MVsize -membertype scriptproperty -value { $this.BRsize + $this.SDsize }  -passthru }
+
+}
+
+function totalstats ($drives,$systemname=&quot;All&quot;) {
+    $drivesobject = new-object psobject -property @{
+        systemname=$systemname
+        name=&quot;All&quot;
+        capacity=  $drives | %{$s=0}{$s+=$_.capacity}{$s}
+        freespace= $drives | %{$s=0}{$s+=$_.freespace}{$s}
+        SDs=       $drives | %{$movs=@()}{if ($_.SDs.count -ne 0 -and $_.SDs -ne $null){$movs+=$_.SDs}}{$movs}
+        BRs=       $drives | %{$movs=@()}{if ($_.BRs.count -ne 0 -and $_.BRs -ne $null){$movs+=$_.BRs}}{$movs}
+        MVs=       $drives | %{$movs=@()}{if ($_.MVs.count -ne 0 -and $_.MVs -ne $null){$movs+=$_.MVs}}{$movs}
+        SDsize=    $drives | %{$s=0}{$s+=$_.SDsize}{$s}
+        BRsize=    $drives | %{$s=0}{$s+=$_.BRsize}{$s}
+        MVSize=    $drives | %{$s=0}{$s+=$_.MVsize}{$s}
+    }
+        return $drivesobject
+}
+
+function displaystats ($drives) {
+$drives | ft -a systemname, name, @{Label=&quot;Size&quot;;Expression={[math]::round($_.capacity/1GB,0)}}, @{Label=&quot;Used&quot;; Expression={[math]::round(($_.capacity-$_.freespace)/1GB,0)}},@{Label=&quot;free&quot;; Expression={[math]::round($_.freespace/1GB,0)}}, @{Label=&quot;SDs&quot;;Expression={if ($_.SDs.count) {$_.SDs.count} else {0}}}, @{Label=&quot;BRs&quot;;Expression={ if ($_.BRs.count) {$_.BRs.count} else {0}}}, @{Label=&quot;Movs&quot;;Expression={ if ($_.MVs.count) {$_.MVs.count} else {0}}}, @{label=&quot;SD SZ&quot;;Expression={$_.SDsize}}, @{Label=&quot;BR SZ&quot;; Expression={$_.BRsize}}, @{Label=&quot;Mov SZ&quot;; Expression={$_.MVsize}}, @{Label=&quot;Other SZ&quot;; Expression={[math]::round((($_.capacity/1GB)-($_.freespace/1GB))-$_.MVSize,0)}}, @{Label=&quot;&lt;SDs&gt;&quot;; Expression={if ($_.SDs.count -ne 0 -and $_.SDs.count -ne $null) {[math]::round($_.SDsize/$_.SDs.count,0) } else {&quot;?&quot;}};align=&quot;right&quot;}, @{Label=&quot;&lt;BRs&gt;&quot;; Expression={if($_.BRsize -ne 0 -and $_.BRsize -ne $null){$global:BRave=[math]::round($_.BRsize/$_.BRs.count,0);$BRave } else {$global:BRave=0;&quot;?&quot;}};align=&quot;right&quot;}, @{Label=&quot;&lt;Movs&gt;&quot;; Expression={if ($_.MVsize -ne 0 -and $_.MVsize -ne $null) {[math]::round($_.MVsize/$_.MVs.count,0)} else {&quot;?&quot;}};align=&quot;right&quot;}, @{Label=&quot;BR slots&quot;;Expression={ if ($BRAve -ne 0 -and $BRave -ne $null) {[math]::round($_.capacity/1GB/$BRAve)} else {&quot;?&quot;}}; Align=&quot;Right&quot;},@{label=&quot;BRs Avail&quot;;Expression={if ($BRAve -eq 0 -or $BRave -eq $null) {&quot;?&quot;} else {[math]::round(($_.freespace/1gb)/$BRAve,0)}};Align=&quot;Right&quot; }
+}
+
+$cn = &quot;QuadBox&quot;
+
+if ($env:computername -eq $cn) {$cn = &quot;SixShooter&quot;}
+
+$s = new-pssession -ea 0 -computername $cn -sessionOption (new-pssessionoption -noCompression)
+
+$localdrives=@(gwmi -class win32_volume | ?{$_.filesystem -eq &quot;ntfs&quot;} | ?{$_.name -notlike &quot;\\*&quot;}|?{test-path &quot;$($_.name)\media\BR movies&quot;}|sort driveletter)
+
+getmoviestat $localdrives
+
+$remotedrives=@()
+
+if ($s -ne $null) {$remotedrives=@(invoke-command -session $s -scriptblock {gwmi -class win32_volume | ?{$_.filesystem -eq &quot;ntfs&quot;} | ?{$_.name -notlike &quot;\\*&quot;}|?{test-path &quot;$($_.name)\media\BR movies&quot;}|sort driveletter}); getmoviestat $remotedrives }
+
+$localall=totalstats $localdrives $localdrives[0].systemname
+$remoteall=totalstats $remotedrives $remotedrives[0].systemname
+$all=totalstats ($remotedrives+$localdrives)
+
+displaystats ($localdrives+$localall+$remotedrives+$remoteall+$all)
+
+
+if ($s -ne $null) {remove-pssession $S}
+
+write-host &quot;Press Any Key to continue...&quot; -n; $host.ui.rawui.readkey() | out-null; write-host &quot;&quot;
+
+
+
+
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>

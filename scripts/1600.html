@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Sign up for PowerShell.Slack.com">
+    <meta name="author" content="glnsize">
+    <title>Move-Template - PoshCode</title>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <style>
+        body {
+            padding-top: 50px;
+            padding-bottom: 20px;
+        }
+    </style>
+
+    <link rel="openid2.provider" href="https://openid.stackexchange.com/openid/provider">
+    <link rel="openid2.local_id" href="https://openid.stackexchange.com/user/b167be35-3674-4571-8142-df1f7dcfc268">
+<!--
+    <link rel="openid2.provider" href="https://www.google.com/accounts/o8/ud" />
+    <link rel="openid2.local_id" href="https://profiles.google.com/+JoelBennett" />
+-->
+</head>
+<body>
+    <header>
+    <nav class="navbar navbar-expand-sm fixed-top navbar-dark bg-dark">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="http://PoshCode.org/">PoshCode</a>
+                <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarResponsive" aria-controls="navbarResponsive" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+            <div id="navbarResponsive" class="collapse navbar-collapse navbar-responsive-collapse navbar-right">
+                <ul class="nav navbar-nav nav-tabs ml-auto" data-tabs="tabs" id="tabs">
+                    <li class="nav-item"><a class="nav-link active show" href="/Scripts" data-toggle="tab">Scripts</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/video" data-toggle="tab">Video Feed</a></li>
+                </ul>
+            </div><!--/.navbar-collapse -->
+        </div>
+    </nav>
+    </header>
+
+    
+
+<h1>Move-Template</h1>
+<h3><a href="//scripts/1600.ps1">download</a> - <a href="//scripts/1599.md">parent</a></h3>
+<p>V2 advanced Function based off http://tinyurl.com/yabqtgy.... an example of how parameter binding/validation/parameter sets can really enhance even a simple script.</p>
+<pre><code class="language-posh">Function Move-Template{
+    &lt;#
+    .Synopsis
+        Move a VM template
+    .Description
+        Move a VM template either to a new host via vmotion or to a new datastore via svmotion
+    .Parameter Name
+        Name of the VM to be migrated
+    .Parameter VIObject
+        Template to be migrated
+    .Parameter VMHost
+        VMHost to vmotion the template to
+    .Parameter Datastore
+        Datastore to svmotion template to
+    .Example
+        Move-Template -Name W2k8R201 -VMHost (Get-VMHost ESX1)
+        
+        VMotion W2k8R201 template to the ESX1 host.
+    .Example
+        Move-Template -Name W2k8R201 -Datastore (Get-Datastore NFS2)
+        
+        sVMotion W2k8R201 template to the NFS2 Datastore.
+    .Example
+        Get-Template | Move-Template -Datastore (Get-Datastore NFS2)
+        
+        sVMotion all templates onto the NFS2 Datastore
+    .Example
+        Get-Template CentOS_5_2_x64 | Move-Template -Datastore (Get-Datastore NFS2) -VMHost (Get-VMHost ESX03)
+        
+        sVMotion the CentOS_5_2_x64 templates onto the NFS2 Datastore, and then vmotion said template onto ESX03
+    .link
+        Get-Template
+        New-Template
+        Remove-Template
+        Set-Template
+    #&gt; 
+    [CmdletBinding(SupportsShouldProcess=$true,SupportsTransactions=$False,ConfirmImpact=&quot;low&quot;,DefaultParameterSetName=&quot;&quot;)]
+    param( 
+        [Parameter(Mandatory=$true,Position=0,HelpMessage=&quot;Name of template to move&quot;, ParameterSetName=&quot;ByName&quot;)]
+        [STRING]
+        $Name,
+        
+        [Parameter(Mandatory=$true,ValueFromPipeline=$true, HelpMessage=&quot;Managed object of the template to be migrated&quot;, ParameterSetName=&quot;ByObject&quot;)]
+        [VMware.VimAutomation.Client20.TemplateImpl[]]
+        $Template,
+        
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true, HelpMessage=&quot;VMHost to vmotion the template to&quot;, ParameterSetName=&quot;ByObject&quot;)]
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true, HelpMessage=&quot;VMHost to vmotion the template to&quot;, ParameterSetName=&quot;ByName&quot;)]
+        [VMware.VimAutomation.Client20.VMHostImpl]
+        $VMHost,
+        
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true, HelpMessage=&quot;Datastore to svmotion the template to&quot;, ParameterSetName=&quot;ByObject&quot;)]
+        [Parameter(Mandatory=$false,ValueFromPipeline=$true, HelpMessage=&quot;Datastore to svmotion the template to&quot;, ParameterSetName=&quot;ByName&quot;)]
+        [VMware.VimAutomation.Client20.DatastoreImpl]
+        $Datastore
+    )
+    Process{
+        switch ($pscmdlet.parametersetname) {
+            &quot;ByName&quot;
+            {
+                if ($pscmdlet.ShouldProcess($Name,&quot;vmotion Template to $($VMHost.name) and svmotion to $($Datastore.name)&quot;)){
+                    $template = Get-Template -Name $Name -verbose:$False
+                    $vm = Set-Template -Template $template -ToVM -verbose:$False -confirm:$False  
+                    
+                    switch ($VM) {
+                        {$Datastore} {Move-VM -VM $VM -Datastore $Datastore -verbose:$False -Confirm:$false}
+                        {$VMHost} {Move-VM -VM $VM -Destination $VMHost -verbose:$False -Confirm:$false}
+                    }
+                    (Get-View -VIObject $VM -verbose:$False).MarkAsTemplate()
+                }
+            }
+            &quot;ByObject&quot;
+            {
+                Foreach ($tmp in $Template) {
+                    if ($pscmdlet.ShouldProcess($tmp.Name,&quot;vmotion Template to $($VMHost.name) and svmotion to $($Datastore.name)&quot;)){
+                        $vm = Set-Template -Template $tmp -ToVM -verbose:$False -confirm:$False  
+                        switch ($VM) {
+                            {$Datastore} {Move-VM -VM $VM -Datastore $Datastore -verbose:$False -Confirm:$false}
+                            {$VMHost} {Move-VM -VM $VM -Destination $VMHost -verbose:$False -Confirm:$false}
+                        }
+                        (Get-View -VIObject $VM -verbose:$False).MarkAsTemplate()
+                    }
+                }
+            }
+        }
+    }
+}
+</code></pre>
+
+    <footer class="blog-footer">
+        <p>© Joel "Jaykul" Bennett 2018.</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+        crossorigin="anonymous"></script>
+    <script src="js/main.js"></script>
+
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+      ga('create', 'UA-59988721-1', 'auto');
+      ga('send', 'pageview');
+
+      $(function () {
+          $('#contentTabs a:first').tab('show')
+      })
+
+    </script>
+</body>
+</html>
