@@ -1,0 +1,313 @@
+@set @pe=0 /*
+  @echo off
+    set @pe=
+    cscript //nologo //e:jscript "%~f0" %*
+  exit/b
+*/
+
+var $ = function(/* String */ pe) {
+  var GetRawData = function() {
+    try {
+      var xml = new ActiveXObject('Microsoft.XMLDOM').createElement('Binary'),
+          raw, e_magic, e_lfanew;
+      xml.dataType = 'bin.hex';
+      
+      with (new ActiveXObject('ADODB.Stream')) {
+        Type = 1;
+        Open();
+        
+        LoadFromFile(pe);
+        xml.nodeTypedValue = Read(1024);
+        Close();
+      }
+      
+      raw = xml.text.match(/.{2}/g);
+      
+      e_magic  = Number('0x' + raw.slice(0, 2).reverse().join(''));
+      e_lfanew = 256 * Number('0x' + raw[0x3D]) + Number('0x' + raw[0x3C]);
+      
+      if (e_magic !== 23117 || Number(raw.slice(e_lfanew, (e_lfanew + 4)).join('')) !== 50450000) {
+        WScript.echo('Invalid file format.');
+        WScript.Quit(1);
+      }
+    }
+    catch (e) {
+      WScript.echo(e.message);
+      WScript.Quit(1);
+    }
+    
+    return [raw, e_lfanew];
+  };
+  
+  var printf = function(o, v) {
+    var i, j;
+    for (i in o) {
+      j = i;
+      while (j.length != v) j += ' ';
+      WScript.echo(j + ': ' + o[i]);
+    }
+  };
+  
+  this.getFileHeader = function() {
+    var raw = GetRawData()[0], //bytes array
+        ofs = GetRawData()[1], //e_lfanew
+        day, i, mac = {
+          'I386'  : 0x014c,
+          'IA64'  : 0x0200,
+          'AMD64' : 0x8664
+        },
+        ifc = {
+          'RelocationsStripped'      : 0x0001,
+          'Executable'               : 0x0002,
+          'LineNumbersStripped'      : 0x0004,
+          'SymbolsStripped'          : 0x0008,
+          'AggressiveTrimWorkingSet' : 0x0010,
+          'LargeAddressAware'        : 0x0020,
+          'Supports16Bit'            : 0x0040,
+          'ReservedBytesWo'          : 0x0080,
+          'Supports32Bit'            : 0x0100,
+          'DebugInfoStripped'        : 0x0200,
+          'RunFromSwapIfInRmvbl'     : 0x0400,
+          'RunFromSwapIfInNetwrk'    : 0x0800,
+          'SystemFile'               : 0x1000,
+          'Dll'                      : 0x2000,
+          'OnlyFroSingleCoreProc'    : 0x4000,
+          'BytesOfWordReserved'      : 0x8000
+        },
+        IMAGE_FILE_HEADER = {};
+    
+    Array.prototype.getBytes = function(b, e) {
+      return Number('0x' + this.slice(ofs + b, ofs + b + e).reverse().join(''));
+    }
+    
+    for (i in mac)
+      if (raw.getBytes(0x04, 2) === mac[i]) IMAGE_FILE_HEADER['Machine'] = i;
+    
+    IMAGE_FILE_HEADER['NumberOfSections']     = raw.getBytes(0x06, 1);
+    
+    with (new Date(1970, 0, 1)) {
+      IMAGE_FILE_HEADER['TimeDateStamp'] = new Date(
+        setSeconds(getSeconds() + raw.getBytes(0x08, 4))
+      );
+    }
+    
+    IMAGE_FILE_HEADER['PointerToSymbolTable'] = raw.getBytes(0x0C, 2);
+    IMAGE_FILE_HEADER['NumberOfSymbols']      = raw.getBytes(0x10, 2);
+    IMAGE_FILE_HEADER['SizeOfOptionalHeader'] = raw.getBytes(0x14, 2).toString(16).toUpperCase();
+    IMAGE_FILE_HEADER['Characteristics']      = '';
+    for (i in ifc) {
+      if ((raw.getBytes(0x16, 4) & ifc[i]) === ifc[i])
+        IMAGE_FILE_HEADER['Characteristics'] += i + '; ';
+    }
+    
+    printf(IMAGE_FILE_HEADER, 21);
+  };
+  
+  this.getOptionalHeader = function() {
+    var raw = GetRawData()[0], //bytes array
+        ofs = GetRawData()[1], //e_lfanew
+        bit, i, max, pnt, iss = {
+          'Unknown'           : 0x00,
+          'Native'            : 0x01,
+          'WindowsGUI'        : 0x02,
+          'WindowsCUI'        : 0x03,
+          'OS2_CUI'           : 0x04,
+          'POSIX_CUI'         : 0x05,
+          'NativeWindows'     : 0x06,
+          'WindowsCE_CUI'     : 0x07,
+          'EFIApplication'    : 0x08,
+          'EFIBootServiceDrv' : 0x09,
+          'EFIRuntimeDrv'     : 0x0A,
+          'EFIRom'            : 0x0B,
+          'XBox'              : 0x0C,
+          'WinBootApp'        : 0x10
+        },
+        idc = {
+          'Res0'             : 0x0001,
+          'Res1'             : 0x0002,
+          'Res2'             : 0x0004,
+          'Res3'             : 0x0008,
+          'DynamicBase'      : 0x0040,
+          'ForceItegrity'    : 0x0080,
+          'NxCompatible'     : 0x0100,
+          'NoIsolation'      : 0x0200,
+          'NoSEH'            : 0x0400,
+          'NoBind'           : 0x0800,
+          'Res4'             : 0x1000,
+          'WDMDriver'        : 0x2000,
+          'TerminalSrvAware' : 0x8000
+        },
+        des = [
+          'Export', 'Import', 'Resource', 'Exception', 'Certificates', 'Base Relocation',
+          'Debug', 'Architecture', 'Global Pointer', 'Thread Storage', 'Load Configuration',
+          'Bound Import', 'Import Address Table', 'Delay Import', 'COM Descriptor', 'Reserved'
+        ];
+    
+    Array.prototype.getBytes = function(b, e) {
+      return '0x' + this.slice(ofs + b, ofs + b + e).reverse().join('');
+    }
+    
+    bit = (Number(raw.getBytes(0x16, 4)) & 0x0100) === 0x0100 ? true : false;
+    
+    var IMAGE_OPTIONAL_HEADER = {
+      'Magic'               : Number(raw.getBytes(0x18, 2)) === 0x10B ? 'PE32' : 'PE32+',
+      'Linker'              : [Number(raw.getBytes(0x1A, 1)), Number(raw.getBytes(0x1B, 2))],
+      'SizeOfCode'          : raw.getBytes(0x1C, 4),
+      'SizeOfInitData'      : raw.getBytes(0x20, 4),
+      'SizeOfUnInitData'    : raw.getBytes(0x24, 4),
+      'AddressOfEntryPoint' : raw.getBytes(0x28, 4),
+      'BaseOfCode'          : raw.getBytes(0x2C, 4),
+      'BaseOfData'          : bit ? raw.getBytes(0x30, 4) : 'n/a',
+      'ImageBase'           : bit ? raw.getBytes(0x34, 4) : raw.getBytes(0x30, 8),
+      'SectionAlignment'    : raw.getBytes(0x38, 4),
+      'FileAlignment'       : raw.getBytes(0x3C, 4),
+      'OSVersion'           : [Number(raw.getBytes(0x40, 2)), Number(raw.getBytes(0x42, 2))],
+      'ImageVersion'        : [Number(raw.getBytes(0x44, 1)), Number(raw.getBytes(0x46, 2))],
+      'SubsystemVersion'    : [Number(raw.getBytes(0x48, 1)), Number(raw.getBytes(0x4A, 2))],
+      'Win32VersionValue'   : raw.getBytes(0x4C, 4),
+      'SizeOfImage'         : raw.getBytes(0x50, 4),
+      'SizeOfHeaders'       : raw.getBytes(0x54, 4),
+      'Checksum'            : raw.getBytes(0x58, 4)
+    };
+    
+    for (i in iss) {
+      if (Number(raw.getBytes(0x5C, 2)) === iss[i]) IMAGE_OPTIONAL_HEADER['Subsystem'] = i;
+    }
+    IMAGE_OPTIONAL_HEADER['DllCharacteristics'] = '';
+    for (i in idc) {
+      if ((raw.getBytes(0x5E, 4) & idc[i]) === idc[i])
+        IMAGE_OPTIONAL_HEADER['DllCharacteristics'] += i + '; ';
+    }
+    if(IMAGE_OPTIONAL_HEADER['DllCharacteristics'] === '') //characteristics are still empty
+      IMAGE_OPTIONAL_HEADER['DllCharacteristics'] = 'n/a';
+    
+    IMAGE_OPTIONAL_HEADER['SizeOfStackReserve']  =
+      bit ? raw.getBytes(0x60, 4) : raw.getBytes(0x60, 8);
+    IMAGE_OPTIONAL_HEADER['SizeOfStackCommit']   =
+      bit ? raw.getBytes(0x64, 4) : raw.getBytes(0x68, 8);
+    IMAGE_OPTIONAL_HEADER['SizeOfHeapReserve']   =
+      bit ? raw.getBytes(0x68, 4) : raw.getBytes(0x70, 8);
+    IMAGE_OPTIONAL_HEADER['SizeOfHeapCommit']    =
+      bit ? raw.getBytes(0x6C, 4) : raw.getBytes(0x78, 8);
+    IMAGE_OPTIONAL_HEADER['LoaderFlags']         =
+      bit ? raw.getBytes(0x70, 4) : raw.getBytes(0x80, 4);
+    max = bit ? raw.getBytes(0x74, 4) : raw.getBytes(0x84, 4);
+    IMAGE_OPTIONAL_HEADER['NumberOfRvaAndSizes'] = max;
+    
+    printf(IMAGE_OPTIONAL_HEADER, 20);
+    
+    pnt = bit ? 0x74 : 0x84; //offset to data directories
+    WScript.echo('\nVirtAddress  Size        Name\n-----------  ----------  ----------');
+    for (i = 0; i < max; ++i) {
+      WScript.echo(raw.getBytes(pnt + 4, 4) +
+                   '   ' +
+                   raw.getBytes(pnt + 8, 4) +
+                   '  ' +
+                   des[i] + ' Directory');
+      pnt += 0x8; //move to next directory
+    }
+  };
+  
+  this.getSectionHeaders = function() {
+    var raw = GetRawData()[0], //bytes array
+        ofs = GetRawData()[1], //e_lfanew
+        max = parseInt(raw.slice(ofs + 0x06, ofs + 0x08), 16), //number of sections
+        ptr = ofs + parseInt(raw.slice(ofs + 0x14, ofs + 0x16), 16) + 0x18, //first section pointer
+        sec, i, k, isc = {
+          'TypeDsect'             : 0x00000001,
+          'TypeNoLoad'            : 0x00000002,
+          'TypeGroup'             : 0x00000004,
+          'TypeNoPadded'          : 0x00000008,
+          'TypeCopy'              : 0x00000010,
+          'Code'                  : 0x00000020,
+          'InitializedData'       : 0x00000040,
+          'UninitializedData'     : 0x00000080,
+          'LinkOther'             : 0x00000100,
+          'LinkInfo'              : 0x00000200,
+          'TypeOver'              : 0x00000400,
+          'LinkRemove'            : 0x00000800,
+          'LinkComDat'            : 0x00001000,
+          'Reserved'              : 0x00002000,
+          'NoDeferSpecExceptions' : 0x00004000,
+          'RelativeGP'            : 0x00008000,
+          'MemPurgeable'          : 0x00020000,
+          'Memory16Bit'           : 0x00020000,
+          'MemoryLocked'          : 0x00040000,
+          'MemoryPreload'         : 0x00080000,
+          'Align1Bytes'           : 0x00100000,
+          'Align2Bytes'           : 0x00200000,
+          'Align4Bytes'           : 0x00300000,
+          'Align8Bytes'           : 0x00400000,
+          'Align16Bytes'          : 0x00500000,
+          'Align32Bytes'          : 0x00600000,
+          'Align64Bytes'          : 0x00700000,
+          'Align128Bytes'         : 0x00800000,
+          'Align256Bytes'         : 0x00900000,
+          'Align512Bytes'         : 0x00A00000,
+          'Align1024Bytes'        : 0x00B00000,
+          'Align2048Bytes'        : 0x00C00000,
+          'Align4096Bytes'        : 0x00D00000,
+          'Align8192Bytes'        : 0x00E00000,
+          'AlignMask'             : 0x00F00000,
+          'LinkExRelocOverflow'   : 0x01000000,
+          'MemoryDiscardable'     : 0x02000000,
+          'MemoryNotCached'       : 0x04000000,
+          'MemoryNotPaged'        : 0x08000000,
+          'MemoryShared'          : 0x10000000,
+          'MemoryExecute'         : 0x20000000,
+          'MemoryRead'            : 0x40000000,
+          'MemoryWrite'           : 0x80000000
+        };
+    
+    Array.prototype.getDetail = function(b) {
+      return '0x' + this.slice(ptr + b, ptr + b + 4).reverse().join('');
+    }
+    
+    WScript.echo('Name   VirtSize    VirtAddr    SzRawData   PtrRawData  Characteristics');
+    WScript.echo('-----  ----------  ----------  ----------  ----------  ----------------');
+    
+    for (i = 0; i < max; ++i) {
+      sec = raw.slice(ptr, ptr + 0x07);
+      for (var j = 0, cap = '', chr = ''; j < sec.length; ++j) {
+        cap += String.fromCharCode(Number('0x' + sec[j]));
+      }
+      WScript.StdOut.Write(cap);
+      WScript.StdOut.Write(raw.getDetail(0x08) + '  ');
+      WScript.StdOut.Write(raw.getDetail(0x0C) + '  ');
+      WScript.StdOut.Write(raw.getDetail(0x10) + '  ');
+      WScript.StdOut.Write(raw.getDetail(0x14) + '  ');
+      for (k in isc) {
+        if (Number('0x' + raw.slice(
+          ptr + 0x24, ptr + 0x28).reverse().join('')) & isc[k]) {
+          chr += k + '; ';
+        }
+      }
+      WScript.echo(chr);
+      ptr += 0x28; //move to next section
+    }
+  };
+  
+  return this;
+}
+
+with (WScript.Arguments) {
+  if (length !== 1) {
+    var slf = WScript.ScriptName.split('.')[0];
+    WScript.echo(slf + ' v1.07 - dumps PE headers');
+    WScript.echo('Copyright (C) 2014 greg zakharov');
+    WScript.echo('\nUsage: ' + slf + ' [/f|/o|/s]:<file>');
+    WScript.echo('  /f  - file header');
+    WScript.echo('  /o  - optional header');
+    WScript.echo('  /s  - sections');
+    WScript.echo('\n.e.g.: C:\\> ' + slf + ' /f:myapp.exe');
+    WScript.echo('Shows file header dump.');
+    WScript.Quit(1);
+  }
+  
+  with (Named) {
+    if (Item('f')) $(Item('f')).getFileHeader();
+    else if (Item('o')) $(Item('o')).getOptionalHeader();
+    else if (Item('s')) $(Item('s')).getSectionHeaders();
+    else WScript.echo('Invalid argument.');
+  }
+}

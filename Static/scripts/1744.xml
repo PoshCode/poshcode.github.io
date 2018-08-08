@@ -1,0 +1,389 @@
+<#
+   Name     : Universal Log4Net Logging Module (Logger.psm1)
+   Version  : 0.1
+   Author   : Joel Bennett (MVP)
+   Site     : http://www.HuddledMasses.org/
+
+   See Also : http://poshcode.org/1743
+   You should download this config and put it in your Modules\Logger folder with this Logger.psm1
+   
+   Uses Log4Net : http://logging.apache.org/log4net/download.html
+   Documentation: http://logging.apache.org/log4net/release/sdk/
+   
+   NOTES:
+   By default, this overwrites the Write-* cmdlets for Error, Warning, Debug, Verbose, and even Host.
+   This means that you may end up logging a lot of stuff you didn't intend to log (ie: verbose output from other scripts)
+   ***** BUT IT ONLY WORKS FOR SCRIPTS *****
+   It currently has no effect on error/verbose/warning that is logged from cmdlets.
+   
+   To avoid this behavior, Import it with a -Prefix, and call it's methods directly. I.E.:
+   Import-Module Logger -Prefix Logged
+   Write-LoggedWarning "This is your warning"
+   Write-LoggedHost    "You should know that..."
+   Write-LoggedVerbose "Everything would be logged, otherwise"
+#>
+
+
+Add-Type -Path $PSScriptRoot\log4net.dll
+[Log4Net.Config.BasicConfigurator]::Configure()
+
+function Get-Logger {
+param( 
+   [Parameter(Mandatory=$true)]
+   [string]$Name
+,
+   [Parameter(Mandatory=$false)]
+   [string]$Configuration = "default.config"
+)
+   [log4net.LogManager]::GetLogger($Name) | Tee-Object -Variable script:logger
+   
+   if(Test-Path $Configuration) {
+      [log4net.Config.XmlConfigurator]::Configure( ([IO.FileInfo]$Configuration) )
+   } else { 
+      $Configuration = Join-Path $PSScriptRoot $Configuration
+      if(Test-Path $Configuration) {
+         [log4net.Config.XmlConfigurator]::Configure( ([IO.FileInfo]$Configuration) )
+      }
+   }
+}
+
+function Set-Logger {
+param(
+   [Parameter(Mandatory=$true)]
+   [log4net.Core.LogImpl]$Logger
+)
+   $script:Logger = $Logger
+}
+
+function Push-Context {
+param( 
+   [Parameter(Mandatory=$true)]
+   [string]$Name
+)
+   [log4net.NDC]::Push($Name)
+}
+
+function Pop-Context {
+   [log4net.NDC]::Pop()
+}
+
+
+function Write-Debug {
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]
+    [Alias('Msg')]
+    [AllowEmptyString()]
+    [System.String]
+    ${Message})
+
+begin
+{
+    try {
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Debug', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {& $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $logger.debug($Message) #Write-Debug
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+<#
+
+.ForwardHelpTargetName Write-Debug
+.ForwardHelpCategory Cmdlet
+
+#>
+}
+function Write-Error {
+[CmdletBinding(DefaultParameterSetName='NoException')]
+param(
+    [Parameter(ParameterSetName='WithException', Mandatory=$true)]
+    [System.Exception]
+    ${Exception},
+
+    [Parameter(ParameterSetName='NoException', Mandatory=$true, Position=0, ValueFromPipeline=$true)]
+    [Parameter(ParameterSetName='WithException')]
+    [Alias('Msg')]
+    [AllowNull()]
+    [AllowEmptyString()]
+    [System.String]
+    ${Message},
+
+    [Parameter(ParameterSetName='ErrorRecord', Mandatory=$true)]
+    [System.Management.Automation.ErrorRecord]
+    ${ErrorRecord},
+
+    [Parameter(ParameterSetName='NoException')]
+    [Parameter(ParameterSetName='WithException')]
+    [System.Management.Automation.ErrorCategory]
+    ${Category},
+
+    [Parameter(ParameterSetName='WithException')]
+    [Parameter(ParameterSetName='NoException')]
+    [System.String]
+    ${ErrorId},
+
+    [Parameter(ParameterSetName='NoException')]
+    [Parameter(ParameterSetName='WithException')]
+    [System.Object]
+    ${TargetObject},
+
+    [System.String]
+    ${RecommendedAction},
+
+    [Alias('Activity')]
+    [System.String]
+    ${CategoryActivity},
+
+    [Alias('Reason')]
+    [System.String]
+    ${CategoryReason},
+
+    [Alias('TargetName')]
+    [System.String]
+    ${CategoryTargetName},
+
+    [Alias('TargetType')]
+    [System.String]
+    ${CategoryTargetType})
+
+begin
+{
+    try {
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Error', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {& $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $logger.error($Message,$Exception) #Write-Error
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+<#
+
+.ForwardHelpTargetName Write-Error
+.ForwardHelpCategory Cmdlet
+
+#>
+}
+function Write-Host {
+[CmdletBinding()]
+param(
+    [Parameter(Position=0, ValueFromPipeline=$true, ValueFromRemainingArguments=$true)]
+    [System.Object]
+    ${Object},
+
+    [Switch]
+    ${NoNewline},
+
+    [System.Object]
+    ${Separator} = $OFS,
+
+    [System.ConsoleColor]
+    ${ForegroundColor},
+
+    [System.ConsoleColor]
+    ${BackgroundColor})
+
+begin
+{
+    try {
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Host', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {& $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $logger.info(($Object -join $Separator))  #Write-Verbose
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+<#
+
+.ForwardHelpTargetName Write-Host
+.ForwardHelpCategory Cmdlet
+
+#>
+}
+
+
+function Write-Verbose {
+
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]
+    [Alias('Msg')]
+    [AllowEmptyString()]
+    [System.String]
+    ${Message})
+
+begin
+{
+    try {
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Verbose', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {& $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $logger.info($Message)
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+<#
+
+.ForwardHelpTargetName Write-Verbose
+.ForwardHelpCategory Cmdlet
+
+#>
+}
+function Write-Warning {
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory=$true, Position=0, ValueFromPipeline=$true)]
+    [Alias('Msg')]
+    [AllowEmptyString()]
+    [System.String]
+    ${Message})
+
+begin
+{
+    try {
+        $outBuffer = $null
+        if ($PSBoundParameters.TryGetValue('OutBuffer', [ref]$outBuffer))
+        {
+            $PSBoundParameters['OutBuffer'] = 1
+        }
+        $wrappedCmd = $ExecutionContext.InvokeCommand.GetCommand('Write-Warning', [System.Management.Automation.CommandTypes]::Cmdlet)
+        $scriptCmd = {& $wrappedCmd @PSBoundParameters }
+        $steppablePipeline = $scriptCmd.GetSteppablePipeline($myInvocation.CommandOrigin)
+        $steppablePipeline.Begin($PSCmdlet)
+    } catch {
+        throw
+    }
+}
+
+process
+{
+    try {
+        $logger.warn($Message)  #Write-Warning
+        $steppablePipeline.Process($_)
+    } catch {
+        throw
+    }
+}
+
+end
+{
+    try {
+        $steppablePipeline.End()
+    } catch {
+        throw
+    }
+}
+<#
+
+.ForwardHelpTargetName Write-Warning
+.ForwardHelpCategory Cmdlet
+
+#>
+}
+
+
+
+
+
+$script:defaultLogger = Get-Logger "Default"
+
