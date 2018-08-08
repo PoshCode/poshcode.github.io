@@ -35,7 +35,7 @@
 	PrettyUrl = $True
 
 	# Controls how many posts are rendered on each index page
-	PostsPerArchivePage = 5
+	PostsPerArchivePage = 15
 
 	# Date format used to display post dates.
 	# Passed to DateTimeOffset.ToString(...)
