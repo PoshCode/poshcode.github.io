@@ -58,33 +58,37 @@ function Export-PowerSite {
         }
 
         Write-AllLines "Pages\scripts\$id.md" @"
-        ---
-        pid:            $id
-        author:         $author
-        title:          $title
-        date:           $date
-        tags:           $language
-        file:           Static\scripts\$id$extension
-        $(if($parent){   "parent:         $($parent -join ',')"})
-        $(if($children){ "children:       $($children -join ',')"})
-        ---
+---
+pid:            $id
+author:         $author
+title:          $title
+date:           $date
+tags:           $language
+file:           Static\scripts\$id$extension
+$(if($parent){   "parent:         $($parent -join ',')"})
+$(if($children){ "children:       $($children -join ',')"})
+---
 
-        # $title
+### [download $title$extension](/scripts/$id$extension)$(if($parent -ne 0) { " - [parent](/scripts/$parent.md)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child](/scripts/$child.md)" }) -join ', ')" })
 
-        ### [download](/scripts/$id$extension)$(if($parent -ne 0) { " - [parent](/scripts/$parent.md)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child](/scripts/$child.md)" }) -join ', ')" })
+$description
 
-        $description
-
-        ``````$language
-        $code
-        ``````
+``````$language
+$code
+``````
 "@
+        Write-Progress (Resolve-Path "Pages\scripts\$id.md")
 
         Write-AllLines "Static\scripts\$id$extension" $code
-
+        Write-Progress (Resolve-Path "Static\scripts\$id$extension")
     }
 }
 
+Push-Location $PSScriptRoot
 Write-Warning "This dump contains some malware samples which will trigger your AV"
+Get-Item $PSScriptRoot\Static\scripts, $PSScriptRoot\Pages\scripts -ErrorAction SilentlyContinue |
+    Remove-Item -Confirm -Recurse
+$null = New-Item $PSScriptRoot\Static\scripts -Type Directory
+$null = New-Item $PSScriptRoot\Pages\scripts -Type Directory
 
 Import-Csv $PSScriptRoot\PoshCodeData.csv | Export-PowerSite
