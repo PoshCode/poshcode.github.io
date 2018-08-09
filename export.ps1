@@ -1,83 +1,90 @@
-function Export-PoshCodeGithub {
-[CmdletBinding()]
-param(
-    [Parameter(ValueFromPipelineByPropertyName)]
-    $parent,
+function Export-PowerSite {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromPipelineByPropertyName)]
+        $parent,
 
-    [Parameter(ValueFromPipelineByPropertyName)]
-    [Alias("child")]
-    $children,
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [Alias("child")]
+        $children,
 
-    [Parameter(ValueFromPipelineByPropertyName)]
-    [alias("pid")]
-    $id,
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [alias("pid")]
+        $id,
 
-    [Parameter(ValueFromPipelineByPropertyName)]
-    [alias("poster")]
-    $author,
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [alias("poster")]
+        $author,
 
-    [Parameter(ValueFromPipelineByPropertyName)]
-    $title,
+        [Parameter(ValueFromPipelineByPropertyName)]
+        $title,
 
-    [Parameter(ValueFromPipelineByPropertyName)]
-    $date,
+        [Parameter(ValueFromPipelineByPropertyName)]
+        $date,
 
-    [Parameter(ValueFromPipelineByPropertyName)]
-    $description,
+        [Parameter(ValueFromPipelineByPropertyName)]
+        $description,
 
-    [Parameter(ValueFromPipelineByPropertyName)]
-    [alias("format")]
-    $Language,
+        [Parameter(ValueFromPipelineByPropertyName)]
+        [alias("format")]
+        $language,
 
-    [Parameter(ValueFromPipelineByPropertyName)]
-    $code
-)
-process {
+        [Parameter(ValueFromPipelineByPropertyName)]
+        $code
+    )
+    process {
+        if($language -eq "posh") {
+            $language = "powershell"
+        }
 
-$extension = switch($Language) {
-    "asp"        { ".asp" }
-    "bash"       { ".sh" }
-    "cpp"        { ".cpp" }
-    "csharp"     { ".cs" }
-    "javascript" { ".js" }
-    "posh"       { ".ps1" }
-    "text"       { ".txt" }
-    "vbnet"      { ".vb" }
-    "xml"        { ".xml" }
-}
+        $extension = switch($language) {
+            "asp"        { ".asp" }
+            "bash"       { ".sh"  }
+            "cpp"        { ".cpp" }
+            "csharp"     { ".cs"  }
+            "javascript" { ".js"  }
+            "powershell" { ".ps1" }
+            "text"       { ".txt" }
+            "vbnet"      { ".vb"  }
+            "xml"        { ".xml" }
+            default      { ".txt" }
+        }
 
-# Work around PowerShell's insistence on BOMs
-function Write-AllLines {
-    param($Path, $Content)
-    $null = New-Item $Path -Type File -Force
-    [IO.File]::WriteAllLines((Convert-Path $Path), $content)
-}
+        # Work around PowerShell's insistence on BOMs
+        function Write-AllLines {
+            param($Path, $Content)
+            $null = New-Item $Path -Type File -Force
+            [IO.File]::WriteAllLines((Convert-Path $Path), $content)
+        }
 
-if($Language -eq "posh") { $Langauge = "powershell" }
+        Write-AllLines "Pages\scripts\$id.md" @"
+        ---
+        pid:            $id
+        author:         $author
+        title:          $title
+        date:           $date
+        tags:           $language
+        file:           Static\scripts\$id$extension
+        $(if($parent){   "parent:         $($parent -join ',')"})
+        $(if($children){ "children:       $($children -join ',')"})
+        ---
 
-Write-AllLines "Pages\scripts\$id.md" @"
----
-pid:            $id
-author:         $author
-title:          $title
-date:           $date
-format:         $Language
-$(if($parent){   "parent:         $($parent -join ',')"})
-$(if($children){ "children:       $($children -join ',')"})
----
+        # $title
 
-# $title
+        ### [download](/scripts/$id$extension)$(if($parent -ne 0) { " - [parent](/scripts/$parent.md)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child](/scripts/$child.md)" }) -join ', ')" })
 
-### [download](//scripts/$id$extension)$(if($parent -ne 0) { " - [parent](//scripts/$parent.md)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child](//scripts/$child.md)" }) -join ', ')" })
+        $description
 
-$description
-
-``````$language
-$code
-``````
+        ``````$language
+        $code
+        ``````
 "@
 
-Write-AllLines "Static\scripts\$id$extension" $code
+        Write-AllLines "Static\scripts\$id$extension" $code
 
+    }
 }
-}
+
+Write-Warning "This dump contains some malware samples which will trigger your AV"
+
+Import-Csv $PSScriptRoot\PoshCodeData.csv | Export-PowerSite
