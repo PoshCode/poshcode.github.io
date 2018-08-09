@@ -1,6 +1,9 @@
 function Export-PowerSite {
     [CmdletBinding()]
     param(
+        [Parameter(Mandatory)]
+        $OutputPath,
+
         [Parameter(ValueFromPipelineByPropertyName)]
         $parent,
 
@@ -32,6 +35,19 @@ function Export-PowerSite {
         [Parameter(ValueFromPipelineByPropertyName)]
         $code
     )
+    begin {
+        $OutputPath = Convert-Path $OutputPath
+
+        Get-Item $OutputPath\Static\scripts -ErrorAction SilentlyContinue |
+            Remove-Item -Confirm -Recurse
+        Get-Item $OutputPath\Pages\scripts -ErrorAction SilentlyContinue |
+            Remove-Item -Confirm -Recurse
+
+        $null = New-Item $OutputPath\Static\scripts -Type Directory -Force
+        $null = New-Item $OutputPath\Pages\scripts -Type Directory -Force
+
+
+    }
     process {
         if($language -eq "posh") {
             $language = "powershell"
@@ -57,7 +73,7 @@ function Export-PowerSite {
             [IO.File]::WriteAllLines((Convert-Path $Path), $content)
         }
 
-        Write-AllLines "Pages\scripts\$id.md" @"
+        Write-AllLines "$OutputPath\Pages\scripts\$id.md" @"
 ---
 pid:            $id
 author:         $author
@@ -77,18 +93,15 @@ $description
 $code
 ``````
 "@
-        Write-Progress (Resolve-Path "Pages\scripts\$id.md")
+        Write-Progress (Resolve-Path "$OutputPath\Pages\scripts\$id.md")
 
-        Write-AllLines "Static\scripts\$id$extension" $code
-        Write-Progress (Resolve-Path "Static\scripts\$id$extension")
+        Write-AllLines "$OutputPath\Static\scripts\$id$extension" $code
+        Write-Progress (Resolve-Path "$OutputPath\Static\scripts\$id$extension")
     }
 }
 
 Push-Location $PSScriptRoot
 Write-Warning "This dump contains some malware samples which will trigger your AV"
-Get-Item $PSScriptRoot\Static\scripts, $PSScriptRoot\Pages\scripts -ErrorAction SilentlyContinue |
-    Remove-Item -Confirm -Recurse
-$null = New-Item $PSScriptRoot\Static\scripts -Type Directory
-$null = New-Item $PSScriptRoot\Pages\scripts -Type Directory
+New-Item $PSScriptRoot\export -Type Directory -Force
 
-Import-Csv $PSScriptRoot\PoshCodeData.csv | Export-PowerSite
+Import-Csv $PSScriptRoot\PoshCodeData.csv | Export-PowerSite $PSScriptRoot\export
