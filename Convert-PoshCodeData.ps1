@@ -85,7 +85,7 @@ $(if($parent){   "parent:         $($parent -join ',')"})
 $(if($children){ "children:       $($children -join ',')"})
 ---
 
-### [download $title$extension](/scripts/$id$extension)$(if($parent -ne 0) { " - [parent](/scripts/$parent.md)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child](/scripts/$child.md)" }) -join ', ')" })
+### Download [$title$extension](/scripts/$id$extension)$(if($parent -ne 0) { " - [parent](/scripts/$parent.html)" })$( if($children){  " - children: $($(foreach($child in $children) { "[$child](/scripts/$child.html)" }) -join ', ')" })
 
 $description
 
