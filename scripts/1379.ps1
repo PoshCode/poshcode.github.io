@@ -13,7 +13,7 @@ if (-not ($MyInvocation.line -match '^\. .')) {
 	return
 }
 
-# .SYNOPSIS 
+# .SYNOPSIS
 # Facilitates exception handling as used to under C# or Java
 #
 # .PARAMETER Command
@@ -62,7 +62,7 @@ if (-not ($MyInvocation.line -match '^\. .')) {
 # .LINK
 # trap
 # .LINK
-# http://huddledmasses.org/trap-exception-in-powershell/
+# https://HuddledMasses.org/trap-exception-in-powershell/
 # .LINK
 # http://weblogs.asp.net/adweigert/archive/2007/10/10/powershell-try-catch-finally-comes-to-life.aspx
 function try {
@@ -80,7 +80,7 @@ function try {
 		[Object]      $catch9,
 		[ScriptBlock] $finally = {}
 	)
-	
+
 	# merge all catches to one single hashtable
 	$catches = @{}
 	($catch,$catch1,$catch2,$catch3,$catch4,$catch5,$catch6,$catch7,$catch8,$catch9) | ? { $_ -ne $null } | % {
@@ -96,7 +96,7 @@ function try {
 			throw New-Object Exception("Unknown catch argument type'" + $_.GetType() + "'")
 		}
 	}
-	
+
 	& {
 		$local:ErrorActionPreference = "SilentlyContinue"
 		trap {

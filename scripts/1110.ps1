@@ -20,16 +20,16 @@
 
 function New-ImaginaryFriend {
 ##.Note
-##    DEPENDS on the WatiN module in http://poshcode.org/1108
+##    DEPENDS on the WatiN module in https://PoshCode.org/1108
 ##.Synopsis
 ##    Creates a new "Imaginary Friend" on friendfeed by automating your browser
 ##.Example
-##    New-ImaginaryFriend PoshCode @{Twitter="PoshCode"} http://poshcode.org/PoshCode.png
+##    New-ImaginaryFriend PoshCode @{Twitter="PoshCode"} https://PoshCode.org/PoshCode.png
 ##
 [CmdletBinding()]
 PARAM($name,[hashtable]$services,$avatar)
 ## BEGIN ...
-   if($global:ie -is [WatiN.Core.IE]) { 
+   if($global:ie -is [WatiN.Core.IE]) {
       New-Watin "http`://friendfeed.com/settings/imaginary"
       while( $ie.Url -ne "http`://friendfeed.com/settings/imaginary" ) {
          Set-WatinUrl "http`://friendfeed.com/settings/imaginary"
@@ -46,11 +46,11 @@ PARAM($name,[hashtable]$services,$avatar)
    Find-Button value "Create imaginary friend" | % { $_.Click() }
    Find-TextField name name | % { $_.TypeText( $name ) }
    (Find-Form action "/a/createimaginary").Buttons | % { $_.click() }
-   
+
    $null = $ie.url -match "http`://friendfeed.com/([^/]*)/services";
    $ffid = $matches[1]
    # Write-Output $ffid
-   
+
    foreach($service in $services.GetEnumerator()) {
       Write-Verbose "$($service.Key): $($service.Value)"
       Find-Link service $service.Key | % { $_.Click() }
@@ -58,7 +58,7 @@ PARAM($name,[hashtable]$services,$avatar)
       @($form.TextFields)[0].TypeText( $service.Value )
       @($form.Buttons)[0].click();
    }
-   
+
    if($avatar) {
       Set-WatinUrl "http`://friendfeed.com/$ffid"
       $avatarFile = Get-WebFile $avatar ([uri]$avatar).segments[-1]
@@ -73,14 +73,14 @@ PARAM($name,[hashtable]$services,$avatar)
 }
 
 
-## DEPENDS on the HttpRest module in http://poshcode.org/1107
+## DEPENDS on the HttpRest module in https://PoshCode.org/1107
 Function Get-FriendFeedFriends {
 Param([string]$UserName,[string[]]$Exclude)
-   $friendNames = Get-WebPageText "http`://friendfeed.com/api/user/$username/profile" //user/subscription/nickname @{format="xml";include="subscriptions"} | 
+   $friendNames = Get-WebPageText "http`://friendfeed.com/api/user/$username/profile" //user/subscription/nickname @{format="xml";include="subscriptions"} |
                   Where {$Exclude -notcontains $_ }
 
    ForEach($incoming in (Get-WebPageContent "http`://friendfeed.com/api/profiles" //profiles/profile @{ format="xml"; nickname=$($friendNames -join ",") })) {
-      $output = Select -Input $incoming Name, NickName | 
+      $output = Select -Input $incoming Name, NickName |
       Add-Member noteproperty Lists @($incoming.SelectNodes("//list/nickname").InnerText) -Passthru |
       Add-Member noteproperty Rooms @($incoming.SelectNodes("//room/nickname").InnerText) -Passthru
       ForEach($service in $incoming.service) {
@@ -102,12 +102,12 @@ Param([string]$UserName,[string[]]$Exclude)
    }
 }
 
-## DEPENDS on the HttpRest module in http://poshcode.org/1107
+## DEPENDS on the HttpRest module in https://PoshCode.org/1107
 function Get-TwitterFriends {
 Param($UserName, [string[]]$Exclude)
    $page = 0; $tweeters = @()
-   do { 
-      $tweeters = Get-WebPageContent "http`://twitter.com/statuses/friends.xml" //users/user @{page=(++$page); screen_name=$UserName} | 
+   do {
+      $tweeters = Get-WebPageContent "http`://twitter.com/statuses/friends.xml" //users/user @{page=(++$page); screen_name=$UserName} |
                   Where {$Exclude -notcontains $_.screen_name }
       Write-Output $tweeters
    } while($tweeters)

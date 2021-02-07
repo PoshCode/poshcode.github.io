@@ -4,14 +4,14 @@
 .Description
 	Searches text files by pattern and displays the results.
 .Notes
-Based on versions from http://weblogs.asp.net/whaggard/archive/2007/03/23/powershell-script-to-find-strings-and-highlight-them-in-the-output.aspx and from http://poshcode.org/426
+Based on versions from http://weblogs.asp.net/whaggard/archive/2007/03/23/powershell-script-to-find-strings-and-highlight-them-in-the-output.aspx and from https://PoshCode.org/426
 
-Makes use of Out-ColorMatchInfo found at http://poshcode.org/1095.
+Makes use of Out-ColorMatchInfo found at https://PoshCode.org/1095.
 #>
 
 #requires -version 2
-param ( 
-	[Parameter(Mandatory=$true)] 
+param (
+	[Parameter(Mandatory=$true)]
 	[regex] $pattern,
 	[string] $filter = "*.*",
 	[switch] $recurse = $true,
@@ -24,6 +24,6 @@ if ((-not $caseSensitive) -and (-not $pattern.Options -match "IgnoreCase")) {
 }
 
 Get-ChildItem -recurse:$recurse -filter:$filter |
-	Select-String -caseSensitive:$caseSensitive -pattern:$pattern -AllMatches -context $context | 
+	Select-String -caseSensitive:$caseSensitive -pattern:$pattern -AllMatches -context $context |
 	Out-ColorMatchInfo
 

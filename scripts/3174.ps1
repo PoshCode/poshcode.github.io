@@ -1,6 +1,6 @@
 #requires -version 2.0
 # ALSO REQUIRES Autoload for some functionality (Latest version: http://poshcode.org/3173)
-# You should create a Reflection.psd1 with the contents: 
+# You should create a Reflection.psd1 with the contents:
 #    @{ ModuleToProcess="Reflection.psm1"; RequiredModules = @("Autoload"); GUID="64b5f609-970f-4e65-b02f-93ccf3e60cbb"; ModuleVersion="4.1.0.0" }
 #History:
 # 1.0  - First public release (March 19, 2010)
@@ -44,9 +44,9 @@ public class TransformAttribute : ArgumentTransformationAttribute {
 
    public override Object Transform( EngineIntrinsics engine, Object inputData) {
       try {
-         Collection<PSObject> output = 
+         Collection<PSObject> output =
             engine.InvokeCommand.InvokeScript( engine.SessionState, Script, inputData );
-         
+
          if(output.Count > 1) {
             Object[] transformed = new Object[output.Count];
             for(int i =0; i < output.Count;i++) {
@@ -64,11 +64,11 @@ public class TransformAttribute : ArgumentTransformationAttribute {
          throw new ArgumentTransformationMetadataException(string.Format("Transform Script threw an exception ('{0}'). See `$Error[0].Exception.InnerException.InnerException for more details.",e.Message), e);
       }
    }
-   
+
    public TransformAttribute() {
       this.Script = ScriptBlock.Create("{`$args}");
    }
-   
+
    public TransformAttribute( ScriptBlock Script ) {
       this.Script = Script;
    }
@@ -77,13 +77,13 @@ public class TransformAttribute : ArgumentTransformationAttribute {
       get { return _scriptblock; }
       set { _scriptblock = value; }
    }
-   
+
    public string NoOutputMessage {
       get { return _noOutputMessage; }
       set { _noOutputMessage = value; }
-   }   
+   }
 }
-"@ 
+"@
 
 
 
@@ -103,29 +103,29 @@ function Get-Type {
    .Parameter Interface
       An interface they should implement (wildcard patterns allowed).
    .Parameter Enum
-      An enumeration to list all of enumeration values for 
+      An enumeration to list all of enumeration values for
    .Parameter Namespace
       A namespace to restrict where we selsect types from (wildcard patterns allowed).
    .Parameter Force
       Causes Private types to be included
    .Example
       Get-Type
-       
+
       Gets all loaded types (takes a VERY long time to print out)
    .Example
       Get-Type -Assembly ([PSObject].Assembly)
-       
+
       Gets types from System.Management.Automation
    .Example
       [Threading.Thread]::CurrentThread.ApartmentState | Get-Type
-       
+
       Gets all of the possible values for the ApartmentState property
    .Example
       [Threading.ApartmentState] | Get-Type
-       
+
       Gets all of the possible values for an apartmentstate
    #>
-   [CmdletBinding(DefaultParameterSetName="Assembly")]   
+   [CmdletBinding(DefaultParameterSetName="Assembly")]
    param(
    # The assembly to collect types from
    [Parameter(ValueFromPipeline=$true)]
@@ -139,7 +139,7 @@ function Get-Type {
    [Parameter(Mandatory=$false)]
    [String[]]$Namespace
 ,
-   # A Base Type they should derive from 
+   # A Base Type they should derive from
    [Parameter(Mandatory=$false)]
    [String[]]$BaseType
 ,
@@ -150,7 +150,7 @@ function Get-Type {
    # The enumerated value to get all of the possibilties of
    [Parameter(ParameterSetName="Enum")]
    [PSObject]$Enum
-, 
+,
    [Parameter()][Alias("Private","ShowPrivate")]
    [Switch]$Force
    )
@@ -166,7 +166,7 @@ function Get-Type {
          }
       }
       else {
-         if($Assembly -as [Reflection.Assembly[]]) { 
+         if($Assembly -as [Reflection.Assembly[]]) {
             ## This is what we expected, move along
          } elseif($Assembly -as [String[]]) {
             $Assembly = Get-Assembly $Assembly
@@ -176,7 +176,7 @@ function Get-Type {
 
          :asm foreach ($asm in $assembly) {
             Write-Verbose "Testing Types from Assembly: $($asm.Location)"
-            if ($asm) { 
+            if ($asm) {
                trap {
                   if( $_.Exception.LoaderExceptions[0] -is [System.IO.FileNotFoundException] ) {
                      $PSCmdlet.WriteWarning( "Unable to load some types from $($asm.Location), required assemblies were not found. Use -Debug to see more detail")
@@ -201,7 +201,7 @@ function Get-Type {
 
 function Add-Assembly {
 #.Synopsis
-#  Load assemblies 
+#  Load assemblies
 #.Description
 #  Load assemblies from a folder
 #.Parameter Path
@@ -211,7 +211,7 @@ function Add-Assembly {
 #  Aliased to -Types
 #.Parameter Recurse
 #  Gets the items in the specified locations and in all child items of the locations.
-# 
+#
 #  Recurse works only when the path points to a container that has child items, such as C:\Windows or C:\Windows\*, and not when it points to items that do not have child items, such as C:\Windows\*.dll
 [CmdletBinding()]
 param(
@@ -233,7 +233,7 @@ process {
 
 function Get-Assembly {
 <#
-.Synopsis 
+.Synopsis
    Get a list of assemblies available in the runspace
 .Description
    Returns AssemblyInfo for all the assemblies available in the current AppDomain, optionally filtered by partial name match
@@ -248,7 +248,7 @@ param(
 process {
    [appdomain]::CurrentDomain.GetAssemblies() | Where {
       $Assembly = $_
-      if($Name){ 
+      if($Name){
          $(
             foreach($n in $Name){
                if(Resolve-Path $n -ErrorAction 0) {
@@ -256,15 +256,15 @@ process {
                }
                $Assembly.FullName -match $n -or $Assembly.Location -match $n -or ($Assembly.Location -and (Split-Path $Assembly.Location) -match $n)
             }
-         ) -contains $True 
+         ) -contains $True
       } else { $true }
    }
-      
+
 }
 }
 
 
-function Update-PSBoundParameters { 
+function Update-PSBoundParameters {
 #.Synopsis
 #  Ensure a parameter value is set
 #.Description
@@ -325,7 +325,7 @@ end {
 
 function Get-Constructor {
 <#
-.Synopsis 
+.Synopsis
    Returns RuntimeConstructorInfo for the (public) constructor methods of the specified Type.
 .Description
    Get the RuntimeConstructorInfo for a type and add members "Syntax," "SimpleSyntax," and "Definition" to each one containing the syntax information that can use to call that constructor.
@@ -337,24 +337,24 @@ function Get-Constructor {
    Serves as the replacement for the broken -WarningAction. If specified, no warnings will be written for types without public constructors.
 .Example
    Get-Constructor System.IO.FileInfo
-   
+
    Description
    -----------
-   Gets all the information about the single constructor for a FileInfo object. 
+   Gets all the information about the single constructor for a FileInfo object.
 .Example
    Get-Type System.IO.*info mscorlib | Get-Constructor -NoWarn | Select Syntax
-   
+
    Description
    -----------
-   Displays the constructor syntax for all of the *Info objects in the System.IO namespace. 
+   Displays the constructor syntax for all of the *Info objects in the System.IO namespace.
    Using -NoWarn supresses the warning about System.IO.FileSystemInfo not having constructors.
-  
+
 .Example
    $path = $pwd
    $driveName = $pwd.Drive
    $fileName = "$Profile"
    Get-Type System.IO.*info mscorlib | Get-Constructor -NoWarn | ForEach-Object { Invoke-Expression $_.Syntax }
-   
+
    Description
    -----------
    Finds and invokes the constructors for DirectoryInfo, DriveInfo, and FileInfo.
@@ -363,14 +363,14 @@ function Get-Constructor {
 
 #>
 [CmdletBinding()]
-param( 
+param(
    [Parameter(Mandatory=$true, ValueFromPipeline=$True, ValueFromPipelineByPropertyName=$true, Position=0)]
    [Alias("ParameterType")]
    [Type]$Type
-,  [Switch]$Force 
+,  [Switch]$Force
 ,  [Switch]$NoWarn
 )
-   process { 
+   process {
       $type.GetConstructors() | Where-Object { $Force -or $_.IsPublic -and -not $_.IsStatic } -OutVariable ctor | Select *,
          @{ name = "TypeName"; expression = { $_.ReflectedType.FullName } },
          @{ name = "Definition";
@@ -388,7 +388,7 @@ param(
 
 function Get-Method {
 <#
-.Synopsis 
+.Synopsis
    Returns MethodInfo for the (public) methods of the specified Type.
 .Description
    Get the MethodInfo for a type and add members "Syntax," "SimpleSyntax," and "Definition" to each one containing the syntax information that can use to call that method.
@@ -401,18 +401,18 @@ function Get-Method {
 
 #>
 [CmdletBinding(DefaultParameterSetName="Type")]
-param( 
+param(
    [Parameter(ParameterSetName="Type", Mandatory=$true, ValueFromPipeline=$True, ValueFromPipelineByPropertyName=$true, Position=0)]
    [Type]$Type
 ,
    [Parameter(Mandatory=$false, ValueFromPipelineByPropertyName=$true, Position=1)]
    [String[]]$Name ="*"
 ,  [Switch]$Definition
-,  [Switch]$Force 
+,  [Switch]$Force
 )
-   process { 
-      foreach($method in 
-         $type.GetMethods() + $type.GetConstructors() | Where-Object { $Force -or $_.IsPublic } | 
+   process {
+      foreach($method in
+         $type.GetMethods() + $type.GetConstructors() | Where-Object { $Force -or $_.IsPublic } |
          # Hide the Property accessor methods
          Where-Object { $Force -or !$_.IsSpecialName -or $_.Name -notmatch "^get_|^set_" } |
          Where-Object { $( foreach($n in $Name) { $_.Name -like $n } ) -contains $True } )
@@ -439,17 +439,17 @@ process {
       foreach($param in $MethodBase.GetParameters()) {
          # Write-Host $param.ParameterType.FullName.TrimEnd('&'), $param.Name -fore cyan
 		 Write-Verbose "$($param.ParameterType.UnderlyingSystemType.FullName) - $($param.ParameterType)"
-      
+
          if($param.ParameterType.Name.EndsWith('&')) { $ref = '[ref]' } else { $ref = '' }
          if($param.ParameterType.IsArray) { $array = ',' } else { $array = '' }
-         if($Simple) { 
+         if($Simple) {
             '{0} {1}' -f $param.ParameterType.ToString(), $param.Name
          } else {
             '{0}({1}[{2}]${3})' -f $ref, $array, $param.ParameterType.ToString().TrimEnd('&'), $param.Name
          }
       }
    )
-   
+
    if($MethodBase.IsConstructor) {
       "New-Object $($MethodBase.ReflectedType.FullName) $($parameters -join ', ')"
    } elseif($Simple) {
@@ -470,13 +470,13 @@ param(
 ,
    [Parameter(Mandatory=$False)]
    [string]$Caption = "Please choose!"
-,  
+,
    [Parameter(Mandatory=$False)]
    [string]$Message = "Choose one of the following options:"
-,  
+,
    [Parameter(Mandatory=$False)]
    [int[]]$Default  = 0
-,  
+,
    [Switch]$MultipleChoice
 ,
    [Switch]$Passthru
@@ -488,7 +488,7 @@ process {
    $Descriptions = [System.Management.Automation.Host.ChoiceDescription[]]( $(
                      foreach($choice in $choices) {
                         New-Object System.Management.Automation.Host.ChoiceDescription $choice.Key,$choice.Value
-                     } 
+                     }
                    ) )
 
    if(!$MultipleChoice) { [int]$Default = $Default[0] }
@@ -520,13 +520,13 @@ trap {
 
    [Type[]]$Types = @(
       foreach($arg in $Arguments) {
-         if($arg -is [type]) { 
-            $arg 
+         if($arg -is [type]) {
+            $arg
          }
          else {
             $arg.GetType()
          }
-      } 
+      }
    )
    try {
       Write-Verbose "[$($Target.FullName)].GetMethod('$($Method.Value)', [$($Flags.GetType())]'$flags', `$null, ([Type[]]($(@($Types|%{$_.Name}) -join ','))), `$null)"
@@ -536,7 +536,7 @@ trap {
          $Method.Value = $MethodBase.Name
       }
    } catch { }
-   
+
    if(!$MethodBase) {
       Write-Verbose "Try again to get $($Method.Value) Method on $($Target.FullName):"
       $MethodBase = Get-Method $target $($Method.Value)
@@ -545,8 +545,8 @@ trap {
          $i = Read-Choice -Choices $(foreach($mb in $MethodBase) { @{ "$($mb.SafeSyntax) &$($i = $i+1;$i)`b`n" =  $mb.SafeSyntax } }) -Default ($MethodBase.Count-1) -Caption "Choose a Method." -Message "Please choose which method overload to invoke:"
          [System.Reflection.MethodBase]$MethodBase = $MethodBase[$i]
       }
-      
-      
+
+
       ForEach($parameter in $MethodBase.GetParameters()) {
          $found = $false
          For($a =0;$a -lt $Arguments.Count;$a++) {
@@ -578,7 +578,7 @@ trap {
 
 function Invoke-Member {
 [CmdletBinding()]
-param(        
+param(
    [parameter(position=10, valuefrompipeline=$true, mandatory=$true)]
    [allowemptystring()]
    $InputObject
@@ -605,9 +605,9 @@ param(
    #  $SafeSyntax = [ScriptBlock]::Create( $Member.SafeSyntax )
 #  }
 process {
-   #  if ($InputObject) 
+   #  if ($InputObject)
    #  {
-      #  if ($InputObject | Get-Member $Member -static:$static) 
+      #  if ($InputObject | Get-Member $Member -static:$static)
       #  {
 
          if ($InputObject -is [type]) {
@@ -615,15 +615,15 @@ process {
          } else {
              $target = $InputObject.GetType()
          }
-      
+
          if(Get-Member $Member -InputObject $InputObject -Type Properties) {
             $_.$Member
-         } 
+         }
          elseif($Member -match "ctor|constructor") {
             $Member = ".ctor"
             [System.Reflection.BindingFlags]$flags = "CreateInstance"
             $InputObject = $Null
-         } 
+         }
          else {
             [System.Reflection.BindingFlags]$flags = "IgnoreCase,Public,InvokeMethod"
             if($Static) { $flags = "$Flags,Static" } else { $flags = "$Flags,Instance" }
@@ -655,7 +655,7 @@ function Invoke-Generic {
 #.Synopsis
 #  Invoke Generic method definitions via reflection:
 [CmdletBinding()]
-param( 
+param(
    [Parameter(Position=0,Mandatory=$true,ValueFromPipelineByPropertyName=$true)]
    [Alias('On')]
    $InputObject
@@ -667,7 +667,7 @@ param(
    [Parameter(Position=2)]
    [Alias("Types")]
    [Type[]]$ParameterTypes
-, 
+,
    [Parameter(Position=4, ValueFromRemainingArguments=$true, ValueFromPipelineByPropertyName=$true)]
    [Object[]]$WithArgs
 ,
@@ -683,14 +683,14 @@ begin {
 process {
    $Type = $InputObject -as [Type]
    if(!$Type) { $Type = $InputObject.GetType() }
-   
+
    if($WithArgs -and -not $ParameterTypes) {
       $ParameterTypes = $withArgs | % { $_.GetType() }
    } elseif(!$ParameterTypes) {
       $ParameterTypes = [Type]::EmptyTypes
-   }   
-   
-   
+   }
+
+
    trap { continue }
    $MemberInfo = $Type.GetMethod($MethodName, $BindingFlags)
    if(!$MemberInfo) {
@@ -703,8 +703,8 @@ process {
          if($Accept){
          Write-Verbose "$Accept = $($MI.Name) -eq $($MethodName)"
             [Array]$GenericTypes = @($MI.GetGenericArguments() | Select -Expand Name)
-            [Array]$Parameters = @($MI.GetParameters() | Add-Member ScriptProperty -Name IsGeneric -Value { 
-                                       $GenericTypes -Contains $this.ParameterType 
+            [Array]$Parameters = @($MI.GetParameters() | Add-Member ScriptProperty -Name IsGeneric -Value {
+                                       $GenericTypes -Contains $this.ParameterType
                                     } -Passthru)
 
                                     $Accept = $ParameterTypes.Count -eq $Parameters.Count
@@ -746,7 +746,7 @@ process {
    }
 } }
 
-# get a reference to the Type   
+# get a reference to the Type
 $xlr8r = [psobject].assembly.gettype("System.Management.Automation.TypeAccelerators")
 
 function Import-Namespace {
@@ -754,7 +754,7 @@ function Import-Namespace {
 param(
    [Parameter(ValueFromPipeline=$true)]
    [string]$Namespace
-,  
+,
    [Switch]$Force
 )
    Get-Type -Namespace $Namespace -Force:$Force | Add-Accelerator
@@ -769,26 +769,26 @@ function Add-Accelerator {
    .Example
       Add-Accelerator list System.Collections.Generic.List``1
       $list = New-Object list[string]
-      
+
       Creates an accelerator for the generic List[T] collection type, and then creates a list of strings.
    .Example
       Add-Accelerator "List T", "GList" System.Collections.Generic.List``1
       $list = New-Object "list t[string]"
-      
+
       Creates two accelerators for the Generic List[T] collection type.
    .Parameter Accelerator
       The short form accelerator should be just the name you want to use (without square brackets).
    .Parameter Type
       The type you want the accelerator to accelerate (without square brackets)
    .Notes
-      When specifying multiple values for a parameter, use commas to separate the values. 
+      When specifying multiple values for a parameter, use commas to separate the values.
       For example, "-Accelerator string, regex".
-      
+
       PowerShell requires arguments that are "types" to NOT have the square bracket type notation, because of the way the parsing engine works.  You can either just type in the type as System.Int64, or you can put parentheses around it to help the parser out: ([System.Int64])
 
       Also see the help for Get-Accelerator and Remove-Accelerator
    .Link
-      http://huddledmasses.org/powershell-2-ctp3-custom-accelerators-finally/
+      https://HuddledMasses.org/powershell-2-ctp3-custom-accelerators-finally/
 #>
 [CmdletBinding()]
 param(
@@ -801,10 +801,10 @@ param(
    [type]$Type
 )
 process {
-   # add a user-defined accelerator  
-   foreach($a in $Accelerator) { 
-      if($xlr8r::AddReplace) { 
-         $xlr8r::AddReplace( $a, $Type) 
+   # add a user-defined accelerator
+   foreach($a in $Accelerator) {
+      if($xlr8r::AddReplace) {
+         $xlr8r::AddReplace( $a, $Type)
       } else {
          $null = $xlr8r::Remove( $a )
          $xlr8r::Add( $a, $Type)
@@ -815,7 +815,7 @@ process {
                Write-Error "Cannot add accelerator [$a] for [$($Type.FullName)]`n                  [$a] is already defined as [$($xlr8r::get[$a].FullName)]"
             }
             Continue;
-         } 
+         }
          throw
       }
    }
@@ -830,23 +830,23 @@ function Get-Accelerator {
       The Get-Accelerator function allows you to look up the type accelerators (like [regex]) defined on your system by their short form or by type
    .Example
       Get-Accelerator System.String
-      
+
       Returns the KeyValue pair for the [System.String] accelerator(s)
    .Example
       Get-Accelerator ps*,wmi*
-      
+
       Returns the KeyValue pairs for the matching accelerator definition(s)
    .Parameter Accelerator
       One or more short form accelerators to search for (Accept wildcard characters).
    .Parameter Type
       One or more types to search for.
    .Notes
-      When specifying multiple values for a parameter, use commas to separate the values. 
+      When specifying multiple values for a parameter, use commas to separate the values.
       For example, "-Accelerator string, regex".
-      
+
       Also see the help for Add-Accelerator and Remove-Accelerator
    .Link
-      http://huddledmasses.org/powershell-2-ctp3-custom-accelerators-finally/
+      https://HuddledMasses.org/powershell-2-ctp3-custom-accelerators-finally/
 #>
 [CmdletBinding(DefaultParameterSetName="ByType")]
 param(
@@ -859,9 +859,9 @@ param(
    [type[]]$Type
 )
 process {
-   # add a user-defined accelerator  
+   # add a user-defined accelerator
    switch($PSCmdlet.ParameterSetName) {
-      "ByAccelerator" { 
+      "ByAccelerator" {
          $xlr8r::get.GetEnumerator() | % {
             foreach($a in $Accelerator) {
                if($_.Key -like $a) { $_ }
@@ -869,7 +869,7 @@ process {
          }
          break
       }
-      "ByType" { 
+      "ByType" {
          if($Type -and $Type.Count) {
             $xlr8r::get.GetEnumerator() | ? { $Type -contains $_.Value }
          }
@@ -909,12 +909,12 @@ function Remove-Accelerator {
    .Parameter Accelerator
       The short form accelerator that you want to remove (Accept wildcard characters).
    .Notes
-      When specifying multiple values for a parameter, use commas to separate the values. 
+      When specifying multiple values for a parameter, use commas to separate the values.
       For example, "-Accel string, regex".
 
       Also see the help for Add-Accelerator and Get-Accelerator
    .Link
-      http://huddledmasses.org/powershell-2-ctp3-custom-accelerators-finally/
+      https://HuddledMasses.org/powershell-2-ctp3-custom-accelerators-finally/
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -924,12 +924,12 @@ param(
 )
 process {
    foreach($a in $Accelerator) {
-      foreach($key in $xlr8r::Get.Keys -like $a) { 
+      foreach($key in $xlr8r::Get.Keys -like $a) {
          if($PSCmdlet.ShouldProcess( "Removes the alias [$($Key)] for type [$($xlr8r::Get[$key].FullName)]",
                                      "Remove the alias [$($Key)] for type [$($xlr8r::Get[$key].FullName)]?",
                                      "Removing Type Accelerator" )) {
             # remove a user-defined accelerator
-            $xlr8r::remove($key)   
+            $xlr8r::remove($key)
          }
       }
    }
@@ -943,7 +943,7 @@ $Script:CodeGenContentProperties = 'Content','Child','Children','Frames','Items'
 $DependencyProperties = @{}
 if(Test-Path $PSScriptRoot\DependencyPropertyCache.xml) {
 	#$DependencyProperties = [System.Windows.Markup.XamlReader]::Parse( (gc $PSScriptRoot\DependencyPropertyCache.xml) )
-	$DependencyProperties = Import-CliXml  $PSScriptRoot\DependencyPropertyCache.xml 
+	$DependencyProperties = Import-CliXml  $PSScriptRoot\DependencyPropertyCache.xml
 }
 
 function Get-ReflectionModule { $executioncontext.sessionstate.module }
@@ -975,7 +975,7 @@ param( $Parameters, [ref]$DObject )
 
 
       } ## HANDLE PROPERTIES ....
-      else { 
+      else {
          try {
             ## TODO: File a BUG because Write-DEBUG and Write-VERBOSE die here.
             if($DebugPreference -ne "SilentlyContinue") {
@@ -1055,7 +1055,7 @@ PARAM([ref]$TheObject, $Name, $Values)
       }
       if($DependencyProperties.ContainsKey($Name)) {
          $field = @($DependencyProperties.$Name.Keys | Where { $DObject -is $_ -and $PropertyType -eq ([type]$DependencyProperties.$Name.$_.PropertyType)})[0] #  -or -like "*$Class" -and ($Param1.Value -as ([type]$_.PropertyType)
-         if($field) { 
+         if($field) {
             if($DebugPreference -ne "SilentlyContinue") { Write-Host "$($field)" -fore Blue }
             if($DebugPreference -ne "SilentlyContinue") { Write-Host "Binding: ($field)::`"$($DependencyProperties.$Name.$field.Name)`" to $Binding" -fore Blue}
 
@@ -1064,14 +1064,14 @@ PARAM([ref]$TheObject, $Name, $Values)
             throw "Couldn't figure out $( @($DependencyProperties.$Name.Keys) -join ', ' )"
          }
       } else {
-         if($DebugPreference -ne "SilentlyContinue") { 
+         if($DebugPreference -ne "SilentlyContinue") {
             Write-Host "But $($DObject.GetType())::${Name}Property is not a Dependency Property, so it probably can't be bound?" -fore Cyan
          }
          try {
 
             $DObject.SetBinding( ($DObject.GetType()::"${Name}Property"), $Binding ) | Out-Null
 
-            if($DebugPreference -ne "SilentlyContinue") { 
+            if($DebugPreference -ne "SilentlyContinue") {
                Write-Host ([System.Windows.Markup.XamlWriter]::Save( $Dobject )) -foreground yellow
             }
          } catch {
@@ -1085,7 +1085,7 @@ PARAM([ref]$TheObject, $Name, $Values)
       if($Values -is [System.Collections.IEnumerable]) {
          if($DebugPreference -ne "SilentlyContinue") { Write-Host "$Name is $PropertyType which is IEnumerable, and the value is too!" -fore Cyan }
          $DObject.$($Name) = $Values
-      } else { 
+      } else {
          if($DebugPreference -ne "SilentlyContinue") { Write-Host "$Name is $PropertyType which is IEnumerable, but the value is not." -fore Cyan }
          $DObject.$($Name) = new-object "System.Collections.ObjectModel.ObservableCollection[$(@($Values)[0].GetType().FullName)]"
          $DObject.$($Name).Add($Values)
@@ -1123,7 +1123,7 @@ PARAM([ref]$TheObject, $Name, $Values)
             # Write-Host "CAUGHT collection value problem" -fore Red
             if($_.Exception.Message -match "Invalid cast from 'System.String' to 'System.Windows.UIElement'.") {
                $null = $DObject.$($Name).Add( (TextBlock $Values[0]) )
-            }else { 
+            }else {
                throw
             }
          }
@@ -1138,7 +1138,7 @@ PARAM([ref]$TheObject, $Name, $Values)
             # Write-Host "CAUGHT value problem" -fore Red
             if($_.Exception.Message -match "Invalid cast from 'System.String' to 'System.Windows.UIElement'.") {
                $null = $DObject.$($Name).Add( (TextBlock $values) )
-            }else { 
+            }else {
                throw
             }
          }
@@ -1168,34 +1168,34 @@ DYNAMICPARAM {
 
    if( $Property ) {
       if($Property.GetType() -eq ([System.Windows.DependencyProperty]) -or
-         $Property.GetType().IsSubclassOf(([System.Windows.DependencyProperty]))) 
+         $Property.GetType().IsSubclassOf(([System.Windows.DependencyProperty])))
       {
          $Param1.ParameterType = $Property.PropertyType
-      } 
+      }
       elseif($Property -is [string] -and $Property.Contains(".")) {
          $Class,$Property = $Property.Split(".")
          if($DependencyProperties.ContainsKey($Property)){
             $type = $DependencyProperties.$Property.Keys -like "*$Class"
-            if($type) { 
+            if($type) {
                $Param1.ParameterType = [type]@($DependencyProperties.$Property.$type)[0].PropertyType
             }
          }
 
       } elseif($DependencyProperties.ContainsKey($Property)){
          if($Element) {
-            if($DependencyProperties.$Property.ContainsKey( $element.GetType().FullName )) { 
+            if($DependencyProperties.$Property.ContainsKey( $element.GetType().FullName )) {
                $Param1.ParameterType = [type]$DependencyProperties.$Property.($element.GetType().FullName).PropertyType
             }
          } else {
             $Param1.ParameterType = [type]$DependencyProperties.$Property.Values[0].PropertyType
          }
       }
-      else 
+      else
       {
          $Param1.ParameterType = [PSObject]
       }
    }
-   else 
+   else
    {
       $Param1.ParameterType = [PSObject]
    }
@@ -1203,7 +1203,7 @@ DYNAMICPARAM {
    return $paramDictionary
 }
 PROCESS {
-   trap { 
+   trap {
       Write-Host "ERROR Setting Dependency Property" -Fore Red
       Write-Host "Trying to set $Property to $($Param1.Value)" -Fore Red
       continue
@@ -1211,13 +1211,13 @@ PROCESS {
    if($Property.GetType() -eq ([System.Windows.DependencyProperty]) -or
       $Property.GetType().IsSubclassOf(([System.Windows.DependencyProperty]))
    ){
-      trap { 
+      trap {
          Write-Host "ERROR Setting Dependency Property" -Fore Red
          Write-Host "Trying to set $($Property.FullName) to $($Param1.Value)" -Fore Red
          continue
       }
       $Element.SetValue($Property, ($Param1.Value -as $Property.PropertyType))
-   } 
+   }
 	else {
       if("$Property".Contains(".")) {
          $Class,$Property = "$Property".Split(".")
@@ -1225,13 +1225,13 @@ PROCESS {
 
       if( $DependencyProperties.ContainsKey("$Property" ) ) {
          $fields = @( $DependencyProperties.$Property.Keys -like "*$Class" | ? { $Param1.Value -as ([type]$DependencyProperties.$Property.$_.PropertyType) } )
-			if($fields.Count -eq 0 ) { 
+			if($fields.Count -eq 0 ) {
             $fields = @($DependencyProperties.$Property.Keys -like "*$Class" )
-         }			
+         }
          if($fields.Count) {
             $success = $false
             foreach($field in $fields) {
-               trap { 
+               trap {
                   Write-Host "ERROR Setting Dependency Property" -Fore Red
                   Write-Host "Trying to set $($field)::$($DependencyProperties.$Property.$field.Name) to $($Param1.Value) -as $($DependencyProperties.$Property.$field.PropertyType)" -Fore Red
                   continue
@@ -1239,10 +1239,10 @@ PROCESS {
                $Element.SetValue( ([type]$field)::"$($DependencyProperties.$Property.$field.Name)", ($Param1.Value -as ([type]$DependencyProperties.$Property.$field.PropertyType)))
                if($?) { $success = $true; break }
             }
-				
-            if(!$success) { 
-					throw "food" 
-				}				
+
+            if(!$success) {
+					throw "food"
+				}
          } else {
             Write-Host "Couldn't find the right property: $Class.$Property on $( $Element.GetType().Name ) of type $( $Param1.Value.GetType().FullName )" -Fore Red
          }
@@ -1251,7 +1251,7 @@ PROCESS {
          Write-Host "Unknown Dependency Property Key: $Property on $($Element.GetType().Name)" -Fore Red
       }
    }
-	
+
    if( $Passthru ) { $Element }
 }
 }
@@ -1264,7 +1264,7 @@ function Add-ConstructorFunction {
 .Description
    Creates a New-Namespace.Type function for each type passed in, as well as a short form "Type" alias.
 
-   Exposes all of the properties and events of the type as perameters to the function. 
+   Exposes all of the properties and events of the type as perameters to the function.
 
    NOTE: The Type MUST have a default parameterless constructor.
 .Parameter Assembly
@@ -1286,12 +1286,12 @@ function Add-ConstructorFunction {
 
    Will create constructor functions for all the WPF components in the PresentationFramework assembly.
 
-.Links 
-   http://HuddledMasses.org/powerboots
+.Links
+   https://HuddledMasses.org/powerboots
 .ReturnValue
    The name(s) of the function(s) created -- so you can export them, if necessary.
 .Notes
- AUTHOR:    Joel Bennett http://HuddledMasses.org
+ AUTHOR:    Joel Bennett https://HuddledMasses.org
  LASTEDIT:  2009-01-13 16:35:23
 #>
 [CmdletBinding(DefaultParameterSetName="FromType")]
@@ -1322,7 +1322,7 @@ BEGIN {
 END {
    #Set-Content -Literal $PSScriptRoot\DependencyPropertyCache.xml -Value ([System.Windows.Markup.XamlWriter]::Save( $DependencyProperties ))
 	Export-CliXml -Path $PSScriptRoot\DependencyPropertyCache.xml -InputObject $DependencyProperties
-	
+
    if($ErrorList.Count) { Write-Warning "Some New-* functions not aliased." }
    $ErrorList | Write-Error
 }
@@ -1340,8 +1340,8 @@ PROCESS {
             $asm =  [Reflection.Assembly]::LoadWithPartialName( $lib )
          }
          if($asm) {
-            $type += $asm.GetTypes() | ?{ $_.IsPublic    -and !$_.IsEnum      -and 
-                                         !$_.IsAbstract  -and !$_.IsInterface -and 
+            $type += $asm.GetTypes() | ?{ $_.IsPublic    -and !$_.IsEnum      -and
+                                         !$_.IsAbstract  -and !$_.IsInterface -and
                                           $_.GetConstructor( "Instance,Public", $Null, $Empty, @() )}
          } else {
             Write-Error "Can't find the assembly $lib, please check your spelling and try again"
@@ -1357,7 +1357,7 @@ PROCESS {
       ## Collect all dependency properties ....
       $T.GetFields() |
          Where-Object { $_.FieldType -eq [System.Windows.DependencyProperty] } |
-         ForEach-Object { 
+         ForEach-Object {
             [string]$Field = $_.DeclaringType::"$($_.Name)".Name
             [string]$TypeName = $_.DeclaringType.FullName
 
@@ -1365,7 +1365,7 @@ PROCESS {
                $DependencyProperties.$Field = @{}
             }
 
-            $DependencyProperties.$Field.$TypeName = @{ 
+            $DependencyProperties.$Field.$TypeName = @{
                Name         = [string]$_.Name
                PropertyType = [string]$_.DeclaringType::"$($_.Name)".PropertyType.FullName
             }
@@ -1377,11 +1377,11 @@ PROCESS {
          $PropertyNames = New-Object System.Text.StringBuilder "@("
 
          $Parameters = New-Object System.Text.StringBuilder "[CmdletBinding(DefaultParameterSetName='Default')]`nPARAM(`n"
-		 
+
          ## Add all properties
-         $Properties = $T.GetProperties("Public,Instance,FlattenHierarchy") | 
+         $Properties = $T.GetProperties("Public,Instance,FlattenHierarchy") |
             Where-Object { $_.CanWrite -Or $_.PropertyType.GetInterface([System.Collections.IList]) }
-			
+
          $Properties = ($T.GetEvents("Public,Instance,FlattenHierarchy") + $Properties) | Sort-Object Name -Unique
 
          foreach ($p in $Properties) {
@@ -1403,8 +1403,8 @@ PROCESS {
 ,
 '@, $p.Name)
                      $Pipelineable += @(Add-Member -in $p.Name -Type NoteProperty -Name "IsCollection" -Value $($p.PropertyType.GetInterface([System.Collections.IList]) -ne $null) -Passthru)
-                  } 
-                  elseif($p.PropertyType -eq [System.Boolean]) 
+                  }
+                  elseif($p.PropertyType -eq [System.Boolean])
                   {
                      $null = $Parameters.AppendFormat(@'
 	[Parameter()]
@@ -1412,7 +1412,7 @@ PROCESS {
 ,
 '@, $p.Name)
                   }
-                  else 
+                  else
                   {
                      $null = $Parameters.AppendFormat(@'
 	[Parameter()]
@@ -1427,7 +1427,7 @@ PROCESS {
 	[string[]]$DependencyProps
 )')
 		$null = $PropertyNames.Remove(2,1).Append(')')
-			
+
       $collectable = [bool]$(@(foreach($p in @($Pipelineable)){$p.IsCollection}) -contains $true)
       $ofs = "`n";
 
@@ -1457,12 +1457,12 @@ function New-$TypeName {
    Generates a new $TypeName object, and allows setting all of it's properties.
    (From the $($T.Assembly.GetName().Name) assembly v$($T.Assembly.GetName().Version))
 .Notes
- GENERATOR : $((Get-ReflectionModule).Name) v$((Get-ReflectionModule).Version) by Joel Bennett http://HuddledMasses.org
+ GENERATOR : $((Get-ReflectionModule).Name) v$((Get-ReflectionModule).Version) by Joel Bennett https://HuddledMasses.org
  GENERATED : $(Get-Date)
  ASSEMBLY  : $($T.Assembly.FullName)
  FULLPATH  : $($T.Assembly.Location)
 #>
- 
+
 $Parameters
 BEGIN {
    `$DObject = New-Object $TypeName
@@ -1474,7 +1474,7 @@ if(!$collectable) {
 "
    # The content of $TypeName is not a collection
    # So if we're in a pipeline, make a new $($T.Name) each time
-   if(`$_) { 
+   if(`$_) {
       `$DObject = New-Object $TypeName
    }
 "
@@ -1515,7 +1515,7 @@ END {
 		# E.g.: Button = New-System.Windows.Controls.Button
 			Set-Alias -Name $T.Name "New-$TypeName" -ErrorAction SilentlyContinue -ErrorVariable +ErrorList -Scope Global -Passthru:(!$Quiet)
 		}
-		
+
       New-AutoLoad -Name $ScriptPath -Alias "New-$TypeName"
    }
 }#PROCESS
@@ -1541,7 +1541,7 @@ end {
 		$TypeName = $script.Name -replace 'New-(.*).ps1','$1'
       $ShortName = ($TypeName -split '\.')[-1]
       Write-Verbose "Importing constructor for type: $TypeName ($ShortName)"
-		
+
       # Note: set the aliases global for now, because it's too late to export them
 		# E.g.: New-Button = New-System.Windows.Controls.Button
 		Set-Alias -Name "New-$ShortName" "New-$TypeName" -ErrorAction SilentlyContinue -ErrorVariable +ErrorList -Scope Global -Passthru:(!$Quiet)
@@ -1580,7 +1580,7 @@ end {
 #  -----------
 #  Generates module manifest files for the SqlServer PSSnapins and stores them in the current folder
 function New-ModuleManifestFromSnapin {
-param( 
+param(
    [Parameter(Mandatory=$true, Position="0", ValueFromPipeline=$true, ValueFromPipelineByPropertyName=$true)]
    [Alias("FullName")]
    [String[]]$Snapin
@@ -1593,14 +1593,14 @@ param(
 ,
    [Parameter()]
    [String]$Author
-, 
+,
    [Switch]$Passthru
-) 
+)
 
 # $SnapinPath = $(Get-ChildItem $SnapinPath -Filter *.dll)
 $EAP = $ErrorActionPreference
 $ErrorActionPreference = "SilentlyContinue"
-Add-Assembly $Snapin 
+Add-Assembly $Snapin
 $ErrorActionPreference = $EAP
 
 $SnapinTypes = Get-Assembly $Snapin | Get-Type -BaseType System.Management.Automation.PSSnapIn, System.Management.Automation.CustomPSSnapIn -WarningAction SilentlyContinue

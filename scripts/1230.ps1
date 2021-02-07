@@ -1,11 +1,11 @@
 #requires -version 2.0
-Import-Module Accelerators  # http://poshcode.org/762
+Import-Module Accelerators  # https://PoshCode.org/762
 Import-Module PowerBoots    # http://boots.codeplex.com
                             # http://dynamicdatadisplay.codeplex.com
 ## You have to get the DynamicDataDisplay control, and put it's DLLs in the PowerBoots folder...
 ls "$PowerBootsPath\DynamicDataDisplay*.dll" | Add-BootsFunction
 
-## This sets up all the types, and requires the accelerators and the DynamicDataDisplay.dll 
+## This sets up all the types, and requires the accelerators and the DynamicDataDisplay.dll
 Add-Accelerator TimedDouble "System.Collections.Generic.KeyValuePair[DateTime,Double]"
 Add-Accelerator TimedDoubleRing "Microsoft.Research.DynamicDataDisplay.Common.RingArray[System.Collections.Generic.KeyValuePair[DateTime,Double]]"
 Add-Accelerator EnumerableDataSource "Microsoft.Research.DynamicDataDisplay.DataSources.EnumerableDataSource``1"
@@ -14,10 +14,10 @@ function Add-Monitor {
 #.Synopsis
 #  Create a new monitor line
    Param(
-      [String]$global:Label="HuddledMasses", 
-      [ScriptBlock]$global:Script= { 
-         New-Object TimedDouble (Get-Date), ([regex]"time=(\d+)ms").Match( (ping.exe "HuddledMasses.org" -n 1) ).Groups[1].Value 
-      },      
+      [String]$global:Label="HuddledMasses",
+      [ScriptBlock]$global:Script= {
+         New-Object TimedDouble (Get-Date), ([regex]"time=(\d+)ms").Match( (ping.exe "HuddledMasses.org" -n 1) ).Groups[1].Value
+      },
       $global:XMapping = $([System.Func[TimedDouble, Double]]{ param([TimedDouble]$value); $value.Key.TimeOfDay.TotalSeconds }),
       $global:YMapping = $([System.Func[TimedDouble, Double]]{ param([TimedDouble]$value); $value.Value })
    )
@@ -43,7 +43,7 @@ function Remove-Monitor {
 
    Invoke-BootsWindow $Global:Plotter {
       $Global:Plotter.Children.Remove( $(
-         $Global:Plotter.Children | 
+         $Global:Plotter.Children |
             Where-Object { ($_ -is [Microsoft.Research.DynamicDataDisplay.LineGraph]) -and ($_.Name -eq $Label) } |
             Select -First 1 ) )
    }
@@ -80,25 +80,25 @@ Param(
 ####################################################################################################
 # New-RingMonitor
 #
-# Add-Monitor Memory { 
+# Add-Monitor Memory {
 #      New-Object TimedDouble (Get-Date), (gwmi Win32_PerfFormattedData_PerfOS_Memory AvailableBytes).AvailableBytes
 # }
 #
-# Add-Monitor CPU { 
+# Add-Monitor CPU {
 #     New-Object TimedDouble (Get-Date), (gwmi Win32_PerfFormattedData_PerfOS_Processor PercentIdleTime,Name |?{$_.Name -eq "_Total"}).PercentIdleTime
 # }
 # ## Yuck. those two numbers won't work together, because they're too far apart.
 # ## Let's remove the first one and make it percentage based
 # Remove-Monitor Memory
 #
-# Add-Monitor Memory { 
+# Add-Monitor Memory {
 #   New-Object TimedDouble (Get-Date), ((gwmi Win32_PerfFormattedData_PerfOS_Memory AvailableBytes).AvailableBytes / (gwmi Win32_ComputerSystem TotalPhysicalMemory).TotalPhysicalMemory * 100)
 #  }
 
 ####################################################################################################
 # New-RingMonitor
 #
-# Add-Monitor Twitter { 
-#    New-Object TimedDouble (Get-Date), ([regex]"time=(\d+)ms").Match( (ping.exe "Twitter.com" -n 1) ).Groups[1].Value 
+# Add-Monitor Twitter {
+#    New-Object TimedDouble (Get-Date), ([regex]"time=(\d+)ms").Match( (ping.exe "Twitter.com" -n 1) ).Groups[1].Value
 # }
 

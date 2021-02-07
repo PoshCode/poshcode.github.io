@@ -7,7 +7,7 @@ function New-Shortcut {
 .DESCRIPTION
 	The New-Shortcut script creates a shortcut pointing at the target in the location you specify.  You may specify the location as a folder path (which must exist), with a name for the new file (ending in .lnk), or you may specify one of the "SpecialFolder" names like "QuickLaunch" or "CommonDesktop" followed by the name.
 	If you specify the path for the link file without a .lnk extension, the path is assumed to be a folder.
-	
+
 .EXAMPLE
 	New-Shortcut C:\Windows\Notepad.exe
 		Will make a shortcut to notepad in the current folder named "Notepad.lnk"
@@ -18,7 +18,7 @@ function New-Shortcut {
 	New-Shortcut C:\Windows\Notepad.exe F:\User\
 		Will make a shortcut to notepad in the F:\User\ folder with the name "Notepad.lnk"
 .NOTE
-   Partial dependency on Get-SpecialPath ( http://poshcode.org/858 )
+   Partial dependency on Get-SpecialPath ( https://PoshCode.org/858 )
 #>
 [CmdletBinding()]
 param(
@@ -62,14 +62,14 @@ function New-ShortCutFile {
 	if(-not ($TargetPath.Contains("://") -or (Test-Path (Split-Path (Resolve-Path $TargetPath) -parent)))) {
 		Throw "Cannot create Shortcut: Parent folder does not exist"
 	}
-	if(-not (Test-Path variable:\global:WshShell)) { 
-		$global:WshShell = New-Object -com "WScript.Shell" 
+	if(-not (Test-Path variable:\global:WshShell)) {
+		$global:WshShell = New-Object -com "WScript.Shell"
 	}
 
-	
+
 	$Link = $global:WshShell.CreateShortcut($LinkPath)
 	$Link.TargetPath = $TargetPath
-	
+
 	[IO.FileInfo]$LinkInfo = $LinkPath
 
 	## Properties for file shortcuts only
@@ -83,16 +83,16 @@ function New-ShortCutFile {
 			if( $WindowStyle -like "Normal" ) { $WindowStyle = 1 }
 			if( $WindowStyle -like "Maximized" ) { $WindowStyle = 3 }
 			if( $WindowStyle -like "Minimized" ) { $WindowStyle = 7 }
-		} 
+		}
 
 		if( $WindowStyle -ne 1 -and $WindowStyle -ne 3 -and $WindowStyle -ne 7) { $WindowStyle = 1 }
 		$Link.WindowStyle = $WindowStyle
-	
+
 		if($Hotkey.Length -gt 0 ) { $Link.HotKey = $Hotkey }
 		if($Arguments.Length -gt 0 ) { $Link.Arguments = $Arguments }
 		if($Description.Length -gt 0 ) { $Link.Description = $Description }
 		if($IconLocation.Length -gt 0 ) { $Link.IconLocation = $IconLocation }
-		
+
 	}
 
   $Link.Save()
@@ -102,12 +102,12 @@ function New-ShortCutFile {
 
 ## If they didn't explicitly specify a folder
 if($Folder.Length -eq 0) {
-	if($LinkPath.Length -gt 0) { 
-		$path = Split-Path $LinkPath -parent 
+	if($LinkPath.Length -gt 0) {
+		$path = Split-Path $LinkPath -parent
 		[IO.FileInfo]$LinkInfo = $LinkPath
 		if( $LinkInfo.Extension.Length -eq 0 ) {
 			$Folder = $LinkPath
-		} else {	
+		} else {
 			# If the LinkPath is just a single word with no \ or extension...
 			if($path.Length -eq 0) {
 				$Folder = $Pwd
@@ -116,7 +116,7 @@ if($Folder.Length -eq 0) {
 			}
 		}
 	}
-	else 
+	else
 	{ $Folder = $Pwd }
 }
 

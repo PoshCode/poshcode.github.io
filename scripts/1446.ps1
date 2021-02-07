@@ -1,6 +1,6 @@
 #requires -version 2
 
-#Uses SQLParser.ps1 script http://poshcode.org/1445 to return Stored Procedure Call Tree
+#Uses SQLParser.ps1 script https://PoshCode.org/1445 to return Stored Procedure Call Tree
 #Chad Miller
 #http://chadwickmiller.spaces.live.com/
 
@@ -33,7 +33,7 @@ filter Get-StatementByType
 
     if ($_)
     { $statement = $_ }
-    
+
     #If the statement of specify type is found send to output
     if ($statement | Get-Member -Type Property $statementType)
     { $_.$statementType }
@@ -69,7 +69,7 @@ function Get-ProcedureReference
     $sqlparser.Fragment.Batches | foreach {$_.Statements}  | Get-StatementByType 'ExecutableEntity' | foreach {$_.ProcedureReference.Name}  |
     select @{n='Server';e={Invoke-Coalesce $_.ServerIdentifier.Value $server}}, `
     @{n='Database';e={Invoke-Coalesce $_.DatabaseIdentifier.Value $database}}, `
-    @{n='Schema';e={Invoke-Coalesce $_.SchemaIdentifier.Value $schema}}, @{n='Procedure';e={$_.BaseIdentifier.Value}} | 
+    @{n='Schema';e={Invoke-Coalesce $_.SchemaIdentifier.Value $schema}}, @{n='Procedure';e={$_.BaseIdentifier.Value}} |
     select *, @{n='Source';e={"{0}.{1}.{2}.{3}" -f $server,$database,$schema,$procedure}}, `
     @{n='Target';e={"{0}.{1}.{2}.{3}" -f $_.Server,$_.Database,$_.Schema,$_.Procedure}}
 
@@ -79,20 +79,20 @@ function Get-ProcedureReference
 function Get-ProcedureText
 {
     param($server, $database, $schema, $procedure)
-    
+
     #Use SMO to get a reference to server, database and procedure, then call SMO script method
     $srv = new-object ("Microsoft.SqlServer.Management.Smo.Server") $server
     $db= $srv.Databases[$database]
     $proc = $db.StoredProcedures | where {$_.Schema -eq $schema -and $_.Name -eq $procedure}
     $proc.Script()
- 
+
 } #Get-ProcedureText
 
 #######################
 # MAIN
 #######################
-$procedureText = Get-ProcedureText $server $database $schema $procedure 
-#SMO Script method returns a string collection, the first to elements [0] and [1] contain set statements 
+$procedureText = Get-ProcedureText $server $database $schema $procedure
+#SMO Script method returns a string collection, the first to elements [0] and [1] contain set statements
 #There is bug in SMO Script method where the statements are not terminated i.e. no ; or GO statement
 #Note: When script method is used with file output scripting option the statements are terminated.
 #In our case we don't need the SET statements, just the procedure text, which is element [2]

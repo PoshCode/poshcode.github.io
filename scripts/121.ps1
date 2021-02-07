@@ -7,8 +7,8 @@
 ### Downloads a file from the web to the specified file path.
 ### </Description>
 ### <Usage>
-### Get-URL http://huddledmasses.org/downloads/RunOnlyOne.exe RunOnlyOne.exe
-### Get-URL http://huddledmasses.org/downloads/RunOnlyOne.exe C:\Users\Joel\Documents\WindowsPowershell\RunOnlyOne.exe
+### Get-URL https://HuddledMasses.org/downloads/RunOnlyOne.exe RunOnlyOne.exe
+### Get-URL https://HuddledMasses.org/downloads/RunOnlyOne.exe C:\Users\Joel\Documents\WindowsPowershell\RunOnlyOne.exe
 ### </Usage>
 ### </Script>
 # ---------------------------------------------------------------------------

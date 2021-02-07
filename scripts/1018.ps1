@@ -1,13 +1,13 @@
 #.Synopsis
 #  Draw pie charts of server memory usage by process
 #.Description
-#  Uses PowerBoots to draw a pipe-chart of each computer's memory use. While you wait for that information 
-#  to be gathered, it shows you the latest xkcd comic.   ##DEPEND-ON -Function Get-Comic http://poshcode.org/1003
+#  Uses PowerBoots to draw a pipe-chart of each computer's memory use. While you wait for that information
+#  to be gathered, it shows you the latest xkcd comic.   ##DEPEND-ON -Function Get-Comic https://PoshCode.org/1003
 #  Uses the Transitionals library for nice transitions   ##DEPEND-ON -Assembly Transitionals http://www.codeplex.com/transitionals
 #  Uses the Visifire libraries for the charts, of course ##DEPEND-ON -Assembly Transitionals http://visifire.com
-#  Whoops, it's also dependent on Set-AttachedProperty   ##DEPEND-ON -Function Set-AttachedProperty http://poshcode.org/1017
+#  Whoops, it's also dependent on Set-AttachedProperty   ##DEPEND-ON -Function Set-AttachedProperty https://PoshCode.org/1017
 #  which for some reason isn't in PowerBoots yet!
-#  
+#
 #.Parameter hosts
 #  The hostnames of the computers you want memory charts for
 #.Example
@@ -43,10 +43,10 @@ if($comical) {
 
 $limitsize = 10mb
 $labellimitsize = 15mb
-$window = Boots { 
+$window = Boots {
    DockPanel {
-      # ListBox -DisplayMember Name -Ov global:list  `  # -width 0 
-      #        -On_SelectionChanged { $global:container[0].Content = $global:list[0].SelectedItem } 
+      # ListBox -DisplayMember Name -Ov global:list  `  # -width 0
+      #        -On_SelectionChanged { $global:container[0].Content = $global:list[0].SelectedItem }
       # TransitionElement -Transition $(RotateTransition -Angle 45) `
       Frame `
                         -Name TransitionBox -Ov global:container   `
@@ -57,10 +57,10 @@ $window = Boots {
                               if($comical) {
                                  Image -Source $comic.FullName -MaxWidth $width
                               }
-                           } | 
+                           } |
          Set-AttachedProperty ([System.Windows.Navigation.JournalEntry]::NameProperty) "XKCD Comic"
       }
-   } -LastChildFill $true  
+   } -LastChildFill $true
 } -MinHeight 400 -Async -Popup -Passthru
 
 sleep 2;
@@ -71,7 +71,7 @@ ForEach($pc in $hosts) {
 }
 
 while($jobs) {
-   $job = Wait-Job -Any $jobs 
+   $job = Wait-Job -Any $jobs
 
    Invoke-BootsWindow $window {
       # if($list -is [System.Collections.ArrayList]) {
@@ -80,7 +80,7 @@ while($jobs) {
       # }
 
       $name = $($job.Location -Replace "[^a-zA-Z_0-9]" -replace "(^[0-9])",'_$1')
-      # $null = $list.Items.Add( 
+      # $null = $list.Items.Add(
       $global:container[0].Content = `
          $(
             Chart {
@@ -93,12 +93,12 @@ while($jobs) {
                      }
                   }
                } -RenderAs Pie -ShowInLegend $false
-            } -Watermark $false -AnimationEnabled $true -Name $name | 
+            } -Watermark $false -AnimationEnabled $true -Name $name |
             Set-AttachedProperty ([System.Windows.Navigation.JournalEntry]::NameProperty) $name
          )
       # $list.SelectedIndex = $list.Items.Count - 1
    }
-   
+
    $jobs = $jobs -ne $job
    Remove-Job $job.Id
    Sleep 5

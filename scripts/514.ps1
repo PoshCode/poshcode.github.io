@@ -1,5 +1,5 @@
 function Get-EnumValues ( $EnumType ) {
-# Code somewhat stolen from Joel here: http://huddledmasses.org/ideas-for-writing-composable-powershell-scripts/
+# Code somewhat stolen from Joel here: https://HuddledMasses.org/ideas-for-writing-composable-powershell-scripts/
 	Begin {
 		$listItems = @()
 	}
@@ -8,7 +8,7 @@ function Get-EnumValues ( $EnumType ) {
 			$listItems+= [Enum]::GetValues($_)
 		}
 		elseif( $_.GetType().IsEnum ) {
-			$listItems += [Enum]::GetValues($_.GetType())           
+			$listItems += [Enum]::GetValues($_.GetType())
 		}
 		else {
 			throw "Input object must be an enumerator type or derived from one."

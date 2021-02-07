@@ -2,7 +2,7 @@ function New-SelfRestartingTask {
 #.Notes
 #  For production use you should consider investigating more specific matching in the Query clause.
 #
-#  There are many possibilities here: you could watch for instances of a process with specific command-line parameters, or a certain caption, etc. Or, you could match against one process, but fire off a different one when it crashes. 
+#  There are many possibilities here: you could watch for instances of a process with specific command-line parameters, or a certain caption, etc. Or, you could match against one process, but fire off a different one when it crashes.
 #
 #  Have a look at the Win32_Process class to see all the properties available for matching.
 #.Link
@@ -36,7 +36,7 @@ function New-SelfRestartingTask {
 # Starts notepad right away and monitors for crash or exit and restarts it.
 #
 #.Example
-# New-SelfRestartingTask C:\Program` Files\Internet` Explorer\IExplore.exe http://HuddledMasses.org
+# New-SelfRestartingTask C:\Program` Files\Internet` Explorer\IExplore.exe https://HuddledMasses.org
 #
 # Description
 # -----------
@@ -67,9 +67,9 @@ $sb = Invoke-Expression "{ Start-Process `"$ExecutablePath`" $Parameters }"
 
 Register-WMIEvent -Action $sb -Query "Select * From __InstanceDeletionEvent Within $Interval Where TargetInstance ISA 'Win32_Process' And TargetInstance.ExecutablePath='$ExecutablePath'" | Out-Null
 
-if($Start){ 
+if($Start){
    sleep -milli 500
-   &$sb 
+   &$sb
 }
 
 }

@@ -1,11 +1,11 @@
 #requires -version 2.0
 
-# Improves over the built-in Select-XML by leveraging Remove-XmlNamespace http://poshcode.org/1492 
-# to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations 
-# and prefixes are removed from all XML nodes (by an XSL transform) before searching. 
-# IMPORTANT: returned results *will not* have namespaces in them, even if the input XML did. 
+# Improves over the built-in Select-XML by leveraging Remove-XmlNamespace https://PoshCode.org/1492
+# to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations
+# and prefixes are removed from all XML nodes (by an XSL transform) before searching.
+# IMPORTANT: returned results *will not* have namespaces in them, even if the input XML did.
 
-# Also, only raw XmlNodes are returned from this function, so the output isn't completely compatible 
+# Also, only raw XmlNodes are returned from this function, so the output isn't completely compatible
 # with the built in Select-Xml. It's equivalent to using Select-Xml ... | Select-Object -Expand Node
 
 # Version History:
@@ -52,8 +52,8 @@ function Select-Xml {
 #.Synopsis
 #  The Select-XML cmdlet lets you use XPath queries to search for text in XML strings and documents. Enter an XPath query, and use the Content, Path, or Xml parameter to specify the XML to be searched.
 #.Description
-#  Improves over the built-in Select-XML by leveraging Remove-XmlNamespace to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations and prefixes are removed from all XML nodes (by an XSL transform) before searching.  
-#  
+#  Improves over the built-in Select-XML by leveraging Remove-XmlNamespace to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations and prefixes are removed from all XML nodes (by an XSL transform) before searching.
+#
 #  However, only raw XmlNodes are returned from this function, so the output isn't currently compatible with the built in Select-Xml, but is equivalent to using Select-Xml ... | Select-Object -Expand Node
 #
 #  Also note that if the -RemoveNamespace switch is supplied the returned results *will not* have namespaces in them, even if the input XML did, and entities get expanded automatically.
@@ -68,10 +68,10 @@ function Select-Xml {
 #.Parameter XPath
 #  Specifies an XPath search query. The query language is case-sensitive. This parameter is required.
 #.Parameter RemoveNamespace
-#  Allows the execution of XPath queries without namespace qualifiers. 
-#  
+#  Allows the execution of XPath queries without namespace qualifiers.
+#
 #  If you specify the -RemoveNamespace switch, all namespace declarations and prefixes are actually removed from the Xml before the XPath search query is evaluated, and your XPath query should therefore NOT contain any namespace prefixes.
-# 
+#
 #  Note that this means that the returned results *will not* have namespaces in them, even if the input XML did, and entities get expanded automatically.
 [CmdletBinding(DefaultParameterSetName="Xml")]
 PARAM(
@@ -111,7 +111,7 @@ BEGIN {
                $nsManager.AddNamespace( $ns.Key, $ns.Value )
             }
          }
-         
+
          foreach($path in $xpath) {
             $node.SelectNodes($path, $NamespaceManager)
    }  }  }  }
@@ -159,21 +159,21 @@ END {
 Set-Alias slxml Select-Xml -Option AllScope
 
 function Convert-Node {
-#.Synopsis 
+#.Synopsis
 # Convert a single XML Node via XSL stylesheets
 param(
 [Parameter(Mandatory=$true,ValueFromPipeline=$true)]
 [System.Xml.XmlReader]$XmlReader,
 [Parameter(Position=1,Mandatory=$true,ValueFromPipeline=$false)]
 [System.Xml.Xsl.XslCompiledTransform]$StyleSheet
-) 
+)
 PROCESS {
    $output = New-Object IO.StringWriter
    $StyleSheet.Transform( $XmlReader, $null, $output )
    Write-Output $output.ToString()
 }
 }
-   
+
 function Convert-Xml {
 #.Synopsis
 #  The Convert-XML function lets you use Xslt to transform XML strings and documents.
@@ -209,16 +209,16 @@ PARAM(
    [Alias("StyleSheet")]
    [String[]]$Xslt
 )
-BEGIN { 
+BEGIN {
    $StyleSheet = New-Object System.Xml.Xsl.XslCompiledTransform
-   if(Test-Path @($Xslt)[0] -EA 0) { 
+   if(Test-Path @($Xslt)[0] -EA 0) {
       Write-Verbose "Loading Stylesheet from $(Resolve-Path @($Xslt)[0])"
       $StyleSheet.Load( (Resolve-Path @($Xslt)[0]) )
    } else {
       Write-Verbose "$Xslt"
       $StyleSheet.Load(([System.Xml.XmlReader]::Create((New-Object System.IO.StringReader ($Xslt -join "`n")))))
    }
-   [Text.StringBuilder]$XmlContent = [String]::Empty 
+   [Text.StringBuilder]$XmlContent = [String]::Empty
 }
 PROCESS {
    switch($PSCmdlet.ParameterSetName) {
@@ -281,7 +281,7 @@ PARAM(
    [Alias("StyleSheet")]
    [String[]]$Xslt
 )
-BEGIN { 
+BEGIN {
    $StyleSheet = New-Object System.Xml.Xsl.XslCompiledTransform
    $StyleSheet.Load(([System.Xml.XmlReader]::Create((New-Object System.IO.StringReader @"
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -305,7 +305,7 @@ BEGIN {
    </xsl:template>
 </xsl:stylesheet>
 "@))))
-   [Text.StringBuilder]$XmlContent = [String]::Empty 
+   [Text.StringBuilder]$XmlContent = [String]::Empty
 }
 PROCESS {
    switch($PSCmdlet.ParameterSetName) {
@@ -397,7 +397,7 @@ function New-XDocument {
 #   </channel>
 # </rss>
 #
-#.Example 
+#.Example
 #  This time with a default namespace
 ## IMPORTANT! ## NOTE that I use the "xe" shortcut which is redefined when you specify a namespace
 ##            ## for the root element, so that all child elements (by default) inherit that.
@@ -407,7 +407,7 @@ function New-XDocument {
 #
 #   [XNamespace]$atom="http`://www.w3.org/2005/Atom"
 #   [XNamespace]$dc = "http`://purl.org/dc/elements/1.1"
-#  
+#
 #   New-Xml ($atom + "feed") -Encoding "UTF-16" -$([XNamespace]::Xml +'lang') "en-US" -dc $dc {
 #      xe title {"Test First Entry"}
 #      xe link {"http`://HuddledMasses.org"}
@@ -426,7 +426,7 @@ function New-XDocument {
 #         xe summary {"Ema Lazarus' Poem"}
 #         xe link -rel license -href "http://creativecommons.org/licenses/by/3.0/" -title "CC By-Attribution"
 #         xe ($dc + "rights") {"Copyright 2009, Some rights reserved (licensed under the Creative Commons Attribution 3.0 Unported license)"}
-#         xe category -scheme "http://huddledmasses.org/tag/" -term "huddled-masses"
+#         xe category -scheme "https://HuddledMasses.org/tag/" -term "huddled-masses"
 #      }
 #   } | % { $_.Declaration.ToString(); $_.ToString() }
 #
@@ -455,8 +455,8 @@ function New-XDocument {
 #     <category scheme="http ://huddledmasses.org/tag/" term="huddled-masses" />
 #   </entry>
 # </feed>
-# 
-# 
+#
+#
 Param(
    [Parameter(Mandatory = $true, Position = 0)]
    [System.Xml.Linq.XName]$root

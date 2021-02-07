@@ -1,27 +1,27 @@
 /**
  * PowerShell 2.0 Brush for highlighter 2.0
- * 
+ *
  * SyntaxHighlighter  http://alexgorbatchev.com/wiki/SyntaxHighlighter
  *
  * @version
  * 2.1.0 (April 07 2009)
- * 
+ *
  * @copyright
- * Copyright (C) 2008-2009 Joel Bennett http://HuddledMasses.org/
+ * Copyright (C) 2008-2009 Joel Bennett https://HuddledMasses.org/
  *
  * @license
  * This file is for SyntaxHighlighter.
- * 
+ *
  * SyntaxHighlighter is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation, either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * SyntaxHighlighter is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with SyntaxHighlighter.  If not, see <http://www.gnu.org/licenses/>.
  */
@@ -62,7 +62,7 @@ SyntaxHighlighter.brushes.PowerShell = function()
       { regex: new RegExp('(?:'+verbs.replace(/ /g, '\\b|\\b')+')-[a-zA-Z_][a-zA-Z0-9_]*', 'gmi'), css: 'functions' },  // functions and cmdlets
       { regex: new RegExp(this.getKeywords(keywords), 'gmi'),                                      css: 'keyword' },    // keywords
       { regex: new RegExp(this.getKeywords(operators.replace(/ /g,' -')), 'gmi'),              css: 'value bold' }, // operators
-      { regex: new RegExp('\\s+-[a-zA-Z_][a-zA-Z0-9_]*', 'gmi'),                                   css: 'color1' },     // parameters      
+      { regex: new RegExp('\\s+-[a-zA-Z_][a-zA-Z0-9_]*', 'gmi'),                                   css: 'color1' },     // parameters
       { regex: new RegExp('\\[[A-Z_\\[][A-Z0-9_. `,\\[\\]]*\\]', 'gi'),                            css: 'constants' }   // .Net [Type]s
 		];
 }

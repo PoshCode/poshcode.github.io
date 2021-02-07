@@ -1,8 +1,8 @@
 #Requires -version 2.0
 ## Authenticode.psm1
 ####################################################################################################
-## Wrappers for the Get-AuthenticodeSignature and Set-AuthenticodeSignature cmdlets 
-## These properly parse paths, so they don't kill your pipeline and script if you include a folder 
+## Wrappers for the Get-AuthenticodeSignature and Set-AuthenticodeSignature cmdlets
+## These properly parse paths, so they don't kill your pipeline and script if you include a folder
 ##
 ## Usage:
 ## ls | Get-AuthenticodeSignature
@@ -29,9 +29,9 @@
 ####################################################################################################
 ## README! README! README! README! #################################################################
 ## README! README! README! README! #################################################################
-## YOU MUST set the location to your default signing certificate, by either modifiying this script, 
-## or by creating a language resource file! The second is easier: For english, create a subdirectory 
-## next to this file called 'en' (for English) and in that folder, create a 'Authenticode.psd1' file 
+## YOU MUST set the location to your default signing certificate, by either modifiying this script,
+## or by creating a language resource file! The second is easier: For english, create a subdirectory
+## next to this file called 'en' (for English) and in that folder, create a 'Authenticode.psd1' file
 ## EG: Set-Content .\en\Authenticode.psd1 $CertificatePath
 ## Basically, the file should contain the path to your code-signing certificate, preferably from the
 ## CERT:\ PsProvider, but alternately, from a PFX file...
@@ -39,7 +39,7 @@
 ##      "Cert:\CurrentUser\My\F05F583BB5EA4C90E3B9BF1BDD0B657701245BD5"
 ## OR:
 ##      "C:\Users\Joel\Documents\WindowsPowerShell\PoshCerts\Joel-Bennett_Code-Signing.pfx"
-## See: http://huddledmasses.org/misusing-powershell-localizable-data/
+## See: https://HuddledMasses.org/misusing-powershell-localizable-data/
 ####################################################################################################
 
 CMDLET Get-UserCertificate -snapin Huddled.Authenticode {
@@ -49,7 +49,7 @@ CMDLET Get-UserCertificate -snapin Huddled.Authenticode {
       Write-Host "You must put the path to your default signing certificate in the configuration"`
                  "file before you can use the module's Set-Authenticode cmdlet or to the 'mine'"`
                  "feature of the Select-Signed or Test-Signature. To set it up, you can do this:"
-      Write-Host 
+      Write-Host
       Write-Host "MkDir $(Join-Path $PsScriptRoot $(Get-Culture)) |"
       Write-Host "   Join-Path -Path {`$_} 'Authenticode.psd1'    |"
       Write-Host "   New-Item  -Path {`$_} -Type File -Value '`"ThePathToYourCertificate`"'"
@@ -58,16 +58,16 @@ CMDLET Get-UserCertificate -snapin Huddled.Authenticode {
                  "into the folder with the Authenthenticode module script, you can just specify it's"`
                  "thumprint or filename, respectively. Otherwise, it should be a full path."
       return
-   }   
+   }
    Import-LocalizedData -bindingVariable CertificatePath -EA "STOP"
-   
+
    $ResolvedPath = $Null
    $ResolvedPath = Resolve-Path $CertificatePath -ErrorAction "SilentlyContinue"
-   if(!$ResolvedPath) { 
-      $ResolvedPath = Resolve-Path (Join-Path $PsScriptRoot $CertificatePath -ErrorAction "SilentlyContinue") -ErrorAction "SilentlyContinue" 
+   if(!$ResolvedPath) {
+      $ResolvedPath = Resolve-Path (Join-Path $PsScriptRoot $CertificatePath -ErrorAction "SilentlyContinue") -ErrorAction "SilentlyContinue"
    }
-   if(!$ResolvedPath) { 
-      $ResolvedPath = Resolve-Path (Join-Path "Cert:\CurrentUser\My" $CertificatePath -ErrorAction "SilentlyContinue") -ErrorAction "SilentlyContinue" 
+   if(!$ResolvedPath) {
+      $ResolvedPath = Resolve-Path (Join-Path "Cert:\CurrentUser\My" $CertificatePath -ErrorAction "SilentlyContinue") -ErrorAction "SilentlyContinue"
    }
 
    $Certificate = get-item $ResolvedPath -ErrorAction "SilentlyContinue"
@@ -92,23 +92,23 @@ PARAM (
    [Switch]$ForceValid
 )
 
-return ( $Signature.Status -eq "Valid" -or 
-      ( !$ForceValid -and 
-         ($Signature.Status -eq "UnknownError") -and 
-         ($_.SignerCertificate.Thumbprint -eq $CertificateThumbprint) 
+return ( $Signature.Status -eq "Valid" -or
+      ( !$ForceValid -and
+         ($Signature.Status -eq "UnknownError") -and
+         ($_.SignerCertificate.Thumbprint -eq $CertificateThumbprint)
       ) )
 }
 
 CMDLET Set-AuthenticodeSignature -snapin Huddled.Authenticode {
-PARAM ( 
+PARAM (
    [Parameter(Position=1, Mandatory=$true, ValueFromPipelineByPropertyName=$true)]
    [Alias("FullName")]
-   [ValidateScript({ 
+   [ValidateScript({
       if((resolve-path $_).Provider.Name -ne "FileSystem") {
-         throw "Specified Path is not in the FileSystem: '$_'" 
+         throw "Specified Path is not in the FileSystem: '$_'"
       }
-      if(!(Test-Path -PathType Leaf $_)) { 
-         throw "Specified Path is not a File: '$_'" 
+      if(!(Test-Path -PathType Leaf $_)) {
+         throw "Specified Path is not a File: '$_'"
       }
       return $true
    })]
@@ -125,26 +125,26 @@ PROCESS {
       $ps1Path = "$Path.ps1"
       Rename-Item $Path (Split-Path $ps1Path -Leaf)
       $sig = Microsoft.PowerShell.Security\Set-AuthenticodeSignature -Certificate $Certificate -FilePath $ps1Path | Select *
-      Rename-Item $ps1Path (Split-Path $Path -Leaf) 
+      Rename-Item $ps1Path (Split-Path $Path -Leaf)
       $sig.PSObject.TypeNames.Insert( 0, "System.Management.Automation.Signature" )
       $sig.Path = $Path
       $sig
    } else {
-      Microsoft.PowerShell.Security\Set-AuthenticodeSignature -Certificate $Certificate -FilePath $Path  
+      Microsoft.PowerShell.Security\Set-AuthenticodeSignature -Certificate $Certificate -FilePath $Path
    }
 }
 }
 
 CMDLET Get-AuthenticodeSignature -snapin Huddled.Authenticode {
-PARAM ( 
+PARAM (
    [Parameter(Position=1, Mandatory=$true, ValueFromPipelineByPropertyName=$true)]
    [Alias("FullName")]
-   [ValidateScript({ 
+   [ValidateScript({
       if((resolve-path $_).Provider.Name -ne "FileSystem") {
-         throw "Specified Path is not in the FileSystem: '$_'" 
+         throw "Specified Path is not in the FileSystem: '$_'"
       }
-      if(!(Test-Path -PathType Leaf $_)) { 
-         throw "Specified Path is not a File: '$_'" 
+      if(!(Test-Path -PathType Leaf $_)) {
+         throw "Specified Path is not a File: '$_'"
       }
       return $true
    })]
@@ -158,7 +158,7 @@ PROCESS {
       $ps1Path = "$Path.ps1"
       Rename-Item $Path (Split-Path $ps1Path -Leaf)
       $sig = Microsoft.PowerShell.Security\Get-AuthenticodeSignature -FilePath $ps1Path | select *
-      Rename-Item $ps1Path (Split-Path $Path -Leaf) 
+      Rename-Item $ps1Path (Split-Path $Path -Leaf)
       $sig.PSObject.TypeNames.Insert( 0, "System.Management.Automation.Signature" )
       $sig.Path = $Path
       $sig
@@ -170,12 +170,12 @@ PROCESS {
 }
 
 CMDLET Select-Signed -snapin Huddled.Authenticode {
-PARAM ( 
+PARAM (
    [Parameter(Position=1, Mandatory=$true, ValueFromPipelineByPropertyName=$true)]
    [Alias("FullName")]
-   [ValidateScript({ 
+   [ValidateScript({
       if((resolve-path $_).Provider.Name -ne "FileSystem") {
-         throw "Specified Path is not in the FileSystem: '$_'" 
+         throw "Specified Path is not in the FileSystem: '$_'"
       }
       return $true
    })]
@@ -205,57 +205,57 @@ PARAM (
 
 )
 
-   if(!(Test-Path -PathType Leaf $Path)) { 
+   if(!(Test-Path -PathType Leaf $Path)) {
       # if($ErrorAction -ne "SilentlyContinue") {
       #    Write-Error "Specified Path is not a File: '$Path'"
       # }
    } else {
 
-      $sig = Get-AuthenticodeSignature $Path 
-      
+      $sig = Get-AuthenticodeSignature $Path
+
       # Broken only returns ONLY things which are HashMismatch
-      if($BrokenOnly   -and $sig.Status -ne "HashMismatch") 
-      { 
+      if($BrokenOnly   -and $sig.Status -ne "HashMismatch")
+      {
          Write-Debug "$($sig.Status) - Not Broken: $Path"
-         return 
+         return
       }
-      
+
       # Trusted only returns ONLY things which are Valid
-      if($TrustedOnly  -and $sig.Status -ne "Valid") 
-      { 
+      if($TrustedOnly  -and $sig.Status -ne "Valid")
+      {
          Write-Debug "$($sig.Status) - Not Trusted: $Path"
-         return 
+         return
       }
-      
+
       # AllValid returns only things that are SIGNED and not HashMismatch
-      if($ValidOnly    -and (($sig.Status -ne "HashMismatch") -or !$sig.SignerCertificate) ) 
-      { 
+      if($ValidOnly    -and (($sig.Status -ne "HashMismatch") -or !$sig.SignerCertificate) )
+      {
          Write-Debug "$($sig.Status) - Not Valid: $Path"
-         return 
+         return
       }
-      
+
       # NOTValid returns only things that are SIGNED and not HashMismatch
-      if($InvalidOnly  -and ($sig.Status -eq "Valid")) 
-      { 
+      if($InvalidOnly  -and ($sig.Status -eq "Valid"))
+      {
          Write-Debug "$($sig.Status) - Valid: $Path"
-         return 
+         return
       }
-      
+
       # Unsigned returns only things that aren't signed
       # NOTE: we don't test using NotSigned, because that's only set for .ps1 or .exe files??
-      if($UnsignedOnly -and $sig.SignerCertificate ) 
-      { 
+      if($UnsignedOnly -and $sig.SignerCertificate )
+      {
          Write-Debug "$($sig.Status) - Signed: $Path"
-         return 
+         return
       }
-      
+
       # Mine returns only things that were signed by MY CertificateThumbprint
       if($MineOnly     -and (!($sig.SignerCertificate) -or ($sig.SignerCertificate.Thumbprint -ne $CertificateThumbprint)))
       {
          Write-Debug "Originally signed by someone else, thumbprint: $($sig.SignerCertificate.Thumbprint)"
          Write-Debug "Does not match your default certificate print: $CertificateThumbprint"
          Write-Debug "     $Path"
-         return 
+         return
       }
 
       # NotMine returns only things that were signed by MY CertificateThumbprint
@@ -266,16 +266,16 @@ PARAM (
             Write-Debug "Matches your default certificate print: $CertificateThumbprint"
             Write-Debug "     $Path"
          }
-         return 
+         return
       }
-      
-      if(!$BrokenOnly  -and !$TrustedOnly -and !$ValidOnly -and !$InvalidOnly -and !$UnsignedOnly -and !($sig.SignerCertificate) ) 
-      { 
+
+      if(!$BrokenOnly  -and !$TrustedOnly -and !$ValidOnly -and !$InvalidOnly -and !$UnsignedOnly -and !($sig.SignerCertificate) )
+      {
          # Write-Debug ("You asked for Broken ({0}) or Trusted ({1}) or Valid ({2}) or Invalid ({3}) or Unsigned ({4}) and the cert is: ({5})" -f  [int]$BrokenOnly, [int]$TrustedOnly, [int]$ValidOnly, [int]$InvalidOnly, [int]$UnsignedOnly, $sig.SignerCertificate)
          Write-Debug "$($sig.Status) - Not Signed: $Path"
-         return 
+         return
       }
-      
+
       get-childItem $sig.Path
    }
 }

@@ -2,7 +2,7 @@
 # By Vincent Hoogendoorn
 @@# See http://vincenth.net/blog/archive/2009/11/02/detect-32-or-64-bits-windows-regardless-of-wow64-with-the-powershell-osarchitecture-function.aspx for details.
 @@# For the used InvokeCSharp function source, see http://vincenth.net/blog/archive/2009/10/27/call-inline-c-from-powershell-with-invokecsharp.aspx
-@@# or search http://poshcode.org for InvokeCSharp
+@@# or search https://PoshCode.org for InvokeCSharp
 
 Function global:CurrentProcessIsWOW64
 {
@@ -10,13 +10,13 @@ Function global:CurrentProcessIsWOW64
     $code = @"
         using System;
         using System.Runtime.InteropServices;
- 
+
         public class Kernel32
         {
             [DllImport("kernel32.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
             [return: MarshalAs(UnmanagedType.Bool)]
             public static extern bool IsWow64Process([In] IntPtr hProcess, [Out] out bool lpSystemInfo);
- 
+
             // This overload returns True if the current process is running on Wow, False otherwise
             public bool CurrentProcessIsWow64()
             {
@@ -28,7 +28,7 @@ Function global:CurrentProcessIsWOW64
 "@
     InvokeCSharp -code $code -class 'Kernel32' -method 'CurrentProcessIsWow64'
 }
- 
+
 Function global:ProcessArchitecture
 {
     switch ([System.IntPtr]::Size)
@@ -38,7 +38,7 @@ Function global:ProcessArchitecture
         default { throw "Unknown Process Architecture: $([System.IntPtr]::Size * 8) bits" }
     }
 }
- 
+
 Function global:OSArchitecture
 {
     if (((ProcessArchitecture) -eq 32) -and (CurrentProcessIsWOW64)) { 64 } else { ProcessArchitecture }

@@ -2,7 +2,7 @@
 
 
 #.Note
-#  Depends on ConvertFrom-HashTable http://poshcode.org/1118
+#  Depends on ConvertFrom-HashTable https://PoshCode.org/1118
 #.Synopsis
 #  Performs an inner join on two collections of objects based on a common key column.
 #.Description
@@ -28,7 +28,7 @@
 #  FirstName,  LastName,   MailingAddress,    EmployeeID
 #  John,       Doe,        123 First Ave,     J8329029
 #  Susan Q.,   Public,     3025 South Street, K4367143
-#"@.Split("`n") | ConvertFrom-Csv                               
+#"@.Split("`n") | ConvertFrom-Csv
 #
 # $SecondCollection = @"
 #  ID,    Week, HrsWorked,   PayRate,  EmployeeID
@@ -38,9 +38,9 @@
 #  12279, 12,   35,          40,       K4367143
 #  12280, 13,   32,          40,       K4367143
 #  12281, 14,   48,          40,       K4367143
-#"@.Split("`n") | ConvertFrom-Csv                               
+#"@.Split("`n") | ConvertFrom-Csv
 #
-# Join-Collections $FirstCollection EmployeeID $SecondCollection | ft            
+# Join-Collections $FirstCollection EmployeeID $SecondCollection | ft
 #
 #.Notes
 #  Author: Joel Bennett
@@ -54,9 +54,9 @@ PARAM(
 )
 PROCESS {
    $properties  = $FirstCollection[0] | gm -type Properties
-   $properties += $SecondCollection[0] | gm -type Properties | 
+   $properties += $SecondCollection[0] | gm -type Properties |
       Where { $_.Name -ne $SecondJoinColumn } | ForEach { if($Properties -contains $_) { "__$_" } else { $_ } }
-   
+
    foreach($first in $FirstCollection) {
       foreach($second in $SecondCollection | Where{ $_."$SecondJoinColumn" -eq $first."$FirstJoinColumn" } ) {
         [string]$join = $first | gm -type Properties | select -expand Definition | %{($_ -split " ",2)[1]}

@@ -32,7 +32,7 @@ function Hide-Window {
    Hide a window
 .DESCRIPTION
    Hide a window by handle or by process name. Hidden windows are gone: they don't show up in alt+tab, or on the taskbar, and they're invisible. The only way to get them back is with ShowWindow.
-   
+
    Windows hidden by Hide-Window are pushed onto a stack so they can be retrieved by Show-Window. Since they're invisible, they're very hard to find otherwise.
 .NOTES
    See also Show-Window
@@ -42,10 +42,10 @@ function Hide-Window {
    The name of a running process whos windows you want to hide.
 .EXAMPLE
    Get-Process PowerShell | Hide-Window; Sleep 5; Show-Window
-   
+
    Hides the PowerShell window(s) for 5 seconds
 .LINK
-   http://HuddledMasses.org/stupid-powershell-tricks
+   https://HuddledMasses.org/stupid-powershell-tricks
 #>
 [CmdletBinding()]
 PARAM (
@@ -57,7 +57,7 @@ PARAM (
    [Alias("ProcessName")]
    [String]$Name
 )
-PROCESS { 
+PROCESS {
 	(Push-Window $WindowHandle $Name) | ForEach-Object { [Tricks]::HideWindow( $_ ) }
 }
 }
@@ -76,10 +76,10 @@ function Show-Window {
    The name of a running process whos windows you want to show.
 .EXAMPLE
    Get-Process PowerShell | Hide-Window; Sleep 5; Show-Window
-   
+
    Hides the PowerShell window(s) for 5 seconds
 .LINK
-   http://HuddledMasses.org/stupid-powershell-tricks
+   https://HuddledMasses.org/stupid-powershell-tricks
 #>
 [CmdletBinding()]
 
@@ -92,7 +92,7 @@ PARAM (
 [Alias("ProcessName")]
 [String]$Name
 )
-PROCESS { 
+PROCESS {
 	(Pop-Window $WindowHandle $Name) | ForEach-Object { [Tricks]::ShowWindow( $_ ) }
 }
 }
@@ -101,13 +101,13 @@ PROCESS {
 FUNCTION Push-Window {
    [CmdletBinding()]
 	PARAM ([IntPtr]$Handle,[String]$ProcessName)
-	
+
 	[IntPtr[]]$Handles = @($Handle)
 	if(!$ProcessName) { $ProcessName = "--Unknown--" }
-   
+
 	if(!$Windows.ContainsKey($ProcessName)) {
 		$windows.Add($ProcessName, (New-Object $intPtrList))
-	} 
+	}
 	if($Handle -eq [IntPtr]::Zero) {
 		[IntPtr[]]$Handles = @(Get-Process $ProcessName | % { $_.MainWindowHandle } )
 	}
@@ -119,10 +119,10 @@ FUNCTION Push-Window {
 FUNCTION Pop-Window {
    [CmdletBinding()]
 	PARAM ([IntPtr]$Handle,[String]$ProcessName)
-	
+
 	[IntPtr[]]$Handles = @($Handle)
 	if(!$ProcessName) { $ProcessName = "--Unknown--" }
-   
+
 	if(($Handle -eq [IntPtr]::Zero) -and $windows[$ProcessName] ) {
 		write-output $windows[$ProcessName]
 		$Null = $windows[$ProcessName].Clear()
@@ -147,10 +147,10 @@ function Wiggle-Mouse {
    The name of a running process whos windows you want to hide.
 .EXAMPLE
    Get-Process PowerShell | Hide-Window; Wiggle-Mouse -Duration 5;  Get-Process PowerShell | Show-Window
-   
+
    Hides the PowerShell window and wiggle the mouse for five seconds ... :D
 .LINK
-   http://HuddledMasses.org/stupid-powershell-tricks
+   https://HuddledMasses.org/stupid-powershell-tricks
 #>
 [CmdletBinding()]
 PARAM (
@@ -164,15 +164,15 @@ PARAM (
    $Duration *= -1000
 	While($Duration -le 0) {
 		[Windows.Forms.Cursor]::Position ="$(
-			$random.Next(	[Math]::Max( $screen.Left, ([System.Windows.Forms.Cursor]::Position.X - $Variation) ), 
+			$random.Next(	[Math]::Max( $screen.Left, ([System.Windows.Forms.Cursor]::Position.X - $Variation) ),
 								[Math]::Min( $screen.Right, ([System.Windows.Forms.Cursor]::Position.X + $Variation) )	)
 							),$(
-			$random.Next(	[Math]::Max( $screen.Top, ([System.Windows.Forms.Cursor]::Position.Y - $Variation) ), 
+			$random.Next(	[Math]::Max( $screen.Top, ([System.Windows.Forms.Cursor]::Position.Y - $Variation) ),
 								[Math]::Min( $screen.Bottom, ([System.Windows.Forms.Cursor]::Position.Y + $Variation) )	)
-							)" 
+							)"
 		sleep -milli $Sleep
       $Duration += $Sleep
-	} 
+	}
 }
 
 

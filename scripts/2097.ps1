@@ -6,7 +6,7 @@
 ##
 ## INSTALL:
 ## You need mindtouch.dream.dll (mindtouch.core.dll, SgmlReaderDll.dll, log4net.dll) from the SDK
-## Get MindTouch_Dream_2.1.0.zip (code name Indigo) from http`://sourceforge.net/projects/dekiwiki/files/ 
+## Get MindTouch_Dream_2.1.0.zip (code name Indigo) from http`://sourceforge.net/projects/dekiwiki/files/
 ##
 ## Unpack it, and you can find these dlls in the "dist" folder.
 ## Make sure to put them in the folder with this script module.
@@ -31,8 +31,8 @@
 ####################################################################################################
 ## Usage:
 ##   function Get-Google {
-##     Invoke-Http GET http`://www.google.com/search @{q=$args} | 
-##       Receive-Http Xml "//h3[@class='r']/a" | Select href, InnerText 
+##     Invoke-Http GET http`://www.google.com/search @{q=$args} |
+##       Receive-Http Xml "//h3[@class='r']/a" | Select href, InnerText
 ##   }
 ##   #########################################################################
 ##   function Get-WebFile($url,$cred) {
@@ -43,8 +43,8 @@
 ##   PARAM($PastebinURI="http`://posh.jaykul.com/p/",[IO.FileInfo]$file)
 ##   PROCESS {
 ##     if($_){[IO.FileInfo]$file=$_}
-## 
-##     if($file.Exists) { 
+##
+##     if($file.Exists) {
 ##       $ofs="`n"
 ##       $result = Invoke-Http POST $PastebinURI @{
 ##         format="posh"           # PowerShell
@@ -60,7 +60,7 @@
 ##
 ####################################################################################################
 Write-Debug "PSScriptRoot: '$PSScriptRoot'"
-# This Module depends on MindTouch.Dream 
+# This Module depends on MindTouch.Dream
 $null = Add-Type -Path "$PSScriptRoot\mindtouch.dream.dll" -ErrorAction Stop
 # MindTouch.Dream requires: mindtouch.dream.dll, mindtouch.core.dll, SgmlReaderDll.dll, and log4net.dll)
 # This Module also depends on utility functions from System.Web
@@ -77,13 +77,13 @@ PARAM($Content,$Type)
       Write-Verbose "Specific Content: $([MindTouch.Dream.MimeType]::$Type)"
       $Type = [MindTouch.Dream.MimeType]::$Type
    }
-   
+
    if($Type -is [MindTouch.Dream.MimeType] -and $Content) {
       Write-Verbose "Specific Content: $([MindTouch.Dream.MimeType]::$Type)"
       return [MindTouch.Dream.DreamMessage]::Ok( $Type, $Content )
    }
-   
-   if(!$Content) { 
+
+   if(!$Content) {
       Write-Verbose "No Content"
       return [MindTouch.Dream.DreamMessage]::Ok()
    }
@@ -95,10 +95,10 @@ PARAM($Content,$Type)
       $kvp = $Content.GetEnumerator() | %{ new-object "System.Collections.Generic.KeyValuePair[[String],[String]]" $_.Key, $_.Value }
       Write-Verbose "Hashtable content: $($kvp | ft -auto | out-string -stream | %{ "   $_ ".TrimEnd()} )"
       return [MindTouch.Dream.DreamMessage]::Ok( $kvp )
-   }   
+   }
    if(Test-Path $Content -EA "SilentlyContinue") {
       Write-Verbose "File Content"
-      return [MindTouch.Dream.DreamMessage]::FromFile((Convert-Path (Resolve-Path $Content))); 
+      return [MindTouch.Dream.DreamMessage]::FromFile((Convert-Path (Resolve-Path $Content)));
    }
 
    Write-Verbose "Unspecified string content"
@@ -120,14 +120,14 @@ Function Get-DreamPlug {
                $plug = $plug.At($param.Key)
             }
          }
-      } 
-      else 
+      }
+      else
       {
-         [URI]$uri = Join-Url $global:url $url 
+         [URI]$uri = Join-Url $global:url $url
          $plug = [MindTouch.Dream.Plug]::New($uri)
       }
    }
-   elseif($url -is [string]) 
+   elseif($url -is [string])
    {
       Write-Verbose "String URL"
       trap { continue }
@@ -137,25 +137,25 @@ Function Get-DreamPlug {
          Write-Verbose "Relative URL, appending to $($global:url) to get: $uri"
       }
       $plug = [MindTouch.Dream.Plug]::New($uri)
-   } 
+   }
    else {
       Write-Verbose "No URL, using default $($global:url)"
       $plug = [MindTouch.Dream.Plug]::New($global:url)
    }
-   if($with) { 
+   if($with) {
       foreach($w in $with.GetEnumerator()) {
          if($w.Value) {
             $plug = $plug.With($w.Key,$w.Value)
          }
-      } 
+      }
       Write-Verbose "Added 'with' params: $plug"
    }
-   if($headers) { 
+   if($headers) {
       foreach($header in $Headers.GetEnumerator()) {
          if($header.Value) {
             $plug = $plug.WithHeader($header.Key,$header.Value)
          }
-      } 
+      }
       Write-Verbose "Added 'with' params: $plug"
    }
    return $plug
@@ -167,8 +167,8 @@ PARAM(
    [Parameter(Position=1, Mandatory=$false)]
    [ValidateSet("Xml", "File", "Text","Bytes")]
    [Alias("As")]
-   $Output = "Xml" 
-, 
+   $Output = "Xml"
+,
    [Parameter(Position=2, Mandatory=$false)]
    [AllowEmptyString()]
    [string]$Path
@@ -181,12 +181,12 @@ PARAM(
    [Parameter(Mandatory=$true, ValueFromPipeline=$true, ParameterSetName="Response")]
    [MindTouch.Dream.DreamMessage]
    $Response
-) 
+)
 PROCESS {
    if($PSCmdlet.ParameterSetName -eq "Result") {
       $Response = $InputObject.Wait()
    }
-   
+
    if($Response) {
       Write-Debug $($response | Out-String)
       if(!$response.IsSuccessful) {
@@ -196,11 +196,11 @@ PROCESS {
          Write-Host "Hello" -fore Yellow
          Write-Error $($response | Out-String)
          throw "ERROR: '$($response.Status)' Response Status."
-      } else {   
+      } else {
          switch($Output) {
             "File" {
                ## Joel's magic filename guesser ...
-               if(!$Path) { 
+               if(!$Path) {
                   [string]$fileName = ([regex]'(?i)filename=(.*)$').Match( $response.Headers["Content-Disposition"] ).Groups[1].Value
                   $Path = $fileName.trim("\/""'")
                   if(!$Path){
@@ -210,10 +210,10 @@ PROCESS {
                         if(!([IO.FileInfo]$Path).Extension) {
                            $Path = $Path + "." + $response.ContentType.Split(";")[0].Split("/")[1]
                         }
-                     } 
+                     }
                   }
                }
-               if($Path) { 
+               if($Path) {
                   $File = Get-FileName $Path
                } else {
                   $File = Get-FileName
@@ -222,21 +222,21 @@ PROCESS {
                Get-ChildItem $File
             }
             "XDoc" {
-               if($Path) { 
+               if($Path) {
                   $response.AsDocument()[$Path]
                } else {
                   $response.AsDocument()#.ToXml()
                }
             }
             "Xml" {
-               if($Path) { 
+               if($Path) {
                   $response.AsDocument().ToXml().SelectNodes($Path)
                } else {
                   $response.AsDocument().ToXml()
                }
             }
             "Text" {
-               if($Path) { 
+               if($Path) {
                   $response.AsDocument()[$Path] | % { $_.AsInnerText }
                } else {
                   $response.AsText()
@@ -260,10 +260,10 @@ Function Invoke-Http {
 #.Description
 #  This is the core http rest cmdlet, which does most of the work and allows fetching web pages, files, etc.
 [CmdletBinding(DefaultParameterSetName="ByPath")]
-PARAM( 
+PARAM(
    ## http`://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
-   ## Nobody actually uses HEAD or OPTIONS, right? 
-   ## And nobody's even heard of TRACE or CONNECT ;) 
+   ## Nobody actually uses HEAD or OPTIONS, right?
+   ## And nobody's even heard of TRACE or CONNECT ;)
    [Parameter(Position=0, Mandatory=$false)]
    [ValidateSet("POST", "GET", "PUT", "DELETE", "HEAD", "OPTIONS")] ## There are other verbs, but we need a list to make sure you don't screw up
    [string]$Verb = "GET"
@@ -275,10 +275,10 @@ PARAM(
    [Parameter(Position=1, Mandatory=$true, ValueFromPipeline=$true, ParameterSetName="ByPath")]
    [string]
    $Path
-, 
+,
    [Parameter(Position=2, Mandatory=$false, ParameterSetName="ByPath")]
    [hashtable]$With
-, 
+,
    [Parameter(Position=3, Mandatory=$false, ParameterSetName="ByPath")]
    [hashtable]$Headers
 ,
@@ -293,13 +293,13 @@ PARAM(
 ,
    [Parameter(Mandatory=$false)]
    [switch]$authenticate
-, 
+,
    [Parameter(Mandatory=$false)]
    $credentials
 ,
    [Parameter(Mandatory=$false)]
    [switch]$Persistent  ## Note this ALSO causes WaitForResponse
-, 
+,
    [switch]$waitForResponse
 )
 PROCESS {
@@ -316,19 +316,19 @@ PROCESS {
          $dream = Get-DreamMessage $Content $Type
          Write-Verbose "Created Dream with Content: $($dream.AsText() |out-String)"
       }
-      
+
       if(!$plug -or !$dream) {
          throw "Can't come up with a request!"
       }
-      
+
       if($Persistent -and $global:HttpRestCookies) {
          $dream.Cookies.AddRange( $global:HttpRestCookies )
       }
       if($Cookies) {
          $dream.Cookies.AddRange( $Cookies )
       }
-      
-      if($authenticate -or $credentials){ 
+
+      if($authenticate -or $credentials){
          if($credentials -is [System.Management.Automation.PSCredential]) {
             Write-Verbose "AUTHENTICATING AS $($credentials.GetNetworkCredential().UserName)"
             $plug = $plug.WithCredentials($credentials.GetNetworkCredential())
@@ -344,32 +344,32 @@ PROCESS {
             $plug = $plug.WithCredentials($global:HttpRestCredential.GetNetworkCredential())
          }
       }
-      
+
       Write-Verbose $plug.Uri
-      
+
       ## DEBUG:
       Write-Debug "URI: $($Plug.Uri)"
       Write-Debug "Verb: $($Verb.ToUpper())"
       Write-Debug $($dream | gm | Out-String)
-      
+
       $result = $plug.InvokeAsync( $Verb.ToUpper(),  $dream )
-      
+
       Write-Debug $($result | Out-String)
       #  if($DebugPreference -eq "Continue") {
       #     Write-Debug $($result.Wait() | Out-String)
       #  }
-      
-      if($waitForResponse -or $Persistent) { 
+
+      if($waitForResponse -or $Persistent) {
          $result = $result.Wait()
          $global:HttpRestCookies = $result.Cookies
       }
-      
+
       write-output $result
-   
+
       trap [MindTouch.Dream.DreamResponseException] {
          Write-Error @"
 TRAPPED DreamResponseException
-      
+
 $($_.Exception.Response | Out-String)
 
 $($_.Exception.Response.Headers | Out-String)
@@ -383,7 +383,7 @@ Function Get-WebPageContent {
 #.Synopsis
 #  A wrapper for http get | rcv xml
 [CmdletBinding()]
-param( 
+param(
    [Parameter(Position=0,Mandatory=$true, ValueFromPipeline=$true)]
    [string]$url
 ,
@@ -394,7 +394,7 @@ param(
    [hashtable]$with=@{}
 ,
    [Parameter(Mandatory=$false)]
-   [switch]$Persist 
+   [switch]$Persist
 ,
    [Parameter(Mandatory=$false)]
    [switch]$Authenticate
@@ -408,7 +408,7 @@ Function Get-WebPageText {
 #.Synopsis
 #  A wrapper for http get | rcv text
 [CmdletBinding()]
-param( 
+param(
    [Parameter(Position=0,Mandatory=$true, ValueFromPipeline=$true)]
    [string]$url
 ,
@@ -419,7 +419,7 @@ param(
    [hashtable]$with=@{}
 ,
    [Parameter(Mandatory=$false)]
-   [switch]$Persist 
+   [switch]$Persist
 ,
    [Parameter(Mandatory=$false)]
    [switch]$Authenticate
@@ -433,7 +433,7 @@ Function Get-WebFile {
 #.Synopsis
 #  Download a file from a URI to the local computer
 [CmdletBinding()]
-param( 
+param(
    [Parameter(Position=0,Mandatory=$true, ValueFromPipeline=$true)]
    [string]$url
 ,
@@ -445,7 +445,7 @@ param(
    [hashtable]$with=@{}
 ,
    [Parameter(Mandatory=$false)]
-   [switch]$Persist 
+   [switch]$Persist
 ,
    [Parameter(Mandatory=$false)]
    [switch]$Authenticate
@@ -459,7 +459,7 @@ Function Set-HttpDefaultUrl {
 #.Synopsis
 #  Set the base URI for making lots of calls to a single webservice without re-entering the full URL each time
 PARAM ([uri]$baseUri=$(Read-Host "Please enter the base Uri for your RESTful web-service"))
-   $global:url = $baseUri 
+   $global:url = $baseUri
 }
 
 Function Set-HttpCredential {
@@ -498,9 +498,9 @@ Function Join-Url {
 #.Synopsis
 #  Like Join-Path, but for URIs
 [CmdletBinding()]
-param( 
+param(
 [Parameter()]
-[uri]$baseUri=$global:url 
+[uri]$baseUri=$global:url
 ,
 [Parameter(ValueFromRemainingArguments=$true)]
 [string[]]$path
@@ -550,12 +550,12 @@ Function Get-UtcTime {
    [DateTime]::Now.ToUniversalTime().ToString($Format)
 }
 
-Function Get-CredentialBetter { 
+Function Get-CredentialBetter {
 ## .Synopsis
 ##    Gets a credential object based on a user name and password.
 ## .Description
 ##    The Get-Credential function creates a credential object for a specified username and password, with an optional domain. You can use the credential object in security operations.
-## 
+##
 ##    The function accepts more parameters to customize the security prompt than the default Get-Credential cmdlet (including forcing the call through the console if you're in the native PowerShell.exe CMD console), but otherwise functions identically.
 ##
 ## .Parameter UserName
@@ -566,7 +566,7 @@ Function Get-CredentialBetter {
 ##    You should use this to allow users to differentiate one credential prompt from another.  In particular, if you're prompting for, say, Twitter credentials, you should put "Twitter" in the title somewhere. If you're prompting for domain credentials. Being specific not only helps users differentiate and know what credentials to provide, but also allows tools like KeePass to automatically determine it.
 ## .Parameter Message
 ##    Allows you to override the text displayed inside the credential dialog/prompt.
-##    
+##
 ##    You can use this for things like presenting an explanation of what you need the credentials for.
 ## .Parameter Domain
 ##    Specifies the default domain to use if the user doesn't provide one (by default, this is null)
@@ -597,12 +597,12 @@ PROCESS {
    } elseif($UserName -ne $null) {
       $UserName = $UserName.ToString()
    }
-   
+
    if($Inline) {
       if($Title)    { Write-Host $Title }
       if($Message)  { Write-Host $Message }
-      if($Domain) { 
-         if($UserName -and $UserName -notmatch "[@\\]") { 
+      if($Domain) {
+         if($UserName -and $UserName -notmatch "[@\\]") {
             $UserName = "${Domain}\${UserName}"
          }
       }
@@ -615,7 +615,7 @@ PROCESS {
       return New-Object System.Management.Automation.PSCredential $UserName,$(Read-Host "Password for user $UserName" -AsSecureString)
    }
    if($GenericCredentials) { $Credential = "Generic" } else { $Credential = "Domain" }
-   
+
    ## Now call the Host.UI method ... if they don't have one, we'll die, yay.
    ## BugBug? PowerShell.exe disregards the last parameter
    $Host.UI.PromptForCredential($Title, $Message, $UserName, $Domain, $Credential,"Default")
@@ -639,65 +639,65 @@ Export-ModuleMember -Function Invoke-Http, Receive-Http, Get-WebPageContent, Get
 ## # Generated by: Joel Bennett
 ## # Generated on: 3/19/2009
 ## #
-## 
+##
 ## @{
-## 
+##
 ## # These modules will be processed when the module manifest is loaded.
 ## ModuleToProcess = 'HttpRest.psm1'
-## 
+##
 ## # This GUID is used to uniquely identify this module.
 ## GUID = '49fc4e2a-0270-467d-a652-a9ba8f82e97b'
-## 
+##
 ## # The author of this module.
 ## Author = 'Joel Bennett'
-## 
+##
 ## # The company or vendor for this module.
-## CompanyName = 'http://HuddledMasses.org'
-## 
+## CompanyName = 'https://HuddledMasses.org'
+##
 ## # The copyright statement for this module.
 ## Copyright = 'Copyright (c) 2008, Joel Bennett. Released under Ms-PL license.'
-## 
+##
 ## # The version of this module.
 ## ModuleVersion = '2.0'
-## 
+##
 ## # A description of this module.
 ## Description = 'This module provides functions for working Http services.  Everything from downloading web pages, posting forms, and parsing HTML as XML, to downloading images and files, to interacting with REST web APIs'
-## 
+##
 ## # The minimum version of PowerShell needed to use this module.
 ## PowerShellVersion = '2.0'
-## 
+##
 ## # The CLR version required to use this module.
 ## CLRVersion = '2.0'
-## 
+##
 ## # Functions to export from this manifest.
 ## FunctionsToExport = '*'
-## 
+##
 ## # Aliases to export from this manifest.
 ## AliasesToExport = '*'
-## 
+##
 ## # Variables to export from this manifest.
 ## VariablesToExport = '*'
-## 
+##
 ## # Cmdlets to export from this manifest.
 ## CmdletsToExport = '*'
-## 
+##
 ## # This is a list of other modules that must be loaded before this module.
 ## RequiredModules = @()
-## 
+##
 ## # The script files (.ps1) that are loaded before this module.
 ## ScriptsToProcess = @()
-## 
+##
 ## # The type files (.ps1xml) loaded by this module.
 ## TypesToProcess = @()
-## 
+##
 ## # The format files (.ps1xml) loaded by this module.
 ## FormatsToProcess = @()
-## 
+##
 ## # A list of assemblies that must be loaded before this module can work.
 ## RequiredAssemblies = 'autofac.dll', 'log4net.dll', 'mindtouch.core.dll', 'SgmlReaderDll.dll', 'mindtouch.dream.dll'
-## 
+##
 ## # Module specific private data can be passed via this member.
 ## PrivateData = ''
-## 
+##
 ## }
 

@@ -15,11 +15,11 @@ PARAM($name,[hashtable]$services,$avatar)
    Find-Button value "Create imaginary friend" | % { $_.Click() }
    Find-TextField name name | % { $_.TypeText( $name ) }
    (Find-Form action "/a/createimaginary").Buttons | % { $_.click() }
-   
+
    $null = $ie.url -match "http`://friendfeed.com/([^/]*)/services";
    $ffid = $matches[1]
    # Write-Output $ffid
-   
+
    foreach($service in $services.GetEnumerator()) {
       Write-Verbose "$($service.Key): $($service.Value)"
       Find-Link service $service.Key | % { $_.Click() }
@@ -27,7 +27,7 @@ PARAM($name,[hashtable]$services,$avatar)
       @($form.TextFields)[0].TypeText( $service.Value )
       @($form.Buttons)[0].click();
    }
-   
+
    if($avatar) {
       Set-WatinUrl "http`://friendfeed.com/$ffid"
       $avatarFile = Get-WebFile $avatar ([uri]$avatar).segments[-1]
@@ -42,12 +42,12 @@ PARAM($name,[hashtable]$services,$avatar)
 }
 
 
-## DEPENDS on the HttpRest module in http://poshcode.org/1107
+## DEPENDS on the HttpRest module in https://PoshCode.org/1107
 Function Get-FriendFeedFriends {
 Param($username)
    $friendNames = Get-WebPageText "http`://friendfeed.com/api/user/$username/profile" //user/subscription/nickname @{format="xml";include="subscriptions"}
    ForEach($incoming in (Get-WebPageContent "http`://friendfeed.com/api/profiles" //profiles/profile @{ format="xml"; nickname=$($friendNames -join ",") })) {
-      $output = Select -Input $incoming Name, NickName | 
+      $output = Select -Input $incoming Name, NickName |
       Add-Member noteproperty Lists @($incoming.SelectNodes("//list/nickname").InnerText) -Passthru |
       Add-Member noteproperty Rooms @($incoming.SelectNodes("//room/nickname").InnerText) -Passthru
       ForEach($service in $incoming.service) {
@@ -70,7 +70,7 @@ Param($username)
 }
 
 ## This might work to copy over all your twitter friends to friend feed ...
-## You'll need the modules: 1107 and 1108 
+## You'll need the modules: 1107 and 1108
 ## And the dll's those depend on (WatiN and MindTouch Dream)
 ## And IE, logged into friendfeed
 ## And a little luck
@@ -86,9 +86,9 @@ $friends = Get-FFFriends $ffNick
 $knownTweeters = $friends | select -expand twitter
 $page = 0
 $twits = $tweeters = @()
-do { 
+do {
    $twits += $tweeters
-   $tweeters = Get-WebPageContent "http`://twitter.com/statuses/friends.xml" //users/user @{page=(++$page); screen_name=$TwitterId} | 
+   $tweeters = Get-WebPageContent "http`://twitter.com/statuses/friends.xml" //users/user @{page=(++$page); screen_name=$TwitterId} |
                Where { $knownTweeters -notcontains $_.screen_name }
 } while($tweeters)
 

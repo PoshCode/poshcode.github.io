@@ -1,31 +1,31 @@
 <#
-.Synopsis 
+.Synopsis
    Open a file for editing in notepad++
 .Description
    Opens one or more files in Notepad++, passing all the switches each time.  Accepts filenames on the pipeline
-.Notes 
+.Notes
    I took the "no" off the parameters, because in PowerShell you only need to enter just enough of the parameter name to differentiate ... this way each one is differentiatable by the first letter.
 .Link
    http://notepad-plus.sourceforge.net/uk/cmdLine-HOWTO.php
 .Link
    http://notepad-plus.sourceforge.net/
 .Link
-   http://poshcode.org/notepad++lexer/
+   https://PoshCode.org/notepad++lexer/
 .Example
    Edit-File $Profile -MultiInstance -SessionOff -TabBarOff -PluginsOff
-   
+
    Open your Profile in a new Notepad++ window in a "notepad" like mode: multi-session, no tab bars, no previous files, no plugins.
-   
+
 .Example
    ls *.ps1 | Edit-File -SessionOff
-   
+
    Open all the ps1 scripts in Notepad++ without restoring previous files.
-   
+
 .Example
    Edit-File -language xml ~\Projects\Project1\Project1.csproj
 
    Open the file Project1.csproj as a xml file, even though its extension is not recognized as xml...
-   
+
 .Parameter File
    The absolute or relative path of file(s) you want to open, accepts wildcards
 .Parameter MultiInstance
@@ -61,7 +61,7 @@ Param(
    [string]$Language
 ,
    [Parameter(Position=2)]
-   [int]$Number 
+   [int]$Number
 ,
    [Parameter()]
    [switch]$SessionOff
@@ -75,7 +75,7 @@ Param(
 )
 BEGIN {
    $npp = "C:\Programs\DevTools\Notepad++\notepad++.exe"
-   $param = @( 
+   $param = @(
       if($MultiInstance) { "-multiInst" }
       if($PluginsOff)    { "-noPlugin" }
       if($Language)      { "-l$Language" }
@@ -86,12 +86,12 @@ BEGIN {
       " "
    ) -join " "
 }
-PROCESS {    
-   foreach($path in $File) { 
+PROCESS {
+   foreach($path in $File) {
       foreach($f in Convert-Path (Resolve-Path $path)) {
          $parameters = $param + """" + $f + """"
          write-verbose "$npp $parameters"
          [Diagnostics.Process]::Start($npp,$parameters).WaitForInputIdle(500)
-      } 
+      }
    }
 }

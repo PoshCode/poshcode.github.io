@@ -2,11 +2,11 @@
 
 ####################################################################################################
 ## Version History:
-## 
+##
 ## Version 2.0 Added Join-Object and removed dependency on ConvertFrom-Hashtable
 ##             Now works on DataTables!
-## Version 1.1 Fixed column uniqueness bug http://poshcode.org/1460
-## Version 1.0 First post http://poshcode.org/1459
+## Version 1.1 Fixed column uniqueness bug https://PoshCode.org/1460
+## Version 1.0 First post https://PoshCode.org/1459
 
 #.Note
 #  This script includes a Join-Object function you could use outside
@@ -35,7 +35,7 @@
 #  FirstName,  LastName,   MailingAddress,    EmployeeID
 #  John,       Doe,        123 First Ave,     J8329029
 #  Susan Q.,   Public,     3025 South Street, K4367143
-#"@.Split("`n") | ConvertFrom-Csv                               
+#"@.Split("`n") | ConvertFrom-Csv
 #
 # $SecondCollection = @"
 #  ID,    Week, HrsWorked,   PayRate,  EmployeeID
@@ -45,9 +45,9 @@
 #  12279, 12,   35,          40,       K4367143
 #  12280, 13,   32,          40,       K4367143
 #  12281, 14,   48,          40,       K4367143
-#"@.Split("`n") | ConvertFrom-Csv                               
+#"@.Split("`n") | ConvertFrom-Csv
 #
-# Join-Collections $FirstCollection EmployeeID $SecondCollection | ft -auto        
+# Join-Collections $FirstCollection EmployeeID $SecondCollection | ft -auto
 #
 #.Notes
 #  Author: Joel Bennett

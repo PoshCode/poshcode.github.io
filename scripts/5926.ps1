@@ -1,17 +1,17 @@
 #requires -version 2.0
 
-# Improves over the built-in Select-XML by leveraging Remove-XmlNamespace http`://poshcode.org/1492 
-# to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations 
-# and prefixes are removed from all XML nodes (by an XSL transform) before searching. 
-# IMPORTANT: returned results *will not* have namespaces in them, even if the input XML did. 
+# Improves over the built-in Select-XML by leveraging Remove-XmlNamespace http`://poshcode.org/1492
+# to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations
+# and prefixes are removed from all XML nodes (by an XSL transform) before searching.
+# IMPORTANT: returned results *will not* have namespaces in them, even if the input XML did.
 
-# Also, only raw XmlNodes are returned from this function, so the output isn't completely compatible 
+# Also, only raw XmlNodes are returned from this function, so the output isn't completely compatible
 # with the built in Select-Xml. It's equivalent to using Select-Xml ... | Select-Object -Expand Node
 
 # Version History:
 # Select-Xml 2.0 This was the first script version I wrote.
 #                it didn't function identically to the built-in Select-Xml with regards to parameter parsing
-# Select-Xml 2.1 Matched the built-in Select-Xml parameter sets, it's now a drop-in replacement 
+# Select-Xml 2.1 Matched the built-in Select-Xml parameter sets, it's now a drop-in replacement
 #                BUT only if you were using the original with: Select-Xml ... | Select-Object -Expand Node
 # Select-Xml 2.2 Fixes a bug in the -Content parameterset where -RemoveNamespace was *presumed*
 # Version    3.0 Added New-XDocument and associated generation functions for my XML DSL
@@ -37,7 +37,7 @@
 # Version    6.1 Update for PowerShell 3.0
 # Version    6.2 Minor tweak in exception handling for CliXml
 # Version    6.3 Added Remove-XmlElement to allow removing nodes or attributes
-#                This is something I specifically needed to remove "ignorable" namespaces 
+#                This is something I specifically needed to remove "ignorable" namespaces
 #                Specifically, the ones created by the Visual Studio Workflow designer (and perhaps other visual designers like Blend)
 #                Which I don't want to check into source control, because it makes diffing nearly impossible
 # Version    6.4 Fixed a bug on New-XElement for Rudy Shockaert (nice bug report, thanks!)
@@ -53,26 +53,26 @@ function Add-Accelerator {
    .Example
       Add-Accelerator list System.Collections.Generic.List``1
       $list = New-Object list[string]
-      
+
       Creates an accelerator for the generic List[T] collection type, and then creates a list of strings.
    .Example
       Add-Accelerator "List T", "GList" System.Collections.Generic.List``1
       $list = New-Object "list t[string]"
-      
+
       Creates two accelerators for the Generic List[T] collection type.
    .Parameter Accelerator
       The short form accelerator should be just the name you want to use (without square brackets).
    .Parameter Type
       The type you want the accelerator to accelerate (without square brackets)
    .Notes
-      When specifying multiple values for a parameter, use commas to separate the values. 
+      When specifying multiple values for a parameter, use commas to separate the values.
       For example, "-Accelerator string, regex".
-      
+
       PowerShell requires arguments that are "types" to NOT have the square bracket type notation, because of the way the parsing engine works.  You can either just type in the type as System.Int64, or you can put parentheses around it to help the parser out: ([System.Int64])
 
       Also see the help for Get-Accelerator and Remove-Accelerator
    .Link
-      http://huddledmasses.org/powershell-2-ctp3-custom-accelerators-finally/
+      https://HuddledMasses.org/powershell-2-ctp3-custom-accelerators-finally/
 #>
 [CmdletBinding()]
 param(
@@ -85,10 +85,10 @@ param(
    [type]$Type
 )
 process {
-   # add a user-defined accelerator  
-   foreach($a in $Accelerator) { 
-      if($xlr8r::AddReplace) { 
-         $xlr8r::AddReplace( $a, $Type) 
+   # add a user-defined accelerator
+   foreach($a in $Accelerator) {
+      if($xlr8r::AddReplace) {
+         $xlr8r::AddReplace( $a, $Type)
       } else {
          $null = $xlr8r::Remove( $a )
          $xlr8r::Add( $a, $Type)
@@ -99,14 +99,14 @@ process {
                Write-Error "Cannot add accelerator [$a] for [$($Type.FullName)]`n                  [$a] is already defined as [$($xlr8r::get[$a].FullName)]"
             }
             Continue;
-         } 
+         }
          throw
       }
    }
 }
 }
 
-&{ 
+&{
 $local:xlr8r = [psobject].assembly.gettype("System.Management.Automation.TypeAccelerators")
 $local:xlinq = [Reflection.Assembly]::Load("System.Xml.Linq, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")
 $xlinq.GetTypes() | ? { $_.IsPublic -and !$_.IsSerializable -and $_.Name -ne "Extensions" -and !$xlr8r::Get[$_.Name] } | Add-Accelerator
@@ -135,7 +135,7 @@ begin {
     [bool]$Path = $true
 }
 process {
-    if($Path -and ($Path = Test-Path @($Content)[0] -EA 0)) { 
+    if($Path -and ($Path = Test-Path @($Content)[0] -EA 0)) {
         foreach($file in Resolve-Path $Content) {
             $xml = New-Object System.Xml.XmlDocument;
             if($file.Provider.Name -eq "FileSystem") {
@@ -160,7 +160,7 @@ process {
 }
 end {
     if(!$Path) {
-        $xml = New-Object System.Xml.XmlDocument; 
+        $xml = New-Object System.Xml.XmlDocument;
         $xml.LoadXml( $XmlContent.ToString() )
         if($RemoveNamespace) {
             $xml.LoadXml( (Remove-XmlNamespace -Xml $xml.DocumentElement) )
@@ -238,7 +238,7 @@ param(
 process {
    ## Load from file, if necessary
    if($Path) { [xml]$xml = Get-Content $Path }
-   
+
    $StringWriter = New-Object System.IO.StringWriter
    $XmlWriter = New-Object System.Xml.XmlTextWriter $StringWriter
    $xmlWriter.Formatting = "indented"
@@ -274,8 +274,8 @@ function Select-Xml {
 #.Synopsis
 #  The Select-XML cmdlet lets you use XPath queries to search for text in XML strings and documents. Enter an XPath query, and use the Content, Path, or Xml parameter to specify the XML to be searched.
 #.Description
-#  Improves over the built-in Select-XML by leveraging Remove-XmlNamespace to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations and prefixes are removed from all XML nodes (by an XSL transform) before searching.  
-#  
+#  Improves over the built-in Select-XML by leveraging Remove-XmlNamespace to provide a -RemoveNamespace parameter -- if it's supplied, all of the namespace declarations and prefixes are removed from all XML nodes (by an XSL transform) before searching.
+#
 #  However, only raw XmlNodes are returned from this function, so the output isn't currently compatible with the built in Select-Xml, but is equivalent to using Select-Xml ... | Select-Object -Expand Node
 #
 #  Also note that if the -RemoveNamespace switch is supplied the returned results *will not* have namespaces in them, even if the input XML did, and entities get expanded automatically.
@@ -310,10 +310,10 @@ param(
     [Alias("Ns")]
     [Hashtable]$Namespace
 ,
-    # Allows the execution of XPath queries without namespace qualifiers. 
-    # 
+    # Allows the execution of XPath queries without namespace qualifiers.
+    #
     # If you specify the -RemoveNamespace switch, all namespace declarations and prefixes are actually removed from the Xml before the XPath search query is evaluated, and your XPath query should therefore NOT contain any namespace prefixes.
-    # 
+    #
     # Note that this means that the returned results *will not* have namespaces in them, even if the input XML did, and entities get expanded automatically.
     [Alias("Rn","Rm")]
     [Switch]$RemoveNamespace
@@ -393,13 +393,13 @@ param(
     [ValidateNotNullOrEmpty()]
     [Alias("Node")]
     [System.Xml.XmlNode[]]$Xml
-,   
+,
     # Specifies a hash table of the namespaces used in the XML. Use the format @{<namespaceName> = <namespaceUri>}.
     [Parameter(Position=10,Mandatory=$false)]
     [ValidateNotNullOrEmpty()]
     [Alias("Ns")]
     [Hashtable]$Namespace
-,   
+,
     # Output the XML documents after adding updating them
     [Switch]$Passthru
 )
@@ -409,13 +409,13 @@ process
         $select = @{}
         $select.Xml = $XmlNode
         $select.XPath = $XPath
-        if($Namespace) {  
+        if($Namespace) {
             $select.Namespace = $Namespace
         }
         $document =
             if($XmlNode -is [System.Xml.XmlDocument]) {
                 $XmlNode
-            } else { 
+            } else {
                 $XmlNode.get_OwnerDocument()
             }
         if($xValue = $Value -as [Xml]) {
@@ -424,7 +424,7 @@ process
         $nodes = Select-Xml @Select | Where-Object { $_ }
 
         if(@($nodes).Count -eq 0) { Write-Warning "No nodes matched your XPath, nothing will be updated" }
-        
+
         foreach($node in $nodes) {
             $select.XPath = "$XPath/parent::*"
             $parent = Select-Xml @Select
@@ -440,7 +440,7 @@ process
                     $xValue.Value = $aValue
                 }
             }
-            
+
             switch($PSCmdlet.ParameterSetName) {
                 "Before" {
                     $null = $parent.InsertBefore( $xValue, $node )
@@ -489,7 +489,7 @@ Set-Alias uxml Update-Xml -EA 0
 Set-Alias ux Update-Xml -EA 0
 
 function Convert-Node {
-#.Synopsis 
+#.Synopsis
 # Convert a single XML Node via XSL stylesheets
 [CmdletBinding(DefaultParameterSetName="Reader")]
 param(
@@ -513,22 +513,22 @@ PROCESS {
 
    $output = New-Object IO.StringWriter
    $argList = $null
-   
+
    if($Arguments) {
       $argList = New-Object System.Xml.Xsl.XsltArgumentList
       foreach($arg in $Arguments.GetEnumerator()) {
          $namespace, $name = $arg.Key -split ":"
          ## Fix namespace
-         if(!$name) { 
+         if(!$name) {
             $name = $Namespace
             $namespace = ""
          }
-         
+
          Write-Verbose "ns:$namespace name:$name value:$($arg.Value)"
          $argList.AddParam($name,"$namespace",$arg.Value)
       }
    }
-   
+
    $StyleSheet.Transform( $XmlReader, $argList, $output )
    Write-Output $output.ToString()
 }
@@ -546,7 +546,7 @@ param(
     [ValidateNotNullOrEmpty()]
     [Alias("Node")]
     [System.Xml.XmlNode[]]$Xml
-,   
+,
     # Specifies an Xml StyleSheet to transform with...
     [Parameter(Position=0,Mandatory=$true,ValueFromPipeline=$false)]
     [ValidateNotNullOrEmpty()]
@@ -557,9 +557,9 @@ param(
     [Alias("Parameters")]
     [hashtable]$Arguments
 )
-begin { 
+begin {
    $StyleSheet = New-Object System.Xml.Xsl.XslCompiledTransform
-   if(Test-Path $Xslt -EA 0) { 
+   if(Test-Path $Xslt -EA 0) {
       Write-Verbose "Loading Stylesheet from $(Resolve-Path $Xslt)"
       $StyleSheet.Load( (Resolve-Path $Xslt) )
    } else {
@@ -597,7 +597,7 @@ PARAM(
    [Alias("Node")]
    [System.Xml.XmlNode[]]$Xml
 )
-BEGIN { 
+BEGIN {
    $StyleSheet = New-Object System.Xml.Xsl.XslCompiledTransform
    $StyleSheet.Load(([System.Xml.XmlReader]::Create((New-Object System.IO.StringReader @"
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
@@ -621,7 +621,7 @@ BEGIN {
    </xsl:template>
 </xsl:stylesheet>
 "@))))
-   [Text.StringBuilder]$XmlContent = [String]::Empty 
+   [Text.StringBuilder]$XmlContent = [String]::Empty
 }
 PROCESS {
    $Xml | Convert-Node $StyleSheet
@@ -671,7 +671,7 @@ BEGIN {
       # If no namespaces are passed in, use the "ignorable" ones from XAML if there are any
       if(!$Namespace) {
          $root = $Node.DocumentElement
-         # $nsManager = new-object System.Xml.XmlNamespaceManager $Node.NameTable                       
+         # $nsManager = new-object System.Xml.XmlNamespaceManager $Node.NameTable
          $nsManager.AddNamespace("compat", "http://schemas.openxmlformats.org/markup-compatibility/2006")
          if($ignorable = $root.SelectSingleNode("@compat:Ignorable",$nsManager)) {
             foreach($prefix in $ignorable.get_InnerText().Split(" ")) {
@@ -681,7 +681,7 @@ BEGIN {
       }
    }
 
-   
+
    Write-Verbose "$Namespace"
    $i = 0
    $NSString = $(foreach($n in $Namespace) { "xmlns:n$i='$n'"; $i+=1 }) -Join " "
@@ -691,7 +691,7 @@ BEGIN {
       <xsl:template match='@n${i}:*'>
       </xsl:template>"
    })
-   
+
    $XSLT = @"
 <xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform" $NSString>
    <xsl:output method="xml" indent="yes"/>
@@ -704,10 +704,10 @@ BEGIN {
 </xsl:stylesheet>
 "@
    Write-Verbose $XSLT
- 
+
    $StyleSheet = New-Object System.Xml.Xsl.XslCompiledTransform
    $StyleSheet.Load(([System.Xml.XmlReader]::Create((New-Object System.IO.StringReader $XSLT))))
-   [Text.StringBuilder]$XmlContent = [String]::Empty 
+   [Text.StringBuilder]$XmlContent = [String]::Empty
 }
 PROCESS {
    $Xml | Convert-Node $StyleSheet
@@ -806,7 +806,7 @@ function ConvertTo-CliXml {
          write-warning "Could not serialize $($InputObject.gettype()): $InputObject"
       }
    }
-   end {    
+   end {
       [void]$done.invoke($serializer, @())
       $sw.ToString()
       $xw.Close()
@@ -861,15 +861,15 @@ function New-XDocument {
 #
 # Description
 # -----------
-# This example shows the creation of a complete RSS feed with a single item in it. 
+# This example shows the creation of a complete RSS feed with a single item in it.
 #
 # NOTE that the backtick in the http`: in the URLs in the input is unecessary, and I added the space after the http: in the URLs  in the output -- these are accomodations to PoshCode's spam filter. Backticks are not need in the input, and spaces do not appear in the actual output.
 #
 #
-#.Example 
+#.Example
 # [XNamespace]$atom="http`://www.w3.org/2005/Atom"
 # C:\PS>[XNamespace]$dc = "http`://purl.org/dc/elements/1.1"
-# 
+#
 # C:\PS>New-XDocument ($atom + "feed") -Encoding "UTF-16" -$([XNamespace]::Xml +'lang') "en-US" -dc $dc {
 #    title {"Test First Entry"}
 #    link {"http`://HuddledMasses.org"}
@@ -920,7 +920,7 @@ function New-XDocument {
 # This example shows the use of a default namespace, as well as additional specific namespaces for the "dc" namespace. It also demonstrates how you can get the <?xml?> declaration which does not appear in a simple .ToString().
 #
 # NOTE that the backtick in the http`: in the URLs in the input is unecessary, and I added the space after the http: in the URLs  in the output -- these are accomodations to PoshCode's spam filter. Backticks are not need in the input, and spaces do not appear in the actual output.#
-# 
+#
 [CmdletBinding()]
 Param(
    # The root node name
@@ -1045,7 +1045,7 @@ PROCESS {
         } elseif($value -ne $null) {
            Write-Verbose "New XAttribute $($attrib.TrimStart("-").TrimEnd(':')) = $value"
            New-Object XAttribute $attrib.TrimStart("-").TrimEnd(':'), $value
-        }        
+        }
      }
    )
 }
@@ -1084,8 +1084,8 @@ Param([ScriptBlock]$script)
 #     trap { continue }
 #     [Reflection.Assembly]::LoadWithPartialName("System.Xaml") | Out-Null
 #     if("System.Xaml.XamlServices" -as [type]) {
-    
+
    #  }
 #  }
-   
+
 Export-ModuleMember -alias * -function New-XDocument, New-XAttribute, New-XElement, Remove-XmlNamespace, Remove-XmlElement, Get-Namespace, Get-XmlContent, Set-XmlContent, Convert-Xml, Select-Xml, Update-Xml, Format-Xml, ConvertTo-CliXml, ConvertFrom-CliXml

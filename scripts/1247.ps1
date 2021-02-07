@@ -2,13 +2,13 @@
 #Name: VMWare Quick Migration Function
 #Author: Justin Grote <jgrote NOSPAMAT enpointe DOT com>
 #Credit: Inspired by Mike DiPetrillo's Quick Migration Script: http://www.mikedipetrillo.com/mikedvirtualization/2008/10/quick-migration-for-vmware-the-power-of-powershell.html
-#Source: http://poshcode.org/1246
+#Source: https://PoshCode.org/1246
 #Version: 0.1
 #Last Revised: 31 July 2009
 #
-#Description: Performs the fucntional equivalent of a Hyper-V Quick Migration by suspending a VM, 
+#Description: Performs the fucntional equivalent of a Hyper-V Quick Migration by suspending a VM,
 #	moving it to a new host, and resuming it. This does not require vMotion licensing.
-#	it works by providing required VM objects via the pipeline or the second argument, 
+#	it works by providing required VM objects via the pipeline or the second argument,
 #	and specifying the Destination host in the first argument.
 #	The commeand accepts both text strings and VMHost objects for the VMHost Parameter
 #
@@ -47,7 +47,7 @@ function QuickMigrate-VM {
 			write-host -fore white "===Begin Quick Migration==="
 		}
 	}
-	
+
 	PROCESS {
 		$step = 0
 		$skip = $false
@@ -59,7 +59,7 @@ function QuickMigrate-VM {
 			continue
 		}
 		$vmToMigrate = $_
-		
+
 		### Validation Checks
 		if($_ -is [VMware.VimAutomation.Client20.VirtualMachineImpl]) {
 			write-host -fore white "Quick Migrating $($vmToMigrate.Name) to $NewVMHost..."
@@ -74,13 +74,13 @@ function QuickMigrate-VM {
 		if (! $skip -and (get-floppydrive $vmToMigrate).ConnectionState.Connected -ieq "TRUE") {
 			throw "Connected Floppy Drive. Please disconnect and try again."
 		}
-		
+
 		# Make sure the current VM Host and the Destination Host are different.
 		$sourceVMHost = get-vmhost -vm $vmToMigrate
 		if (! $skip -and ($sourceVMHost.Name -eq $destinationVMHost.Name)) {
 			throw "Source and Destination Hosts are the same."
 		}
-		
+
 		###Validation Complete, begin Migration
 		if (! $skip) {
 			$step++

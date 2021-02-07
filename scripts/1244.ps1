@@ -5,7 +5,7 @@
 ####################################################################################################
 #### I still have to add documentation comments to these, but in the meantime ...
 ### please see the samples at the bottom to understand how to use them :)
-#### 
+####
 $xlr8r = [type]::gettype("System.Management.Automation.TypeAccelerators")
 $xlinq = [Reflection.Assembly]::Load("System.Xml.Linq, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")
 $xlinq.GetTypes() | ? { $_.IsPublic -and !$_.IsSerializable -and $_.Name -ne "Extensions" -and !$xlr8r::Get[$_.Name] } | % {
@@ -158,7 +158,7 @@ Set-Alias xe New-XmlElement
 #
 #   [XNamespace]$atom="http`://www.w3.org/2005/Atom"
 #   [XNamespace]$dc = "http`://purl.org/dc/elements/1.1"
-#  
+#
 #   New-Xml ($atom + "feed") -Encoding "UTF-16" -$([XNamespace]::Xml +'lang') "en-US" -dc $dc {
 #      xe title {"Test First Entry"}
 #      xe link {"http`://HuddledMasses.org"}
@@ -177,7 +177,7 @@ Set-Alias xe New-XmlElement
 #         xe summary {"Ema Lazarus' Poem"}
 #         xe link -rel license -href "http://creativecommons.org/licenses/by/3.0/" -title "CC By-Attribution"
 #         xe ($dc + "rights") {"Copyright 2009, Some rights reserved (licensed under the Creative Commons Attribution 3.0 Unported license)"}
-#         xe category -scheme "http://huddledmasses.org/tag/" -term "huddled-masses"
+#         xe category -scheme "https://HuddledMasses.org/tag/" -term "huddled-masses"
 #      }
 #   } | % { $_.Declaration.ToString(); $_.ToString() }
 #
@@ -203,6 +203,6 @@ Set-Alias xe New-XmlElement
 #     <category scheme="http ://huddledmasses.org/tag/" term="huddled-masses" />
 #   </entry>
 # </feed>
-# 
-# 
+#
+#
 

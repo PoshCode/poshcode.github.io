@@ -1,10 +1,10 @@
 #requires -version 2.0
 ###############################################################################
-## New-ElevatedTask is a script (for Vista) which creates "elevated" scheduled 
+## New-ElevatedTask is a script (for Vista) which creates "elevated" scheduled
 ## tasks by exploiting the import-from XML feature of schtasks.exe /Create /XML
 ##
-## Creates a new "On Demand Only" scheduled task to run an "Elevated" application 
-## on Vista, so it MUST be run from an elevated prompt ... and then creates a 
+## Creates a new "On Demand Only" scheduled task to run an "Elevated" application
+## on Vista, so it MUST be run from an elevated prompt ... and then creates a
 ## shortcut to run that scheduled task on demand via schtasks.exe /run /tn
 ##
 ## NOTE: Depends on my New-Shortcut script which is also available on the script
@@ -27,20 +27,20 @@
 
    You may specify the shortcut path as a folder path (which must exist), with a name for the new file (ending in .lnk), or you may specify one of the "SpecialFolder" names like "QuickLaunch" or "CommonDesktop" followed by the name.  The shortcut feature depends on the New-Shortcut function (a separate script).
 
-	
+
 	NOTE: You MUST run this in an elevated PowerShell instance.
 
 .Example
 	New-ElevatedTask C:\Windows\Notepad.exe
 		Will create a task to run notepad elevated, and creates a shortcut to run it the current folder, named "Notepad.lnk"
-	
+
 .Example
 	New-ElevatedTask C:\Windows\Notepad.exe -Shortcut QuickLaunch\Editor.lnk -FriendlyName "Run Notepad" -TaskName "Elevated Text Editor"
 		Will create a task to run notepad elevated, and names it "Elevated Text Editor". Also creates a shortcut on the QuickLaunch bar with the name "Run Notepad.lnk" and the tooltip "Elevated Text Editor"
 
 .NOTE
    Must be run from an elevated PowerShell instance
-   Some features depend on New-Shortcut (which is also available on the repository: http://PoshCode.org/search/New-Shortcut)
+   Some features depend on New-Shortcut (which is also available on the repository: https://PoshCode.org/search/New-Shortcut)
 #>
 [CmdletBinding()]
 param(
@@ -131,12 +131,12 @@ $xml += @"
     <UseUnifiedSchedulingEngine>false</UseUnifiedSchedulingEngine>
   </Settings>
 </Task>
-"@ 
+"@
 } else {
 $xml += @"
   </Settings>
 </Task>
-"@ 
+"@
 }
 
 $xFile = [IO.Path]::GetTempFileName()
@@ -165,7 +165,7 @@ if($UserName -ne $null -and $password -ne $null)  {
   if($password -ne $null) {
     $xml -f $friendlyName, $TargetPath, $arguments, $WorkingDirectory, $UserName, "Password" | set-content $xFile
     &$SchTasks /Create /XML $xFile /TN $taskname /RU $UserName /RP $password
-  
+
   # otherwise, there are no special credentials needed, "Interactive" means only "this" user can run it.
   } else {
     $xml -f $friendlyName, $TargetPath, $arguments, $WorkingDirectory, $UserName, "InteractiveToken" | set-content $xFile
